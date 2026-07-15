@@ -57,15 +57,34 @@ async function measureDownload(onMbps: (mbps: number) => void): Promise<number> 
   return (receivedBytes * 8) / totalSeconds / 1e6;
 }
 
-async function measureUpload(onMbps: (mbps: number) => void): Promise<number> {
+// XHR (not fetch) because only xhr.upload emits live progress events, which the
+// gauge needs to sweep during the upload phase. `event.loaded` is bytes handed
+// to the socket — over a slow link that tracks actual upload throughput.
+function measureUpload(onMbps: (mbps: number) => void): Promise<number> {
   const payload = new Uint8Array(UPLOAD_BYTES);
   crypto.getRandomValues(payload.subarray(0, 65_536));
-  const startedAt = performance.now();
-  await fetch("/speedtest/__up", { method: "POST", body: payload, cache: "no-store" });
-  const totalSeconds = (performance.now() - startedAt) / 1000;
-  const uploadMbps = (UPLOAD_BYTES * 8) / totalSeconds / 1e6;
-  onMbps(uploadMbps);
-  return uploadMbps;
+  return new Promise<number>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/speedtest/__up");
+    xhr.timeout = PHASE_TIME_LIMIT_MS + 5_000;
+    const startedAt = performance.now();
+
+    xhr.upload.addEventListener("progress", (event) => {
+      const elapsedSeconds = (performance.now() - startedAt) / 1000;
+      if (elapsedSeconds > 0.3 && event.loaded > 0) {
+        onMbps((event.loaded * 8) / elapsedSeconds / 1e6);
+      }
+    });
+    xhr.addEventListener("load", () => {
+      const totalSeconds = (performance.now() - startedAt) / 1000;
+      const uploadMbps = (UPLOAD_BYTES * 8) / totalSeconds / 1e6;
+      onMbps(uploadMbps);
+      resolve(uploadMbps);
+    });
+    xhr.addEventListener("error", () => reject(new Error("upload failed")));
+    xhr.addEventListener("timeout", () => reject(new Error("upload timed out")));
+    xhr.send(payload);
+  });
 }
 
 export async function runSpeedTest(onProgress: (progress: SpeedTestProgress) => void): Promise<void> {
@@ -90,8 +109,9 @@ export async function runSpeedTest(onProgress: (progress: SpeedTestProgress) => 
     });
     progress.phase = "upload";
     report();
-    progress.uploadMbps = await measureUpload((finalMbps) => {
-      progress.uploadMbps = finalMbps;
+    progress.uploadMbps = await measureUpload((liveMbps) => {
+      progress.uploadMbps = liveMbps;
+      report();
     });
     progress.phase = "done";
     report();
