@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  launchd service for the Dishboard energy collector — keeps it running across
+  logout and (re)launches it after sleep/crash.
+
+  Install:
+    cp server/com.dishboard.collector.plist ~/Library/LaunchAgents/
+    launchctl load  ~/Library/LaunchAgents/com.dishboard.collector.plist
+  Stop / uninstall:
+    launchctl unload ~/Library/LaunchAgents/com.dishboard.collector.plist
+  Logs: server/data/collector.out.log  /  collector.err.log
+
+  Paths below are absolute for this machine; update them if the repo moves.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.dishboard.collector</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/daveyhert/.nvm/versions/node/v22.19.0/bin/node</string>
+    <string>/Users/daveyhert/Desktop/projects/starlink/node_modules/tsx/dist/cli.mjs</string>
+    <string>/Users/daveyhert/Desktop/projects/starlink/server/collector.mts</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/daveyhert/Desktop/projects/starlink</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/daveyhert/Desktop/projects/starlink/server/data/collector.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/daveyhert/Desktop/projects/starlink/server/data/collector.err.log</string>
+</dict>
+</plist>
