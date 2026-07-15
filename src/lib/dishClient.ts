@@ -10,15 +10,20 @@ import { createFileRegistry, fromBinary, toJson, type DescMessage, type Registry
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { grpcWebUnaryCall } from "./grpcWeb";
 
-const HANDLE_METHOD_URL = "/dishy/SpaceX.API.Device.Device/Handle";
+// Same Device service on both boxes; the schema protoset is identical.
+const DISH_HANDLE_URL = "/dishy/SpaceX.API.Device.Device/Handle";
+const ROUTER_HANDLE_URL = "/router/SpaceX.API.Device.Device/Handle";
 
 // Oneof field numbers inside SpaceX.API.Device.Request (from the dish schema).
 const REQUEST_FIELD = {
+  reboot: 1001,
   getStatus: 1004,
   getHistory: 1007,
   getDeviceInfo: 1008,
   getLocation: 1017,
+  dishStow: 2002,
   dishGetObstructionMap: 2008,
+  wifiGetClients: 3002,
 } as const;
 
 // ---------- response JSON shapes (proto3 JSON mapping; uint64 → string) ----------
@@ -62,6 +67,8 @@ export interface DishStatusJson {
   uplinkThroughputBps?: number;
   popPingLatencyMs?: number;
   popPingDropRate?: number;
+  boresightAzimuthDeg?: number;
+  boresightElevationDeg?: number;
   gpsStats?: DishGpsStatsJson;
   ethSpeedMbps?: number;
   classOfService?: string;
@@ -110,12 +117,33 @@ export interface DishObstructionMapJson {
   maxThetaDeg?: number;
 }
 
+export interface WifiClientStatsJson {
+  bytes?: string;
+  rateMbps?: number;
+  throughputMbpsLast1mAvg?: number;
+}
+
+export interface WifiClientJson {
+  name?: string;
+  macAddress?: string;
+  ipAddress?: string;
+  signalStrength?: number;
+  snr?: number;
+  iface?: string;
+  role?: string;
+  deviceId?: string;
+  associatedTimeS?: number;
+  rxStats?: WifiClientStatsJson;
+  txStats?: WifiClientStatsJson;
+}
+
 interface DishResponseJson {
   dishGetStatus?: DishStatusJson;
   dishGetHistory?: DishHistoryJson;
   getDeviceInfo?: { deviceInfo?: DishDeviceInfoJson };
   getLocation?: DishLocationJson;
   dishGetObstructionMap?: DishObstructionMapJson;
+  wifiGetClients?: { clients?: WifiClientJson[] };
 }
 
 // ---------- request encoding ----------
@@ -131,36 +159,41 @@ function encodeVarint(value: number): number[] {
   return bytes;
 }
 
-/** Encode a Request whose oneof selects `fieldNumber` with an empty sub-message. */
-function encodeEmptyOneofRequest(fieldNumber: number): Uint8Array {
+/** Encode a Request whose oneof selects `fieldNumber` with the given sub-message bytes. */
+function encodeOneofRequest(fieldNumber: number, subMessageBytes: number[] = []): Uint8Array {
   const LENGTH_DELIMITED_WIRE_TYPE = 2;
   const fieldTag = (fieldNumber << 3) | LENGTH_DELIMITED_WIRE_TYPE;
-  return new Uint8Array([...encodeVarint(fieldTag), 0]);
+  return new Uint8Array([...encodeVarint(fieldTag), subMessageBytes.length, ...subMessageBytes]);
 }
 
 // ---------- client ----------
 
 export class DishClient {
   private constructor(
+    private readonly handleUrl: string,
     private readonly responseSchema: DescMessage,
     private readonly registry: Registry,
   ) {}
 
   /** Load the descriptor set dumped from the dish's reflection service. */
-  static async load(): Promise<DishClient> {
+  static async load(target: "dish" | "router" = "dish"): Promise<DishClient> {
     const protosetResponse = await fetch("/dish.protoset");
     const protosetBytes = new Uint8Array(await protosetResponse.arrayBuffer());
     const fileDescriptorSet = fromBinary(FileDescriptorSetSchema, protosetBytes);
     const registry = createFileRegistry(fileDescriptorSet);
     const responseSchema = registry.getMessage("SpaceX.API.Device.Response");
     if (!responseSchema) throw new Error("SpaceX.API.Device.Response missing from dish.protoset");
-    return new DishClient(responseSchema, registry);
+    return new DishClient(target === "dish" ? DISH_HANDLE_URL : ROUTER_HANDLE_URL, responseSchema, registry);
   }
 
-  private async call(fieldNumber: number, abortSignal?: AbortSignal): Promise<DishResponseJson> {
+  private async call(
+    fieldNumber: number,
+    abortSignal?: AbortSignal,
+    subMessageBytes: number[] = [],
+  ): Promise<DishResponseJson> {
     const responseBytes = await grpcWebUnaryCall(
-      HANDLE_METHOD_URL,
-      encodeEmptyOneofRequest(fieldNumber),
+      this.handleUrl,
+      encodeOneofRequest(fieldNumber, subMessageBytes),
       abortSignal,
     );
     const responseMessage = fromBinary(this.responseSchema, responseBytes);
@@ -189,5 +222,21 @@ export class DishClient {
    */
   async getLocation(abortSignal?: AbortSignal): Promise<DishLocationJson> {
     return (await this.call(REQUEST_FIELD.getLocation, abortSignal)).getLocation ?? {};
+  }
+
+  /** Connected clients — meaningful on the ROUTER target. */
+  async getWifiClients(abortSignal?: AbortSignal): Promise<WifiClientJson[]> {
+    return (await this.call(REQUEST_FIELD.wifiGetClients, abortSignal)).wifiGetClients?.clients ?? [];
+  }
+
+  /** Reboot this device (dish or router). Drops connectivity for a few minutes. */
+  async reboot(abortSignal?: AbortSignal): Promise<void> {
+    await this.call(REQUEST_FIELD.reboot, abortSignal);
+  }
+
+  /** Stow (fold flat) or unstow the dish. Dish target only. */
+  async stow(unstow: boolean, abortSignal?: AbortSignal): Promise<void> {
+    // DishStowRequest { bool unstow = 1 } — field 1, varint wire type
+    await this.call(REQUEST_FIELD.dishStow, abortSignal, unstow ? [0x08, 0x01] : []);
   }
 }

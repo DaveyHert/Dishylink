@@ -8,10 +8,16 @@ interface SheetModalProps {
   title: string;
   onClose: () => void;
   children: ReactNode;
-  wide?: boolean;
+  size?: "default" | "wide" | "xl";
 }
 
-export function SheetModal({ title, onClose, children, wide = false }: SheetModalProps) {
+const SIZE_CLASS: Record<NonNullable<SheetModalProps["size"]>, string> = {
+  default: "detail-sheet",
+  wide: "detail-sheet detail-sheet-wide",
+  xl: "detail-sheet detail-sheet-xl",
+};
+
+export function SheetModal({ title, onClose, children, size = "default" }: SheetModalProps) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
@@ -23,7 +29,7 @@ export function SheetModal({ title, onClose, children, wide = false }: SheetModa
   return (
     <div className="detail-overlay" onClick={onClose}>
       <div
-        className={wide ? "detail-sheet detail-sheet-wide" : "detail-sheet"}
+        className={SIZE_CLASS[size]}
         role="dialog"
         aria-modal="true"
         aria-label={title}

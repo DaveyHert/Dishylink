@@ -1,142 +1,329 @@
-// Alignment sheet modeled on the dish's own debug instruments: a Rotation
-// compass (dotted ring, dish glyph at actual azimuth, orange needle at the
-// desired azimuth with a tolerance wedge) and a Tilt quadrant (dotted arc,
-// dish drawn at its actual tilt, orange needle at the desired elevation).
-// Rendered inside a wide SheetModal.
+// Alignment instruments ported 1:1 from the dish's own web app (bundle
+// fetched from http://192.168.100.1/static/js/script.js.gz). The math is
+// SpaceX's, not an interpretation:
+//  - alignment logic  = their `Nd`: great-circle separation < 5° against a
+//    target elevation band (70°…75° for fixed standard kits, up to 90° for
+//    mobile/low-tilt kits), azimuth tolerance widening near zenith
+//  - azimuth tolerance = their `Ld` (spherical law of cosines solved for the
+//    azimuth offset that produces a 5° separation)
+//  - Rotation drawing  = their `xd`: dotted ring (gaps at the cardinals),
+//    sector wedge = desired ± tolerance, white dish rect + ORANGE needle
+//    both rotated to the ACTUAL azimuth
+//  - Tilt drawing      = their `Ad`: y-flipped quarter arc, wedge spanning
+//    the valid elevation band, dish plate + orange needle at the ACTUAL
+//    elevation. Their needle orange is #ffac30.
 
-import type { DishStatusJson, DishAlignmentStatsJson } from "../lib/dishClient";
+import type { DishStatusJson } from "../lib/dishClient";
 
-const ALIGNED_TOLERANCE_DEG = 2;
-const WEDGE_HALF_WIDTH_DEG = 9;
-// Real alignment errors are fractions of a degree — invisible at 1:1 scale.
-// Like a course-deviation instrument, the *error* is drawn magnified (and
-// labeled as such); the wedge marks the aligned tolerance at the same scale.
-const ERROR_MAGNIFICATION = 8;
-const ERROR_DISPLAY_CLAMP_DEG = 24;
+const DEG_TO_RAD = Math.PI / 180;
+const RAD_TO_DEG = 180 / Math.PI;
+const SEPARATION_LIMIT_DEG = 5;
+const NEEDLE_ORANGE = "#ffac30";
 
-function magnifiedError(actualDeg: number, desiredDeg: number): number {
-  const magnified = (actualDeg - desiredDeg) * ERROR_MAGNIFICATION;
-  return Math.max(-ERROR_DISPLAY_CLAMP_DEG, Math.min(ERROR_DISPLAY_CLAMP_DEG, magnified));
+// ---------- SpaceX's alignment math (their Nd/Ld/Ed) ----------
+
+/** Their `Ed`: great-circle angular separation between two pointing directions. */
+function angularSeparationDeg(azimuthA: number, elevationA: number, azimuthB: number, elevationB: number): number {
+  const cosSeparation =
+    Math.sin(elevationA * DEG_TO_RAD) * Math.sin(elevationB * DEG_TO_RAD) +
+    Math.cos(elevationA * DEG_TO_RAD) * Math.cos(elevationB * DEG_TO_RAD) * Math.cos((azimuthA - azimuthB) * DEG_TO_RAD);
+  const separation = Math.acos(Math.min(1, Math.max(-1, cosSeparation))) * RAD_TO_DEG;
+  return Number.isNaN(separation) ? 0 : separation;
 }
 
-export function alignmentVerdict(status: DishStatusJson | null): "aligned" | "adjust dish" | "—" {
-  const alignment = status?.alignmentStats;
-  if (!alignment) return "—";
-  const azimuthError = Math.abs((alignment.boresightAzimuthDeg ?? 0) - (alignment.desiredBoresightAzimuthDeg ?? 0));
-  const elevationError = Math.abs(
-    (alignment.boresightElevationDeg ?? 0) - (alignment.desiredBoresightElevationDeg ?? 0),
+/** Their `Ld`: azimuth offset at which separation hits 5°, given the two elevations. */
+function azimuthToleranceDeg(targetElevation: number, currentElevation: number): number {
+  const targetRad = targetElevation * DEG_TO_RAD;
+  const currentRad = currentElevation * DEG_TO_RAD;
+  const limitRad = SEPARATION_LIMIT_DEG * DEG_TO_RAD;
+  const denominator = Math.cos(targetRad) * Math.cos(currentRad);
+  const cosAzimuth = (Math.cos(limitRad) - Math.sin(currentRad) * Math.sin(targetRad)) / denominator;
+  if (cosAzimuth < -1) return 180;
+  const tolerance = Math.acos(cosAzimuth) * RAD_TO_DEG;
+  return Number.isNaN(tolerance) ? 0 : tolerance;
+}
+
+function wrapDegrees(angleDeg: number): number {
+  const wrapped = ((angleDeg % 360) + 360) % 360;
+  return wrapped < 180 ? wrapped : wrapped - 360;
+}
+
+export interface AlignmentReading {
+  isValid: boolean;
+  isAligned: boolean;
+  boresightAzimuthDeg: number;
+  boresightElevationDeg: number;
+  desiredAzimuthDeg: number;
+  azimuthToleranceDeg: number;
+  upperElevationLimitDeg: number;
+  lowerElevationLimitDeg: number;
+  isElevationValid: boolean;
+  targetElevationDeg: number;
+  maxTargetElevationDeg: number;
+}
+
+/** Their `Nd`, ported. Uses top-level boresight fields exactly as their code does. */
+export function computeAlignment(status: DishStatusJson): AlignmentReading {
+  const stats = status.alignmentStats;
+  // Their code: 90° band ceiling for MOBILE dishes or kits with default tilt
+  // < 8° (Mini/HP); fixed standard kits like rev4 get 75°.
+  const maxTargetElevation = 75;
+  const desiredElevationRaw = stats?.desiredBoresightElevationDeg;
+  const targetElevation =
+    desiredElevationRaw !== undefined && desiredElevationRaw !== 0 ? Math.min(70, desiredElevationRaw) : 70;
+  const desiredAzimuth = stats?.desiredBoresightAzimuthDeg ?? 0;
+  const currentAzimuth = status.boresightAzimuthDeg ?? 0;
+  const currentElevation = status.boresightElevationDeg ?? 0;
+
+  const separationAtTarget = angularSeparationDeg(desiredAzimuth, targetElevation, currentAzimuth, currentElevation);
+  const separationAtBandTop = angularSeparationDeg(desiredAzimuth, maxTargetElevation, currentAzimuth, currentElevation);
+  const azimuthDiff = wrapDegrees(desiredAzimuth - currentAzimuth);
+  const isValid =
+    stats?.attitudeEstimationState === "FILTER_CONVERGED" || stats?.attitudeEstimationState === "FILTER_UNCONVERGED";
+  const bandUsable = targetElevation >= 50;
+
+  // their `w`: azimuth error projected onto the sky at the current elevation
+  const effectiveAzimuthError =
+    Math.acos(
+      Math.sqrt(
+        Math.cos(azimuthDiff * DEG_TO_RAD) ** 2 * Math.cos(currentElevation * DEG_TO_RAD) ** 2 +
+          Math.sin(currentElevation * DEG_TO_RAD) ** 2,
+      ),
+    ) * RAD_TO_DEG;
+
+  const alignedAtTarget = isValid && separationAtTarget < SEPARATION_LIMIT_DEG;
+  const alignedAtBandTop = isValid && bandUsable && separationAtBandTop < SEPARATION_LIMIT_DEG;
+  const alignedInsideBand =
+    isValid &&
+    bandUsable &&
+    currentElevation > targetElevation &&
+    currentElevation < maxTargetElevation &&
+    Math.abs(azimuthDiff) < 90 &&
+    Math.abs(effectiveAzimuthError) < SEPARATION_LIMIT_DEG;
+  const isAligned = alignedAtTarget || alignedAtBandTop || alignedInsideBand;
+
+  const tolerance = Math.max(
+    azimuthToleranceDeg(targetElevation, currentElevation),
+    bandUsable ? azimuthToleranceDeg(maxTargetElevation, currentElevation) : 0,
+    bandUsable && currentElevation > targetElevation && currentElevation < maxTargetElevation
+      ? azimuthToleranceDeg(currentElevation, currentElevation)
+      : 0,
   );
-  return azimuthError < ALIGNED_TOLERANCE_DEG && elevationError < ALIGNED_TOLERANCE_DEG ? "aligned" : "adjust dish";
+  const upperLimit = Math.max(Math.min((bandUsable ? maxTargetElevation : targetElevation) + 5, 90), 0);
+  const lowerLimit = Math.max(Math.min(targetElevation - 5, 90), 0);
+
+  return {
+    isValid,
+    isAligned,
+    boresightAzimuthDeg: currentAzimuth,
+    boresightElevationDeg: currentElevation,
+    desiredAzimuthDeg: desiredAzimuth,
+    azimuthToleranceDeg: tolerance,
+    upperElevationLimitDeg: upperLimit,
+    lowerElevationLimitDeg: lowerLimit,
+    isElevationValid: currentElevation > lowerLimit && currentElevation < upperLimit,
+    targetElevationDeg: targetElevation,
+    maxTargetElevationDeg: maxTargetElevation,
+  };
 }
 
-function polar(centerX: number, centerY: number, angleFromNorthDeg: number, radius: number) {
-  const angleRad = (angleFromNorthDeg * Math.PI) / 180;
-  return { x: centerX + Math.sin(angleRad) * radius, y: centerY - Math.cos(angleRad) * radius };
+// ---------- shared drawing pieces (their Cd ring and Id sector) ----------
+
+/** Filled sector (pie slice), angles in SVG degrees from the +x axis. */
+function sectorPath(centerX: number, centerY: number, radius: number, thetaCenterDeg: number, thetaDeg: number): string {
+  const startRad = (thetaCenterDeg - thetaDeg / 2) * DEG_TO_RAD;
+  const endRad = (thetaCenterDeg + thetaDeg / 2) * DEG_TO_RAD;
+  const largeArc = thetaDeg > 180 ? 1 : 0;
+  const startX = centerX + radius * Math.cos(startRad);
+  const startY = centerY + radius * Math.sin(startRad);
+  const endX = centerX + radius * Math.cos(endRad);
+  const endY = centerY + radius * Math.sin(endRad);
+  return `M${centerX},${centerY} L${startX.toFixed(2)},${startY.toFixed(2)} A${radius},${radius} 0 ${largeArc} 1 ${endX.toFixed(2)},${endY.toFixed(2)} Z`;
 }
 
-function wedgePath(centerX: number, centerY: number, centerAngleDeg: number, radius: number): string {
-  const from = polar(centerX, centerY, centerAngleDeg - WEDGE_HALF_WIDTH_DEG, radius);
-  const to = polar(centerX, centerY, centerAngleDeg + WEDGE_HALF_WIDTH_DEG, radius);
-  return `M${centerX},${centerY} L${from.x.toFixed(1)},${from.y.toFixed(1)} A${radius},${radius} 0 0 1 ${to.x.toFixed(1)},${to.y.toFixed(1)} Z`;
-}
-
-function InstrumentHead({ label, isGood }: { label: string; isGood: boolean }) {
+function InstrumentHead({ label, berry }: { label: string; berry: "good" | "bad" | "unknown" }) {
+  const berryColor =
+    berry === "good" ? "var(--status-good)" : berry === "bad" ? "var(--status-critical)" : "var(--ink-muted)";
   return (
     <div className="instrument-head">
       <span className="micro-label">{label}</span>
-      <span
-        className="status-dot"
-        style={{ background: isGood ? "var(--status-good)" : "var(--chart-warm)" }}
-      />
+      <span className="status-dot" style={{ background: berryColor }} />
     </div>
   );
 }
 
-function RotationInstrument({ alignment }: { alignment: DishAlignmentStatsJson }) {
+// ---------- Rotation (their xd, size ratios verbatim) ----------
+
+function RotationInstrument({ reading }: { reading: AlignmentReading }) {
   const size = 250;
   const center = size / 2;
-  const ringRadius = center - 26;
-  const actualAzimuth = alignment.boresightAzimuthDeg ?? 0;
-  const desiredAzimuth = alignment.desiredBoresightAzimuthDeg ?? 0;
-  const isGood = Math.abs(actualAzimuth - desiredAzimuth) < ALIGNED_TOLERANCE_DEG;
-  // dish drawn at desired + magnified error, so a 1.7° offset is visible
-  const displayedDishAzimuth = desiredAzimuth + magnifiedError(actualAzimuth, desiredAzimuth);
+  const ringRadius = 0.45 * size;
+  const dishWidth = size / 8;
+  const dishHeight = size / 6;
+  const needleAzimuth = reading.isValid ? reading.boresightAzimuthDeg : 0;
 
+  // their tick loop: 72 five-degree dots, skipping three around each cardinal
+  const ringDots: number[] = [];
+  for (let dotIndex = 0; dotIndex < 72; dotIndex++) {
+    const positionInQuadrant = dotIndex % 18;
+    if (positionInQuadrant !== 0 && positionInQuadrant !== 1 && positionInQuadrant !== 17) {
+      ringDots.push(dotIndex * 5);
+    }
+  }
   const compassLabels = [
-    { label: "N", angle: 0 },
-    { label: "E", angle: 90 },
-    { label: "S", angle: 180 },
-    { label: "W", angle: 270 },
+    { label: "N", angleDeg: 0 },
+    { label: "E", angleDeg: 90 },
+    { label: "S", angleDeg: 180 },
+    { label: "W", angleDeg: 270 },
   ];
 
   return (
     <div className="instrument-panel">
-      <InstrumentHead label="Rotation" isGood={isGood} />
-      <svg width="100%" viewBox={`0 0 ${size} ${size - 14}`}>
-        <g transform="translate(0,-6)">
-          <circle
-            cx={center}
-            cy={center}
-            r={ringRadius}
-            fill="none"
-            stroke="var(--ink-muted)"
-            strokeWidth={1.6}
-            strokeDasharray="0.5 5.5"
-            strokeLinecap="round"
-            opacity={0.8}
+      <InstrumentHead
+        label="Rotation"
+        berry={reading.isAligned ? "good" : reading.isValid ? "bad" : "unknown"}
+      />
+      <svg width="100%" viewBox={`0 0 ${size} ${size}`}>
+        {ringDots.map((angleDeg) => {
+          const angleRad = (angleDeg - 90) * DEG_TO_RAD;
+          return (
+            <circle
+              key={angleDeg}
+              cx={center + ringRadius * Math.cos(angleRad)}
+              cy={center + ringRadius * Math.sin(angleRad)}
+              r={1.2}
+              fill="var(--ink-secondary)"
+            />
+          );
+        })}
+        {compassLabels.map((mark) => {
+          const angleRad = (mark.angleDeg - 90) * DEG_TO_RAD;
+          return (
+            <text
+              key={mark.label}
+              x={center + ringRadius * Math.cos(angleRad)}
+              y={center + ringRadius * Math.sin(angleRad)}
+              dy="0.35em"
+              textAnchor="middle"
+              fontSize={size / 20}
+              fontWeight={600}
+              fill="var(--ink-secondary)"
+              fontFamily="var(--font-ui)"
+            >
+              {mark.label}
+            </text>
+          );
+        })}
+        {/* wedge: desired azimuth ± tolerance (their thetaCenter = desired − 90) */}
+        {reading.isValid && (
+          <path
+            d={sectorPath(
+              center,
+              center,
+              0.98 * ringRadius,
+              reading.desiredAzimuthDeg - 90,
+              2 * reading.azimuthToleranceDeg,
+            )}
+            fill="var(--ink-muted)"
+            opacity={reading.isAligned ? 0.32 : 0.16}
           />
-          {compassLabels.map((mark) => {
-            const labelPoint = polar(center, center, mark.angle, ringRadius + 14);
+        )}
+        {/* dish rect + orange needle, both at the ACTUAL azimuth */}
+        <g transform={`rotate(${needleAzimuth} ${center} ${center})`}>
+          <rect
+            x={center - dishWidth / 2}
+            y={center - dishHeight / 2}
+            width={dishWidth}
+            height={dishHeight}
+            rx={1}
+            fill="var(--chart-ink)"
+          />
+          {reading.isValid && (
+            <line
+              x1={center}
+              y1={center}
+              x2={center}
+              y2={center - 0.94 * ringRadius}
+              stroke={NEEDLE_ORANGE}
+              strokeWidth={1.5}
+              strokeLinecap="round"
+            />
+          )}
+        </g>
+      </svg>
+    </div>
+  );
+}
+
+// ---------- Tilt (their Ad: y-flipped quarter arc, ratios verbatim) ----------
+
+function TiltInstrument({ reading }: { reading: AlignmentReading }) {
+  const size = 250;
+  const pivot = size / 6;
+  const arcRadius = 0.77 * size;
+  const dishLength = size / 4;
+  const dishThickness = dishLength / 10;
+  const needleElevation = reading.isValid ? reading.boresightElevationDeg : 70;
+
+  const arcDots: number[] = [];
+  for (let dotIndex = 0; dotIndex < 19; dotIndex++) arcDots.push(dotIndex * 5);
+
+  return (
+    <div className="instrument-panel">
+      <InstrumentHead
+        label="Tilt"
+        berry={reading.isElevationValid ? "good" : reading.isValid ? "bad" : "unknown"}
+      />
+      <svg width="100%" viewBox={`0 0 ${size} ${size}`}>
+        {/* their y-up coordinate system: translate(0, size) scale(1, -1) */}
+        <g transform={`translate(0, ${size}) scale(1, -1)`}>
+          {arcDots.map((angleDeg) => {
+            const angleRad = angleDeg * DEG_TO_RAD;
             return (
-              <text
-                key={mark.label}
-                x={labelPoint.x}
-                y={labelPoint.y + 3}
-                textAnchor="middle"
-                fontSize={10}
-                fontWeight={600}
+              <circle
+                key={angleDeg}
+                cx={pivot + arcRadius * Math.cos(angleRad)}
+                cy={pivot + arcRadius * Math.sin(angleRad)}
+                r={1.2}
                 fill="var(--ink-secondary)"
-                fontFamily="var(--font-ui)"
-              >
-                {mark.label}
-              </text>
+              />
             );
           })}
-          {/* tolerance wedge around the desired azimuth */}
-          <path d={wedgePath(center, center, desiredAzimuth, ringRadius - 4)} fill="var(--ink-muted)" opacity={0.22} />
-          {/* desired azimuth needle */}
-          <line
-            x1={center}
-            y1={center}
-            x2={polar(center, center, desiredAzimuth, ringRadius - 4).x}
-            y2={polar(center, center, desiredAzimuth, ringRadius - 4).y}
-            stroke="var(--chart-warm)"
-            strokeWidth={2}
-            strokeLinecap="round"
-          />
-          {/* actual boresight needle (magnified error) */}
-          <line
-            x1={center}
-            y1={center}
-            x2={polar(center, center, displayedDishAzimuth, ringRadius - 24).x}
-            y2={polar(center, center, displayedDishAzimuth, ringRadius - 24).y}
-            stroke="var(--chart-ink)"
-            strokeWidth={1.6}
-            strokeLinecap="round"
-            opacity={0.85}
-          />
-          {/* the dish, seen from above, at the magnified actual azimuth */}
-          <g transform={`rotate(${displayedDishAzimuth} ${center} ${center})`}>
-            <rect
-              x={center - 11}
-              y={center - 15}
-              width={22}
-              height={30}
-              rx={2.5}
-              fill="var(--chart-ink)"
-              stroke="var(--surface)"
-              strokeWidth={1.5}
+          {/* wedge spanning the valid elevation band */}
+          {reading.isValid && (
+            <path
+              d={sectorPath(
+                pivot,
+                pivot,
+                0.98 * arcRadius,
+                (reading.upperElevationLimitDeg + reading.lowerElevationLimitDeg) / 2,
+                reading.upperElevationLimitDeg - reading.lowerElevationLimitDeg,
+              )}
+              fill="var(--ink-muted)"
+              opacity={reading.isElevationValid ? 0.32 : 0.16}
             />
+          )}
+          {/* dish plate + orange needle at the ACTUAL elevation */}
+          <g transform={`rotate(${needleElevation - 90} ${pivot} ${pivot})`}>
+            <rect
+              x={pivot - dishLength / 2}
+              y={pivot - dishThickness / 2}
+              width={dishLength}
+              height={dishThickness}
+              rx={1}
+              fill="var(--chart-ink)"
+            />
+            {reading.isValid && (
+              <line
+                x1={pivot}
+                y1={pivot}
+                x2={pivot}
+                y2={pivot + 0.96 * arcRadius}
+                stroke={NEEDLE_ORANGE}
+                strokeWidth={1.5}
+                strokeLinecap="round"
+              />
+            )}
           </g>
         </g>
       </svg>
@@ -144,154 +331,60 @@ function RotationInstrument({ alignment }: { alignment: DishAlignmentStatsJson }
   );
 }
 
-function TiltInstrument({ alignment }: { alignment: DishAlignmentStatsJson }) {
-  const width = 250;
-  const height = 220;
-  const pivotX = 62;
-  const pivotY = height - 44;
-  const armLength = 132;
-  const actualElevation = alignment.boresightElevationDeg ?? 0;
-  const desiredElevation = alignment.desiredBoresightElevationDeg ?? 0;
-  const isGood = Math.abs(actualElevation - desiredElevation) < ALIGNED_TOLERANCE_DEG;
-  const displayedElevation = desiredElevation + magnifiedError(actualElevation, desiredElevation);
-
-  // elevation measured from the horizon; drawn in the up-right quadrant
-  const pointAt = (elevationDeg: number, radius: number) => ({
-    x: pivotX + Math.cos((elevationDeg * Math.PI) / 180) * radius,
-    y: pivotY - Math.sin((elevationDeg * Math.PI) / 180) * radius,
-  });
-
-  const arcDots = Array.from({ length: 25 }, (_, dotIndex) => 25 + dotIndex * 2.9); // 25°..95°
-  const desiredPoint = pointAt(desiredElevation, armLength);
-  const wedgeFrom = pointAt(desiredElevation + WEDGE_HALF_WIDTH_DEG, armLength - 6);
-  const wedgeTo = pointAt(desiredElevation - WEDGE_HALF_WIDTH_DEG, armLength - 6);
-  // the dish plane is perpendicular to its (magnified-error) boresight
-  const dishHalf = 26;
-  const dishPlaneAngleRad = ((displayedElevation - 90) * Math.PI) / 180;
-  const dishFrom = {
-    x: pivotX - Math.cos(dishPlaneAngleRad) * dishHalf,
-    y: pivotY + Math.sin(dishPlaneAngleRad) * dishHalf,
-  };
-  const dishTo = {
-    x: pivotX + Math.cos(dishPlaneAngleRad) * dishHalf,
-    y: pivotY - Math.sin(dishPlaneAngleRad) * dishHalf,
-  };
-
-  return (
-    <div className="instrument-panel">
-      <InstrumentHead label="Tilt" isGood={isGood} />
-      <svg width="100%" viewBox={`0 0 ${width} ${height - 30}`}>
-        <g transform="translate(0,-16)">
-          {arcDots.map((elevationDeg) => {
-            const dotPoint = pointAt(elevationDeg, armLength + 14);
-            const isMajorTick = Math.round(elevationDeg) % 15 < 3;
-            return (
-              <circle
-                key={elevationDeg}
-                cx={dotPoint.x}
-                cy={dotPoint.y}
-                r={isMajorTick ? 1.7 : 1.1}
-                fill="var(--ink-muted)"
-                opacity={0.8}
-              />
-            );
-          })}
-          <path
-            d={`M${pivotX},${pivotY} L${wedgeFrom.x.toFixed(1)},${wedgeFrom.y.toFixed(1)} A${armLength - 6},${armLength - 6} 0 0 1 ${wedgeTo.x.toFixed(1)},${wedgeTo.y.toFixed(1)} Z`}
-            fill="var(--ink-muted)"
-            opacity={0.22}
-          />
-          <line
-            x1={pivotX}
-            y1={pivotY}
-            x2={desiredPoint.x}
-            y2={desiredPoint.y}
-            stroke="var(--chart-warm)"
-            strokeWidth={2}
-            strokeLinecap="round"
-          />
-          {/* actual boresight needle (magnified error) */}
-          <line
-            x1={pivotX}
-            y1={pivotY}
-            x2={pointAt(displayedElevation, armLength - 18).x}
-            y2={pointAt(displayedElevation, armLength - 18).y}
-            stroke="var(--chart-ink)"
-            strokeWidth={1.6}
-            strokeLinecap="round"
-            opacity={0.85}
-          />
-          {/* dish panel + mast */}
-          <line
-            x1={pivotX}
-            y1={pivotY}
-            x2={pivotX}
-            y2={pivotY + 22}
-            stroke="var(--chart-ink)"
-            strokeWidth={3}
-            strokeLinecap="round"
-            opacity={0.7}
-          />
-          <line
-            x1={dishFrom.x}
-            y1={dishFrom.y}
-            x2={dishTo.x}
-            y2={dishTo.y}
-            stroke="var(--chart-ink)"
-            strokeWidth={6}
-            strokeLinecap="round"
-          />
-        </g>
-      </svg>
-    </div>
-  );
-}
+// ---------- the sheet content ----------
 
 export function AlignmentPanel({ status }: { status: DishStatusJson }) {
-  const alignment = status.alignmentStats ?? {};
-  const verdict = alignmentVerdict(status);
-  const isAligned = verdict === "aligned";
+  const reading = computeAlignment(status);
+  const stats = status.alignmentStats;
 
   return (
     <div>
       <div
         className="stat-caption"
-        style={{ color: isAligned ? "var(--status-good)" : "var(--chart-warm)", fontWeight: 600, fontSize: 13.5 }}
+        style={{
+          color: reading.isAligned ? "var(--status-good)" : reading.isValid ? "var(--chart-warm)" : "var(--ink-muted)",
+          fontWeight: 600,
+          fontSize: 13.5,
+        }}
       >
-        {isAligned
-          ? "Starlink is aligned — pointed in the correct direction."
-          : "Starlink wants to point elsewhere — adjust the dish."}
+        {!reading.isValid
+          ? "Attitude filter not ready — alignment data is settling."
+          : reading.isAligned
+            ? "Starlink is aligned — pointed in the correct direction."
+            : "Starlink is not aligned — adjust the dish toward the wedge."}
       </div>
 
       <div className="instrument-row">
-        <RotationInstrument alignment={alignment} />
-        <TiltInstrument alignment={alignment} />
+        <RotationInstrument reading={reading} />
+        <TiltInstrument reading={reading} />
       </div>
 
       <div className="device-grid device-grid-two">
         <div className="device-row">
           <span className="device-label">Azimuth</span>
           <span className="mono-value">
-            {(alignment.boresightAzimuthDeg ?? 0).toFixed(1)}° → {(alignment.desiredBoresightAzimuthDeg ?? 0).toFixed(1)}°
+            {reading.boresightAzimuthDeg.toFixed(1)}° · target {reading.desiredAzimuthDeg.toFixed(1)}° ±
+            {reading.azimuthToleranceDeg.toFixed(0)}°
           </span>
         </div>
         <div className="device-row">
           <span className="device-label">Elevation</span>
           <span className="mono-value">
-            {(alignment.boresightElevationDeg ?? 0).toFixed(1)}° → {(alignment.desiredBoresightElevationDeg ?? 0).toFixed(1)}°
+            {reading.boresightElevationDeg.toFixed(1)}° · band {reading.lowerElevationLimitDeg.toFixed(0)}–
+            {reading.upperElevationLimitDeg.toFixed(0)}°
           </span>
         </div>
         <div className="device-row">
           <span className="device-label">Tilt</span>
-          <span className="mono-value">{(alignment.tiltAngleDeg ?? 0).toFixed(1)}°</span>
+          <span className="mono-value">{(stats?.tiltAngleDeg ?? 0).toFixed(1)}°</span>
         </div>
         <div className="device-row">
           <span className="device-label">Attitude uncertainty</span>
-          <span className="mono-value">±{(alignment.attitudeUncertaintyDeg ?? 0).toFixed(2)}°</span>
+          <span className="mono-value">±{(stats?.attitudeUncertaintyDeg ?? 0).toFixed(2)}°</span>
         </div>
         <div className="device-row">
           <span className="device-label">Attitude filter</span>
-          <span className="mono-value">{(alignment.attitudeEstimationState ?? "—").replaceAll("_", " ").toLowerCase()}</span>
+          <span className="mono-value">{(stats?.attitudeEstimationState ?? "—").replaceAll("_", " ").toLowerCase()}</span>
         </div>
         <div className="device-row">
           <span className="device-label">GPS</span>
@@ -302,9 +395,8 @@ export function AlignmentPanel({ status }: { status: DishStatusJson }) {
       </div>
 
       <div className="stat-caption" style={{ marginTop: 12 }}>
-        white = the dish now · orange = where it wants to point · gray wedge = aligned tolerance. Pointing
-        errors are drawn ×{ERROR_MAGNIFICATION} so sub-degree offsets stay visible — the numbers below are
-        true values, updating live every 2 s.
+        orange = where the dish is pointing · gray wedge = acceptable range. Geometry and thresholds are
+        ported 1:1 from the dish's own alignment code; values update live every 2 s.
       </div>
     </div>
   );

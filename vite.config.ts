@@ -34,6 +34,21 @@ export default defineConfig({
           });
         },
       },
+      // The Starlink router speaks the same grpc-web protocol on its LAN IP.
+      "/router": {
+        target: "http://192.168.1.1:9001",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/router/, ""),
+        configure: (proxy) => {
+          const proxyEvents = proxy as unknown as {
+            on(eventName: "proxyReq", handler: (proxyRequest: OutgoingProxyRequest) => void): void;
+          };
+          proxyEvents.on("proxyReq", (proxyRequest) => {
+            proxyRequest.removeHeader("referer");
+            proxyRequest.removeHeader("origin");
+          });
+        },
+      },
       // CelesTrak publishes SpaceX's official Starlink ephemerides but sends
       // no CORS headers; same-origin proxy for the TLE fetch.
       "/celestrak": {

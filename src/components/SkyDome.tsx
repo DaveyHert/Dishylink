@@ -29,6 +29,9 @@ interface SkyDomeProps {
   observerLocation: ObserverLocation | null;
   onLocationSaved: (location: ObserverLocation) => void;
   onClearLocation: () => void;
+  /** "standard" = compact obstructions card; "immersive" = full satellite view in a sheet. */
+  variant?: "standard" | "immersive";
+  onOpenImmersive?: () => void;
 }
 
 type DomePointKind = "clear" | "obstructed" | "unmapped";
@@ -46,7 +49,8 @@ interface TrailPoint {
   atMs: number;
 }
 
-const CANVAS_SIZE = 330;
+const STANDARD_CANVAS_SIZE = 330;
+const IMMERSIVE_CANVAS_SIZE = 540;
 const GRID_STRIDE = 2;
 const INITIAL_YAW = 0.6;
 const INITIAL_ELEVATION = 0.62;
@@ -120,7 +124,11 @@ export function SkyDome({
   observerLocation,
   onLocationSaved,
   onClearLocation,
+  variant = "standard",
+  onOpenImmersive,
 }: SkyDomeProps) {
+  const isImmersive = variant === "immersive";
+  const canvasSize = isImmersive ? IMMERSIVE_CANVAS_SIZE : STANDARD_CANVAS_SIZE;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const pointsRef = useRef<DomePoint[]>([]);
   const yawRef = useRef(INITIAL_YAW);
@@ -139,7 +147,7 @@ export function SkyDome({
     if (!context) return;
 
     const pixelRatio = window.devicePixelRatio > 1 ? 2 : 1;
-    const sizePx = CANVAS_SIZE * pixelRatio;
+    const sizePx = canvasSize * pixelRatio;
     if (canvas.width !== sizePx) {
       canvas.width = sizePx;
       canvas.height = sizePx;
@@ -249,8 +257,8 @@ export function SkyDome({
     context.fill();
     context.restore();
 
-    // satellites (live view only — historical sky had different satellites)
-    if (!isViewingHistory && satellites.sampleSky) {
+    // satellites: immersive live view only (historical sky had different satellites)
+    if (isImmersive && !isViewingHistory && satellites.sampleSky) {
       const inViewSatellites = satellites.sampleSky();
       const nowMs = Date.now();
 
@@ -337,7 +345,7 @@ export function SkyDome({
         }
       }
     }
-  }, [satellites, isViewingHistory]);
+  }, [satellites, isViewingHistory, isImmersive, canvasSize]);
 
   // rebuild dome points when the data source (live map or scrubbed snapshot) changes
   useEffect(() => {
@@ -364,9 +372,9 @@ export function SkyDome({
     if (obstructionMap?.snr) setSnapshots(saveSnapshotIfDue(obstructionMap));
   }, [obstructionMap]);
 
-  // animation loop while satellites are live (or a drag is possible)
+  // animation loop while satellites are live (immersive only)
   useEffect(() => {
-    if (!satellites.sampleSky || isViewingHistory) return;
+    if (!isImmersive || !satellites.sampleSky || isViewingHistory) return;
     let animationFrameId = 0;
     let lastFrameAt = 0;
     const animate = (frameTime: number) => {
@@ -406,7 +414,7 @@ export function SkyDome({
   const validHours = (obstructionStats?.validS ?? 0) / 3600;
   const { stats, feedState } = satellites;
 
-  const noteText = isViewingHistory
+  const immersiveNote = isViewingHistory
     ? `Viewing the obstruction map as of ${new Date(snapshots[scrubIndex].takenAtMs).toLocaleString()}.`
     : feedState === "loading"
       ? "Loading SpaceX's published constellation ephemerides…"
@@ -415,29 +423,96 @@ export function SkyDome({
         : fractionObstructed < 0.005
           ? "Your Starlink has an unobstructed view of the sky. Satellites shown are propagated live from SpaceX's published ephemerides; the orange beam marks the best unobstructed satellite."
           : "Obstructed patches cause brief interruptions as satellites pass behind them. The orange beam marks the best unobstructed satellite.";
+  const standardNote =
+    fractionObstructed < 0.005
+      ? "Your Starlink has an unobstructed view of the sky. The map becomes more accurate as the dish collects data."
+      : "Obstructed patches cause brief interruptions as satellites pass behind them.";
+
+  const domeCanvas =
+    obstructionMap?.snr || isViewingHistory ? (
+      <canvas
+        ref={canvasRef}
+        style={{ width: canvasSize, height: canvasSize }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+      />
+    ) : (
+      <div className="empty-note">waiting for obstruction data…</div>
+    );
+
+  const baseLegend = (
+    <>
+      <span className="legend-item">
+        <span className="legend-cell" style={{ background: "var(--ink-muted)", opacity: 0.45 }} />
+        Unmapped
+      </span>
+      <span className="legend-item">
+        <span className="legend-cell" style={{ background: "var(--chart-ink)" }} />
+        Clear view
+      </span>
+      <span className="legend-item">
+        <span className="legend-cell" style={{ background: "var(--status-critical)" }} />
+        Obstructions
+      </span>
+    </>
+  );
+
+  const baseStats = (
+    <>
+      <div className="skydome-stat">
+        <span className="stat-caption">Sky obstructed</span>
+        <span className="mono-value">{(fractionObstructed * 100).toFixed(2)}%</span>
+      </div>
+      <div className="skydome-stat">
+        <span className="stat-caption">Observed for</span>
+        <span className="mono-value">{validHours.toFixed(1)} h</span>
+      </div>
+    </>
+  );
+
+  if (!isImmersive) {
+    return (
+      <div className="card row-span-2 span-4">
+        <div className="card-header">
+          <span className="card-title">Obstructions</span>
+          <button className="card-link" onClick={onOpenImmersive}>
+            Sky view ›
+          </button>
+        </div>
+        <div className="skydome-canvas-wrap">{domeCanvas}</div>
+        <div className="skydome-legend">{baseLegend}</div>
+        <div className="skydome-stats">{baseStats}</div>
+        <div className="skydome-note">
+          <span aria-hidden="true">ⓘ</span>
+          <span>{standardNote}</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="card row-span-2 span-4">
-      <div className="card-header">
-        <span className="card-title">Sky view</span>
+    <div className="skydome-immersive">
+      <div className="card-header" style={{ marginBottom: 0 }}>
         <span className="card-meta">{isViewingHistory ? "time-lapse" : "drag to orbit"}</span>
-      </div>
-      <div className="skydome-canvas-wrap">
-        {obstructionMap?.snr || isViewingHistory ? (
-          <canvas
-            ref={canvasRef}
-            style={{ width: CANVAS_SIZE, height: CANVAS_SIZE }}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerUp}
-          />
-        ) : (
-          <div className="empty-note">waiting for obstruction data…</div>
+        {feedState === "active" && observerLocation && (
+          <span className="site-line" style={{ marginTop: 0 }}>
+            <span className="stat-caption">
+              site {observerLocation.latitudeDeg.toFixed(4)}, {observerLocation.longitudeDeg.toFixed(4)}
+            </span>
+            <button className="site-change" onClick={onClearLocation}>
+              change
+            </button>
+          </span>
         )}
       </div>
+      <div className="skydome-canvas-wrap">{domeCanvas}</div>
       {snapshots.length >= 2 && (
         <div className="skydome-scrub">
+          <span className="stat-caption" style={{ whiteSpace: "nowrap" }}>
+            Obstruction time-lapse
+          </span>
           <input
             type="range"
             min={0}
@@ -457,32 +532,14 @@ export function SkyDome({
         </div>
       )}
       <div className="skydome-legend">
-        <span className="legend-item">
-          <span className="legend-cell" style={{ background: "var(--ink-muted)", opacity: 0.45 }} />
-          Unmapped
-        </span>
-        <span className="legend-item">
-          <span className="legend-cell" style={{ background: "var(--chart-ink)" }} />
-          Clear view
-        </span>
-        <span className="legend-item">
-          <span className="legend-cell" style={{ background: "var(--status-critical)" }} />
-          Obstructions
-        </span>
+        {baseLegend}
         <span className="legend-item">
           <span className="legend-cell" style={{ background: "var(--chart-warm)" }} />
           Serving satellite
         </span>
       </div>
       <div className="skydome-stats">
-        <div className="skydome-stat">
-          <span className="stat-caption">Sky obstructed</span>
-          <span className="mono-value">{(fractionObstructed * 100).toFixed(2)}%</span>
-        </div>
-        <div className="skydome-stat">
-          <span className="stat-caption">Observed for</span>
-          <span className="mono-value">{validHours.toFixed(1)} h</span>
-        </div>
+        {baseStats}
         {feedState === "active" && (
           <>
             <div className="skydome-stat">
@@ -505,16 +562,6 @@ export function SkyDome({
                   : "none above 25°"}
               </span>
             </div>
-            {observerLocation && (
-              <div className="skydome-stat site-line" style={{ gridColumn: "1 / -1" }}>
-                <span className="stat-caption">
-                  site {observerLocation.latitudeDeg.toFixed(4)}, {observerLocation.longitudeDeg.toFixed(4)}
-                </span>
-                <button className="site-change" onClick={onClearLocation}>
-                  change
-                </button>
-              </div>
-            )}
           </>
         )}
       </div>
@@ -523,7 +570,7 @@ export function SkyDome({
       ) : (
         <div className="skydome-note">
           <span aria-hidden="true">ⓘ</span>
-          <span>{noteText}</span>
+          <span>{immersiveNote}</span>
         </div>
       )}
     </div>

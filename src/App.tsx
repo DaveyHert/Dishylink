@@ -20,7 +20,7 @@ import type { ObserverLocation } from "./lib/satellites";
 import type { TelemetrySample } from "./lib/telemetry";
 
 type ThemeName = "light" | "dark";
-type SheetName = "speedtest" | "alignment" | "terminal";
+type SheetName = "speedtest" | "alignment" | "skyview";
 
 const WINDOW_CHOICES: { label: string; minutes: number }[] = [
   { label: "15M", minutes: 15 },
@@ -210,6 +210,8 @@ export default function App() {
                 clearSavedLocation();
                 setSavedObserver(null);
               }}
+              variant="standard"
+              onOpenImmersive={() => setOpenSheet("skyview")}
             />
 
             <div className="card span-8">
@@ -259,8 +261,28 @@ export default function App() {
         </SheetModal>
       )}
       {openSheet === "alignment" && status && (
-        <SheetModal title="Alignment" onClose={() => setOpenSheet(null)} wide>
+        <SheetModal title="Alignment" onClose={() => setOpenSheet(null)} size="wide">
           <AlignmentPanel status={status} />
+        </SheetModal>
+      )}
+      {openSheet === "skyview" && (
+        <SheetModal title="Sky view" onClose={() => setOpenSheet(null)} size="xl">
+          <SkyDome
+            obstructionMap={telemetry.obstructionMap}
+            obstructionStats={status?.obstructionStats}
+            theme={theme}
+            satellites={satellites}
+            observerLocation={observerLocation}
+            onLocationSaved={(location) => {
+              saveLocation(location);
+              setSavedObserver(location);
+            }}
+            onClearLocation={() => {
+              clearSavedLocation();
+              setSavedObserver(null);
+            }}
+            variant="immersive"
+          />
         </SheetModal>
       )}
     </>
