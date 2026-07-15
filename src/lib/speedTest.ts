@@ -7,6 +7,7 @@ export interface SpeedTestProgress {
   downloadMbps: number | null;
   uploadMbps: number | null;
   latencyMs: number | null;
+  jitterMs: number | null;
 }
 
 const DOWNLOAD_BYTES = 60_000_000;
@@ -14,15 +15,19 @@ const UPLOAD_BYTES = 12_000_000;
 const PHASE_TIME_LIMIT_MS = 10_000;
 const LATENCY_PROBES = 4;
 
-async function measureLatency(): Promise<number> {
+async function measureLatency(): Promise<{ latencyMs: number; jitterMs: number }> {
   const roundTrips: number[] = [];
   for (let probeIndex = 0; probeIndex < LATENCY_PROBES; probeIndex++) {
     const startedAt = performance.now();
     await fetch(`/speedtest/__down?bytes=0&cachebust=${Date.now()}-${probeIndex}`, { cache: "no-store" });
     roundTrips.push(performance.now() - startedAt);
   }
+  // Jitter = mean absolute difference between consecutive probes (Ookla-style).
+  let jitterSum = 0;
+  for (let i = 1; i < roundTrips.length; i++) jitterSum += Math.abs(roundTrips[i] - roundTrips[i - 1]);
+  const jitterMs = roundTrips.length > 1 ? jitterSum / (roundTrips.length - 1) : 0;
   roundTrips.sort((first, second) => first - second);
-  return roundTrips[Math.floor(roundTrips.length / 2)];
+  return { latencyMs: roundTrips[Math.floor(roundTrips.length / 2)], jitterMs };
 }
 
 async function measureDownload(onMbps: (mbps: number) => void): Promise<number> {
@@ -64,11 +69,19 @@ async function measureUpload(onMbps: (mbps: number) => void): Promise<number> {
 }
 
 export async function runSpeedTest(onProgress: (progress: SpeedTestProgress) => void): Promise<void> {
-  const progress: SpeedTestProgress = { phase: "latency", downloadMbps: null, uploadMbps: null, latencyMs: null };
+  const progress: SpeedTestProgress = {
+    phase: "latency",
+    downloadMbps: null,
+    uploadMbps: null,
+    latencyMs: null,
+    jitterMs: null,
+  };
   const report = () => onProgress({ ...progress });
   report();
   try {
-    progress.latencyMs = await measureLatency();
+    const latency = await measureLatency();
+    progress.latencyMs = latency.latencyMs;
+    progress.jitterMs = latency.jitterMs;
     progress.phase = "download";
     report();
     progress.downloadMbps = await measureDownload((liveMbps) => {

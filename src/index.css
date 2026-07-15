@@ -1065,8 +1065,153 @@ button.card {
 
 /* ---------- speed test ---------- */
 
+.speedtest {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.speed-headlines {
+  display: flex;
+  width: 100%;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.speed-headline {
+  flex: 1;
+  padding: 8px 4px;
+  border-radius: 10px;
+  transition: background 150ms ease;
+}
+
+.speed-headline.active {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.speed-headline-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+}
+
+.speed-headline.active .speed-headline-label {
+  color: var(--ink);
+}
+
+.speed-headline-arrow {
+  font-weight: 700;
+}
+
+.speed-headline-unit {
+  font-weight: 500;
+}
+
+.speed-headline-value {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  line-height: 1.1;
+}
+
+.speed-metrics {
+  display: flex;
+  gap: 18px;
+  padding: 8px 0;
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+  width: 100%;
+  justify-content: center;
+}
+
+.speed-metric {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.speed-metric-label {
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.speed-metric-value {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.speed-metric-unit {
+  font-weight: 500;
+  color: var(--ink-muted);
+}
+
+.speed-gauge {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.speed-gauge-svg {
+  width: 100%;
+  max-width: 300px;
+  height: auto;
+}
+
+.gauge-track {
+  stroke: var(--hairline);
+  stroke-width: 10;
+}
+
+.gauge-tick {
+  stroke: var(--baseline);
+  stroke-width: 1.5;
+}
+
+.gauge-tick-label {
+  fill: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+
+.gauge-needle {
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.gauge-value {
+  fill: var(--ink);
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.gauge-unit {
+  fill: var(--ink-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.speed-gauge-caption {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  margin-top: -6px;
+}
+
+.speedtest-status {
+  margin-top: 10px;
+  text-align: center;
+}
+
 .speedtest-button {
   width: 100%;
+  margin-top: 8px;
   padding: 11px 0;
   border: none;
   border-radius: 12px;
