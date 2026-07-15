@@ -4,6 +4,13 @@
    status colors. Light mode is the paper adaptation; dark mode is the
    Starlink blackout. Dot-grid page texture in both. */
 
+/* Tailwind utilities, without preflight — the hand-written CSS below already
+   provides the reset/base, and skipping preflight lets Tailwind coexist with it
+   while we migrate incrementally. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
 :root {
   --page: #f4f3ee;
   --surface: #ffffff;
@@ -22,6 +29,10 @@
   --status-good: #16a34a;
   --status-critical: #e11d48;
 
+  /* SpinLoader paints in this; follows the theme ink. Resolves dynamically, so
+     one declaration covers light + dark. */
+  --color-brand-accent: var(--ink);
+
   --font-ui: "Barlow", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 
@@ -30,7 +41,7 @@
 
 :root[data-theme="dark"] {
   --page: #000000;
-  --surface: #141414;
+  --surface: #0c0c0c;
   --surface-raised: #1e1e1e;
   --ink: #ffffff;
   --ink-secondary: #b9b9b9;
@@ -979,6 +990,30 @@ button.card {
   width: min(780px, 100%);
 }
 
+.detail-sheet-xl {
+  width: min(920px, 100%);
+}
+
+.card-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+
+.card-link:hover {
+  color: var(--ink);
+}
+
+.skydome-immersive .skydome-canvas-wrap {
+  padding: 8px 0 12px;
+}
+
 /* ---------- energy history (inside the Power detail) ---------- */
 
 .energy-history {
@@ -1209,8 +1244,16 @@ button.card {
   text-align: center;
 }
 
+.speedtest-source {
+  margin-top: 4px;
+  text-align: center;
+  font-size: 10.5px;
+  opacity: 0.7;
+}
+
 .speedtest-button {
   width: 100%;
+  min-height: 42px;
   margin-top: 8px;
   padding: 11px 0;
   border: none;
@@ -1222,6 +1265,11 @@ button.card {
   font-weight: 600;
   cursor: pointer;
   transition: opacity 120ms ease;
+  /* center the spinner; paint it in the button's text color */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  --color-brand-accent: var(--page);
 }
 
 .speedtest-button:hover:not(:disabled) { opacity: 0.85; }

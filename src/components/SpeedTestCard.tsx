@@ -6,6 +6,7 @@
 import { useState } from "react";
 import { runSpeedTest, type SpeedTestProgress } from "../lib/speedTest";
 import { SpeedGauge } from "./SpeedGauge";
+import { SpinLoader } from "./loaders/SpinLoader";
 
 const IDLE_PROGRESS: SpeedTestProgress = {
   phase: "idle",
@@ -88,9 +89,12 @@ export function SpeedTestPanel() {
           void runSpeedTest(setProgress);
         }}
       >
-        {isRunning ? "Testing…" : phase === "done" ? "Run again" : "Go"}
+        {isRunning ? <SpinLoader variant="activity" size={20} label="Running speed test" /> : phase === "done" ? "Run again" : "Go"}
       </button>
       <div className="stat-caption speedtest-status">{PHASE_LABEL[phase]}</div>
+      <div className="stat-caption speedtest-source">
+        Measured against Cloudflare · may read lower than tests to a nearby server
+      </div>
     </div>
   );
 }

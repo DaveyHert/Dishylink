@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 
 interface OutgoingProxyRequest {
   removeHeader(headerName: string): void;
@@ -8,7 +9,7 @@ interface OutgoingProxyRequest {
 // The dish's grpc-web endpoint (port 9201) only allows CORS from its own
 // origin, so the dev server proxies it same-origin under /dishy.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   // satellite.js' wasm/pthreads build spawns Web Workers; Vite bundles workers
   // as iife by default, which can't do the top-level await that build uses.
   // Emit workers as ES modules so the production build succeeds.

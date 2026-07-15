@@ -1,6 +1,11 @@
 // Ookla-style circular speed gauge: a 270° arc with a sweeping needle, a
 // non-linear (sqrt) scale so low speeds still move the needle, and the live
-// value in the center. Theme-aware via CSS variables.
+// value in the center. The needle/fill/number ease toward the target value each
+// frame (rAF) so the gauge glides like a real speedometer instead of snapping —
+// SVG geometry attributes (d, x2/y2) can't be CSS-transitioned, so we animate
+// the value itself. Theme-aware via CSS variables.
+
+import { useEffect, useRef, useState } from "react";
 
 const CENTER = 130;
 const RADIUS = 100;
@@ -38,8 +43,36 @@ interface SpeedGaugeProps {
   caption: string;
 }
 
+/** Eases a displayed number toward `target` each animation frame. */
+function useEasedValue(target: number): number {
+  const [displayed, setDisplayed] = useState(target);
+  const displayedRef = useRef(target);
+  const targetRef = useRef(target);
+  targetRef.current = target;
+
+  useEffect(() => {
+    let frame = 0;
+    const tick = () => {
+      const goal = targetRef.current;
+      const current = displayedRef.current;
+      // Exponential smoothing: fast to start, gentle settle — speedometer feel.
+      const next = Math.abs(goal - current) < 0.05 ? goal : current + (goal - current) * 0.14;
+      if (next !== current) {
+        displayedRef.current = next;
+        setDisplayed(next);
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  return displayed;
+}
+
 export function SpeedGauge({ value, mode, caption }: SpeedGaugeProps) {
-  const fraction = value === null ? 0 : fractionFor(value);
+  const eased = useEasedValue(value ?? 0);
+  const fraction = fractionFor(eased);
   const needleDeg = START_DEG + fraction * SWEEP_DEG;
   const [needleX, needleY] = pointOnArc(RADIUS - 12, needleDeg);
   const fillColor = mode === "upload" ? "var(--chart-warm)" : "var(--chart-ink)";
@@ -57,7 +90,6 @@ export function SpeedGauge({ value, mode, caption }: SpeedGaugeProps) {
             stroke={fillColor}
             strokeWidth={10}
             strokeLinecap="round"
-            style={{ transition: "stroke-dashoffset 0.2s ease" }}
           />
         )}
         {/* ticks + labels */}
@@ -76,11 +108,11 @@ export function SpeedGauge({ value, mode, caption }: SpeedGaugeProps) {
           );
         })}
         {/* needle */}
-        <line x1={CENTER} y1={CENTER} x2={needleX} y2={needleY} stroke={fillColor} className="gauge-needle" style={{ transition: "all 0.2s ease" }} />
+        <line x1={CENTER} y1={CENTER} x2={needleX} y2={needleY} stroke={fillColor} className="gauge-needle" />
         <circle cx={CENTER} cy={CENTER} r={7} fill={fillColor} />
-        {/* center readout */}
+        {/* center readout — eases with the needle; blank only when idle at rest */}
         <text x={CENTER} y={CENTER + 52} className="gauge-value" textAnchor="middle">
-          {value === null ? "—" : value.toFixed(value < 100 ? 1 : 0)}
+          {value === null && eased < 0.1 ? "—" : eased.toFixed(eased < 100 ? 1 : 0)}
         </text>
         <text x={CENTER} y={CENTER + 72} className="gauge-unit" textAnchor="middle">
           Mbps
