@@ -5,7 +5,7 @@
 // SVG geometry attributes (d, x2/y2) can't be CSS-transitioned, so we animate
 // the value itself. Theme-aware via CSS variables.
 
-import { useEffect, useRef, useState } from "react";
+import { useEasedValue } from "../hooks/useEasedValue";
 
 const CENTER = 130;
 const RADIUS = 100;
@@ -41,33 +41,6 @@ interface SpeedGaugeProps {
   mode: "download" | "upload" | "idle";
   /** Caption under the big number, e.g. "Download". */
   caption: string;
-}
-
-/** Eases a displayed number toward `target` each animation frame. */
-function useEasedValue(target: number): number {
-  const [displayed, setDisplayed] = useState(target);
-  const displayedRef = useRef(target);
-  const targetRef = useRef(target);
-  targetRef.current = target;
-
-  useEffect(() => {
-    let frame = 0;
-    const tick = () => {
-      const goal = targetRef.current;
-      const current = displayedRef.current;
-      // Exponential smoothing: fast to start, gentle settle — speedometer feel.
-      const next = Math.abs(goal - current) < 0.05 ? goal : current + (goal - current) * 0.14;
-      if (next !== current) {
-        displayedRef.current = next;
-        setDisplayed(next);
-      }
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, []);
-
-  return displayed;
 }
 
 export function SpeedGauge({ value, mode, caption }: SpeedGaugeProps) {

@@ -6,7 +6,10 @@
 import { useState } from "react";
 import { runSpeedTest, type SpeedTestProgress } from "../lib/speedTest";
 import { SpeedGauge } from "./SpeedGauge";
+import { SpeedBeam } from "./SpeedBeam";
 import { SpinLoader } from "./loaders/SpinLoader";
+
+type SpeedView = "gauge" | "beam";
 
 const IDLE_PROGRESS: SpeedTestProgress = {
   phase: "idle",
@@ -54,6 +57,7 @@ function MetricPill({ label, value, unit }: { label: string; value: string; unit
 
 export function SpeedTestPanel() {
   const [progress, setProgress] = useState<SpeedTestProgress>(IDLE_PROGRESS);
+  const [view, setView] = useState<SpeedView>("gauge");
   const { phase } = progress;
   const isRunning = phase === "latency" || phase === "download" || phase === "upload";
 
@@ -69,6 +73,27 @@ export function SpeedTestPanel() {
 
   return (
     <div className="speedtest">
+      <div className="speed-segment" role="tablist" aria-label="Speed test view">
+        <button
+          role="tab"
+          aria-selected={view === "gauge"}
+          className={view === "gauge" ? "active" : ""}
+          disabled={isRunning}
+          onClick={() => setView("gauge")}
+        >
+          Gauge
+        </button>
+        <button
+          role="tab"
+          aria-selected={view === "beam"}
+          className={view === "beam" ? "active" : ""}
+          disabled={isRunning}
+          onClick={() => setView("beam")}
+        >
+          Starlink
+        </button>
+      </div>
+
       <div className="speed-headlines">
         <HeadlineFigure arrow="↓" label="DOWNLOAD" value={fmt(progress.downloadMbps)} active={phase === "download"} />
         <HeadlineFigure arrow="↑" label="UPLOAD" value={fmt(progress.uploadMbps)} active={phase === "upload"} />
@@ -80,7 +105,11 @@ export function SpeedTestPanel() {
         <MetricPill label="Loss" value="—" unit="%" />
       </div>
 
-      <SpeedGauge value={gauge.value} mode={gauge.mode} caption={gauge.caption} />
+      {view === "beam" ? (
+        <SpeedBeam value={gauge.value} mode={gauge.mode} caption={gauge.caption} />
+      ) : (
+        <SpeedGauge value={gauge.value} mode={gauge.mode} caption={gauge.caption} />
+      )}
 
       <button
         className="speedtest-button"

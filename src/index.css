@@ -1014,6 +1014,203 @@ button.card {
   padding: 8px 0 12px;
 }
 
+/* ---------- time-lapse scrubber with visible stops ---------- */
+
+.scrub-track {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  height: 22px;
+}
+
+.scrub-track input[type="range"] {
+  width: 100%;
+  position: relative;
+  z-index: 1;
+}
+
+.scrub-ticks {
+  position: absolute;
+  inset: 0 8px; /* inset by ~thumb radius so ticks line up with thumb stops */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  pointer-events: none;
+}
+
+.scrub-tick {
+  width: 2px;
+  height: 8px;
+  border-radius: 1px;
+  background: var(--baseline);
+}
+
+.scrub-tick.active {
+  background: var(--ink);
+  height: 12px;
+}
+
+.scrub-tick.live {
+  background: var(--status-good);
+}
+
+/* ---------- network sheet ---------- */
+
+.network-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.network-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 2px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.network-row:last-child {
+  border-bottom: none;
+}
+
+.network-row-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.network-name {
+  font-size: 14.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.network-role {
+  color: var(--ink-muted);
+  font-weight: 500;
+}
+
+.network-sub {
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+.network-row-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex: none;
+}
+
+.network-throughput {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.network-signal {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+/* ---------- device actions (reboot / stow) ---------- */
+
+.device-actions {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.device-actions,
+.device-action-confirm-buttons {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.device-action-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--status-critical) 8%, var(--surface));
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.device-action-confirm-buttons {
+  display: flex;
+}
+
+.device-action-button {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 10px;
+  background: var(--ink);
+  color: var(--page);
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+
+.device-action-button:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.device-action-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.device-action-button.subtle {
+  background: color-mix(in srgb, var(--ink) 8%, var(--surface));
+  color: var(--ink);
+}
+
+.device-action-button.danger {
+  background: var(--status-critical);
+  color: #fff;
+}
+
+.device-action-status {
+  width: 100%;
+}
+
+/* ---------- data usage bars ---------- */
+
+.usage-bar-stack {
+  width: 100%;
+  min-height: 2px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 3px 3px 0 0;
+  overflow: hidden;
+}
+
+.usage-bar-up {
+  background: var(--chart-warm);
+  min-height: 0;
+}
+
+.usage-bar-down {
+  background: var(--chart-ink);
+  opacity: 0.75;
+}
+
 /* ---------- energy history (inside the Power detail) ---------- */
 
 .energy-history {
@@ -1237,6 +1434,99 @@ button.card {
   font-weight: 600;
   color: var(--ink-muted);
   margin-top: -6px;
+}
+
+/* segment control (Gauge | Starlink) */
+.speed-segment {
+  display: inline-flex;
+  align-self: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  margin-bottom: 12px;
+}
+
+.speed-segment button {
+  border: none;
+  background: transparent;
+  color: var(--ink-muted);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 5px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.speed-segment button.active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.speed-segment button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* Starlink beam view */
+.speed-beam {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.speed-beam-svg {
+  width: 100%;
+  max-width: 300px;
+  height: auto;
+}
+
+.beam-ring {
+  stroke: var(--hairline);
+  stroke-width: 1;
+}
+
+.beam-orbit {
+  stroke: var(--baseline);
+  stroke-width: 1;
+  stroke-dasharray: 3 5;
+}
+
+.beam-dish line {
+  stroke: var(--ink);
+  stroke-width: 2;
+}
+
+.beam-wordmark {
+  fill: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+}
+
+.speed-beam-readout {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.speed-beam-value {
+  font-size: 38px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.speed-beam-unit {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-muted);
 }
 
 .speedtest-status {
