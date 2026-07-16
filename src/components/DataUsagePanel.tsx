@@ -4,6 +4,7 @@
 // (Starlink's own billing meter is cloud-side and not exposed locally).
 
 import { useState } from "react";
+import { useElementWidth, labelStride } from "../hooks/useElementWidth";
 import { useDataUsage, type UsageBucket } from "../hooks/useDataUsage";
 import type { EnergyRange } from "../hooks/useEnergyHistory";
 
@@ -30,15 +31,22 @@ function bucketLabel(bucket: UsageBucket, range: EnergyRange): string {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+/** Roughly how wide a label renders at 9px mono: "10:00 PM" vs "7/16" vs "Jul". */
+function labelWidthFor(range: EnergyRange): number {
+  if (range === "month") return 26;
+  if (range === "day" || range === "week") return 30;
+  return 46;
+}
+
 function UsageBars({ buckets, range }: { buckets: UsageBucket[]; range: EnergyRange }) {
-  if (buckets.length === 0) return null;
+  const [barsRef, barsWidth] = useElementWidth<HTMLDivElement>();
   const totalOf = (bucket: UsageBucket) => (bucket.downGB ?? 0) + (bucket.upGB ?? 0);
   const maxTotalGB = Math.max(...buckets.map(totalOf), 1e-9);
-  // Slots with no data hold their place, so every Nth slot is still every Nth
-  // hour and the labels keep an even rhythm.
-  const labelEvery = Math.max(1, Math.ceil(buckets.length / 8));
+  // Skip labels only when the width genuinely forces it.
+  const labelEvery = labelStride(barsWidth, buckets.length, labelWidthFor(range));
+  if (buckets.length === 0) return null;
   return (
-    <div className="energy-bars">
+    <div className="energy-bars" ref={barsRef}>
       {buckets.map((bucket, index) => {
         const missing = bucket.downGB === null || bucket.upGB === null;
         const total = totalOf(bucket);
@@ -52,20 +60,26 @@ function UsageBars({ buckets, range }: { buckets: UsageBucket[]; range: EnergyRa
                 : `${bucketLabel(bucket, range)} · ↓${formatGB(bucket.downGB!)} GB · ↑${formatGB(bucket.upGB!)} GB`
             }
           >
-            {missing ? (
-              // An empty slot, not a zero one: mark the hole rather than draw a
-              // bar claiming no traffic passed.
-              <div style={{ height: "100%", width: "100%", background: "var(--ink-muted)", opacity: 0.06 }} />
-            ) : (
-              <div className="usage-bar-stack" style={{ height: `${(total / maxTotalGB) * 100}%` }}>
-                <div
-                  className="usage-bar-up"
-                  style={{ height: `${((bucket.upGB ?? 0) / Math.max(total, 1e-9)) * 100}%` }}
-                />
-                <div className="usage-bar-down" style={{ flex: 1 }} />
-              </div>
-            )}
-            <span className="energy-bar-label">{index % labelEvery === 0 ? bucketLabel(bucket, range) : " "}</span>
+            {/* Bar in its own box so its height is a share of the plot, not of
+                the plot plus the label. */}
+            <div style={{ flex: 1, minHeight: 0, width: "100%", display: "flex", alignItems: "flex-end" }}>
+              {missing ? (
+                // An empty slot, not a zero one: mark the hole rather than draw a
+                // bar claiming no traffic passed.
+                <div style={{ height: "100%", width: "100%", background: "var(--ink-muted)", opacity: 0.06 }} />
+              ) : (
+                <div className="usage-bar-stack" style={{ height: `${(total / maxTotalGB) * 100}%` }}>
+                  <div
+                    className="usage-bar-up"
+                    style={{ height: `${((bucket.upGB ?? 0) / Math.max(total, 1e-9)) * 100}%` }}
+                  />
+                  <div className="usage-bar-down" style={{ flex: 1 }} />
+                </div>
+              )}
+            </div>
+            <span className="energy-bar-label" style={{ flexShrink: 0 }}>
+              {index % labelEvery === 0 ? bucketLabel(bucket, range) : " "}
+            </span>
           </div>
         );
       })}

@@ -5,7 +5,7 @@
 // per-second readings actually collected for that minute (≤60) — so gaps in
 // collection show up as low sample counts rather than fabricated energy.
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { TelemetrySample } from "../src/lib/telemetry.ts";
 
@@ -34,14 +34,42 @@ export function foldSamplesToMinutes(samples: TelemetrySample[]): Map<number, Mi
   return buckets;
 }
 
+/**
+ * How far back minutes are kept. The month view reaches back twelve calendar
+ * months, so this has to clear a year comfortably — a shorter window would
+ * quietly hollow out the oldest bars rather than just save disk.
+ */
+const RETENTION_DAYS = 400;
+
 export class EnergyStore {
   private maxWrittenMinute = -1;
 
   constructor(private readonly filePath: string) {
     mkdirSync(dirname(filePath), { recursive: true });
+    this.compact();
     for (const bucket of this.readAll()) {
       if (bucket.minute > this.maxWrittenMinute) this.maxWrittenMinute = bucket.minute;
     }
+  }
+
+  /**
+   * Drop minutes past the retention window. The log is append-only and one line
+   * per minute — roughly half a million lines a year — so without this it grows
+   * without bound for history nothing can display.
+   */
+  compact(): number {
+    if (!existsSync(this.filePath)) return 0;
+    const all = this.readAll();
+    const cutoffSec = Math.floor(Date.now() / 1000) - RETENTION_DAYS * 86_400;
+    const kept = all.filter((bucket) => bucket.minute >= cutoffSec);
+    const dropped = all.length - kept.length;
+    if (dropped === 0) return 0;
+    const body = kept.map((bucket) => JSON.stringify(bucket)).join("\n");
+    // temp + rename so a crash mid-write never tears the log
+    const tempPath = `${this.filePath}.tmp`;
+    writeFileSync(tempPath, body ? body + "\n" : "");
+    renameSync(tempPath, this.filePath);
+    return dropped;
   }
 
   /** Newest minute already persisted; incoming samples at/below this are ignored to avoid double-counting on restart. */

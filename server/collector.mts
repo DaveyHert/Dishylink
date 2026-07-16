@@ -18,9 +18,16 @@ import { resolve } from "node:path";
 import { createFileRegistry, fromBinary, toJson } from "@bufbuild/protobuf";
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { grpcWebUnaryCall } from "../src/lib/grpcWeb.ts";
-import { decodeHistoryWindow, TelemetryAccumulator, type TelemetrySample } from "../src/lib/telemetry.ts";
+import {
+  decodeHistoryWindow,
+  decodeOutageEvents,
+  TelemetryAccumulator,
+  type TelemetrySample,
+} from "../src/lib/telemetry.ts";
 import { EnergyStore, foldSamplesToMinutes, type MinuteBucket } from "./energyStore.mts";
 import { ThermalStore } from "./thermalStore.mts";
+import { EventStore } from "./eventStore.mts";
+import { RadioStore, type RadioReading } from "./radioStore.mts";
 
 const DISH_URL =
   process.env.DISH_URL ?? "http://192.168.100.1:9201/SpaceX.API.Device.Device/Handle";
@@ -28,10 +35,19 @@ const PROTOSET_PATH = resolve("public/dish.protoset");
 const DATA_FILE = resolve("server/data/energy.ndjson");
 const SAMPLES_SNAPSHOT_FILE = resolve("server/data/samples.json");
 const THERMAL_FILE = resolve("server/data/thermal.ndjson");
+const EVENTS_FILE = resolve("server/data/events.ndjson");
+const RADIO_FILE = resolve("server/data/radio.ndjson");
 const PORT = Number(process.env.COLLECTOR_PORT ?? 8088);
 const POLL_MS = 5_000;
 const GET_HISTORY_FIELD = 1007;
 const GET_STATUS_FIELD = 1004;
+const GET_RADIO_STATS_FIELD = 1036;
+
+/**
+ * The router answers get_radio_stats on its own endpoint; the dish answers it
+ * Unimplemented. This is the only live temperature either device will give up.
+ */
+const ROUTER_URL = process.env.ROUTER_URL ?? "http://192.168.1.1:9001/SpaceX.API.Device.Device/Handle";
 
 /**
  * Thermal flags on get_status → alerts. The dish has no temperature reading to
@@ -83,8 +99,42 @@ async function getStatusAlerts(): Promise<Record<string, boolean>> {
   return json.dishGetStatus?.alerts ?? {};
 }
 
+/**
+ * Wi-Fi radio temperatures from the router. Only `temp2` is ever populated —
+ * the schema's `temp` stays absent on this firmware — so read that and fall
+ * back rather than assume.
+ */
+async function getRadioReadings(): Promise<RadioReading[]> {
+  const bytes = await grpcWebUnaryCall(ROUTER_URL, requestBytes(GET_RADIO_STATS_FIELD));
+  const json = toJson(responseSchema, fromBinary(responseSchema, bytes), { registry }) as {
+    getRadioStats?: {
+      radioStats?: Array<{
+        band?: string;
+        thermalStatus?: { temp?: number; temp2?: number; dutyCycle?: number };
+      }>;
+    };
+  };
+  const readings: RadioReading[] = [];
+  for (const radio of json.getRadioStats?.radioStats ?? []) {
+    const tempC = radio.thermalStatus?.temp2 ?? radio.thermalStatus?.temp;
+    if (tempC === undefined || !Number.isFinite(tempC)) continue;
+    readings.push({
+      band: radio.band ?? "unknown",
+      tempC,
+      dutyCycle: radio.thermalStatus?.dutyCycle ?? 100,
+    });
+  }
+  return readings;
+}
+
 const store = new EnergyStore(DATA_FILE);
+// Compaction also runs on construction; repeat daily for a collector that stays
+// up for months at a stretch.
+const COMPACT_EVERY_MS = 24 * 3_600_000;
 const thermalStore = new ThermalStore(THERMAL_FILE);
+const eventStore = new EventStore(EVENTS_FILE);
+const radioStore = new RadioStore(RADIO_FILE);
+let latestRadio: { readings: RadioReading[]; atMs: number } | null = null;
 // Minutes seen but not yet completed (the in-progress minute, replaced each poll
 // with the authoritative recompute from the ring buffer).
 const pending = new Map<number, MinuteBucket>();
@@ -157,8 +207,25 @@ async function pollThermal(): Promise<void> {
   }
 }
 
+/**
+ * Record the router's radio temperatures. The router is a separate device on a
+ * separate address: it can be unreachable while the dish is fine, so its
+ * failures stay quiet rather than reading as a dish problem.
+ */
+async function pollRadio(): Promise<void> {
+  try {
+    const readings = await getRadioReadings();
+    if (readings.length === 0) return;
+    latestRadio = { readings, atMs: Date.now() };
+    radioStore.ingest(readings, Date.now());
+  } catch {
+    // router unreachable (or not a Starlink router) — leave the last reading be
+  }
+}
+
 async function poll(): Promise<void> {
   await pollThermal();
+  await pollRadio();
 
   let history: Awaited<ReturnType<typeof getHistory>>;
   try {
@@ -167,6 +234,11 @@ async function poll(): Promise<void> {
     console.warn(`[collector] dish unreachable: ${(error as Error).message}`);
     return;
   }
+
+  // The dish's event list rolls and resets on reboot; fold each poll's view
+  // into the durable log while we still have it.
+  const newEvents = eventStore.upsert(decodeOutageEvents(history));
+  if (newEvents > 0) console.log(`[collector] recorded ${newEvents} event(s) from the dish log`);
 
   const now = Date.now();
   latestSamples = sampleWindow.ingest(history, now);
@@ -386,6 +458,23 @@ const server = createServer((request, response) => {
     );
     return;
   }
+  if (url.pathname === "/api/radio") {
+    const hours = Math.min(24, Math.max(1, Number(url.searchParams.get("hours") ?? 6)));
+    response.setHeader("Content-Type", "application/json");
+    response.end(
+      JSON.stringify({
+        current: latestRadio?.readings ?? [],
+        atMs: latestRadio?.atMs ?? null,
+        history: radioStore.history(hours),
+      }),
+    );
+    return;
+  }
+  if (url.pathname === "/api/outages") {
+    response.setHeader("Content-Type", "application/json");
+    response.end(JSON.stringify({ events: eventStore.all() }));
+    return;
+  }
   if (url.pathname === "/api/thermal") {
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify({ episodes: thermalStore.all() }));
@@ -409,6 +498,12 @@ loadSampleSnapshot();
 void poll();
 setInterval(() => void poll(), POLL_MS);
 setInterval(writeSampleSnapshot, SNAPSHOT_EVERY_MS);
+setInterval(() => {
+  const dropped = store.compact();
+  if (dropped > 0) console.log(`[collector] compacted energy log, dropped ${dropped} old minute(s)`);
+  const radioDropped = radioStore.compact();
+  if (radioDropped > 0) console.log(`[collector] compacted radio log, dropped ${radioDropped} old row(s)`);
+}, COMPACT_EVERY_MS);
 process.on("SIGTERM", () => {
   writeSampleSnapshot();
   process.exit(0);

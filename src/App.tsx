@@ -3,6 +3,7 @@ import { useDishTelemetry } from "./hooks/useDishTelemetry";
 import { useSatellites } from "./hooks/useSatellites";
 import { useOutageNotifications } from "./hooks/useOutageNotifications";
 import { useThermalEvents, useThermalNotifications } from "./hooks/useThermalEvents";
+import { useOutageHistory, mergeOutages } from "./hooks/useOutageHistory";
 import { notificationsEnabled, toggleNotifications } from "./lib/notifications";
 import { TopBar } from "./components/TopBar";
 import { StatTile } from "./components/StatTile";
@@ -66,6 +67,9 @@ export default function App() {
   const [notificationsOn, setNotificationsOn] = useState(notificationsEnabled);
   const [openDetailId, setOpenDetailId] = useState<string | null>(null);
   const [openSheet, setOpenSheet] = useState<SheetName | null>(null);
+  // Which device/node the Network sheet is drilled into — owned here so the
+  // sheet header can carry the back chevron beside its title.
+  const [networkSelectedMac, setNetworkSelectedMac] = useState<string | null>(null);
   const [savedObserver, setSavedObserver] = useState<ObserverLocation | null>(loadSavedLocation);
   const telemetry = useDishTelemetry();
   // The dish's own GPS still wins where the plan allows it (Priority); consumer
@@ -81,6 +85,13 @@ export default function App() {
   useOutageNotifications(telemetry);
   useThermalNotifications(telemetry.status);
   const thermalEvents = useThermalEvents();
+  // The dish's own event list is short and resets on reboot; the collector's log
+  // reaches further back, so the two are folded together.
+  const persistedOutages = useOutageHistory();
+  const outageEvents = useMemo(
+    () => mergeOutages(telemetry.outageEvents, persistedOutages),
+    [telemetry.outageEvents, persistedOutages],
+  );
   // Router polling runs only while a router-backed surface is open.
   const routerNetwork = useRouterNetwork(openSheet === "network" || openSheet === "settings");
 
@@ -97,8 +108,8 @@ export default function App() {
   const recentDropRate = useMemo(() => recentAverage(samples, (sample) => sample.dropRate), [samples]);
 
   const statDetails = useMemo(
-    () => buildStatDetails({ status, currentPowerW: livePowerW, outageEvents: telemetry.outageEvents }),
-    [status, livePowerW, telemetry.outageEvents],
+    () => buildStatDetails({ status, currentPowerW: livePowerW, outageEvents }),
+    [status, livePowerW, outageEvents],
   );
   const openDetail = openDetailId ? statDetails[openDetailId] : null;
 
@@ -205,7 +216,7 @@ export default function App() {
                 windowMinutes={windowMinutes}
                 formatValue={formatThroughputLabel}
                 formatTick={formatThroughputTick}
-                outageEvents={telemetry.outageEvents}
+                outageEvents={outageEvents}
               />
             </div>
 
@@ -238,7 +249,7 @@ export default function App() {
                 series={LATENCY_SERIES}
                 windowMinutes={windowMinutes}
                 formatValue={(value) => `${value.toFixed(0)} ms`}
-                outageEvents={telemetry.outageEvents}
+                outageEvents={outageEvents}
                 height={160}
               />
             </div>
@@ -261,7 +272,7 @@ export default function App() {
 
             {/* Thermal episodes join the event list, but not the charts above:
                 those shade outage bands, and a throttle is not an outage. */}
-            <OutageLog outageEvents={[...telemetry.outageEvents, ...thermalEvents]} />
+            <OutageLog outageEvents={[...outageEvents, ...thermalEvents]} />
 
             {status && <DevicePanel status={status} />}
           </section>
@@ -287,8 +298,20 @@ export default function App() {
         </SheetModal>
       )}
       {openSheet === "network" && (
-        <SheetModal title="Network" onClose={() => setOpenSheet(null)} size="wide">
-          <NetworkPanel network={routerNetwork} />
+        <SheetModal
+          title="Network"
+          onBack={networkSelectedMac ? () => setNetworkSelectedMac(null) : undefined}
+          onClose={() => {
+            setOpenSheet(null);
+            setNetworkSelectedMac(null);
+          }}
+          size="wide"
+        >
+          <NetworkPanel
+            network={routerNetwork}
+            selectedMac={networkSelectedMac}
+            onSelect={setNetworkSelectedMac}
+          />
         </SheetModal>
       )}
       <SettingsModal

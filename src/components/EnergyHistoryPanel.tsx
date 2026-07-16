@@ -4,6 +4,7 @@
 
 import { useState } from "react";
 import { useEnergyHistory, type EnergyRange, type EnergyBucket } from "../hooks/useEnergyHistory";
+import { useElementWidth, labelStride } from "../hooks/useElementWidth";
 
 const RANGE_TABS: { label: string; value: EnergyRange }[] = [
   { label: "1H", value: "1h" },
@@ -40,33 +41,44 @@ function bucketTitle(bucket: EnergyBucket, range: EnergyRange): string {
   return `${total} — only ${sampled} of ${expected} min recorded`;
 }
 
+/** Roughly how wide a label renders at 9px mono: "10:00 PM" vs "7/16" vs "Jul". */
+function labelWidthFor(range: EnergyRange): number {
+  if (range === "month") return 26;
+  if (range === "day" || range === "week") return 30;
+  return 46;
+}
+
 function EnergyBars({ buckets, range }: { buckets: EnergyBucket[]; range: EnergyRange }) {
-  if (buckets.length === 0) return null;
+  const [barsRef, barsWidth] = useElementWidth<HTMLDivElement>();
   const maxKWh = Math.max(...buckets.map((bucket) => bucket.kWh ?? 0), 1e-9);
-  // Show at most ~8 x-axis labels so dense ranges (a full day of hourly bars) don't crowd.
-  // Slots with no data still hold their place, so every Nth slot is still every
-  // Nth hour and the labels keep an even rhythm.
-  const labelEvery = Math.max(1, Math.ceil(buckets.length / 8));
+  // Skip labels only when the width genuinely forces it.
+  const labelEvery = labelStride(barsWidth, buckets.length, labelWidthFor(range));
+  if (buckets.length === 0) return null;
   return (
-    <div className="energy-bars">
+    <div className="energy-bars" ref={barsRef}>
       {buckets.map((bucket, index) => (
         <div key={bucket.t} className="energy-bar-col" title={bucketTitle(bucket, range)}>
-          {bucket.kWh === null ? (
-            // An empty slot, not a zero one: a faint full-height wash marks the
-            // hole without claiming no energy was used.
-            <div className="energy-bar" style={{ height: "100%", background: "var(--ink-muted)", opacity: 0.06 }} />
-          ) : (
-            <div
-              className="energy-bar"
-              style={{
-                height: `${(bucket.kWh / maxKWh) * 100}%`,
-                // Part-sampled slots are real but short by construction; fade one
-                // so a low bar is not read as a quiet hour.
-                opacity: isPartial(bucket) ? 0.45 : undefined,
-              }}
-            />
-          )}
-          <span className="energy-bar-label">
+          {/* The bar lives in its own box so its height is a share of the plot,
+              not of the plot plus the label. Sizing it against the whole column
+              let a tall bar squeeze the label and knock it out of line. */}
+          <div style={{ flex: 1, minHeight: 0, width: "100%", display: "flex", alignItems: "flex-end" }}>
+            {bucket.kWh === null ? (
+              // An empty slot, not a zero one: a faint full-height wash marks the
+              // hole without claiming no energy was used.
+              <div className="energy-bar" style={{ height: "100%", background: "var(--ink-muted)", opacity: 0.06 }} />
+            ) : (
+              <div
+                className="energy-bar"
+                style={{
+                  height: `${(bucket.kWh / maxKWh) * 100}%`,
+                  // Part-sampled slots are real but short by construction; fade one
+                  // so a low bar is not read as a quiet hour.
+                  opacity: isPartial(bucket) ? 0.45 : undefined,
+                }}
+              />
+            )}
+          </div>
+          <span className="energy-bar-label" style={{ flexShrink: 0 }}>
             {index % labelEvery === 0 ? bucketLabel(bucket, range) : " "}
           </span>
         </div>
