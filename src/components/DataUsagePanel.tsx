@@ -32,26 +32,43 @@ function bucketLabel(bucket: UsageBucket, range: EnergyRange): string {
 
 function UsageBars({ buckets, range }: { buckets: UsageBucket[]; range: EnergyRange }) {
   if (buckets.length === 0) return null;
-  const maxTotalGB = Math.max(...buckets.map((bucket) => bucket.downGB + bucket.upGB), 1e-9);
+  const totalOf = (bucket: UsageBucket) => (bucket.downGB ?? 0) + (bucket.upGB ?? 0);
+  const maxTotalGB = Math.max(...buckets.map(totalOf), 1e-9);
+  // Slots with no data hold their place, so every Nth slot is still every Nth
+  // hour and the labels keep an even rhythm.
   const labelEvery = Math.max(1, Math.ceil(buckets.length / 8));
   return (
     <div className="energy-bars">
-      {buckets.map((bucket, index) => (
-        <div
-          key={bucket.t}
-          className="energy-bar-col"
-          title={`${bucketLabel(bucket, range)} · ↓${formatGB(bucket.downGB)} GB · ↑${formatGB(bucket.upGB)} GB`}
-        >
-          <div className="usage-bar-stack" style={{ height: `${((bucket.downGB + bucket.upGB) / maxTotalGB) * 100}%` }}>
-            <div
-              className="usage-bar-up"
-              style={{ height: `${(bucket.upGB / Math.max(bucket.downGB + bucket.upGB, 1e-9)) * 100}%` }}
-            />
-            <div className="usage-bar-down" style={{ flex: 1 }} />
+      {buckets.map((bucket, index) => {
+        const missing = bucket.downGB === null || bucket.upGB === null;
+        const total = totalOf(bucket);
+        return (
+          <div
+            key={bucket.t}
+            className="energy-bar-col"
+            title={
+              missing
+                ? `${bucketLabel(bucket, range)} · no data — the collector wasn't running`
+                : `${bucketLabel(bucket, range)} · ↓${formatGB(bucket.downGB!)} GB · ↑${formatGB(bucket.upGB!)} GB`
+            }
+          >
+            {missing ? (
+              // An empty slot, not a zero one: mark the hole rather than draw a
+              // bar claiming no traffic passed.
+              <div style={{ height: "100%", width: "100%", background: "var(--ink-muted)", opacity: 0.06 }} />
+            ) : (
+              <div className="usage-bar-stack" style={{ height: `${(total / maxTotalGB) * 100}%` }}>
+                <div
+                  className="usage-bar-up"
+                  style={{ height: `${((bucket.upGB ?? 0) / Math.max(total, 1e-9)) * 100}%` }}
+                />
+                <div className="usage-bar-down" style={{ flex: 1 }} />
+              </div>
+            )}
+            <span className="energy-bar-label">{index % labelEvery === 0 ? bucketLabel(bucket, range) : " "}</span>
           </div>
-          <span className="energy-bar-label">{index % labelEvery === 0 ? bucketLabel(bucket, range) : " "}</span>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

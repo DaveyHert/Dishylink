@@ -256,6 +256,42 @@ function groupKeyOf(minuteSec: number, spec: RangeSpec): number {
   return Math.floor(date.getTime() / 1000);
 }
 
+/**
+ * Every bar slot in the range, including ones nothing was recorded for.
+ * Emitting only the slots that have data lets the survivors close ranks, so an
+ * hour the collector missed vanishes and the bars either side sit shoulder to
+ * shoulder as though no time passed between them.
+ */
+function groupKeysInRange(startSec: number, endSec: number, spec: RangeSpec): number[] {
+  const keys: number[] = [];
+  if (spec.group === "fixed") {
+    const first = Math.floor(startSec / spec.fixedSec!) * spec.fixedSec!;
+    for (let key = first; key <= endSec; key += spec.fixedSec!) keys.push(key);
+    return keys;
+  }
+  const cursor = new Date(startSec * 1000);
+  cursor.setHours(0, 0, 0, 0);
+  if (spec.group === "calendarWeek") cursor.setDate(cursor.getDate() - ((cursor.getDay() + 6) % 7));
+  else if (spec.group === "calendarMonth") cursor.setDate(1);
+  while (Math.floor(cursor.getTime() / 1000) <= endSec) {
+    keys.push(Math.floor(cursor.getTime() / 1000));
+    if (spec.group === "calendarDay") cursor.setDate(cursor.getDate() + 1);
+    else if (spec.group === "calendarWeek") cursor.setDate(cursor.getDate() + 7);
+    else cursor.setMonth(cursor.getMonth() + 1);
+  }
+  return keys;
+}
+
+/** Where the slot after this one starts — the end of this slot's span. */
+function nextGroupKey(key: number, spec: RangeSpec): number {
+  if (spec.group === "fixed") return key + spec.fixedSec!;
+  const cursor = new Date(key * 1000);
+  if (spec.group === "calendarDay") cursor.setDate(cursor.getDate() + 1);
+  else if (spec.group === "calendarWeek") cursor.setDate(cursor.getDate() + 7);
+  else cursor.setMonth(cursor.getMonth() + 1);
+  return Math.floor(cursor.getTime() / 1000);
+}
+
 /** Merge persisted + in-progress buckets, since "today" should include the current partial minute. */
 function bucketsInRange(startSec: number, endSec: number): MinuteBucket[] {
   const merged = store.readRange(startSec, endSec);
@@ -302,15 +338,28 @@ function summarize(range: Range, now: Date) {
       expectedSeconds,
       fraction: Math.min(1, sampledSeconds / expectedSeconds),
     },
-    buckets: [...groups.entries()]
-      .sort((a, b) => a[0] - b[0])
-      .map(([t, group]) => ({
+    buckets: groupKeysInRange(startSec, endSec, spec).map((t) => {
+      // How much of this slot the window actually asks about: the first and
+      // last slots are clipped by the range, and the last one is still running.
+      const expectedSeconds = Math.max(
+        0,
+        Math.min(nextGroupKey(t, spec), endSec) - Math.max(t, startSec),
+      );
+      const group = groups.get(t);
+      // Nothing recorded is not the same claim as nothing used — null so the
+      // bar can be left out rather than drawn at zero.
+      if (!group) {
+        return { t, kWh: null, downGB: null, upGB: null, sampledSeconds: 0, expectedSeconds };
+      }
+      return {
         t,
         kWh: group.wattSeconds / 3_600_000,
         downGB: group.dlBits / BITS_PER_GB,
         upGB: group.ulBits / BITS_PER_GB,
         sampledSeconds: group.samples,
-      })),
+        expectedSeconds,
+      };
+    }),
   };
 }
 

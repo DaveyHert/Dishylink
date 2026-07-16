@@ -7,8 +7,9 @@ import type { EnergyRange } from "./useEnergyHistory";
 
 export interface UsageBucket {
   t: number;
-  downGB: number;
-  upGB: number;
+  /** null when nothing was recorded for this slot — absence, not zero traffic. */
+  downGB: number | null;
+  upGB: number | null;
   sampledSeconds: number;
 }
 

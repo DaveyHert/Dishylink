@@ -23,18 +23,51 @@ function bucketLabel(bucket: EnergyBucket, range: EnergyRange): string {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+/** Slot the collector only caught part of: its total is real but understates the period. */
+function isPartial(bucket: EnergyBucket): boolean {
+  return (
+    bucket.kWh !== null && bucket.expectedSeconds > 0 && bucket.sampledSeconds / bucket.expectedSeconds < 0.9
+  );
+}
+
+function bucketTitle(bucket: EnergyBucket, range: EnergyRange): string {
+  const when = bucketLabel(bucket, range);
+  if (bucket.kWh === null) return `${when} · no data — the collector wasn't running`;
+  const total = `${when} · ${bucket.kWh.toFixed(3)} kWh`;
+  if (!isPartial(bucket)) return total;
+  const sampled = Math.round(bucket.sampledSeconds / 60);
+  const expected = Math.round(bucket.expectedSeconds / 60);
+  return `${total} — only ${sampled} of ${expected} min recorded`;
+}
+
 function EnergyBars({ buckets, range }: { buckets: EnergyBucket[]; range: EnergyRange }) {
   if (buckets.length === 0) return null;
-  const maxKWh = Math.max(...buckets.map((bucket) => bucket.kWh), 1e-9);
+  const maxKWh = Math.max(...buckets.map((bucket) => bucket.kWh ?? 0), 1e-9);
   // Show at most ~8 x-axis labels so dense ranges (a full day of hourly bars) don't crowd.
+  // Slots with no data still hold their place, so every Nth slot is still every
+  // Nth hour and the labels keep an even rhythm.
   const labelEvery = Math.max(1, Math.ceil(buckets.length / 8));
   return (
     <div className="energy-bars">
       {buckets.map((bucket, index) => (
-        <div key={bucket.t} className="energy-bar-col" title={`${bucketLabel(bucket, range)} · ${bucket.kWh.toFixed(3)} kWh`}>
-          <div className="energy-bar" style={{ height: `${(bucket.kWh / maxKWh) * 100}%` }} />
+        <div key={bucket.t} className="energy-bar-col" title={bucketTitle(bucket, range)}>
+          {bucket.kWh === null ? (
+            // An empty slot, not a zero one: a faint full-height wash marks the
+            // hole without claiming no energy was used.
+            <div className="energy-bar" style={{ height: "100%", background: "var(--ink-muted)", opacity: 0.06 }} />
+          ) : (
+            <div
+              className="energy-bar"
+              style={{
+                height: `${(bucket.kWh / maxKWh) * 100}%`,
+                // Part-sampled slots are real but short by construction; fade one
+                // so a low bar is not read as a quiet hour.
+                opacity: isPartial(bucket) ? 0.45 : undefined,
+              }}
+            />
+          )}
           <span className="energy-bar-label">
-            {index % labelEvery === 0 ? bucketLabel(bucket, range) : " "}
+            {index % labelEvery === 0 ? bucketLabel(bucket, range) : " "}
           </span>
         </div>
       ))}

@@ -9,8 +9,11 @@ export type EnergyRange = "1h" | "6h" | "12h" | "today" | "day" | "week" | "mont
 
 export interface EnergyBucket {
   t: number; // epoch seconds at bucket start
-  kWh: number;
+  /** null when nothing was recorded for this slot — absence, not zero use. */
+  kWh: number | null;
   sampledSeconds: number;
+  /** Seconds of this slot the range covers; the newest slot is still filling. */
+  expectedSeconds: number;
 }
 
 export interface EnergySummary {
