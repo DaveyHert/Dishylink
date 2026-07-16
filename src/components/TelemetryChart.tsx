@@ -184,20 +184,14 @@ export function TelemetryChart({
     () =>
       series.map((_, seriesIndex) =>
         toRuns(buckets, seriesIndex, xForTime, yForValue)
-          .map((run, runIndex) => {
+          .map((run) => {
             const head = run[0];
             const headX = head.x.toFixed(1);
             const headY = head.y.toFixed(1);
-            let linePath: string;
-            if (runIndex === 0) {
-              // Emerge from the ground: run flat along the baseline from the left
-              // edge to where data begins, then rise into the first sample — so
-              // the line never materializes floating in mid-air.
-              linePath = `M${leftEdgeX.toFixed(1)},${baselineY.toFixed(1)}L${headX},${baselineY.toFixed(1)}L${headX},${headY}`;
-            } else {
-              // Resuming after a hole: lift the pen rather than joining across.
-              linePath = `M${headX},${headY}`;
-            }
+            // Every run starts where its data starts. Running along the baseline
+            // to meet the edge would draw the line at zero across time we never
+            // measured — the same claim the gap break exists to avoid.
+            let linePath = `M${headX},${headY}`;
             for (const point of run.slice(1)) {
               linePath += `L${point.x.toFixed(1)},${point.y.toFixed(1)}`;
             }
@@ -207,7 +201,7 @@ export function TelemetryChart({
           })
           .join(""),
       ),
-    [buckets, series, xForTime, yForValue, baselineY, leftEdgeX],
+    [buckets, series, xForTime, yForValue],
   );
 
   const areaPath = useMemo(() => {
@@ -215,18 +209,37 @@ export function TelemetryChart({
     // One closed shape per run, so the wash leaves the same holes as the line
     // instead of shading time we never measured.
     return toRuns(buckets, 0, xForTime, yForValue)
-      .map((run, runIndex) => {
+      .map((run) => {
         const firstX = run[0].x.toFixed(1);
         const lastX = run[run.length - 1].x.toFixed(1);
         const ground = baselineY.toFixed(1);
         const lineSegment = run.map((point) => `L${point.x.toFixed(1)},${point.y.toFixed(1)}`).join("");
-        // Match the line: the first run fills from the ground at the left edge,
-        // later ones start where their data does.
-        const start = runIndex === 0 ? `M${leftEdgeX.toFixed(1)},${ground}L${firstX},${ground}` : `M${firstX},${ground}`;
-        return `${start}${lineSegment}L${lastX},${ground}Z`;
+        // Each run's fill spans only its own data, matching the line.
+        return `M${firstX},${ground}${lineSegment}L${lastX},${ground}Z`;
       })
       .join("");
-  }, [areaWash, buckets, baselineY, leftEdgeX, xForTime, yForValue]);
+  }, [areaWash, buckets, baselineY, xForTime, yForValue]);
+
+  /**
+   * Stretches of the window with no readings at all, named rather than drawn
+   * through. Includes a hole at the left edge when the record starts partway
+   * into the window: the chart shows six hours because you asked for six hours,
+   * not because six hours were measured.
+   */
+  const gapRegions = useMemo(() => {
+    if (buckets.length === 0) return [];
+    const gapThresholdMs = Math.max(bucketSpanMs * 1.5, MIN_GAP_MS);
+    const regions: { startMs: number; endMs: number }[] = [];
+    if (buckets[0].timestampMs - windowStartMs > gapThresholdMs) {
+      regions.push({ startMs: windowStartMs, endMs: buckets[0].timestampMs });
+    }
+    for (let index = 1; index < buckets.length; index++) {
+      if (buckets[index].hasGapBefore) {
+        regions.push({ startMs: buckets[index - 1].timestampMs, endMs: buckets[index].timestampMs });
+      }
+    }
+    return regions;
+  }, [buckets, bucketSpanMs, windowStartMs]);
 
   const yTickValues = useMemo(() => {
     const tickStep = niceCeiling(yMax / 4);
@@ -339,6 +352,38 @@ export function TelemetryChart({
               fill="var(--status-critical)"
               opacity={0.09}
             />
+          );
+        })}
+        {/* no-data bands: name the hole, so absence reads as deliberate rather
+            than as a chart that failed to draw */}
+        {gapRegions.map((region) => {
+          const bandStartX = Math.max(xForTime(region.startMs), leftEdgeX);
+          const bandEndX = Math.min(xForTime(region.endMs), leftEdgeX + plotWidth);
+          const bandWidth = bandEndX - bandStartX;
+          if (bandWidth <= 0) return null;
+          return (
+            <g key={region.startMs}>
+              <rect
+                x={bandStartX}
+                y={PLOT_MARGIN.top}
+                width={bandWidth}
+                height={plotHeight}
+                fill="var(--ink-muted)"
+                opacity={0.06}
+              />
+              {bandWidth > 54 && (
+                <text
+                  x={bandStartX + bandWidth / 2}
+                  y={PLOT_MARGIN.top + plotHeight / 2}
+                  textAnchor="middle"
+                  fontSize={10}
+                  fontFamily="var(--font-mono)"
+                  fill="var(--ink-muted)"
+                >
+                  no data
+                </text>
+              )}
+            </g>
           );
         })}
         {/* area wash for the first series */}
