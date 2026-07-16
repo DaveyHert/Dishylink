@@ -1,0 +1,316 @@
+// One catalogue for every alert the dish and router report.
+//
+// Both devices send alerts as bare booleans, and proto3 JSON drops false — so an
+// absent key means "fine", never "unknown". Each entry therefore carries both
+// faces: what to say when the flag is clear, and what to say when it is set.
+// The clear-state wording follows the Starlink app's own Status list ("Motors
+// healthy", "Mast is near vertical", "Not heating") so the two read alike.
+//
+// This is the source of truth for the notification panel, the status list, and
+// which alerts are worth a desktop notification.
+
+export type AlertSeverity = "critical" | "warning" | "advisory";
+
+export interface AlertSpec {
+  key: string;
+  /** Shown when the flag is false — phrased as the good news, like the app. */
+  ok: string;
+  /** Shown when the flag is true. Plain language: what is wrong, in the user's terms. */
+  firing: string;
+  severity: AlertSeverity;
+  /** Worth interrupting someone with a desktop notification. */
+  notify?: boolean;
+}
+
+/** Alerts on the dish's get_status. Order is roughly by how much it matters. */
+export const DISH_ALERTS: AlertSpec[] = [
+  {
+    key: "dishWaterDetected",
+    ok: "Dish is dry",
+    firing: "Water detected inside the dish",
+    severity: "critical",
+    notify: true,
+  },
+  {
+    key: "routerWaterDetected",
+    ok: "Router is dry",
+    firing: "Water detected inside the router",
+    severity: "critical",
+    notify: true,
+  },
+  {
+    key: "thermalShutdown",
+    ok: "Not overheated",
+    firing: "Dish shut itself down to cool off",
+    severity: "critical",
+    notify: true,
+  },
+  {
+    key: "noEthernetLink",
+    ok: "Ethernet connected",
+    firing: "No Ethernet link to the router",
+    severity: "critical",
+    notify: true,
+  },
+  {
+    key: "motorsStuck",
+    ok: "Motors healthy",
+    firing: "Motors are stuck — the dish cannot aim itself",
+    severity: "critical",
+    notify: true,
+  },
+  {
+    key: "thermalThrottle",
+    ok: "Normal temperature",
+    firing: "Dish is hot and is limiting speed to cool down",
+    severity: "warning",
+    notify: true,
+  },
+  {
+    key: "powerSupplyThermalThrottle",
+    ok: "Power supply temperature normal",
+    firing: "Power supply is hot and is limiting power",
+    severity: "warning",
+    notify: true,
+  },
+  {
+    key: "slowEthernetSpeeds",
+    ok: "Normal Ethernet speeds to router",
+    firing: "Slow Ethernet link to the router",
+    severity: "warning",
+    notify: true,
+  },
+  {
+    key: "slowEthernetSpeeds100",
+    ok: "Ethernet running at full speed",
+    firing: "Ethernet is capped at 100 Mbps — check the cable",
+    severity: "warning",
+  },
+  {
+    key: "upsuRouterPortSlow",
+    ok: "Power supply port normal",
+    firing: "Power supply's router port is running slow",
+    severity: "warning",
+  },
+  {
+    key: "mastNotNearVertical",
+    ok: "Mast is near vertical",
+    firing: "Mast is not near vertical",
+    severity: "warning",
+  },
+  {
+    key: "lowMotorCurrent",
+    ok: "Motor current normal",
+    firing: "Low motor current",
+    severity: "warning",
+  },
+  {
+    key: "lowerSignalThanPredicted",
+    ok: "Signal as predicted",
+    firing: "Signal is weaker than predicted — check for obstructions",
+    severity: "warning",
+  },
+  {
+    key: "dbfTelemStale",
+    ok: "Telemetry current",
+    firing: "Dish telemetry has gone stale",
+    severity: "warning",
+  },
+  {
+    key: "unexpectedLocation",
+    ok: "At service location",
+    firing: "Dish is away from its registered service location",
+    severity: "warning",
+  },
+  {
+    key: "obstructionMapReset",
+    ok: "Obstruction map intact",
+    firing: "Obstruction map was reset — it is remapping the sky",
+    severity: "advisory",
+  },
+  {
+    key: "roaming",
+    ok: "Not roaming",
+    firing: "Roaming — away from your registered address",
+    severity: "advisory",
+  },
+  {
+    key: "isHeating",
+    ok: "Not heating",
+    firing: "Heating itself to melt snow or ice",
+    severity: "advisory",
+  },
+  {
+    key: "isPowerSaveIdle",
+    ok: "Not sleeping",
+    firing: "Sleeping to save power",
+    severity: "advisory",
+  },
+  {
+    key: "installPending",
+    ok: "Install complete",
+    firing: "Install is still pending",
+    severity: "advisory",
+  },
+];
+
+/** Alerts on the router's get_status. Nothing read these before. */
+export const ROUTER_ALERTS: AlertSpec[] = [
+  {
+    key: "poeFuseBlown",
+    ok: "Power supply fuse intact",
+    firing: "Power supply fuse has blown",
+    severity: "critical",
+    notify: true,
+  },
+  {
+    key: "poeVinOvervoltage",
+    ok: "Power input normal",
+    firing: "Power supply input voltage is too high",
+    severity: "critical",
+    notify: true,
+  },
+  {
+    key: "poeVinUndervoltage",
+    ok: "Power input steady",
+    firing: "Power supply input voltage is too low",
+    severity: "critical",
+    notify: true,
+  },
+  {
+    key: "poeRouterOvercurrent",
+    ok: "Router current normal",
+    firing: "Router is drawing too much current",
+    severity: "critical",
+    notify: true,
+  },
+  {
+    key: "poeOnDishUnreachable",
+    ok: "Dish reachable over power supply",
+    firing: "Cannot reach the dish through the power supply",
+    severity: "critical",
+    notify: true,
+  },
+  {
+    key: "ethSwitchError",
+    ok: "Ethernet switch healthy",
+    firing: "Ethernet switch error",
+    severity: "critical",
+    notify: true,
+  },
+  {
+    key: "wanEthPoorConnection",
+    ok: "Good connection to the dish",
+    firing: "Poor Ethernet connection to the dish",
+    severity: "warning",
+    notify: true,
+  },
+  {
+    key: "highCablePingDropRate",
+    ok: "Cable link clean",
+    firing: "Cable is dropping pings — check the Starlink cable",
+    severity: "warning",
+    notify: true,
+  },
+  {
+    key: "thermalThrottle",
+    ok: "Router temperature normal",
+    firing: "Router is hot and is slowing Wi-Fi to cool down",
+    severity: "warning",
+    notify: true,
+  },
+  {
+    key: "meshUnreliableBackhaul",
+    ok: "Mesh link reliable",
+    firing: "Mesh nodes have an unreliable link to the router",
+    severity: "warning",
+  },
+  {
+    key: "meshTopologyChangingOften",
+    ok: "Mesh layout stable",
+    firing: "Mesh nodes keep switching how they connect",
+    severity: "warning",
+  },
+  {
+    key: "lanEthSlowLink10",
+    ok: "LAN ports at full speed",
+    firing: "A LAN port is stuck at 10 Mbps",
+    severity: "warning",
+  },
+  {
+    key: "lanEthSlowLink100",
+    ok: "LAN ports not capped",
+    firing: "A LAN port is capped at 100 Mbps",
+    severity: "warning",
+  },
+  {
+    key: "wiredMeshNotUsingWanIface",
+    ok: "Wired mesh on the right port",
+    firing: "Wired mesh node is not using its WAN port",
+    severity: "warning",
+  },
+  {
+    key: "poeOffCurrentNominal",
+    ok: "Power supply output normal",
+    firing: "Power supply is off but still drawing current",
+    severity: "warning",
+  },
+  {
+    key: "radiusMissingProcess",
+    ok: "Access control running",
+    firing: "Access-control process is missing",
+    severity: "warning",
+  },
+  {
+    key: "installPending",
+    ok: "Install complete",
+    firing: "Router install is still pending",
+    severity: "advisory",
+  },
+  {
+    key: "freshlyFused",
+    ok: "Router configured",
+    firing: "Router is freshly fused and not yet set up",
+    severity: "advisory",
+  },
+  {
+    key: "sandboxDisabled",
+    ok: "Sandbox available",
+    firing: "Sandbox mode is disabled",
+    severity: "advisory",
+  },
+  {
+    key: "onlyOverflightBlocked",
+    ok: "Service unrestricted",
+    firing: "Only overflight service is blocked",
+    severity: "advisory",
+  },
+  {
+    key: "offlineNetworksDisabled",
+    ok: "Offline networks available",
+    firing: "Offline networks are disabled",
+    severity: "advisory",
+  },
+];
+
+export interface AlertState extends AlertSpec {
+  active: boolean;
+  /** "dish" | "router" — both devices use overlapping keys (e.g. thermalThrottle). */
+  source: "dish" | "router";
+}
+
+/** Fold a device's raw alert booleans against its catalogue. Absent = clear. */
+export function resolveAlerts(
+  specs: AlertSpec[],
+  alerts: Record<string, boolean> | undefined,
+  source: AlertState["source"],
+): AlertState[] {
+  return specs.map((spec) => ({ ...spec, source, active: alerts?.[spec.key] === true }));
+}
+
+const SEVERITY_ORDER: Record<AlertSeverity, number> = { critical: 0, warning: 1, advisory: 2 };
+
+/** Active alerts first, worst first. */
+export function sortBySeverity(states: AlertState[]): AlertState[] {
+  return [...states].sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
+}
