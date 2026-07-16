@@ -119,9 +119,13 @@ export class TelemetryAccumulator {
     const window = decodeHistoryWindow(history, nowMs);
     if (window.samples.length === 0) return this.samples;
 
-    // A counter reset means the dish rebooted — start the series over.
+    // The dish's sample counter runs backwards on a reboot — and also whenever
+    // the link drops long enough for its ring to restart. That only invalidates
+    // counter arithmetic; it says nothing about the history we already recorded,
+    // which is the user's data. Never discard it: reset the counter and fall
+    // through to the wall-clock splice below, which appends only samples newer
+    // than what we hold.
     if (window.newestCounter < this.newestCounter) {
-      this.samples = [];
       this.newestCounter = 0;
     }
 
