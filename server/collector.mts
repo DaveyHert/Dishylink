@@ -20,15 +20,26 @@ import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { grpcWebUnaryCall } from "../src/lib/grpcWeb.ts";
 import { decodeHistoryWindow, TelemetryAccumulator, type TelemetrySample } from "../src/lib/telemetry.ts";
 import { EnergyStore, foldSamplesToMinutes, type MinuteBucket } from "./energyStore.mts";
+import { ThermalStore } from "./thermalStore.mts";
 
 const DISH_URL =
   process.env.DISH_URL ?? "http://192.168.100.1:9201/SpaceX.API.Device.Device/Handle";
 const PROTOSET_PATH = resolve("public/dish.protoset");
 const DATA_FILE = resolve("server/data/energy.ndjson");
 const SAMPLES_SNAPSHOT_FILE = resolve("server/data/samples.json");
+const THERMAL_FILE = resolve("server/data/thermal.ndjson");
 const PORT = Number(process.env.COLLECTOR_PORT ?? 8088);
 const POLL_MS = 5_000;
 const GET_HISTORY_FIELD = 1007;
+const GET_STATUS_FIELD = 1004;
+
+/**
+ * Thermal flags on get_status → alerts. The dish has no temperature reading to
+ * go with them — the numeric sensors live on TransceiverGetStatus, which this
+ * firmware answers with Unimplemented — so these booleans are the whole signal,
+ * and they only exist while they are set. Nobody records them but us.
+ */
+const THERMAL_ALERT_KEYS = ["thermalThrottle", "thermalShutdown", "powerSupplyThermalThrottle"];
 const SAMPLE_WINDOW_SECONDS = 6 * 3_600;
 const SNAPSHOT_EVERY_MS = 60_000;
 
@@ -60,7 +71,20 @@ async function getHistory(): Promise<any> {
   return json.dishGetHistory ?? {};
 }
 
+/**
+ * `toJson` omits false fields, so an alert key is absent unless it is true —
+ * `=== true` is the check, and absence means clear.
+ */
+async function getStatusAlerts(): Promise<Record<string, boolean>> {
+  const bytes = await grpcWebUnaryCall(DISH_URL, requestBytes(GET_STATUS_FIELD));
+  const json = toJson(responseSchema, fromBinary(responseSchema, bytes), { registry }) as {
+    dishGetStatus?: { alerts?: Record<string, boolean> };
+  };
+  return json.dishGetStatus?.alerts ?? {};
+}
+
 const store = new EnergyStore(DATA_FILE);
+const thermalStore = new ThermalStore(THERMAL_FILE);
 // Minutes seen but not yet completed (the in-progress minute, replaced each poll
 // with the authoritative recompute from the ring buffer).
 const pending = new Map<number, MinuteBucket>();
@@ -107,7 +131,35 @@ function writeSampleSnapshot(): void {
   }
 }
 
+/**
+ * Record thermal alert edges. An unreachable dish means no reading, not a
+ * cleared alert, so a failed poll leaves open episodes open.
+ */
+async function pollThermal(): Promise<void> {
+  let alerts: Record<string, boolean>;
+  try {
+    alerts = await getStatusAlerts();
+  } catch {
+    return; // the history poll already logs dish-unreachable
+  }
+  const now = Date.now();
+  for (const alertKey of THERMAL_ALERT_KEYS) {
+    const isActive = alerts[alertKey] === true;
+    const wasActive = thermalStore.isOpen(alertKey);
+    if (isActive && !wasActive) {
+      thermalStore.open(alertKey, now);
+      console.log(`[collector] thermal alert ON: ${alertKey}`);
+    }
+    if (!isActive && wasActive) {
+      thermalStore.close(alertKey, now);
+      console.log(`[collector] thermal alert cleared: ${alertKey}`);
+    }
+  }
+}
+
 async function poll(): Promise<void> {
+  await pollThermal();
+
   let history: Awaited<ReturnType<typeof getHistory>>;
   try {
     history = await getHistory();
@@ -283,6 +335,11 @@ const server = createServer((request, response) => {
         samples: latestSamples.filter((sample) => sample.timestampMs >= cutoffMs).map(compactSample),
       }),
     );
+    return;
+  }
+  if (url.pathname === "/api/thermal") {
+    response.setHeader("Content-Type", "application/json");
+    response.end(JSON.stringify({ episodes: thermalStore.all() }));
     return;
   }
   if (url.pathname === "/api/health") {

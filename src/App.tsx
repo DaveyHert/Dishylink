@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useDishTelemetry } from "./hooks/useDishTelemetry";
 import { useSatellites } from "./hooks/useSatellites";
 import { useOutageNotifications } from "./hooks/useOutageNotifications";
+import { useThermalEvents, useThermalNotifications } from "./hooks/useThermalEvents";
 import { notificationsEnabled, toggleNotifications } from "./lib/notifications";
 import { TopBar } from "./components/TopBar";
 import { StatTile } from "./components/StatTile";
@@ -78,6 +79,8 @@ export default function App() {
   }, [telemetry.dishLocation, savedObserver]);
   const satellites = useSatellites(observerLocation, telemetry.obstructionMap);
   useOutageNotifications(telemetry);
+  useThermalNotifications(telemetry.status);
+  const thermalEvents = useThermalEvents();
   // Router polling runs only while a router-backed surface is open.
   const routerNetwork = useRouterNetwork(openSheet === "network" || openSheet === "settings");
 
@@ -256,7 +259,9 @@ export default function App() {
               />
             </div>
 
-            <OutageLog outageEvents={telemetry.outageEvents} />
+            {/* Thermal episodes join the event list, but not the charts above:
+                those shade outage bands, and a throttle is not an outage. */}
+            <OutageLog outageEvents={[...telemetry.outageEvents, ...thermalEvents]} />
 
             {status && <DevicePanel status={status} />}
           </section>
@@ -268,7 +273,7 @@ export default function App() {
       )}
       {openSheet === "speedtest" && (
         <SheetModal title="Speed test" onClose={() => setOpenSheet(null)}>
-          <SpeedTestPanel />
+          <SpeedTestPanel samples={samples} />
         </SheetModal>
       )}
       {openSheet === "alignment" && status && (
