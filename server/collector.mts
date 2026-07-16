@@ -15,7 +15,7 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
-import { createFileRegistry, fromBinary, toJson } from "@bufbuild/protobuf";
+import { createFileRegistry, fromBinary, toJson, type DescMessage } from "@bufbuild/protobuf";
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { grpcWebUnaryCall } from "../src/lib/grpcWeb.ts";
 import {
@@ -28,6 +28,7 @@ import { EnergyStore, foldSamplesToMinutes, type MinuteBucket } from "./energySt
 import { ThermalStore } from "./thermalStore.mts";
 import { EventStore } from "./eventStore.mts";
 import { RadioStore, type RadioReading } from "./radioStore.mts";
+import { ClientStore, type ClientReading } from "./clientStore.mts";
 
 const DISH_URL =
   process.env.DISH_URL ?? "http://192.168.100.1:9201/SpaceX.API.Device.Device/Handle";
@@ -37,11 +38,13 @@ const SAMPLES_SNAPSHOT_FILE = resolve("server/data/samples.json");
 const THERMAL_FILE = resolve("server/data/thermal.ndjson");
 const EVENTS_FILE = resolve("server/data/events.ndjson");
 const RADIO_FILE = resolve("server/data/radio.ndjson");
+const CLIENTS_FILE = resolve("server/data/clients.ndjson");
 const PORT = Number(process.env.COLLECTOR_PORT ?? 8088);
 const POLL_MS = 5_000;
 const GET_HISTORY_FIELD = 1007;
 const GET_STATUS_FIELD = 1004;
 const GET_RADIO_STATS_FIELD = 1036;
+const WIFI_GET_CLIENTS_FIELD = 3002;
 
 /**
  * The router answers get_radio_stats on its own endpoint; the dish answers it
@@ -60,8 +63,15 @@ const SAMPLE_WINDOW_SECONDS = 6 * 3_600;
 const SNAPSHOT_EVERY_MS = 60_000;
 
 const registry = createFileRegistry(fromBinary(FileDescriptorSetSchema, readFileSync(PROTOSET_PATH)));
-const responseSchema = registry.getMessage("SpaceX.API.Device.Response");
-if (!responseSchema) throw new Error("SpaceX.API.Device.Response missing from protoset");
+
+/** Fail at startup, not on the first poll, if the protoset lacks a message. */
+function requireMessage(typeName: string): DescMessage {
+  const schema = registry.getMessage(typeName);
+  if (!schema) throw new Error(`${typeName} missing from protoset`);
+  return schema;
+}
+
+const responseSchema = requireMessage("SpaceX.API.Device.Response");
 
 function encodeVarint(value: number): number[] {
   const bytes: number[] = [];
@@ -127,6 +137,62 @@ async function getRadioReadings(): Promise<RadioReading[]> {
   return readings;
 }
 
+/**
+ * Per-device rates from the router. The router reports only an instantaneous
+ * rate, so this is the only place a per-device series can come from — and it has
+ * to be recorded here, not in the browser, to exist when nobody is looking.
+ * The 1-minute average is absent on freshly-joined clients; fall back to the
+ * 15s one rather than record a busy device as idle.
+ */
+/** proto3 JSON renders a NaN double as the string "NaN"; the router sends that
+ *  for quiet clients, so these values are not safely arithmetic. */
+interface WireStats {
+  bytes?: string;
+  throughputMbpsLast1mAvg?: number | "NaN";
+  throughputMbpsLast15sAvg?: number | "NaN";
+}
+
+function finiteMbps(value: number | "NaN" | undefined): number | null {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+async function getClientReadings(): Promise<ClientReading[]> {
+  const bytes = await grpcWebUnaryCall(ROUTER_URL, requestBytes(WIFI_GET_CLIENTS_FIELD));
+  const json = toJson(responseSchema, fromBinary(responseSchema, bytes), { registry }) as {
+    wifiGetClients?: {
+      clients?: Array<{
+        macAddress?: string;
+        name?: string;
+        givenName?: string;
+        role?: string;
+        rxStats?: WireStats;
+        txStats?: WireStats;
+      }>;
+    };
+  };
+  const readings: ClientReading[] = [];
+  for (const client of json.wifiGetClients?.clients ?? []) {
+    // The router itself reports empty stats — it is the network, not a client of it.
+    if (!client.macAddress || (client.role && client.role !== "CLIENT")) continue;
+    readings.push({
+      macAddress: client.macAddress,
+      name: client.givenName ?? client.name,
+      downMbps:
+        finiteMbps(client.rxStats?.throughputMbpsLast1mAvg) ??
+        finiteMbps(client.rxStats?.throughputMbpsLast15sAvg) ??
+        0,
+      upMbps:
+        finiteMbps(client.txStats?.throughputMbpsLast1mAvg) ??
+        finiteMbps(client.txStats?.throughputMbpsLast15sAvg) ??
+        0,
+      rxBytes: Number(client.rxStats?.bytes ?? 0),
+      txBytes: Number(client.txStats?.bytes ?? 0),
+    });
+  }
+  return readings;
+}
+
 const store = new EnergyStore(DATA_FILE);
 // Compaction also runs on construction; repeat daily for a collector that stays
 // up for months at a stretch.
@@ -134,6 +200,7 @@ const COMPACT_EVERY_MS = 24 * 3_600_000;
 const thermalStore = new ThermalStore(THERMAL_FILE);
 const eventStore = new EventStore(EVENTS_FILE);
 const radioStore = new RadioStore(RADIO_FILE);
+const clientStore = new ClientStore(CLIENTS_FILE);
 let latestRadio: { readings: RadioReading[]; atMs: number } | null = null;
 // Minutes seen but not yet completed (the in-progress minute, replaced each poll
 // with the authoritative recompute from the ring buffer).
@@ -223,9 +290,22 @@ async function pollRadio(): Promise<void> {
   }
 }
 
+/** Same contract as pollRadio: the router is a separate box and its failures
+ *  must not read as a dish problem. */
+async function pollClients(): Promise<void> {
+  try {
+    const readings = await getClientReadings();
+    if (readings.length === 0) return;
+    clientStore.ingest(readings, Date.now());
+  } catch {
+    // router unreachable (or bypass mode) — keep what we have
+  }
+}
+
 async function poll(): Promise<void> {
   await pollThermal();
   await pollRadio();
+  await pollClients();
 
   let history: Awaited<ReturnType<typeof getHistory>>;
   try {
@@ -299,12 +379,11 @@ function startOfWeekSec(now: Date, weeksBack: number): number {
   return Math.floor(date.getTime() / 1000);
 }
 
-/** Local first-of-month 00:00 `monthsBack` months ago, epoch seconds. */
-function startOfMonthSec(now: Date, monthsBack: number): number {
+/** Local start of the current calendar year, epoch seconds. */
+function startOfYearSec(now: Date): number {
   const date = new Date(now);
   date.setHours(0, 0, 0, 0);
-  date.setDate(1);
-  date.setMonth(date.getMonth() - monthsBack);
+  date.setMonth(0, 1);
   return Math.floor(date.getTime() / 1000);
 }
 
@@ -315,7 +394,10 @@ const RANGE_SPECS: Record<Range, RangeSpec> = {
   today: { startSec: (now) => startOfDaySec(now, 0), group: "fixed", fixedSec: 3_600 }, // hourly, since midnight
   day: { startSec: (now) => startOfDaySec(now, 13), group: "calendarDay" }, // last 14 individual days
   week: { startSec: (now) => startOfWeekSec(now, 11), group: "calendarWeek" }, // last 12 individual weeks
-  month: { startSec: (now) => startOfMonthSec(now, 11), group: "calendarMonth" }, // last 12 individual months
+  // Calendar year, as Starlink's own usage page does it: Jan–Dec of this year,
+  // not a window straddling into last year. Older months live on as one-row
+  // summaries in the store rather than as minutes nothing can draw.
+  month: { startSec: (now) => startOfYearSec(now), group: "calendarMonth" },
 };
 
 /** Bar this minute belongs to: a fixed slice, or the local calendar day/week/month start. */
@@ -470,6 +552,13 @@ const server = createServer((request, response) => {
     );
     return;
   }
+  if (url.pathname === "/api/clients") {
+    const hours = Math.min(6, Math.max(1, Number(url.searchParams.get("hours") ?? 6)));
+    const mac = url.searchParams.get("mac") ?? undefined;
+    response.setHeader("Content-Type", "application/json");
+    response.end(JSON.stringify({ history: clientStore.history(hours, mac) }));
+    return;
+  }
   if (url.pathname === "/api/outages") {
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify({ events: eventStore.all() }));
@@ -499,11 +588,16 @@ void poll();
 setInterval(() => void poll(), POLL_MS);
 setInterval(writeSampleSnapshot, SNAPSHOT_EVERY_MS);
 setInterval(() => {
-  const dropped = store.compact();
-  if (dropped > 0) console.log(`[collector] compacted energy log, dropped ${dropped} old minute(s)`);
+  const folded = store.compact();
+  if (folded > 0) console.log(`[collector] folded ${folded} minute(s) from past years into monthly summaries`);
   const radioDropped = radioStore.compact();
   if (radioDropped > 0) console.log(`[collector] compacted radio log, dropped ${radioDropped} old row(s)`);
 }, COMPACT_EVERY_MS);
+// The per-device log keeps only six hours, so it cannot wait for the daily sweep.
+setInterval(() => {
+  const dropped = clientStore.compact();
+  if (dropped > 0) console.log(`[collector] compacted client log, dropped ${dropped} old row(s)`);
+}, 3_600_000);
 process.on("SIGTERM", () => {
   writeSampleSnapshot();
   process.exit(0);
