@@ -3,6 +3,10 @@
 // { value, mode, caption } contract. During a test the beam pulses and a packet
 // travels along it (down = satellite→dish, up = dish→satellite); the big value
 // eases like the gauge. Theme-aware via CSS variables.
+//
+// `running` (test in flight) is deliberately separate from `mode`: when a test
+// finishes the parent keeps mode="download" to hold the final reading, so the
+// motion loops must key off `running` or they'd never stop.
 
 import { motion, useReducedMotion } from "motion/react";
 import { useEasedValue } from "../hooks/useEasedValue";
@@ -11,17 +15,25 @@ interface SpeedBeamProps {
   value: number | null;
   mode: "download" | "upload" | "idle";
   caption: string;
+  running?: boolean;
 }
 
 const DISH: [number, number] = [130, 168];
 const SAT: [number, number] = [201, 55];
 const RING_RADII = [26, 50, 76, 104, 134];
+// Slow, shallow breathing — the Starlink app's beam swells rather than blinks.
+// Kept longer than the packet transit so the two rhythms don't lock in step.
+const PULSE_SECONDS = 3.2;
+const PACKET_SECONDS = 1.5;
 
-export function SpeedBeam({ value, mode, caption }: SpeedBeamProps) {
+export function SpeedBeam({ value, mode, caption, running = false }: SpeedBeamProps) {
   const reduce = useReducedMotion() ?? false;
   const eased = useEasedValue(value ?? 0);
   const active = mode !== "idle";
-  const beamColor = mode === "upload" ? "var(--chart-warm)" : "var(--chart-ink)";
+  const animating = running && !reduce;
+  const pending = value === null && eased < 0.1;
+  // Upload uses the dashboard's upload series colour so the two views agree.
+  const beamColor = mode === "upload" ? "var(--series-up)" : "var(--chart-ink)";
   // Packet direction: download flows down to the dish, upload flows up.
   const from = mode === "upload" ? DISH : SAT;
   const to = mode === "upload" ? SAT : DISH;
@@ -29,61 +41,90 @@ export function SpeedBeam({ value, mode, caption }: SpeedBeamProps) {
   return (
     <div className="speed-beam">
       <svg viewBox="0 0 260 200" className="speed-beam-svg" role="img" aria-label={`${caption} ${value?.toFixed(0) ?? "—"} Mbps`}>
+        <defs>
+          {/* bloom around the beam and satellite, as in the Starlink app */}
+          <filter id="beam-glow" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="2.4" result="bloom" />
+            <feMerge>
+              <feMergeNode in="bloom" />
+              <feMergeNode in="bloom" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <radialGradient id="beam-sat-halo">
+            <stop offset="0%" stopColor={beamColor} stopOpacity="0.45" />
+            <stop offset="35%" stopColor={beamColor} stopOpacity="0.1" />
+            <stop offset="100%" stopColor={beamColor} stopOpacity="0" />
+          </radialGradient>
+        </defs>
+
         {/* ground rings (horizon) */}
         {RING_RADII.map((rx, index) => (
           <ellipse key={index} cx={DISH[0]} cy={DISH[1] + 6} rx={rx} ry={rx * 0.24} className="beam-ring" fill="none" />
         ))}
 
-        {/* orbit arc */}
-        <path d="M22,74 Q130,18 238,74" className="beam-orbit" fill="none" />
+        {/* orbit arc — rides clear above the satellite so it never crosses the beam */}
+        <path d="M18,52 Q130,-6 242,52" className="beam-orbit" fill="none" />
 
-        {/* beam */}
-        <motion.line
-          x1={DISH[0]}
-          y1={DISH[1]}
-          x2={SAT[0]}
-          y2={SAT[1]}
-          stroke={beamColor}
-          strokeLinecap="round"
-          animate={active && !reduce ? { opacity: [0.4, 1, 0.4], strokeWidth: [1.5, 3, 1.5] } : { opacity: active ? 0.85 : 0.28, strokeWidth: 2 }}
-          transition={active && !reduce ? { duration: 1.5, repeat: Infinity, ease: "easeInOut" } : { duration: 0.3 }}
-        />
+        {/* soft halo behind the satellite — kept out of the blur group so it stays smooth */}
+        <circle cx={SAT[0]} cy={SAT[1]} r={15} className="beam-sat-halo" fill="url(#beam-sat-halo)" />
 
-        {/* travelling packet */}
-        {active && !reduce && (
+        <g className="beam-glow-layer">
+          {/* beam */}
+          <motion.line
+            x1={DISH[0]}
+            y1={DISH[1]}
+            x2={SAT[0]}
+            y2={SAT[1]}
+            stroke={beamColor}
+            strokeLinecap="round"
+            animate={
+              animating ? { opacity: [0.55, 1, 0.55], strokeWidth: [1.8, 2.8, 1.8] } : { opacity: active ? 0.85 : 0.28, strokeWidth: 2 }
+            }
+            transition={animating ? { duration: PULSE_SECONDS, repeat: Infinity, ease: "easeInOut" } : { duration: 0.3 }}
+          />
+
+          {/* travelling packet */}
+          {animating && (
+            <motion.circle
+              r={3.5}
+              fill={beamColor}
+              initial={false}
+              animate={{
+                cx: [from[0], to[0]],
+                cy: [from[1], to[1]],
+                opacity: [0, 1, 0],
+              }}
+              transition={{ duration: PACKET_SECONDS, repeat: Infinity, ease: "linear" }}
+            />
+          )}
+
+          {/* satellite — initial={false} or motion writes r="undefined" on the first frame */}
           <motion.circle
-            r={3.5}
+            cx={SAT[0]}
+            cy={SAT[1]}
+            r={6}
             fill={beamColor}
             initial={false}
-            animate={{ cx: [from[0], to[0]], cy: [from[1], to[1]], opacity: [0, 1, 0] }}
-            transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+            animate={animating ? { r: [5.2, 6.6, 5.2] } : { r: 5.5 }}
+            transition={animating ? { duration: PULSE_SECONDS, repeat: Infinity, ease: "easeInOut" } : {}}
           />
-        )}
-
-        {/* satellite */}
-        <circle cx={SAT[0]} cy={SAT[1]} r={12} fill="none" stroke={beamColor} strokeOpacity={0.25} />
-        <motion.circle
-          cx={SAT[0]}
-          cy={SAT[1]}
-          r={6}
-          fill={beamColor}
-          animate={active && !reduce ? { r: [5, 7, 5] } : { r: 5.5 }}
-          transition={active && !reduce ? { duration: 1.5, repeat: Infinity, ease: "easeInOut" } : {}}
-        />
+        </g>
 
         {/* dish: short mast + tilted face */}
         <g className="beam-dish">
           <line x1={DISH[0]} y1={DISH[1] + 8} x2={DISH[0]} y2={DISH[1] - 4} />
-          <line x1={DISH[0] - 11} y1={DISH[1] - 2} x2={DISH[0] + 11} y2={DISH[1] - 8} strokeWidth={3.5} strokeLinecap="round" />
+          <line x1={DISH[0] - 11} y1={DISH[1] - 8} x2={DISH[0] + 11} y2={DISH[1] - 2} strokeWidth={3.5} strokeLinecap="round" />
         </g>
 
-        <text x={130} y={150} className="beam-wordmark" textAnchor="middle">
+        {/* wordmark sits in the clear band left of the beam, below the arc, above the rings */}
+        <text x={78} y={112} className="beam-wordmark" textAnchor="middle">
           STARLINK
         </text>
       </svg>
 
       <div className="speed-beam-readout">
-        <span className="speed-beam-value">{value === null && eased < 0.1 ? "—" : eased.toFixed(eased < 100 ? 1 : 0)}</span>
+        <span className={`speed-beam-value${pending ? " pending" : ""}`}>{pending ? "0" : eased.toFixed(eased < 100 ? 1 : 0)}</span>
         <span className="speed-beam-unit">Mbps</span>
       </div>
       <div className="speed-gauge-caption">{caption}</div>

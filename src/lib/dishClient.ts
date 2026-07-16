@@ -64,11 +64,32 @@ export interface DishAlignmentStatsJson {
   desiredBoresightElevationDeg?: number;
   attitudeEstimationState?: string;
   attitudeUncertaintyDeg?: number;
+  /** "HAS_ACTUATORS_NO" on electronically-steered kits, "HAS_ACTUATORS_YES" on motorized. */
+  hasActuators?: string;
 }
 
 export interface DishGpsStatsJson {
   gpsValid?: boolean;
   gpsSats?: number;
+  /** Position/navigation filter state, e.g. "FILTER_CONVERGED". */
+  pntFilterConvergenceState?: string;
+}
+
+/** The dish's orientation as a unit quaternion (NED → dish frame). */
+export interface DishQuaternionJson {
+  qScalar?: number;
+  qX?: number;
+  qY?: number;
+  qZ?: number;
+}
+
+/** Per-subsystem readiness flags; all true = fully online. */
+export interface DishReadyStatesJson {
+  scp?: boolean;
+  l1l2?: boolean;
+  xphy?: boolean;
+  aap?: boolean;
+  rf?: boolean;
 }
 
 export interface DishStatusJson {
@@ -92,6 +113,20 @@ export interface DishStatusJson {
   dlBandwidthRestrictedReason?: string;
   ulBandwidthRestrictedReason?: string;
   isSnrAboveNoiseFloor?: boolean;
+  /** Set when SNR has stayed low long enough to look like weather, not a blip —
+   *  the flag behind the dish's own RAIN_SNR_PERSISTENTLY_LOW alert. Absent
+   *  (proto3 drops false) means the signal is holding. */
+  isSnrPersistentlyLow?: boolean;
+  /** Per-subsystem online flags — which stage is up while the dish boots. */
+  readyStates?: DishReadyStatesJson;
+  /** Seconds until a pending software-update reboot is possible; −1 = none pending. */
+  secondsUntilSwupdateRebootPossible?: number;
+  /** NAT state, e.g. "NAT_DISABLED" in bypass mode. */
+  natFlag?: string;
+  /** Dish attitude as a quaternion — more precise than the two boresight angles. */
+  ned2dishQuaternion?: DishQuaternionJson;
+  /** Motorized ("HAS_ACTUATORS_YES") vs electronically-steered ("HAS_ACTUATORS_NO"). */
+  hasActuators?: string;
 }
 
 export interface DishOutageJson {
@@ -183,6 +218,10 @@ export interface WifiLanNetworkJson {
   basicServiceSets?: WifiBasicServiceSetJson[];
 }
 
+/** A mesh node the router has been paired with, keyed in `meshConfigs` by the
+ *  node's `deviceId` (same "Router-<hex>" namespace the client list reports).
+ *  Entries persist across disconnects, so this is the roster of *known* nodes —
+ *  whether one is currently up is decided by the live client list. */
 export interface WifiMeshNodeJson {
   displayName?: string;
   auth?: string;
@@ -205,8 +244,27 @@ export interface WifiClientStatsJson {
   bandwidth?: number;
   nss?: number;
   mcs?: number;
-  throughputMbpsLast1mAvg?: number;
-  throughputMbpsLast15sAvg?: number;
+  /** proto3 JSON encodes a NaN double as the *string* "NaN" — the router does
+   *  this on quiet clients — so these are never safely arithmetic. Read them
+   *  through throughputMbps(). */
+  throughputMbpsLast1mAvg?: number | "NaN";
+  throughputMbpsLast15sAvg?: number | "NaN";
+}
+
+/** A reading only if it is really a number: rejects undefined and the "NaN" string. */
+function finiteMbps(value: number | "NaN" | undefined): number | null {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+/**
+ * Point-in-time rate for one direction. The router omits the 1-minute average on
+ * clients that have not been associated for a minute, so fall back to the 15s
+ * one rather than reporting a device with live traffic as idle — and take the
+ * first value that is actually a number, since either may arrive as "NaN".
+ */
+export function throughputMbps(stats: WifiClientStatsJson | undefined): number {
+  return finiteMbps(stats?.throughputMbpsLast1mAvg) ?? finiteMbps(stats?.throughputMbpsLast15sAvg) ?? 0;
 }
 
 export interface WifiClientJson {
@@ -227,7 +285,15 @@ export interface WifiClientJson {
   associatedTimeS?: number;
   secondsUntilDhcpLeaseExpires?: number;
   dhcpLeaseActive?: boolean;
-  /** Session byte counters (proto field names are quirky: uploadMb/downloadMb are raw-ish). */
+  /** Router's internal id for this client — the number the app prints under the
+   *  device name. */
+  clientId?: number;
+  /** Seconds since the client last passed traffic. Omitted (proto3 drops zeros)
+   *  while data is flowing, so `undefined` means "active right now". */
+  noDataIdleS?: number;
+  /** Do NOT render these: the router reports nonsense here (uploadMb reads
+   *  ~3.7e9 "Mb" against 15 MB of rxStats.bytes). Real per-device totals live in
+   *  rxStats.bytes / txStats.bytes. */
   uploadMb?: number;
   downloadMb?: number;
   rxStats?: WifiClientStatsJson;
@@ -244,6 +310,18 @@ interface DishResponseJson {
   dishGetConfig?: { dishConfig?: DishConfigJson & Record<string, unknown> };
   dishGetDiagnostics?: DishDiagnosticsJson;
   wifiGetConfig?: { wifiConfig?: WifiNetworkConfigJson };
+  wifiGetStatus?: WifiStatusJson;
+}
+
+/** The router's own get_status. Its alerts are a different set from the dish's. */
+export interface WifiStatusJson {
+  deviceInfo?: DishDeviceInfoJson;
+  deviceState?: { uptimeS?: string };
+  alerts?: Record<string, boolean>;
+  pingLatencyMs?: number;
+  dishPingLatencyMs?: number;
+  popPingLatencyMs?: number;
+  ipv4WanAddress?: string;
 }
 
 // ---------- request encoding ----------
@@ -309,6 +387,12 @@ export class DishClient {
 
   async getStatus(abortSignal?: AbortSignal): Promise<DishStatusJson> {
     return (await this.call(REQUEST_FIELD.getStatus, abortSignal)).dishGetStatus ?? {};
+  }
+
+  /** The ROUTER's own status — same request field, different device, different
+   *  response branch. Carries the router's alert set (PoE faults, mesh health). */
+  async getRouterStatus(abortSignal?: AbortSignal): Promise<WifiStatusJson> {
+    return (await this.call(REQUEST_FIELD.getStatus, abortSignal)).wifiGetStatus ?? {};
   }
 
   async getHistory(abortSignal?: AbortSignal): Promise<DishHistoryJson> {

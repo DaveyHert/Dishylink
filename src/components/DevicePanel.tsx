@@ -1,36 +1,141 @@
 // Hardware, alignment, GPS, and network facts from the live status message.
 
-import type { DishStatusJson } from "../lib/dishClient";
+import type { DishStatusJson, DishReadyStatesJson } from "../lib/dishClient";
 import { formatUptime } from "../lib/format";
 
 function humanizeAlertKey(alertKey: string): string {
   return alertKey.replace(/([A-Z])/g, " $1").toLowerCase().trim();
 }
 
+/** Plan tier. The API's CONSUMER is what the Starlink app labels "Residential". */
+function formatServiceClass(classOfService?: string): string {
+  switch (classOfService) {
+    case "CONSUMER":
+      return "residential";
+    case "BUSINESS":
+      return "business";
+    case "BUSINESS_PLUS":
+      return "business plus";
+    default:
+      return (classOfService ?? "—").replaceAll("_", " ").toLowerCase();
+  }
+}
+
+/** Why downlink is capped, if it is. NO_LIMIT / NO_RESTRICTION read as "none". */
+function formatBandwidthLimit(reason?: string): string {
+  if (!reason || reason === "NO_LIMIT" || reason === "NO_RESTRICTION") return "none";
+  return reason.replaceAll("_", " ").toLowerCase();
+}
+
+/** Subsystem health as one line: "all ready", or the ones that aren't. proto3
+ *  drops false, so a subsystem is ready only when explicitly true. */
+function readyStatesFact(states?: DishReadyStatesJson): DeviceFact {
+  if (!states) return { label: "Subsystems", value: "—" };
+  const known: [string, boolean | undefined][] = [
+    ["SCP", states.scp],
+    ["L1L2", states.l1l2],
+    ["XPHY", states.xphy],
+    ["AAP", states.aap],
+    ["RF", states.rf],
+  ];
+  const down = known.filter(([, ready]) => ready !== true).map(([name]) => name);
+  if (down.length === 0) return { label: "Subsystems", value: "all ready", tone: "good" };
+  return { label: "Subsystems", value: `${down.join(", ")} coming up`, tone: "warn" };
+}
+
 interface DeviceFact {
   label: string;
   value: string;
+  /** Colors the value when the fact is a health signal (e.g. weather). */
+  tone?: "good" | "warn" | "bad";
 }
 
-export function DevicePanel({ status, embedded = false }: { status: DishStatusJson; embedded?: boolean }) {
+function ExpandIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M9 4H5a1 1 0 0 0-1 1v4M15 4h4a1 1 0 0 1 1 1v4M9 20H5a1 1 0 0 1-1-1v-4M15 20h4a1 1 0 0 0 1-1v-4"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+const TONE_VAR: Record<NonNullable<DeviceFact["tone"]>, string> = {
+  good: "--status-good",
+  warn: "--chart-warm",
+  bad: "--status-critical",
+};
+
+/**
+ * Weather-derived signal condition from the dish's own SNR flags. It has no rain
+ * gauge — it infers weather from the signal: SNR staying persistently low is the
+ * pattern rain fade makes, and is what raises the dish's RAIN_SNR alert. Below
+ * the noise floor is worse still. Absent flags (proto3 drops false) mean clear.
+ */
+function signalCondition(status: DishStatusJson): DeviceFact {
+  if (status.isSnrPersistentlyLow) {
+    return { label: "Signal", value: "weather affecting signal", tone: "warn" };
+  }
+  if (status.isSnrAboveNoiseFloor === false) {
+    return { label: "Signal", value: "weak — below noise floor", tone: "bad" };
+  }
+  if (status.isSnrAboveNoiseFloor) {
+    return { label: "Signal", value: "clear", tone: "good" };
+  }
+  return { label: "Signal", value: "—" };
+}
+
+export function DevicePanel({
+  status,
+  expanded = false,
+  onExpand,
+}: {
+  status: DishStatusJson;
+  /** True in the popup: renders bare (no card chrome/title) inside the sheet.
+   *  Both views show every fact; the sheet just gives it its own width. */
+  expanded?: boolean;
+  /** When set on the card, an expand icon opens the full popup view. */
+  onExpand?: () => void;
+}) {
   const alignment = status.alignmentStats;
   const activeAlerts = Object.entries(status.alerts ?? {})
     .filter(([, isActive]) => isActive)
     .map(([alertKey]) => humanizeAlertKey(alertKey));
 
   const facts: DeviceFact[] = [
+    signalCondition(status),
     { label: "Hardware", value: status.deviceInfo?.hardwareVersion ?? "—" },
     { label: "Firmware", value: status.deviceInfo?.softwareVersion ?? "—" },
     { label: "Country", value: status.deviceInfo?.countryCode ?? "—" },
     { label: "Uptime", value: formatUptime(Number(status.deviceState?.uptimeS ?? 0)) },
     { label: "Boot count", value: String(status.deviceInfo?.bootcount ?? "—") },
-    { label: "Service class", value: (status.classOfService ?? "—").toLowerCase() },
+    { label: "Service class", value: formatServiceClass(status.classOfService) },
     {
-      label: "GPS",
+      label: "Satellites in View (GPS)",
       value: status.gpsStats?.gpsValid ? `${status.gpsStats.gpsSats ?? 0} satellites` : "no fix",
     },
+    {
+      label: "GPS fix",
+      value: status.gpsStats?.gpsValid
+        ? `locked${status.gpsStats.pntFilterConvergenceState ? ` · ${status.gpsStats.pntFilterConvergenceState.replaceAll("_", " ").toLowerCase()}` : ""}`
+        : "no fix",
+      tone: status.gpsStats?.gpsValid ? "good" : "warn",
+    },
     { label: "Ethernet link", value: status.ethSpeedMbps ? `${status.ethSpeedMbps} Mbps` : "—" },
-    { label: "Mesh routers", value: String(status.connectedRouters?.length ?? 0) },
+    { label: "NAT", value: (status.natFlag ?? "—").replace("NAT_", "").replaceAll("_", " ").toLowerCase() },
+    {
+      // The dish sends router identities, not a count — keep both: the count
+      // reads at a glance, the ids say which routers.
+      label: "Mesh routers",
+      value: status.connectedRouters?.length
+        ? `${status.connectedRouters.length} · ${status.connectedRouters.join(", ")}`
+        : "0",
+    },
+    { label: "Bandwidth limit", value: formatBandwidthLimit(status.dlBandwidthRestrictedReason) },
+    readyStatesFact(status.readyStates),
     {
       label: "Boresight",
       value: alignment
@@ -41,17 +146,41 @@ export function DevicePanel({ status, embedded = false }: { status: DishStatusJs
     { label: "Software update", value: (status.softwareUpdateState ?? "—").toLowerCase() },
   ];
 
+  // Pending-update banner: a reboot is scheduled when the countdown is ≥ 0
+  // (−1 = nothing pending), or the updater is mid-flight (not IDLE).
+  const rebootSeconds = status.secondsUntilSwupdateRebootPossible ?? -1;
+  const updateState = status.softwareUpdateState ?? "";
+  const updateBanner =
+    rebootSeconds >= 0
+      ? `Update ready — reboot possible in ${formatUptime(rebootSeconds)}`
+      : updateState && updateState !== "IDLE"
+        ? `Software update: ${updateState.replaceAll("_", " ").toLowerCase()}`
+        : null;
+
   return (
-    <div className={embedded ? "" : "card span-12"}>
+    <div className={expanded ? "" : "card span-12"}>
       <div className="card-header">
-        {!embedded && <span className="card-title">Terminal</span>}
-        <span className="card-meta mono-value">{status.deviceInfo?.id ?? ""}</span>
+        {!expanded && <span className="card-title">Starlink Dish Terminal</span>}
+        <div className="device-header-right">
+          <span className="card-meta mono-value">{status.deviceInfo?.id ?? ""}</span>
+          {onExpand && (
+            <button className="device-expand" onClick={onExpand} aria-label="Open full terminal view">
+              <ExpandIcon />
+            </button>
+          )}
+        </div>
       </div>
-      <div className={embedded ? "device-grid device-grid-narrow" : "device-grid"}>
+      {updateBanner && <div className="device-update-banner">↻ {updateBanner}</div>}
+      <div className="device-grid">
         {facts.map((fact) => (
           <div className="device-row" key={fact.label}>
             <span className="device-label">{fact.label}</span>
-            <span className="mono-value">{fact.value}</span>
+            <span
+              className="mono-value"
+              style={fact.tone ? { color: `var(${TONE_VAR[fact.tone]})` } : undefined}
+            >
+              {fact.value}
+            </span>
           </div>
         ))}
       </div>

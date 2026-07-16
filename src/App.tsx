@@ -26,7 +26,14 @@ import type { ObserverLocation } from "./lib/satellites";
 import type { TelemetrySample } from "./lib/telemetry";
 
 type ThemeName = "light" | "dark";
-type SheetName = "speedtest" | "alignment" | "skyview" | "datausage" | "network" | "settings";
+type SheetName =
+  | "speedtest"
+  | "alignment"
+  | "skyview"
+  | "datausage"
+  | "network"
+  | "settings"
+  | "terminal";
 
 const WINDOW_CHOICES: { label: string; minutes: number }[] = [
   { label: "15M", minutes: 15 },
@@ -182,7 +189,11 @@ export default function App() {
               label="Sky obstructed"
               value={((status?.obstructionStats?.fractionObstructed ?? 0) * 100).toFixed(2)}
               unit="%"
-              caption="all-time view"
+              caption={
+                status?.obstructionStats?.patchesValid
+                  ? `${status.obstructionStats.patchesValid.toLocaleString()} patches mapped`
+                  : "all-time view"
+              }
             />
           </section>
 
@@ -274,13 +285,18 @@ export default function App() {
                 those shade outage bands, and a throttle is not an outage. */}
             <OutageLog outageEvents={[...outageEvents, ...thermalEvents]} />
 
-            {status && <DevicePanel status={status} />}
+            {status && <DevicePanel status={status} onExpand={() => setOpenSheet("terminal")} />}
           </section>
         </main>
       )}
 
       {openDetail && (
         <StatDetailModal detail={openDetail} samples={samples} onClose={() => setOpenDetailId(null)} />
+      )}
+      {openSheet === "terminal" && status && (
+        <SheetModal title="Starlink Dish Terminal" onClose={() => setOpenSheet(null)} size="xxl">
+          <DevicePanel status={status} expanded />
+        </SheetModal>
       )}
       {openSheet === "speedtest" && (
         <SheetModal title="Speed test" onClose={() => setOpenSheet(null)}>
@@ -289,7 +305,7 @@ export default function App() {
       )}
       {openSheet === "alignment" && status && (
         <SheetModal title="Alignment" onClose={() => setOpenSheet(null)} size="wide">
-          <AlignmentPanel status={status} />
+          <AlignmentPanel status={status} onOpenSkyView={() => setOpenSheet("skyview")} />
         </SheetModal>
       )}
       {openSheet === "datausage" && (
@@ -325,6 +341,8 @@ export default function App() {
       {openSheet === "skyview" && (
         <SheetModal title="Satellite view" onClose={() => setOpenSheet(null)} size="xl">
           <SkyDome
+            caption="Satellites shown are propagated live from SpaceX's published ephemerides."
+            status={status}
             obstructionMap={telemetry.obstructionMap}
             obstructionStats={status?.obstructionStats}
             theme={theme}

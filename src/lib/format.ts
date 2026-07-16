@@ -41,3 +41,20 @@ export function formatClockTime(timestampMs: number): string {
     second: "2-digit",
   });
 }
+
+/** The dish's `hasActuators` enum ("HAS_ACTUATORS_YES"/"_NO") → plain Yes/No.
+ *  Anything else — the "_UNKNOWN" default or an absent field — reads as Unknown
+ *  rather than a blank, so the row still says something. */
+export function formatHasActuators(hasActuators: string | undefined): string {
+  if (hasActuators === "HAS_ACTUATORS_YES") return "Yes";
+  if (hasActuators === "HAS_ACTUATORS_NO") return "No";
+  return "Unknown";
+}
+
+/** Byte counters → human size. Used for per-device data totals. */
+export function formatBytes(bytes: number): string {
+  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(2)} GB`;
+  if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(1)} MB`;
+  if (bytes >= 1e3) return `${Math.round(bytes / 1e3)} kB`;
+  return `${Math.round(bytes)} B`;
+}

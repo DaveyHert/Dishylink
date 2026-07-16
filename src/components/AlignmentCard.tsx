@@ -14,6 +14,7 @@
 //    elevation. Their needle orange is #ffac30.
 
 import type { DishStatusJson } from "../lib/dishClient";
+import { formatHasActuators } from "../lib/format";
 
 const DEG_TO_RAD = Math.PI / 180;
 const RAD_TO_DEG = 180 / Math.PI;
@@ -337,25 +338,42 @@ function TiltInstrument({ reading }: { reading: AlignmentReading }) {
 
 // ---------- the sheet content ----------
 
-export function AlignmentPanel({ status }: { status: DishStatusJson }) {
+export function AlignmentPanel({
+  status,
+  onOpenSkyView,
+}: {
+  status: DishStatusJson;
+  onOpenSkyView?: () => void;
+}) {
   const reading = computeAlignment(status);
   const stats = status.alignmentStats;
 
   return (
     <div>
-      <div
-        className="stat-caption"
-        style={{
-          color: reading.isAligned ? "var(--status-good)" : reading.isValid ? "var(--chart-warm)" : "var(--ink-muted)",
-          fontWeight: 600,
-          fontSize: 13.5,
-        }}
-      >
-        {!reading.isValid
-          ? "Attitude filter not ready — alignment data is settling."
-          : reading.isAligned
-            ? "Starlink is aligned — pointed in the correct direction."
-            : "Starlink is not aligned — adjust the dish toward the wedge."}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <div
+          className="stat-caption"
+          style={{
+            color: reading.isAligned
+              ? "var(--status-good)"
+              : reading.isValid
+                ? "var(--chart-warm)"
+                : "var(--ink-muted)",
+            fontWeight: 600,
+            fontSize: 13.5,
+          }}
+        >
+          {!reading.isValid
+            ? "Attitude filter not ready — alignment data is settling."
+            : reading.isAligned
+              ? "Starlink is aligned — pointed in the correct direction."
+              : "Starlink is not aligned — adjust the dish toward the wedge."}
+        </div>
+        {onOpenSkyView && (
+          <button className="card-link" style={{ flexShrink: 0 }} onClick={onOpenSkyView}>
+            Satellite view ›
+          </button>
+        )}
       </div>
 
       <div className="instrument-row">
@@ -391,11 +409,25 @@ export function AlignmentPanel({ status }: { status: DishStatusJson }) {
           <span className="mono-value">{(stats?.attitudeEstimationState ?? "—").replaceAll("_", " ").toLowerCase()}</span>
         </div>
         <div className="device-row">
-          <span className="device-label">GPS</span>
+          <span className="device-label">Satellites in View (GPS)</span>
           <span className="mono-value">
             {status.gpsStats?.gpsValid ? `${status.gpsStats.gpsSats ?? 0} satellites` : "no fix"}
           </span>
         </div>
+        <div className="device-row">
+          <span className="device-label">Has actuators</span>
+          <span className="mono-value">{formatHasActuators(status.alignmentStats?.hasActuators ?? status.hasActuators)}</span>
+        </div>
+        {status.ned2dishQuaternion && (
+          <div className="device-row">
+            <span className="device-label">Orientation (quaternion)</span>
+            <span className="mono-value">
+              w {(status.ned2dishQuaternion.qScalar ?? 0).toFixed(2)} · x{" "}
+              {(status.ned2dishQuaternion.qX ?? 0).toFixed(2)} · y {(status.ned2dishQuaternion.qY ?? 0).toFixed(2)} · z{" "}
+              {(status.ned2dishQuaternion.qZ ?? 0).toFixed(2)}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="stat-caption" style={{ marginTop: 12 }}>

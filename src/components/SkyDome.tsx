@@ -8,8 +8,13 @@
 // Hand-rolled orthographic projection on 2D canvas; drag to orbit and tilt.
 
 import { useEffect, useRef, useCallback, useState, useMemo } from "react";
-import type { DishObstructionMapJson, DishObstructionStatsJson, DishStatusJson } from "../lib/dishClient";
+import type {
+  DishObstructionMapJson,
+  DishObstructionStatsJson,
+  DishStatusJson,
+} from "../lib/dishClient";
 import { specForHardware, buildDishMesh, type MeshTriangle } from "../lib/dishMesh";
+import { StatLabel } from "./InfoDot";
 import type { SatelliteFeed } from "../hooks/useSatellites";
 import type { ObserverLocation, SatelliteSky } from "../lib/satellites";
 import { LocationSetup } from "./LocationSetup";
@@ -35,6 +40,8 @@ interface SkyDomeProps {
   /** "standard" = compact obstructions card; "immersive" = full satellite view in a sheet. */
   variant?: "standard" | "immersive";
   onOpenImmersive?: () => void;
+  /** Immersive only: sub-text under the sheet title, sharing the row with the site line. */
+  caption?: string;
 }
 
 type DomePointKind = "clear" | "obstructed" | "unmapped";
@@ -59,22 +66,17 @@ const INITIAL_YAW = 0.6;
 const INITIAL_ELEVATION = 0.62;
 const TRAIL_POINT_INTERVAL_MS = 1_000;
 const TRAIL_MAX_POINTS = 24;
+/** One turn every two minutes: present when you look at it, never the thing
+ *  moving in the corner of your eye. Dashboard dome only — the immersive view is
+ *  the one you aim and inspect with, so it stays where you put it. */
+const AUTO_ROTATE_RAD_PER_SEC = (2 * Math.PI) / 120;
+/** Rotation yields after a drag, so it isn't fighting the angle you just set. */
+const RESUME_AFTER_DRAG_MS = 4_000;
+/** ~25fps: enough for a motion this slow, a quarter of the frames of 60. */
+const AUTO_ROTATE_FRAME_MS = 40;
 
 function cssVar(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
-
-/** A stat caption with an ⓘ affordance that reveals a plain-language tip on
-    hover/focus — used to explain what each satellite-view metric means. */
-function StatLabel({ children, tip }: { children: React.ReactNode; tip: string }) {
-  return (
-    <span className="stat-caption info-label">
-      {children}
-      <span className="info-dot" tabIndex={0} role="note" aria-label={tip}>
-        i<span className="info-tip">{tip}</span>
-      </span>
-    </span>
-  );
 }
 
 function skyToWorld(azimuthDeg: number, elevationDeg: number): { x: number; y: number; z: number } {
@@ -143,6 +145,7 @@ export function SkyDome({
   onClearLocation,
   variant = "standard",
   onOpenImmersive,
+  caption,
 }: SkyDomeProps) {
   const isImmersive = variant === "immersive";
   const canvasSize = isImmersive ? IMMERSIVE_CANVAS_SIZE : STANDARD_CANVAS_SIZE;
@@ -158,14 +161,21 @@ export function SkyDome({
     startY: number;
   } | null>(null);
   const trailsRef = useRef(new Map<string, TrailPoint[]>());
+  /** When the user last touched the dome; auto-rotation waits this out. */
+  const lastInteractionRef = useRef(0);
   // Satellite click-to-inspect: hit positions collected each frame, the
   // selected name, and the anchored callout element (moved imperatively per
   // frame so it tracks the satellite without React re-renders).
-  const satelliteHitsRef = useRef<Array<{ sky: SatelliteSky; screenX: number; screenY: number }>>([]);
+  const satelliteHitsRef = useRef<Array<{ sky: SatelliteSky; screenX: number; screenY: number }>>(
+    [],
+  );
   const selectedNameRef = useRef<string | null>(null);
   const calloutRef = useRef<HTMLDivElement | null>(null);
   const pixelRatioRef = useRef(1);
-  const [selectedSatellite, setSelectedSatellite] = useState<{ sky: SatelliteSky; isServing: boolean } | null>(null);
+  const [selectedSatellite, setSelectedSatellite] = useState<{
+    sky: SatelliteSky;
+    isServing: boolean;
+  } | null>(null);
   const [snapshots, setSnapshots] = useState<ObstructionSnapshot[]>(listSnapshots);
   const [scrubIndex, setScrubIndex] = useState<number | null>(null); // null = live
 
@@ -253,7 +263,11 @@ export function SkyDome({
     context.textAlign = "center";
     context.textBaseline = "middle";
     for (const mark of compassMarks) {
-      const markPoint = project(Math.sin(mark.azimuthRad) * 1.14, Math.cos(mark.azimuthRad) * 1.14, 0);
+      const markPoint = project(
+        Math.sin(mark.azimuthRad) * 1.14,
+        Math.cos(mark.azimuthRad) * 1.14,
+        0,
+      );
       context.fillStyle = mutedColor;
       context.globalAlpha = 1 - 0.45 * ((markPoint.depth + 1) / 2);
       context.fillText(mark.label, markPoint.screenX, markPoint.screenY);
@@ -268,7 +282,8 @@ export function SkyDome({
     projectedDots.sort((first, second) => second.depth - first.depth);
     for (const dot of projectedDots) {
       const nearness = 1 - (dot.depth + 1) / 2;
-      const dotRadius = (dot.kind === "obstructed" ? 2.4 : 1.7) * pixelRatio * (0.72 + 0.5 * nearness);
+      const dotRadius =
+        (dot.kind === "obstructed" ? 2.4 : 1.7) * pixelRatio * (0.72 + 0.5 * nearness);
       if (dot.kind === "unmapped") {
         context.fillStyle = mutedColor;
         context.globalAlpha = 0.16 + 0.12 * nearness;
@@ -327,7 +342,9 @@ export function SkyDome({
       // The physical dish is white/silver hardware — never a black silhouette.
       // Dark theme: shade 20→255 (white on black). Light theme: shade 150→210
       // (silver on the light panel), so bright faces still read as hardware.
-      const lightness = Math.round(triangle.shade * (isDarkInk ? 235 : 60) + (isDarkInk ? 20 : 150));
+      const lightness = Math.round(
+        triangle.shade * (isDarkInk ? 235 : 60) + (isDarkInk ? 20 : 150),
+      );
       context.fillStyle = `rgb(${lightness},${lightness},${lightness})`;
       context.strokeStyle = context.fillStyle;
       context.lineWidth = 0.6;
@@ -374,8 +391,14 @@ export function SkyDome({
         if (trail.length > 1) {
           context.lineWidth = 1.15 * pixelRatio;
           for (let trailIndex = 1; trailIndex < trail.length; trailIndex++) {
-            const fromWorld = skyToWorld(trail[trailIndex - 1].azimuthDeg, trail[trailIndex - 1].elevationDeg);
-            const toWorld = skyToWorld(trail[trailIndex].azimuthDeg, trail[trailIndex].elevationDeg);
+            const fromWorld = skyToWorld(
+              trail[trailIndex - 1].azimuthDeg,
+              trail[trailIndex - 1].elevationDeg,
+            );
+            const toWorld = skyToWorld(
+              trail[trailIndex].azimuthDeg,
+              trail[trailIndex].elevationDeg,
+            );
             const fromPoint = project(fromWorld.x, fromWorld.y, fromWorld.z);
             const toPoint = project(toWorld.x, toWorld.y, toWorld.z);
             context.strokeStyle = isServing ? warmColor : satelliteAccent;
@@ -420,7 +443,13 @@ export function SkyDome({
           context.fillStyle = satelliteColor;
           context.globalAlpha = 0.16;
           context.beginPath();
-          context.arc(satellitePoint.screenX, satellitePoint.screenY, ringRadius * 2.2, 0, Math.PI * 2);
+          context.arc(
+            satellitePoint.screenX,
+            satellitePoint.screenY,
+            ringRadius * 2.2,
+            0,
+            Math.PI * 2,
+          );
           context.fill();
         }
 
@@ -440,14 +469,24 @@ export function SkyDome({
         context.stroke();
         context.globalAlpha = 1;
 
-        satelliteHitsRef.current.push({ sky, screenX: satellitePoint.screenX, screenY: satellitePoint.screenY });
+        satelliteHitsRef.current.push({
+          sky,
+          screenX: satellitePoint.screenX,
+          screenY: satellitePoint.screenY,
+        });
         if (sky.name === selectedNameRef.current) {
           // selection: a second, wider ring
           context.strokeStyle = inkColor;
           context.lineWidth = 1.4 * pixelRatio;
           context.globalAlpha = 0.9;
           context.beginPath();
-          context.arc(satellitePoint.screenX, satellitePoint.screenY, ringRadius + 4 * pixelRatio, 0, Math.PI * 2);
+          context.arc(
+            satellitePoint.screenX,
+            satellitePoint.screenY,
+            ringRadius + 4 * pixelRatio,
+            0,
+            Math.PI * 2,
+          );
           context.stroke();
           context.globalAlpha = 1;
         }
@@ -545,7 +584,30 @@ export function SkyDome({
     return () => cancelAnimationFrame(animationFrameId);
   }, [satellites.sampleSky, isViewingHistory, drawDome]);
 
+  // Slow drift for the dashboard dome, as the Starlink app does it. Skipped for
+  // anyone who asked the OS to reduce motion — this one never stops on its own.
+  useEffect(() => {
+    if (isImmersive) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    let animationFrameId = 0;
+    let lastFrameAt = 0;
+    const animate = (frameTime: number) => {
+      animationFrameId = requestAnimationFrame(animate);
+      if (frameTime - lastFrameAt < AUTO_ROTATE_FRAME_MS) return;
+      const elapsedMs = lastFrameAt === 0 ? 0 : frameTime - lastFrameAt;
+      lastFrameAt = frameTime;
+      const idle =
+        !dragStateRef.current && performance.now() - lastInteractionRef.current > RESUME_AFTER_DRAG_MS;
+      if (!idle) return;
+      yawRef.current += AUTO_ROTATE_RAD_PER_SEC * (elapsedMs / 1000);
+      drawDome();
+    };
+    animationFrameId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [isImmersive, drawDome]);
+
   const handlePointerDown = (downEvent: React.PointerEvent<HTMLCanvasElement>) => {
+    lastInteractionRef.current = performance.now();
     downEvent.currentTarget.setPointerCapture(downEvent.pointerId);
     dragStateRef.current = {
       pointerId: downEvent.pointerId,
@@ -566,15 +628,20 @@ export function SkyDome({
     );
     dragState.lastX = moveEvent.clientX;
     dragState.lastY = moveEvent.clientY;
+    lastInteractionRef.current = performance.now();
     requestAnimationFrame(drawDome);
   };
 
   const handlePointerUp = (upEvent: React.PointerEvent<HTMLCanvasElement>) => {
     const dragState = dragStateRef.current;
     dragStateRef.current = null;
+    lastInteractionRef.current = performance.now();
     if (!dragState || !isImmersive || isViewingHistory) return;
     // a real click, not the tail of an orbit drag
-    const movedPx = Math.hypot(upEvent.clientX - dragState.startX, upEvent.clientY - dragState.startY);
+    const movedPx = Math.hypot(
+      upEvent.clientX - dragState.startX,
+      upEvent.clientY - dragState.startY,
+    );
     if (movedPx > 6) return;
     const canvasRect = upEvent.currentTarget.getBoundingClientRect();
     const clickX = upEvent.clientX - canvasRect.left;
@@ -582,14 +649,19 @@ export function SkyDome({
     const pixelRatio = pixelRatioRef.current;
     let nearest: { sky: SatelliteSky; distancePx: number } | null = null;
     for (const hit of satelliteHitsRef.current) {
-      const distancePx = Math.hypot(hit.screenX / pixelRatio - clickX, hit.screenY / pixelRatio - clickY);
+      const distancePx = Math.hypot(
+        hit.screenX / pixelRatio - clickX,
+        hit.screenY / pixelRatio - clickY,
+      );
       if (distancePx < 14 && (!nearest || distancePx < nearest.distancePx)) {
         nearest = { sky: hit.sky, distancePx };
       }
     }
     selectedNameRef.current = nearest?.sky.name ?? null;
     setSelectedSatellite(
-      nearest ? { sky: nearest.sky, isServing: nearest.sky.name === satellites.servingCandidateName } : null,
+      nearest
+        ? { sky: nearest.sky, isServing: nearest.sky.name === satellites.servingCandidateName }
+        : null,
     );
     requestAnimationFrame(drawDome);
   };
@@ -599,9 +671,14 @@ export function SkyDome({
   useEffect(() => {
     if (!selectedSatellite) return;
     const timerId = window.setInterval(() => {
-      const hit = satelliteHitsRef.current.find((candidate) => candidate.sky.name === selectedNameRef.current);
+      const hit = satelliteHitsRef.current.find(
+        (candidate) => candidate.sky.name === selectedNameRef.current,
+      );
       if (hit) {
-        setSelectedSatellite({ sky: hit.sky, isServing: hit.sky.name === satellites.servingCandidateName });
+        setSelectedSatellite({
+          sky: hit.sky,
+          isServing: hit.sky.name === satellites.servingCandidateName,
+        });
       } else {
         selectedNameRef.current = null;
         setSelectedSatellite(null);
@@ -622,7 +699,7 @@ export function SkyDome({
       : feedState === "error"
         ? "Couldn't load satellite ephemerides — check the internet connection and reload."
         : fractionObstructed < 0.005
-          ? "Your Starlink has an unobstructed view of the sky. Satellites shown are propagated live from SpaceX's published ephemerides; the orange beam marks the best unobstructed satellite."
+          ? "Your Starlink has an unobstructed view of the sky. The orange beam marks the best unobstructed satellite."
           : "Obstructed patches cause brief interruptions as satellites pass behind them. The orange beam marks the best unobstructed satellite.";
   const standardNote =
     fractionObstructed < 0.005
@@ -640,21 +717,21 @@ export function SkyDome({
         onPointerCancel={handlePointerUp}
       />
     ) : (
-      <div className="empty-note">waiting for obstruction data…</div>
+      <div className='empty-note'>waiting for obstruction data…</div>
     );
 
   const baseLegend = (
     <>
-      <span className="legend-item">
-        <span className="legend-cell" style={{ background: "var(--ink-muted)", opacity: 0.45 }} />
+      <span className='legend-item'>
+        <span className='legend-cell' style={{ background: "var(--ink-muted)", opacity: 0.45 }} />
         Unmapped
       </span>
-      <span className="legend-item">
-        <span className="legend-cell" style={{ background: "var(--chart-ink)" }} />
+      <span className='legend-item'>
+        <span className='legend-cell' style={{ background: "var(--chart-ink)" }} />
         Clear view
       </span>
-      <span className="legend-item">
-        <span className="legend-cell" style={{ background: "var(--status-critical)" }} />
+      <span className='legend-item'>
+        <span className='legend-cell' style={{ background: "var(--status-critical)" }} />
         Obstructions
       </span>
     </>
@@ -662,31 +739,31 @@ export function SkyDome({
 
   const baseStats = (
     <>
-      <div className="skydome-stat">
-        <span className="stat-caption">Sky obstructed</span>
-        <span className="mono-value">{(fractionObstructed * 100).toFixed(2)}%</span>
+      <div className='skydome-stat'>
+        <span className='stat-caption'>Sky obstructed</span>
+        <span className='mono-value'>{(fractionObstructed * 100).toFixed(2)}%</span>
       </div>
-      <div className="skydome-stat">
-        <span className="stat-caption">Observed for</span>
-        <span className="mono-value">{validHours.toFixed(1)} h</span>
+      <div className='skydome-stat'>
+        <span className='stat-caption'>Observed for</span>
+        <span className='mono-value'>{validHours.toFixed(1)} h</span>
       </div>
     </>
   );
 
   if (!isImmersive) {
     return (
-      <div className="card row-span-2 span-4">
-        <div className="card-header">
-          <span className="card-title">Obstructions</span>
-          <button className="card-link" onClick={onOpenImmersive}>
+      <div className='card row-span-2 span-4'>
+        <div className='card-header'>
+          <span className='card-title'>Obstructions</span>
+          <button className='card-link' onClick={onOpenImmersive}>
             Satellite view ›
           </button>
         </div>
-        <div className="skydome-canvas-wrap">{domeCanvas}</div>
-        <div className="skydome-legend">{baseLegend}</div>
-        <div className="skydome-stats">{baseStats}</div>
-        <div className="skydome-note">
-          <span aria-hidden="true">ⓘ</span>
+        <div className='skydome-canvas-wrap'>{domeCanvas}</div>
+        <div className='skydome-legend'>{baseLegend}</div>
+        <div className='skydome-stats'>{baseStats}</div>
+        <div className='skydome-note'>
+          <span aria-hidden='true'>ⓘ</span>
           <span>{standardNote}</span>
         </div>
       </div>
@@ -694,36 +771,51 @@ export function SkyDome({
   }
 
   return (
-    <div className="skydome-immersive">
-      {feedState === "active" && observerLocation && (
-        <div className="card-header" style={{ marginBottom: 0, justifyContent: "flex-end" }}>
-          <span className="site-line" style={{ marginTop: 0 }}>
-            <span className="stat-caption">
-              site {observerLocation.latitudeDeg.toFixed(4)}, {observerLocation.longitudeDeg.toFixed(4)}
+    <div className='skydome-immersive'>
+      {(caption || (feedState === "active" && observerLocation)) && (
+        // Caption and site line are ends of one row: the caption is the sheet's
+        // sub-title, so it must sit on the title's baseline row, not above it.
+        <div
+          className='card-header'
+          style={{ marginBottom: 0, justifyContent: "space-between", gap: 12 }}
+        >
+          <span className='stat-caption'>{caption}</span>
+          {feedState === "active" && observerLocation && (
+            <span className='site-line' style={{ marginTop: 0, flexShrink: 0 }}>
+              <span className='stat-caption'>
+                site {observerLocation.latitudeDeg.toFixed(4)},{" "}
+                {observerLocation.longitudeDeg.toFixed(4)}
+              </span>
+              <button className='site-change' onClick={onClearLocation}>
+                change
+              </button>
             </span>
-            <button className="site-change" onClick={onClearLocation}>
-              change
-            </button>
-          </span>
+          )}
         </div>
       )}
-      <div className="skydome-canvas-wrap" style={{ position: "relative" }}>
+      <div className='skydome-canvas-wrap' style={{ position: "relative" }}>
         {domeCanvas}
-        <div ref={calloutRef} className="sat-callout" style={{ display: "none" }}>
+        <div ref={calloutRef} className='sat-callout' style={{ display: "none" }}>
           {selectedSatellite && (
             <>
-              <div className="sat-callout-head">
+              <div className='sat-callout-head'>
                 <span
-                  className="sat-callout-name mono-value"
-                  style={{ color: selectedSatellite.isServing ? "var(--chart-warm)" : "var(--satellite)" }}
+                  className='sat-callout-name mono-value'
+                  style={{
+                    color: selectedSatellite.isServing ? "var(--chart-warm)" : "var(--satellite)",
+                  }}
                 >
                   {selectedSatellite.sky.name.replace(/\s*\[DTC\]\s*/, "")}
                 </span>
-                {/\[DTC\]/.test(selectedSatellite.sky.name) && <span className="sat-callout-tag">DTC</span>}
-                {selectedSatellite.isServing && <span className="sat-callout-tag serving">serving</span>}
+                {/\[DTC\]/.test(selectedSatellite.sky.name) && (
+                  <span className='sat-callout-tag'>DTC</span>
+                )}
+                {selectedSatellite.isServing && (
+                  <span className='sat-callout-tag serving'>serving</span>
+                )}
                 <button
-                  className="sat-callout-close"
-                  aria-label="Close satellite details"
+                  className='sat-callout-close'
+                  aria-label='Close satellite details'
                   onClick={() => {
                     selectedNameRef.current = null;
                     setSelectedSatellite(null);
@@ -732,7 +824,7 @@ export function SkyDome({
                   ×
                 </button>
               </div>
-              <div className="sat-callout-grid mono-value">
+              <div className='sat-callout-grid mono-value'>
                 <span>elevation</span>
                 <span>{selectedSatellite.sky.elevationDeg.toFixed(1)}°</span>
                 <span>azimuth</span>
@@ -756,14 +848,16 @@ export function SkyDome({
           )}
         </div>
       </div>
-      <div className="skydome-hint card-meta">{isViewingHistory ? "time-lapse" : "drag to orbit · tap a satellite for details"}</div>
+      <div className='skydome-hint card-meta'>
+        {isViewingHistory ? "time-lapse" : "drag to orbit · tap a satellite for details"}
+      </div>
       {snapshots.length >= 2 && (
-        <div className="skydome-scrub">
-          <span className="stat-caption" style={{ whiteSpace: "nowrap" }}>
+        <div className='skydome-scrub'>
+          <span className='stat-caption' style={{ whiteSpace: "nowrap" }}>
             Obstruction time-lapse
           </span>
-          <div className="scrub-track">
-            <div className="scrub-ticks" aria-hidden="true">
+          <div className='scrub-track'>
+            <div className='scrub-ticks' aria-hidden='true'>
               {/* one tick per hourly snapshot + the LIVE stop, so the slidable points are visible */}
               {Array.from({ length: snapshots.length + 1 }, (_, tickIndex) => (
                 <span
@@ -773,7 +867,7 @@ export function SkyDome({
               ))}
             </div>
             <input
-              type="range"
+              type='range'
               min={0}
               max={snapshots.length}
               step={1}
@@ -782,52 +876,60 @@ export function SkyDome({
                 const sliderValue = Number(changeEvent.target.value);
                 setScrubIndex(sliderValue >= snapshots.length ? null : sliderValue);
               }}
-              aria-label="Obstruction time-lapse"
+              aria-label='Obstruction time-lapse'
             />
           </div>
-          <span className="stat-caption" style={{ whiteSpace: "nowrap", minWidth: 44, textAlign: "right" }}>
+          <span
+            className='stat-caption'
+            style={{ whiteSpace: "nowrap", minWidth: 44, textAlign: "right" }}
+          >
             {isViewingHistory
-              ? new Date(snapshots[scrubIndex].takenAtMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+              ? new Date(snapshots[scrubIndex].takenAtMs).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
               : "LIVE"}
           </span>
         </div>
       )}
-      <div className="skydome-legend">
+      <div className='skydome-legend'>
         {baseLegend}
-        <span className="legend-item">
-          <span className="legend-cell" style={{ background: "var(--satellite)" }} />
+        <span className='legend-item'>
+          <span className='legend-cell' style={{ background: "var(--satellite)" }} />
           Satellite
         </span>
-        <span className="legend-item">
-          <span className="legend-cell" style={{ background: "var(--chart-warm)" }} />
+        <span className='legend-item'>
+          <span className='legend-cell' style={{ background: "var(--chart-warm)" }} />
           Serving satellite
         </span>
       </div>
-      <div className="skydome-stats">
+      <div className='skydome-stats'>
         {baseStats}
         {feedState === "active" && (
           <>
-            <div className="skydome-stat">
+            <div className='skydome-stat'>
               <StatLabel tip="Starlink satellites currently above your horizon. 'Serviceable' ones are high enough (above ~25° elevation) that your dish could actually lock onto them.">
                 Satellites overhead
               </StatLabel>
-              <span className="mono-value">
+              <span className='mono-value'>
                 {stats.inViewCount} · {stats.serviceableCount} serviceable
               </span>
             </div>
-            <div className="skydome-stat">
+            <div className='skydome-stat'>
               <StatLabel tip="The fewest serviceable satellites at any moment over the next 30 minutes, from SpaceX's published orbits. A low number can mean brief drops as satellites hand off.">
                 Next 30 min minimum
               </StatLabel>
-              <span className="mono-value">
-                {stats.forecastMinServiceable30m === null ? "…" : `${stats.forecastMinServiceable30m} serviceable`}
+              <span className='mono-value'>
+                {stats.forecastMinServiceable30m === null
+                  ? "…"
+                  : `${stats.forecastMinServiceable30m} serviceable`}
               </span>
             </div>
-            <div className="skydome-stat" style={{ gridColumn: "1 / -1" }}>
-              <StatLabel tip="Our best guess at the satellite your dish is talking to right now — the highest, unobstructed one. The dish doesn't report this directly, so it's inferred from live orbits.">
+            <div className='skydome-stat' style={{ gridColumn: "1 / -1" }}>
+              <StatLabel tip='Our best guess at the satellite your dish is talking to right now — the highest, unobstructed one, inferred from live orbits.'>
                 Likely serving satellite
               </StatLabel>
-              <span className="mono-value">
+              <span className='mono-value'>
                 {stats.servingCandidate
                   ? `${stats.servingCandidate.name} · ${stats.servingCandidate.elevationDeg.toFixed(0)}° el · ${stats.servingCandidate.rangeKm.toFixed(0)} km`
                   : "none above 25°"}
@@ -839,8 +941,8 @@ export function SkyDome({
       {feedState === "location-needed" && !isViewingHistory ? (
         <LocationSetup onLocationSaved={onLocationSaved} />
       ) : (
-        <div className="skydome-note">
-          <span aria-hidden="true">ⓘ</span>
+        <div className='skydome-note'>
+          <span aria-hidden='true'>ⓘ</span>
           <span>{immersiveNote}</span>
         </div>
       )}

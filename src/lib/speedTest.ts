@@ -3,25 +3,38 @@
 // proxy is needed — and going direct is essential: a proxy buffers the upload
 // body and would measure browser→proxy instead of the real uplink). The dish's
 // own speedtest RPCs are unimplemented on current firmware (verified via grpcurl).
+//
+// Throughput only — latency is deliberately NOT measured here. Timing a fetch to
+// Cloudflare clocks DNS/TCP/TLS setup plus edge processing (~220ms, and ~600ms on
+// the cold first probe) rather than the link, which is why that reading used to
+// disagree wildly with the Starlink app. The dish reports its own PoP round trip
+// (~18ms), so the panel reads latency off dish telemetry for the run's window.
 
 const CLOUDFLARE = "https://speed.cloudflare.com";
 
 export interface SpeedTestProgress {
-  phase: "idle" | "latency" | "download" | "upload" | "done" | "error";
+  phase: "idle" | "download" | "upload" | "done" | "error";
   downloadMbps: number | null;
   uploadMbps: number | null;
-  latencyMs: number | null;
-  jitterMs: number | null;
+  /** Wall-clock span of the run, so latency can be read off the dish's own
+   *  per-second samples for exactly the window we were loading the link. */
+  startedAtMs: number | null;
+  endedAtMs: number | null;
 }
 
-// Ookla-style: several concurrent streams to saturate the link (a single TCP
-// stream over Starlink's latency is BDP/slow-start limited and under-reads).
+// Several concurrent streams to saturate the link (a single TCP stream over
+// Starlink's latency is BDP/slow-start limited and under-reads).
 const STREAMS = 6;
-const DOWNLOAD_BYTES_PER_STREAM = 20_000_000;
-const UPLOAD_BYTES_PER_STREAM = 8_000_000;
-const PHASE_TIME_LIMIT_MS = 12_000;
-const LATENCY_PROBES = 4;
+// Chunk sizes, NOT budgets: a stream re-requests until the phase decides to stop.
+// Sized large enough that a fast link spends its time transferring, not in setup.
+const DOWNLOAD_CHUNK_BYTES = 25_000_000;
+const UPLOAD_CHUNK_BYTES = 8_000_000;
 const SAMPLE_INTERVAL_MS = 250;
+// Ramp-up (connection setup + TCP slow start) is excluded from the figure.
+const RAMP_MS = 1_000;
+const SETTLE_MS = 900; // post-ramp delay before the live rate is worth showing
+const MEASURE_MS = 10_000; // steady-state window, timed identically for both directions
+const PHASE_MS = RAMP_MS + MEASURE_MS;
 // Gaps so the gauge settles between phases instead of snapping.
 const HOLD_RESULT_MS = 900; // keep the download result on the gauge
 const REST_MS = 1_100; // let the needle ease back to 0 and rest before upload
@@ -29,61 +42,88 @@ const REST_MS = 1_100; // let the needle ease back to 0 and rest before upload
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Samples a byte counter and reports the *cumulative average* rate
- * (bytesSoFar·8 / elapsed). This converges and structurally can't freefall —
- * both numerator and denominator only grow. The first 0.5s is skipped to hide
- * the connection-setup transient. (Instantaneous per-interval rates are far too
- * bursty for a gauge; going direct to Cloudflare removed the proxy artifact that
- * previously made cumulative decay, so cumulative is the right choice now.)
+ * Runs a phase for a fixed steady-state window rather than a fixed byte budget.
+ * Bytes-as-terminator is what made our phases wildly unequal in duration — a fast
+ * link drained the budget in ~3s (never reaching steady state) while a slow one
+ * was truncated mid-transfer. Time-bounding makes both directions take the same
+ * wall clock regardless of speed, which is the property that actually matters.
+ *
+ * Why a fixed window and not fast.com's dynamic "stop when the estimate settles":
+ * both were built and measured here. Stability detection needs a rate signal that
+ * can genuinely go flat, and ours can't. Upload rate is derived from XHR
+ * `event.loaded`, which reports socket-buffer drains in bursts — instantaneous
+ * rates spiked past 1000% of the true average, and no ±10%-over-3s test ever
+ * fired, so the "dynamic" duration just ran to its cap every time. A fixed window
+ * reaches the same place with far less machinery, and matches M-Lab NDT7 (a fixed
+ * 10s test) rather than fast.com. Revisit only with a smoother rate signal.
+ *
+ * The reported rate is the cumulative average *since the ramp*: it converges and
+ * structurally can't freefall (numerator and denominator both only grow), which is
+ * what keeps the gauge readable. Per-interval instantaneous rates were tried here
+ * and are far too bursty to show. Ramp-up (connection setup + TCP slow start) is
+ * excluded from both the live figure and the result, as fast.com describes.
  */
-function startRateSampler(getBytes: () => number, onMbps: (mbps: number) => void): () => void {
+function startPhase(getBytes: () => number, onMbps: (mbps: number) => void) {
   const startedAt = performance.now();
-  const timer = setInterval(() => {
-    const elapsedSeconds = (performance.now() - startedAt) / 1000;
-    if (elapsedSeconds > 0.5) onMbps((getBytes() * 8) / elapsedSeconds / 1e6);
-  }, SAMPLE_INTERVAL_MS);
-  return () => clearInterval(timer);
-}
+  let rampBytes: number | null = null;
+  let rampAt = 0;
 
-async function measureLatency(): Promise<{ latencyMs: number; jitterMs: number }> {
-  const roundTrips: number[] = [];
-  for (let probeIndex = 0; probeIndex < LATENCY_PROBES; probeIndex++) {
-    const startedAt = performance.now();
-    try {
-      await fetch(`${CLOUDFLARE}/__down?bytes=0&cachebust=${Date.now()}-${probeIndex}`, { cache: "no-store" });
-      roundTrips.push(performance.now() - startedAt);
-    } catch {
-      // drop a failed probe rather than failing the whole test
+  const rateSinceRamp = (nowMs: number): number => {
+    const [markBytes, markAt] = rampBytes === null ? [0, startedAt] : [rampBytes, rampAt];
+    const seconds = (nowMs - markAt) / 1000;
+    return seconds > 0 ? ((getBytes() - markBytes) * 8) / seconds / 1e6 : 0;
+  };
+
+  const timer = setInterval(() => {
+    const now = performance.now();
+    if (rampBytes === null) {
+      // Mark the end of the ramp: bytes from here on are steady-state.
+      if (now - startedAt >= RAMP_MS) {
+        rampBytes = getBytes();
+        rampAt = now;
+      }
+      return;
     }
-  }
-  if (roundTrips.length === 0) return { latencyMs: 0, jitterMs: 0 };
-  // Jitter = mean absolute difference between consecutive probes (Ookla-style).
-  let jitterSum = 0;
-  for (let i = 1; i < roundTrips.length; i++) jitterSum += Math.abs(roundTrips[i] - roundTrips[i - 1]);
-  const jitterMs = roundTrips.length > 1 ? jitterSum / (roundTrips.length - 1) : 0;
-  roundTrips.sort((first, second) => first - second);
-  return { latencyMs: roundTrips[Math.floor(roundTrips.length / 2)], jitterMs };
+    // Hold the readout back until the post-ramp window is wide enough to divide by:
+    // a single buffered burst over ~300ms reads as a wild spike before converging.
+    if (now - rampAt >= SETTLE_MS) onMbps(rateSinceRamp(now));
+  }, SAMPLE_INTERVAL_MS);
+
+  return {
+    shouldStop: () => performance.now() - startedAt >= PHASE_MS,
+    /** Final figure, measured over the post-ramp window only. */
+    finish: (): number => {
+      clearInterval(timer);
+      return rateSinceRamp(performance.now());
+    },
+  };
 }
 
 async function measureDownload(onMbps: (mbps: number) => void): Promise<number> {
   const abortController = new AbortController();
-  const timeoutId = setTimeout(() => abortController.abort(), PHASE_TIME_LIMIT_MS);
-  const startedAt = performance.now();
   let receivedBytes = 0;
-  const stopSampler = startRateSampler(() => receivedBytes, onMbps);
+  const phase = startPhase(() => receivedBytes, onMbps);
+  // Cut in-flight bodies the moment the phase is done, so a settled fast link
+  // isn't held open pulling another 25MB it no longer needs.
+  const stopWatcher = setInterval(() => {
+    if (phase.shouldStop()) abortController.abort();
+  }, 100);
 
-  // Each stream swallows its own errors so one failure can't fail the whole test.
+  // Each stream re-requests until the phase stops. Errors are swallowed per
+  // stream so one failure can't fail the whole test.
   const runStream = async () => {
     try {
-      const response = await fetch(`${CLOUDFLARE}/__down?bytes=${DOWNLOAD_BYTES_PER_STREAM}&r=${Math.random()}`, {
-        cache: "no-store",
-        signal: abortController.signal,
-      });
-      const bodyReader = response.body!.getReader();
-      for (;;) {
-        const chunk = await bodyReader.read();
-        if (chunk.done) break;
-        receivedBytes += chunk.value.length;
+      while (!phase.shouldStop()) {
+        const response = await fetch(`${CLOUDFLARE}/__down?bytes=${DOWNLOAD_CHUNK_BYTES}&r=${Math.random()}`, {
+          cache: "no-store",
+          signal: abortController.signal,
+        });
+        const bodyReader = response.body!.getReader();
+        for (;;) {
+          const chunk = await bodyReader.read();
+          if (chunk.done) break;
+          receivedBytes += chunk.value.length;
+        }
       }
     } catch {
       // aborted/failed stream — keep whatever bytes it delivered
@@ -91,65 +131,78 @@ async function measureDownload(onMbps: (mbps: number) => void): Promise<number> 
   };
 
   await Promise.allSettled(Array.from({ length: STREAMS }, runStream));
-  clearTimeout(timeoutId);
-  stopSampler();
+  clearInterval(stopWatcher);
+  const mbps = phase.finish();
 
-  const totalSeconds = (performance.now() - startedAt) / 1000;
-  if (receivedBytes === 0 || totalSeconds <= 0) throw new Error("download failed");
-  return (receivedBytes * 8) / totalSeconds / 1e6;
+  if (receivedBytes === 0) throw new Error("download failed");
+  return mbps;
 }
 
 // Parallel XHR uploads (not fetch) because only xhr.upload emits progress. Each
-// stream's `event.loaded` is summed; the sampler turns the aggregate into a live
-// rate. `loaded` is bytes drained to the socket — with buffers far smaller than
-// the payload, that tracks real upload throughput under backpressure.
+// stream posts chunks back-to-back until the phase stops, and `event.loaded` is
+// summed across them. `loaded` is bytes drained to the socket — with buffers far
+// smaller than the payload, that tracks real upload throughput under backpressure.
 async function measureUpload(onMbps: (mbps: number) => void): Promise<number> {
-  const loadedPerStream = new Array<number>(STREAMS).fill(0);
-  const startedAt = performance.now();
-  const stopSampler = startRateSampler(() => loadedPerStream.reduce((sum, n) => sum + n, 0), onMbps);
+  // Bytes from finished chunks, plus the in-flight chunk's progress. Kept apart
+  // so a chunk's bytes are counted exactly once as it rolls over.
+  const sentPerStream = new Array<number>(STREAMS).fill(0);
+  const inFlightPerStream = new Array<number>(STREAMS).fill(0);
+  const totalBytes = () => sentPerStream.reduce((sum, n) => sum + n, 0) + inFlightPerStream.reduce((sum, n) => sum + n, 0);
 
-  // `loadend` fires on success, error, abort, and timeout, so each stream always
-  // resolves — one failing stream can't reject the whole test. We count bytes
-  // actually sent (loadedPerStream), so a partial stream still contributes.
-  const uploadStream = (streamIndex: number): Promise<void> =>
+  const phase = startPhase(totalBytes, onMbps);
+  const inFlight = new Set<XMLHttpRequest>();
+  const stopWatcher = setInterval(() => {
+    if (phase.shouldStop()) inFlight.forEach((xhr) => xhr.abort());
+  }, 100);
+
+  // One buffer shared by every stream — it's only ever read.
+  const payload = new Uint8Array(UPLOAD_CHUNK_BYTES);
+  crypto.getRandomValues(payload.subarray(0, 65_536));
+
+  // `loadend` fires on success, error, abort, and timeout, so each chunk always
+  // resolves — one failing chunk can't reject the whole test. Bytes actually sent
+  // are counted, so an aborted chunk still contributes what it managed to push.
+  const sendChunk = (streamIndex: number): Promise<void> =>
     new Promise((resolve) => {
-      const payload = new Uint8Array(UPLOAD_BYTES_PER_STREAM);
-      crypto.getRandomValues(payload.subarray(0, 65_536));
       const xhr = new XMLHttpRequest();
+      inFlight.add(xhr);
       xhr.open("POST", `${CLOUDFLARE}/__up`);
-      xhr.timeout = PHASE_TIME_LIMIT_MS + 5_000;
+      xhr.timeout = PHASE_MS + 5_000;
       xhr.upload.addEventListener("progress", (event) => {
-        loadedPerStream[streamIndex] = event.loaded;
+        inFlightPerStream[streamIndex] = event.loaded;
       });
-      xhr.addEventListener("loadend", () => resolve());
+      xhr.addEventListener("loadend", () => {
+        inFlight.delete(xhr);
+        sentPerStream[streamIndex] += inFlightPerStream[streamIndex];
+        inFlightPerStream[streamIndex] = 0;
+        resolve();
+      });
       xhr.send(payload);
     });
 
-  await Promise.all(Array.from({ length: STREAMS }, (_, index) => uploadStream(index)));
-  stopSampler();
+  const uploadStream = async (streamIndex: number) => {
+    while (!phase.shouldStop()) await sendChunk(streamIndex);
+  };
 
-  const totalSeconds = (performance.now() - startedAt) / 1000;
-  const totalBytes = loadedPerStream.reduce((sum, n) => sum + n, 0);
-  if (totalBytes === 0 || totalSeconds <= 0) throw new Error("upload failed");
-  return (totalBytes * 8) / totalSeconds / 1e6;
+  await Promise.all(Array.from({ length: STREAMS }, (_, index) => uploadStream(index)));
+  clearInterval(stopWatcher);
+  const mbps = phase.finish();
+
+  if (totalBytes() === 0) throw new Error("upload failed");
+  return mbps;
 }
 
 export async function runSpeedTest(onProgress: (progress: SpeedTestProgress) => void): Promise<void> {
   const progress: SpeedTestProgress = {
-    phase: "latency",
+    phase: "download",
     downloadMbps: null,
     uploadMbps: null,
-    latencyMs: null,
-    jitterMs: null,
+    startedAtMs: Date.now(),
+    endedAtMs: null,
   };
   const report = () => onProgress({ ...progress });
   report();
   try {
-    const latency = await measureLatency();
-    progress.latencyMs = latency.latencyMs;
-    progress.jitterMs = latency.jitterMs;
-    progress.phase = "download";
-    report();
     progress.downloadMbps = await measureDownload((liveMbps) => {
       progress.downloadMbps = liveMbps;
       report();
@@ -169,6 +222,7 @@ export async function runSpeedTest(onProgress: (progress: SpeedTestProgress) => 
       report();
     });
     progress.phase = "done";
+    progress.endedAtMs = Date.now();
     report();
   } catch {
     progress.phase = "error";

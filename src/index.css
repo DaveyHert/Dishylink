@@ -72,8 +72,8 @@
 
   /* The physical dish is white/silver hardware — never a black silhouette.
      Kept theme-light in both modes (see dark override below). */
-  --dish-body: #c4c4c4;
-  --dish-edge: #8c8c8c;
+  --dish-body: #fff;
+  --dish-edge: #aba9a9;
 
   --status-good: #16a34a;
   --status-critical: #e11d48;
@@ -110,8 +110,8 @@
   --satellite: #e0a422;
   --accent: #e0a422;
 
-  --dish-body: #ffffff;
-  --dish-edge: rgba(0, 0, 0, 0);
+  --dish-body: #fff;
+  --dish-edge: rgba(255, 255, 255, 0.559);
 
   --status-good: #4ade80;
   --status-critical: #f43f5e;
@@ -734,6 +734,48 @@ body {
   gap: 0;
 }
 
+/* Pending software-update banner on the Terminal card. */
+.device-update-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--chart-warm) 14%, var(--surface));
+  color: var(--chart-warm);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Terminal card header: id text plus an expand affordance, right-aligned. */
+.device-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.device-expand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.device-expand:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 8%, var(--surface));
+}
+
 .device-row {
   display: flex;
   justify-content: space-between;
@@ -887,7 +929,7 @@ button.card {
 .detail-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 6px;
 }
 
@@ -900,6 +942,7 @@ button.card {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  margin-left: auto;
   width: 30px;
   height: 30px;
   border-radius: 999px;
@@ -1140,6 +1183,10 @@ button.card {
   width: min(920px, 100%);
 }
 
+.detail-sheet-xxl {
+  width: min(1080px, 100%);
+}
+
 .card-link {
   background: none;
   border: none;
@@ -1149,7 +1196,9 @@ button.card {
   font-weight: 600;
   color: var(--accent);
   cursor: pointer;
-  transition: color 120ms ease, opacity 120ms ease;
+  transition:
+    color 120ms ease,
+    opacity 120ms ease;
 }
 
 .card-link:hover {
@@ -1265,7 +1314,9 @@ button.card {
   line-height: 1;
   cursor: help;
   outline: none;
-  transition: border-color 120ms ease, color 120ms ease;
+  transition:
+    border-color 120ms ease,
+    color 120ms ease;
 }
 
 .info-dot:hover,
@@ -1297,7 +1348,9 @@ button.card {
   text-align: left;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 130ms ease, transform 130ms ease;
+  transition:
+    opacity 130ms ease,
+    transform 130ms ease;
 }
 
 .info-dot:hover .info-tip,
@@ -1388,6 +1441,29 @@ button.card {
   background: color-mix(in srgb, var(--ink) 8%, var(--surface));
 }
 
+/* Count beside a segment label ("Devices 5"). Tabular so it never nudges the
+   label as the number changes. */
+.settings-segment-count {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  opacity: 0.6;
+  margin-left: 3px;
+}
+
+/* A paired mesh node that is currently down: listed, but nothing to drill into. */
+.netrow-offline {
+  cursor: default;
+}
+
+.netrow-offline:hover {
+  background: color-mix(in srgb, var(--ink) 4%, var(--surface));
+}
+
+.netrow-offline .netrow-name {
+  color: var(--ink-secondary);
+}
+
 .netrow-signal {
   flex: none;
   display: inline-flex;
@@ -1438,21 +1514,36 @@ button.card {
 }
 
 /* device detail drill-in */
-.devdetail-back {
-  background: none;
+/* Back lives in the sheet header beside the title (see .detail-back), where the
+   app keeps it — the drill-in body has no navigation row of its own. */
+.detail-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin-right: -2px;
+  padding: 0;
   border: none;
-  padding: 0 0 12px;
-  color: var(--accent);
-  font-family: var(--font-ui);
-  font-size: 13px;
-  font-weight: 600;
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-secondary);
   cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.detail-back:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 8%, var(--surface));
 }
 
 .devdetail-head {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   margin-bottom: 14px;
 }
 
@@ -1484,7 +1575,9 @@ button.card {
   color: var(--ink-secondary);
   cursor: pointer;
   flex: none;
-  transition: background 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
 }
 
 .devdetail-pencil:hover {
@@ -1498,14 +1591,20 @@ button.card {
   margin-bottom: 14px;
 }
 
-.devdetail-section-label {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--ink-muted);
+/* Section heading for the throughput charts: reads as a real heading, at the
+   app's own weight, rather than as a muted micro-caption. */
+.devdetail-section-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   margin: 20px 0 10px;
+}
+
+.devdetail-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--ink);
 }
 
 .devdetail-collecting {
@@ -1652,7 +1751,9 @@ button.card {
   font-size: 13px;
   line-height: 1;
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
 }
 
 .settings-close:hover {
@@ -1704,6 +1805,26 @@ button.card {
 
 .settings-segment button.active {
   color: var(--page);
+}
+
+/* Dark mode follows the speed-test control: a translucent track with the
+   selection reading as a raised dark pill, rather than the inverted white slab
+   the light theme wants. Light mode keeps its own look. */
+:root[data-theme="dark"] .settings-segment {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+:root[data-theme="dark"] .settings-segment-glider {
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+:root[data-theme="dark"] .settings-segment button {
+  color: var(--ink-muted);
+}
+
+:root[data-theme="dark"] .settings-segment button.active {
+  color: var(--ink);
 }
 
 /* animated-height body */
@@ -1910,6 +2031,11 @@ button.card {
   margin-top: 12px;
 }
 
+/* The plot box is a fixed share of the chart height (flex: 1 of a column whose
+   label row is the same height in every column), so the bar's percentage is
+   measured against one baseline for all columns. The label row keeps its height
+   even when hidden (visibility, not display:none), so it can't hand space back
+   to the plot and stagger the bars. */
 .energy-bar-col {
   flex: 1;
   min-width: 0;
@@ -1918,6 +2044,14 @@ button.card {
   flex-direction: column;
   align-items: center;
   justify-content: flex-end;
+}
+
+.energy-bar-plot {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
 }
 
 .energy-bar {
@@ -1933,8 +2067,10 @@ button.card {
   color: var(--ink-muted);
   margin-top: 4px;
   white-space: nowrap;
-  overflow: hidden;
-  max-width: 100%;
+  /* A label is allowed to spill past its own column: labelStride() only keeps
+     every Nth one precisely so it can use the blank columns either side.
+     Clamping to the column instead truncated the text the stride just made
+     room for ("12:00 AM" rendering as "12:00 A"). */
 }
 
 /* ---------- speed test ---------- */
@@ -1954,18 +2090,16 @@ button.card {
   gap: 12px;
 }
 
+/* The active phase is carried by emphasis alone — no rule, no box. */
 .speed-headline {
   flex: 1;
   padding: 8px 0 9px;
-  border-bottom: 2px solid transparent;
-  opacity: 0.55;
-  transition:
-    opacity 150ms ease,
-    border-color 150ms ease;
+  text-align: center;
+  opacity: 0.5;
+  transition: opacity 150ms ease;
 }
 
 .speed-headline.active {
-  border-bottom-color: var(--ink);
   opacity: 1;
 }
 
@@ -1980,8 +2114,9 @@ button.card {
   color: var(--ink);
 }
 
-.speed-headline-arrow {
-  font-weight: 700;
+.speed-headline-icon {
+  display: inline-flex;
+  vertical-align: -1px;
 }
 
 .speed-headline-unit {
@@ -1994,6 +2129,10 @@ button.card {
   letter-spacing: -0.01em;
   color: var(--ink);
   line-height: 1.1;
+}
+
+.speed-headline-value.pending {
+  color: var(--ink-muted);
 }
 
 .speed-metrics {
@@ -2070,6 +2209,10 @@ button.card {
   letter-spacing: -0.02em;
 }
 
+.gauge-value.pending {
+  fill: var(--ink-muted);
+}
+
 .gauge-unit {
   fill: var(--ink-muted);
   font-size: 13px;
@@ -2084,12 +2227,14 @@ button.card {
 }
 
 /* segment control (Gauge | Starlink) */
+/* Pill, matching the Devices/Nodes segment in the Network sheet — one segmented
+   control shape across the app. */
 .speed-segment {
   display: inline-flex;
   align-self: center;
   gap: 2px;
   padding: 3px;
-  border-radius: 10px;
+  border-radius: 999px;
   background: color-mix(in srgb, var(--ink) 7%, transparent);
   margin-bottom: 12px;
 }
@@ -2102,7 +2247,7 @@ button.card {
   font-size: 12.5px;
   font-weight: 600;
   padding: 5px 18px;
-  border-radius: 8px;
+  border-radius: 999px;
   cursor: pointer;
   transition:
     background 120ms ease,
@@ -2145,6 +2290,20 @@ button.card {
   stroke-dasharray: 3 5;
 }
 
+/* Bloom is a dark-mode effect: blurring dark ink on a light page reads as a grey
+   smudge, so light theme keeps the beam crisp and drops the satellite halo too. */
+.beam-sat-halo {
+  display: none;
+}
+
+:root[data-theme="dark"] .beam-glow-layer {
+  filter: url(#beam-glow);
+}
+
+:root[data-theme="dark"] .beam-sat-halo {
+  display: block;
+}
+
 .beam-dish line {
   stroke: var(--ink);
   stroke-width: 2;
@@ -2172,6 +2331,10 @@ button.card {
   color: var(--ink);
 }
 
+.speed-beam-value.pending {
+  color: var(--ink-muted);
+}
+
 .speed-beam-unit {
   font-size: 13px;
   font-weight: 500;
@@ -2197,27 +2360,49 @@ button.card {
   padding: 11px 0;
   border: none;
   border-radius: 12px;
-  background: var(--ink);
-  color: var(--page);
+  /* A quiet surface rather than a solid ink slab: a full-width white button is
+     the brightest thing on a dark sheet and pulls focus off the readout. */
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
+  color: var(--ink);
   font-family: var(--font-ui);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: opacity 120ms ease;
-  /* center the spinner; paint it in the button's text color */
+  transition:
+    background 150ms ease,
+    color 150ms ease;
+  /* center the icon + label, with room to breathe between them */
   display: flex;
   align-items: center;
   justify-content: center;
-  --color-brand-accent: var(--page);
+  gap: 8px;
 }
 
 .speedtest-button:hover:not(:disabled) {
-  opacity: 0.85;
+  background: color-mix(in srgb, var(--ink) 18%, transparent);
 }
 
+/* Running: a quiet surface with a muted spinner, not a dimmed white slab. */
 .speedtest-button:disabled {
-  opacity: 0.45;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink-muted);
   cursor: default;
+}
+
+.speedtest-spinner {
+  animation: speedtest-spin 1s steps(12, end) infinite;
+}
+
+@keyframes speedtest-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .speedtest-spinner {
+    animation: none;
+  }
 }
 
 /* ---------- unreachable hero ---------- */

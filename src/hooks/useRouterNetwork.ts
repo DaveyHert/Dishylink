@@ -4,13 +4,48 @@
 // surface (Network sheet or Settings modal) is open.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DishClient, type WifiClientJson, type WifiNetworkConfigJson } from "../lib/dishClient";
+import { DishClient, throughputMbps, type WifiClientJson, type WifiNetworkConfigJson } from "../lib/dishClient";
 import type { TelemetrySample } from "../lib/telemetry";
 
 const CLIENTS_POLL_MS = 5_000;
-// Per-device throughput history retained in memory (the router API returns only
-// a point-in-time rate, so we accumulate our own series while the panel is open).
-const HISTORY_WINDOW_MS = 30 * 60_000;
+// Per-device throughput history. The router returns only a point-in-time rate,
+// so the series is accumulated — but by the always-on collector, not here. This
+// hook seeds from it (/api/clients) and then appends what it polls itself, so a
+// reload or a closed panel no longer costs the user their history.
+const HISTORY_WINDOW_MS = 6 * 3_600_000;
+
+interface ClientMinuteJson {
+  minute: number;
+  macAddress: string;
+  downMbps: number;
+  upMbps: number;
+}
+
+/** Backfill per-device series from the collector. Best-effort: without it we
+ *  simply start from this session's own polls, as before. */
+async function fetchPersistedClientHistory(): Promise<Map<string, TelemetrySample[]>> {
+  const history = new Map<string, TelemetrySample[]>();
+  try {
+    const response = await fetch("/api/clients?hours=6", { signal: AbortSignal.timeout(4_000) });
+    if (!response.ok) return history;
+    const payload = (await response.json()) as { history?: ClientMinuteJson[] };
+    for (const row of payload.history ?? []) {
+      const series = history.get(row.macAddress) ?? [];
+      series.push({
+        timestampMs: row.minute * 1000,
+        latencyMs: null,
+        dropRate: 0,
+        downlinkBps: row.downMbps * 1_000_000,
+        uplinkBps: row.upMbps * 1_000_000,
+        powerW: 0,
+      });
+      history.set(row.macAddress, series);
+    }
+  } catch {
+    // collector down — fall through with whatever we can poll ourselves
+  }
+  return history;
+}
 
 export interface RouterNetwork {
   clients: WifiClientJson[];
@@ -39,6 +74,15 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
       try {
         clientRef.current ??= DishClient.load("router");
         const routerClient = await clientRef.current;
+        // Seed once from the collector before the first poll appends to it.
+        if (historyRef.current.size === 0) {
+          const persisted = await fetchPersistedClientHistory();
+          if (disposed) return;
+          if (persisted.size > 0) {
+            historyRef.current = persisted;
+            setThroughputHistory(new Map(persisted));
+          }
+        }
         const pollClients = async () => {
           try {
             const clientList = await routerClient.getWifiClients();
@@ -47,8 +91,8 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
             const history = historyRef.current;
             for (const client of clientList) {
               if (!client.macAddress) continue;
-              const downBps = (client.rxStats?.throughputMbpsLast1mAvg ?? 0) * 1_000_000;
-              const upBps = (client.txStats?.throughputMbpsLast1mAvg ?? 0) * 1_000_000;
+              const downBps = throughputMbps(client.rxStats) * 1_000_000;
+              const upBps = throughputMbps(client.txStats) * 1_000_000;
               const series = history.get(client.macAddress) ?? [];
               series.push({ timestampMs: now, latencyMs: null, dropRate: 0, downlinkBps: downBps, uplinkBps: upBps, powerW: 0 });
               const cutoff = now - HISTORY_WINDOW_MS;

@@ -4,19 +4,9 @@
 // (Starlink's own billing meter is cloud-side and not exposed locally).
 
 import { useState } from "react";
-import { useElementWidth, labelStride } from "../hooks/useElementWidth";
 import { useDataUsage, type UsageBucket } from "../hooks/useDataUsage";
 import type { EnergyRange } from "../hooks/useEnergyHistory";
-
-const RANGE_TABS: { label: string; value: EnergyRange }[] = [
-  { label: "1H", value: "1h" },
-  { label: "6H", value: "6h" },
-  { label: "12H", value: "12h" },
-  { label: "Today", value: "today" },
-  { label: "Day", value: "day" },
-  { label: "Week", value: "week" },
-  { label: "Month", value: "month" },
-];
+import { RANGE_TABS, RangeBars, bucketLabel, type RangeBarColumn } from "./RangeBarChart";
 
 function formatGB(gigabytes: number): string {
   if (gigabytes >= 100) return gigabytes.toFixed(0);
@@ -24,67 +14,35 @@ function formatGB(gigabytes: number): string {
   return gigabytes.toFixed(2);
 }
 
-function bucketLabel(bucket: UsageBucket, range: EnergyRange): string {
-  const date = new Date(bucket.t * 1000);
-  if (range === "month") return date.toLocaleDateString([], { month: "short" });
-  if (range === "day" || range === "week") return date.toLocaleDateString([], { month: "numeric", day: "numeric" });
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-/** Roughly how wide a label renders at 9px mono: "10:00 PM" vs "7/16" vs "Jul". */
-function labelWidthFor(range: EnergyRange): number {
-  if (range === "month") return 26;
-  if (range === "day" || range === "week") return 30;
-  return 46;
-}
-
 function UsageBars({ buckets, range }: { buckets: UsageBucket[]; range: EnergyRange }) {
-  const [barsRef, barsWidth] = useElementWidth<HTMLDivElement>();
   const totalOf = (bucket: UsageBucket) => (bucket.downGB ?? 0) + (bucket.upGB ?? 0);
   const maxTotalGB = Math.max(...buckets.map(totalOf), 1e-9);
-  // Skip labels only when the width genuinely forces it.
-  const labelEvery = labelStride(barsWidth, buckets.length, labelWidthFor(range));
-  if (buckets.length === 0) return null;
-  return (
-    <div className="energy-bars" ref={barsRef}>
-      {buckets.map((bucket, index) => {
-        const missing = bucket.downGB === null || bucket.upGB === null;
-        const total = totalOf(bucket);
-        return (
+  const columns: RangeBarColumn[] = buckets.map((bucket) => {
+    const missing = bucket.downGB === null || bucket.upGB === null;
+    const total = totalOf(bucket);
+    const when = bucketLabel(bucket.t, range);
+    return {
+      key: bucket.t,
+      label: when,
+      title: missing
+        ? `${when} · no data — the collector wasn't running`
+        : `${when} · ↓${formatGB(bucket.downGB!)} GB · ↑${formatGB(bucket.upGB!)} GB`,
+      bar: missing ? (
+        // An empty slot, not a zero one: mark the hole rather than draw a
+        // bar claiming no traffic passed.
+        <div style={{ height: "100%", width: "100%", background: "var(--ink-muted)", opacity: 0.06 }} />
+      ) : (
+        <div className="usage-bar-stack" style={{ height: `${(total / maxTotalGB) * 100}%` }}>
           <div
-            key={bucket.t}
-            className="energy-bar-col"
-            title={
-              missing
-                ? `${bucketLabel(bucket, range)} · no data — the collector wasn't running`
-                : `${bucketLabel(bucket, range)} · ↓${formatGB(bucket.downGB!)} GB · ↑${formatGB(bucket.upGB!)} GB`
-            }
-          >
-            {/* Bar in its own box so its height is a share of the plot, not of
-                the plot plus the label. */}
-            <div style={{ flex: 1, minHeight: 0, width: "100%", display: "flex", alignItems: "flex-end" }}>
-              {missing ? (
-                // An empty slot, not a zero one: mark the hole rather than draw a
-                // bar claiming no traffic passed.
-                <div style={{ height: "100%", width: "100%", background: "var(--ink-muted)", opacity: 0.06 }} />
-              ) : (
-                <div className="usage-bar-stack" style={{ height: `${(total / maxTotalGB) * 100}%` }}>
-                  <div
-                    className="usage-bar-up"
-                    style={{ height: `${((bucket.upGB ?? 0) / Math.max(total, 1e-9)) * 100}%` }}
-                  />
-                  <div className="usage-bar-down" style={{ flex: 1 }} />
-                </div>
-              )}
-            </div>
-            <span className="energy-bar-label" style={{ flexShrink: 0 }}>
-              {index % labelEvery === 0 ? bucketLabel(bucket, range) : " "}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
+            className="usage-bar-up"
+            style={{ height: `${((bucket.upGB ?? 0) / Math.max(total, 1e-9)) * 100}%` }}
+          />
+          <div className="usage-bar-down" style={{ flex: 1 }} />
+        </div>
+      ),
+    };
+  });
+  return <RangeBars columns={columns} range={range} />;
 }
 
 export function DataUsagePanel() {

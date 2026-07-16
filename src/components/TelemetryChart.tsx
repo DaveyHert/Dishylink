@@ -23,6 +23,10 @@ interface TelemetryChartProps {
   height?: number;
   outageEvents?: OutageEvent[];
   areaWash?: boolean;
+  /** Shortest absence that counts as a hole. Raise it for series sampled slower
+   *  than 1 Hz — per-device history is per-minute, so 30s would mark every
+   *  normal step as "no data". */
+  minGapMs?: number;
 }
 
 interface BucketPoint {
@@ -36,9 +40,11 @@ const PLOT_MARGIN = { top: 8, right: 12, bottom: 22, left: 46 };
 
 /**
  * Shortest stretch without samples that counts as a hole rather than a hiccup.
- * Samples arrive at 1 Hz, so anything approaching a minute is real absence —
- * the collector's machine asleep, a restart, the dish unplugged — while a
- * dropped second or two is not worth fracturing the line over.
+ * The default suits the dish series, which arrive at 1 Hz: anything approaching
+ * a minute is real absence — the collector's machine asleep, a restart, the dish
+ * unplugged — while a dropped second or two is not worth fracturing the line
+ * over. Series recorded at a coarser cadence must raise this (see the
+ * `minGapMs` prop), or their normal spacing reads as absence.
  */
 const MIN_GAP_MS = 30_000;
 
@@ -104,6 +110,7 @@ export function TelemetryChart({
   height = 190,
   outageEvents = [],
   areaWash = true,
+  minGapMs = MIN_GAP_MS,
 }: TelemetryChartProps) {
   const [containerRef, containerWidth] = useElementWidth();
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
@@ -149,7 +156,7 @@ export function TelemetryChart({
     // Empty buckets are dropped above, so a hole shows up as two neighbours
     // further apart than one bucket. Anything wider than that — and wider than
     // a dropped sample or two — is time we never measured.
-    const gapThresholdMs = Math.max(bucketSpanMs * 1.5, MIN_GAP_MS);
+    const gapThresholdMs = Math.max(bucketSpanMs * 1.5, minGapMs);
     for (let index = 1; index < populated.length; index++) {
       populated[index].hasGapBefore =
         populated[index].timestampMs - populated[index - 1].timestampMs > gapThresholdMs;
@@ -228,7 +235,7 @@ export function TelemetryChart({
    */
   const gapRegions = useMemo(() => {
     if (buckets.length === 0) return [];
-    const gapThresholdMs = Math.max(bucketSpanMs * 1.5, MIN_GAP_MS);
+    const gapThresholdMs = Math.max(bucketSpanMs * 1.5, minGapMs);
     const regions: { startMs: number; endMs: number }[] = [];
     if (buckets[0].timestampMs - windowStartMs > gapThresholdMs) {
       regions.push({ startMs: windowStartMs, endMs: buckets[0].timestampMs });

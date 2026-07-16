@@ -48,6 +48,7 @@ export function SpeedGauge({ value, mode, caption }: SpeedGaugeProps) {
   const fraction = fractionFor(eased);
   const needleDeg = START_DEG + fraction * SWEEP_DEG;
   const [needleX, needleY] = pointOnArc(RADIUS - 12, needleDeg);
+  const pending = value === null && eased < 0.1;
   const fillColor = mode === "upload" ? "var(--chart-warm)" : "var(--chart-ink)";
 
   return (
@@ -83,9 +84,9 @@ export function SpeedGauge({ value, mode, caption }: SpeedGaugeProps) {
         {/* needle */}
         <line x1={CENTER} y1={CENTER} x2={needleX} y2={needleY} stroke={fillColor} className="gauge-needle" />
         <circle cx={CENTER} cy={CENTER} r={7} fill={fillColor} />
-        {/* center readout — eases with the needle; blank only when idle at rest */}
-        <text x={CENTER} y={CENTER + 52} className="gauge-value" textAnchor="middle">
-          {value === null && eased < 0.1 ? "—" : eased.toFixed(eased < 100 ? 1 : 0)}
+        {/* center readout — eases with the needle; a muted 0 only when idle at rest */}
+        <text x={CENTER} y={CENTER + 52} className={`gauge-value${pending ? " pending" : ""}`} textAnchor="middle">
+          {pending ? "0" : eased.toFixed(eased < 100 ? 1 : 0)}
         </text>
         <text x={CENTER} y={CENTER + 72} className="gauge-unit" textAnchor="middle">
           Mbps
