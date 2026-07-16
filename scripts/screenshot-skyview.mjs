@@ -22,7 +22,7 @@ await page.waitForTimeout(20000); // cached TLEs + coarse pass
 await page.locator(".skydome-canvas-wrap").scrollIntoViewIfNeeded();
 await page.screenshot({ path: `${outputDir}/standard-obstructions.png` });
 
-await page.locator(".card-link", { hasText: "Sky view" }).click();
+await page.locator(".card-link", { hasText: "Satellite view" }).click();
 await page.waitForTimeout(2500);
 await page.screenshot({ path: `${outputDir}/immersive-skyview.png` });
 await page.keyboard.press("Escape");

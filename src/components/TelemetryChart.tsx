@@ -125,41 +125,54 @@ export function TelemetryChart({
     [plotHeight, yMax],
   );
 
+  const baselineY = PLOT_MARGIN.top + plotHeight;
+  const leftEdgeX = PLOT_MARGIN.left;
+
   const seriesPaths = useMemo(
     () =>
       series.map((_, seriesIndex) => {
         let linePath = "";
         let pathOpen = false;
+        let firstPointDrawn = false;
         for (const bucket of buckets) {
           const value = bucket.values[seriesIndex];
           if (value === null) {
             pathOpen = false;
             continue;
           }
-          const command = pathOpen ? "L" : "M";
-          linePath += `${command}${xForTime(bucket.timestampMs).toFixed(1)},${yForValue(value).toFixed(1)}`;
+          const pointX = xForTime(bucket.timestampMs).toFixed(1);
+          const pointY = yForValue(value).toFixed(1);
+          if (!pathOpen && !firstPointDrawn) {
+            // Emerge from the ground: run flat along the baseline from the left
+            // edge to where data begins, then rise into the first sample — so
+            // the line never materializes floating in mid-air.
+            linePath += `M${leftEdgeX.toFixed(1)},${baselineY.toFixed(1)}L${pointX},${baselineY.toFixed(1)}L${pointX},${pointY}`;
+          } else {
+            linePath += `${pathOpen ? "L" : "M"}${pointX},${pointY}`;
+          }
           pathOpen = true;
+          firstPointDrawn = true;
         }
         return linePath;
       }),
-    [buckets, series, xForTime, yForValue],
+    [buckets, series, xForTime, yForValue, baselineY, leftEdgeX],
   );
 
   const areaPath = useMemo(() => {
     if (!areaWash || buckets.length === 0) return "";
     const firstSeriesPoints = buckets.filter((bucket) => bucket.values[0] !== null);
     if (firstSeriesPoints.length === 0) return "";
-    const baselineY = PLOT_MARGIN.top + plotHeight;
     const lineSegment = firstSeriesPoints
       .map(
-        (bucket, pointIndex) =>
-          `${pointIndex === 0 ? "M" : "L"}${xForTime(bucket.timestampMs).toFixed(1)},${yForValue(bucket.values[0]!).toFixed(1)}`,
+        (bucket) => `L${xForTime(bucket.timestampMs).toFixed(1)},${yForValue(bucket.values[0]!).toFixed(1)}`,
       )
       .join("");
     const firstX = xForTime(firstSeriesPoints[0].timestampMs).toFixed(1);
     const lastX = xForTime(firstSeriesPoints[firstSeriesPoints.length - 1].timestampMs).toFixed(1);
-    return `${lineSegment}L${lastX},${baselineY}L${firstX},${baselineY}Z`;
-  }, [areaWash, buckets, plotHeight, xForTime, yForValue]);
+    // Match the line: fill from the ground at the left edge, run flat to the
+    // data start, then up through the series and back down to the baseline.
+    return `M${leftEdgeX.toFixed(1)},${baselineY.toFixed(1)}L${firstX},${baselineY.toFixed(1)}${lineSegment}L${lastX},${baselineY.toFixed(1)}Z`;
+  }, [areaWash, buckets, baselineY, leftEdgeX, xForTime, yForValue]);
 
   const yTickValues = useMemo(() => {
     const tickStep = niceCeiling(yMax / 4);

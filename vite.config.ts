@@ -1,3 +1,4 @@
+import path from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -10,6 +11,9 @@ interface OutgoingProxyRequest {
 // origin, so the dev server proxies it same-origin under /dishy.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: { "@": path.resolve(__dirname, "./src") },
+  },
   // satellite.js' wasm/pthreads build spawns Web Workers; Vite bundles workers
   // as iife by default, which can't do the top-level await that build uses.
   // Emit workers as ES modules so the production build succeeds.

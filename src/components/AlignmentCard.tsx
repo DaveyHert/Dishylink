@@ -236,7 +236,9 @@ function RotationInstrument({ reading }: { reading: AlignmentReading }) {
             width={dishWidth}
             height={dishHeight}
             rx={1}
-            fill="var(--chart-ink)"
+            fill="var(--dish-body)"
+            stroke="var(--dish-edge)"
+            strokeWidth={0.75}
           />
           {reading.isValid && (
             <line
@@ -311,7 +313,9 @@ function TiltInstrument({ reading }: { reading: AlignmentReading }) {
               width={dishLength}
               height={dishThickness}
               rx={1}
-              fill="var(--chart-ink)"
+              fill="var(--dish-body)"
+              stroke="var(--dish-edge)"
+              strokeWidth={0.75}
             />
             {reading.isValid && (
               <line

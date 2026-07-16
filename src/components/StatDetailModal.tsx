@@ -10,7 +10,14 @@ import { useEffect, useMemo, useState } from "react";
 import { TelemetryChart, type ChartSeries } from "./TelemetryChart";
 import { EnergyHistoryPanel } from "./EnergyHistoryPanel";
 import { windowSlice, averageOf, energyKWh, coverageNote } from "../lib/statDetails";
+import { useEnergyHistory, type EnergyRange } from "../hooks/useEnergyHistory";
 import type { TelemetrySample, OutageEvent } from "../lib/telemetry";
+
+// Window minutes → the collector's matching range, so the live-window energy
+// readout can show the SAME persisted total as the "Total energy used" panel
+// below it (only the collector's 1h/6h ranges line up with the picker; 15M has
+// no collector range and stays a live-sample integral).
+const COLLECTOR_RANGE_FOR_WINDOW: Record<number, EnergyRange> = { 60: "1h", 360: "6h" };
 
 export interface StatDetail {
   label: string;
@@ -27,6 +34,8 @@ export interface StatDetail {
   showWindowEnergy?: boolean;
   /** Show the persistent day/week/month energy section (Power detail only). */
   showEnergyHistory?: boolean;
+  /** Window the sheet opens on (defaults to 1H). */
+  defaultWindowMinutes?: number;
 }
 
 const WINDOW_CHOICES: { label: string; minutes: number }[] = [
@@ -54,8 +63,10 @@ function BigNumber({ label, value, unit }: { label: string; value: string; unit:
 }
 
 export function StatDetailModal({ detail, samples, onClose }: StatDetailModalProps) {
-  // Local to the popup — decoupled from the dashboard's window.
-  const [windowMinutes, setWindowMinutes] = useState(60);
+  // Local to the popup — decoupled from the dashboard's window. Fresh mount per
+  // open (the sheet unmounts on close), so this initializer picks the per-tile
+  // default each time.
+  const [windowMinutes, setWindowMinutes] = useState(detail.defaultWindowMinutes ?? 60);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -72,6 +83,22 @@ export function StatDetailModal({ detail, samples, onClose }: StatDetailModalPro
     () => (detail.showWindowEnergy ? energyKWh(windowed) : 0),
     [detail.showWindowEnergy, windowed],
   );
+
+  // Prefer the persistent collector total for this window (matches the panel
+  // below), falling back to the live-sample integral for 15M or when the
+  // collector isn't running.
+  const collectorRange = COLLECTOR_RANGE_FOR_WINDOW[windowMinutes];
+  const energyHistory = useEnergyHistory(
+    collectorRange ?? "6h",
+    Boolean(detail.showWindowEnergy && collectorRange),
+  );
+  const useCollectorEnergy = Boolean(collectorRange && !energyHistory.unavailable && energyHistory.data);
+  const displayEnergyKWh = useCollectorEnergy ? energyHistory.data!.totalKWh : windowEnergy;
+  const energyNote = useCollectorEnergy
+    ? energyHistory.data!.coverage.fraction >= 0.95
+      ? "over the selected window"
+      : `collector has ${Math.round(energyHistory.data!.coverage.fraction * 100)}% of this window`
+    : coverageNote(windowed, windowMinutes);
 
   const current = detail.formatBig(detail.current);
   const average = detail.formatBig(averageValue);
@@ -123,9 +150,9 @@ export function StatDetailModal({ detail, samples, onClose }: StatDetailModalPro
         {detail.showWindowEnergy && (
           <div className="detail-energy">
             <div className="detail-energy-total">
-              {windowEnergy.toFixed(windowEnergy < 1 ? 3 : 2)} kWh
+              {displayEnergyKWh.toFixed(displayEnergyKWh < 1 ? 3 : 2)} kWh
             </div>
-            <div className="detail-energy-note">energy used {coverageNote(windowed, windowMinutes)}</div>
+            <div className="detail-energy-note">energy used {energyNote}</div>
           </div>
         )}
 

@@ -104,18 +104,41 @@ export class TelemetryAccumulator {
 
   constructor(private readonly maxSamples: number) {}
 
+  /**
+   * Backfill with previously persisted samples (from the collector service or
+   * a snapshot file) before live polling starts. No-op once live data exists.
+   */
+  seed(persistedSamples: TelemetrySample[]): TelemetrySample[] {
+    if (this.samples.length === 0 && persistedSamples.length > 0) {
+      this.samples = persistedSamples.slice(-this.maxSamples);
+    }
+    return this.samples;
+  }
+
   ingest(history: DishHistoryJson, nowMs: number): TelemetrySample[] {
     const window = decodeHistoryWindow(history, nowMs);
     if (window.samples.length === 0) return this.samples;
 
     // A counter reset means the dish rebooted — start the series over.
-    if (window.newestCounter < this.newestCounter) this.samples = [];
+    if (window.newestCounter < this.newestCounter) {
+      this.samples = [];
+      this.newestCounter = 0;
+    }
 
-    const freshSampleCount =
-      this.newestCounter === 0 || this.samples.length === 0
-        ? window.samples.length
-        : Math.min(window.newestCounter - this.newestCounter, window.samples.length);
-    this.samples.push(...window.samples.slice(window.samples.length - freshSampleCount));
+    let freshSamples: TelemetrySample[];
+    if (this.newestCounter === 0 && this.samples.length > 0) {
+      // First live poll on top of seeded history: the dish ring overlaps the
+      // seed's tail, so splice by wall-clock time instead of sample counter.
+      const seedNewestMs = this.samples[this.samples.length - 1].timestampMs;
+      freshSamples = window.samples.filter((sample) => sample.timestampMs > seedNewestMs + 500);
+    } else {
+      const freshSampleCount =
+        this.newestCounter === 0 || this.samples.length === 0
+          ? window.samples.length
+          : Math.min(window.newestCounter - this.newestCounter, window.samples.length);
+      freshSamples = window.samples.slice(window.samples.length - freshSampleCount);
+    }
+    this.samples.push(...freshSamples);
     this.newestCounter = window.newestCounter;
 
     if (this.samples.length > this.maxSamples) {

@@ -9,8 +9,8 @@ import type { DishStatusJson } from "./dishClient";
 import { formatThroughput, formatThroughputLabel, formatThroughputTick } from "./format";
 
 export const THROUGHPUT_SERIES: ChartSeries[] = [
-  { id: "down", label: "Download", colorVar: "--chart-ink", getValue: (sample) => sample.downlinkBps },
-  { id: "up", label: "Upload", colorVar: "--chart-warm", getValue: (sample) => sample.uplinkBps },
+  { id: "down", label: "Download", colorVar: "--series-down", getValue: (sample) => sample.downlinkBps },
+  { id: "up", label: "Upload", colorVar: "--series-up", getValue: (sample) => sample.uplinkBps },
 ];
 
 export const LATENCY_SERIES: ChartSeries[] = [
@@ -101,6 +101,7 @@ export function buildStatDetails({ status, currentPowerW, outageEvents }: StatDe
         "Power draw is how much electricity the Starlink terminal is using. It rises under heavy load and when the dish heats itself to melt snow or ice.",
       showWindowEnergy: true,
       showEnergyHistory: true,
+      defaultWindowMinutes: 15,
     },
   };
 }

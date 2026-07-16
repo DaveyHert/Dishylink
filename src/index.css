@@ -10,6 +10,38 @@
 @layer theme, base, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
+@import "tw-animate-css";
+
+/* shadcn/ui semantic tokens, mapped onto the Dishboard palette so shadcn
+   components inherit the app's monochrome instrument look. The dark values
+   resolve automatically because the underlying vars flip with [data-theme]. */
+@theme inline {
+  --color-background: var(--page);
+  --color-foreground: var(--ink);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--surface-raised);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--ink);
+  --color-primary-foreground: var(--page);
+  --color-secondary: var(--surface-raised);
+  --color-secondary-foreground: var(--ink);
+  --color-muted: var(--grid-dot);
+  --color-muted-foreground: var(--ink-muted);
+  --color-accent: var(--grid-dot);
+  --color-accent-foreground: var(--ink);
+  --color-destructive: var(--status-critical);
+  --color-destructive-foreground: #ffffff;
+  --color-border: var(--hairline);
+  --color-input: var(--baseline);
+  --color-ring: var(--ink-muted);
+  --font-sans: var(--font-ui);
+  --font-mono: var(--font-mono);
+  --radius-lg: 12px;
+  --radius-md: 10px;
+  --radius-sm: 8px;
+  --radius-xl: 16px;
+}
 
 :root {
   --page: #f4f3ee;
@@ -25,6 +57,23 @@
   /* Starlink chart language: primary = ink, secondary = warm orange */
   --chart-ink: #111110;
   --chart-warm: #d1671f;
+
+  /* Throughput uses Starlink's signature series colors: download blue,
+     upload green (deeper in light mode for contrast on paper). */
+  --series-down: #2f6fed;
+  --series-up: #1ba85f;
+
+  /* Warm-gold accent — the one hue in an otherwise monochrome instrument UI.
+     Satellites, interactive links and selection rings carry it; the serving
+     satellite keeps the brighter orange. Deeper in light mode for contrast on
+     paper, warmer/brighter in dark. */
+  --satellite: #b7791f;
+  --accent: #b7791f;
+
+  /* The physical dish is white/silver hardware — never a black silhouette.
+     Kept theme-light in both modes (see dark override below). */
+  --dish-body: #c4c4c4;
+  --dish-edge: #8c8c8c;
 
   --status-good: #16a34a;
   --status-critical: #e11d48;
@@ -53,6 +102,17 @@
   --chart-ink: #ffffff;
   --chart-warm: #f09048;
 
+  /* brighter download blue / upload green on the black backdrop */
+  --series-down: #5b9bff;
+  --series-up: #4ade80;
+
+  /* warm gold reads against the black dome + white clear dots */
+  --satellite: #e0a422;
+  --accent: #e0a422;
+
+  --dish-body: #ffffff;
+  --dish-edge: rgba(0, 0, 0, 0);
+
   --status-good: #4ade80;
   --status-critical: #f43f5e;
 
@@ -67,6 +127,25 @@
 html,
 body {
   height: 100%;
+}
+
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--baseline) transparent;
+}
+
+html::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+html::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+html::-webkit-scrollbar-thumb {
+  background: var(--baseline);
+  border-radius: 999px;
 }
 
 body {
@@ -252,8 +331,13 @@ body {
 }
 
 @keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--status-good) 45%, transparent); }
-  55% { box-shadow: 0 0 0 5px transparent; }
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--status-good) 45%, transparent);
+  }
+  55% {
+    box-shadow: 0 0 0 5px transparent;
+  }
 }
 
 .theme-toggle {
@@ -270,7 +354,9 @@ body {
   transition: color 120ms ease;
 }
 
-.theme-toggle:hover { color: var(--ink); }
+.theme-toggle:hover {
+  color: var(--ink);
+}
 
 /* ---------- layout ---------- */
 
@@ -285,8 +371,14 @@ body {
 }
 
 @keyframes rise {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .tiles-row {
@@ -301,16 +393,35 @@ body {
   gap: 14px;
 }
 
-.span-8 { grid-column: span 8; }
-.span-4 { grid-column: span 4; }
-.span-12 { grid-column: span 12; }
-.row-span-2 { grid-row: span 2; }
-.row-span-3 { grid-row: span 3; }
+.span-8 {
+  grid-column: span 8;
+}
+.span-4 {
+  grid-column: span 4;
+}
+.span-12 {
+  grid-column: span 12;
+}
+.row-span-2 {
+  grid-row: span 2;
+}
+.row-span-3 {
+  grid-row: span 3;
+}
 
 @media (max-width: 1080px) {
-  .tiles-row { grid-template-columns: repeat(3, 1fr); }
-  .span-8, .span-4, .span-12 { grid-column: span 12; }
-  .row-span-2, .row-span-3 { grid-row: auto; }
+  .tiles-row {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .span-8,
+  .span-4,
+  .span-12 {
+    grid-column: span 12;
+  }
+  .row-span-2,
+  .row-span-3 {
+    grid-row: auto;
+  }
 }
 
 /* ---------- stat tiles ---------- */
@@ -365,7 +476,9 @@ body {
 
 /* ---------- charts ---------- */
 
-.chart-body { position: relative; }
+.chart-body {
+  position: relative;
+}
 
 .chart-tooltip {
   position: absolute;
@@ -440,10 +553,14 @@ body {
   background: transparent;
   color: var(--ink-muted);
   cursor: pointer;
-  transition: color 120ms ease, background 120ms ease;
+  transition:
+    color 120ms ease,
+    background 120ms ease;
 }
 
-.window-picker button:hover { color: var(--ink); }
+.window-picker button:hover {
+  color: var(--ink);
+}
 
 .window-picker button.active {
   background: var(--ink);
@@ -466,7 +583,9 @@ body {
   cursor: grab;
 }
 
-.skydome-canvas-wrap canvas:active { cursor: grabbing; }
+.skydome-canvas-wrap canvas:active {
+  cursor: grabbing;
+}
 
 .skydome-scrub {
   display: flex;
@@ -524,7 +643,9 @@ body {
   margin-top: 10px;
 }
 
-.skydome-stat .stat-caption { display: block; }
+.skydome-stat .stat-caption {
+  display: block;
+}
 
 .skydome-stat .mono-value {
   font-size: 16px;
@@ -538,6 +659,21 @@ body {
   flex-direction: column;
   max-height: 240px;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--baseline) transparent;
+}
+
+.outage-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.outage-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.outage-list::-webkit-scrollbar-thumb {
+  background: var(--baseline);
+  border-radius: 999px;
 }
 
 .outage-row {
@@ -551,7 +687,9 @@ body {
   font-weight: 500;
 }
 
-.outage-row:last-child { border-bottom: none; }
+.outage-row:last-child {
+  border-bottom: none;
+}
 
 .outage-cause {
   color: var(--ink);
@@ -586,7 +724,9 @@ body {
 }
 
 @media (max-width: 1080px) {
-  .device-grid { grid-template-columns: 1fr; }
+  .device-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .device-grid-narrow {
@@ -650,7 +790,9 @@ button.card {
 
 .stat-tile-clickable {
   cursor: pointer;
-  transition: background 120ms ease, transform 120ms ease;
+  transition:
+    background 120ms ease,
+    transform 120ms ease;
 }
 
 .stat-tile-clickable:hover {
@@ -965,7 +1107,7 @@ button.card {
 .instrument-panel {
   flex: 1;
   min-width: 0;
-  background: color-mix(in srgb, var(--ink) 4%, var(--surface));
+  background: color-mix(in srgb, var(--ink) 3%, var(--surface));
   border-radius: 12px;
   padding: 12px 14px 6px;
 }
@@ -982,8 +1124,12 @@ button.card {
 }
 
 @media (max-width: 720px) {
-  .instrument-row { flex-direction: column; }
-  .device-grid-two { grid-template-columns: 1fr; }
+  .instrument-row {
+    flex-direction: column;
+  }
+  .device-grid-two {
+    grid-template-columns: 1fr;
+  }
 }
 
 .detail-sheet-wide {
@@ -1001,17 +1147,174 @@ button.card {
   font-family: var(--font-ui);
   font-size: 13px;
   font-weight: 600;
-  color: var(--ink-secondary);
+  color: var(--accent);
   cursor: pointer;
-  transition: color 120ms ease;
+  transition: color 120ms ease, opacity 120ms ease;
 }
 
 .card-link:hover {
-  color: var(--ink);
+  opacity: 0.75;
 }
 
 .skydome-immersive .skydome-canvas-wrap {
   padding: 8px 0 12px;
+}
+
+/* ---------- satellite click callout (anchored, follows the dot) ---------- */
+
+.sat-callout {
+  position: absolute;
+  z-index: 6;
+  min-width: 176px;
+  background: color-mix(in srgb, var(--surface-raised) 92%, transparent);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 9px 12px 10px;
+  pointer-events: auto;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+}
+
+.sat-callout-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 7px;
+}
+
+.sat-callout-name {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.sat-callout-tag {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-secondary);
+  border: 1px solid var(--baseline);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.sat-callout-tag.serving {
+  color: var(--chart-warm);
+  border-color: var(--chart-warm);
+}
+
+.sat-callout-close {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--ink-muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0 0 4px;
+}
+
+.sat-callout-close:hover {
+  color: var(--ink);
+}
+
+.sat-callout-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 14px;
+  font-size: 11px;
+}
+
+.sat-callout-grid > span:nth-child(odd) {
+  color: var(--ink-muted);
+}
+
+.sat-callout-grid > span:nth-child(even) {
+  text-align: right;
+}
+
+/* "drag to orbit" hint, centered just below the dome */
+.skydome-hint {
+  text-align: center;
+  padding: 2px 0 6px;
+  opacity: 0.7;
+}
+
+/* ---------- info-label affordance (ⓘ with hover/focus tooltip) ---------- */
+
+.info-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.info-dot {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1px solid var(--baseline);
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-style: italic;
+  line-height: 1;
+  cursor: help;
+  outline: none;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+
+.info-dot:hover,
+.info-dot:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.info-tip {
+  position: absolute;
+  bottom: calc(100% + 13px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  z-index: 8;
+  width: max-content;
+  max-width: 240px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface-raised);
+  border: 1px solid var(--hairline);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
+  color: var(--ink-secondary);
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  font-style: normal;
+  line-height: 1.45;
+  letter-spacing: 0;
+  text-transform: none;
+  text-align: left;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 130ms ease, transform 130ms ease;
+}
+
+.info-dot:hover .info-tip,
+.info-dot:focus-visible .info-tip {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* keep the tip on-screen for the leftmost stat column */
+.skydome-stat:first-child .info-tip {
+  left: 0;
+  transform: translateX(0) translateY(4px);
+}
+
+.skydome-stat:first-child .info-dot:hover .info-tip,
+.skydome-stat:first-child .info-dot:focus-visible .info-tip {
+  transform: translateX(0) translateY(0);
 }
 
 /* ---------- time-lapse scrubber with visible stops ---------- */
@@ -1057,67 +1360,196 @@ button.card {
 
 /* ---------- network sheet ---------- */
 
-.network-list {
+/* ---------- client manager: rows + device detail ---------- */
+
+.netlist {
   display: flex;
   flex-direction: column;
-  max-height: 420px;
+  gap: 6px;
+  max-height: 460px;
   overflow-y: auto;
 }
 
-.network-row {
+.netrow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 11px 2px;
-  border-bottom: 1px solid var(--hairline);
+  gap: 13px;
+  width: 100%;
+  padding: 11px 12px;
+  border: none;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ink) 4%, var(--surface));
+  cursor: pointer;
+  text-align: left;
+  transition: background 120ms ease;
 }
 
-.network-row:last-child {
-  border-bottom: none;
+.netrow:hover {
+  background: color-mix(in srgb, var(--ink) 8%, var(--surface));
 }
 
-.network-row-main {
+.netrow-signal {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.wifi-arc {
+  display: block;
+}
+
+.netrow-main {
   min-width: 0;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
-.network-name {
-  font-size: 14.5px;
+.netrow-name {
+  font-size: 14px;
   font-weight: 600;
+  color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.network-role {
-  color: var(--ink-muted);
-  font-weight: 500;
-}
-
-.network-sub {
-  font-size: 11px;
+.netrow-sub {
+  font-size: 11.5px;
   color: var(--ink-muted);
 }
 
-.network-row-right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
+.netrow-band {
   flex: none;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--ink-secondary);
+  border: 1px solid var(--baseline);
+  border-radius: 6px;
+  padding: 2px 7px;
 }
 
-.network-throughput {
+.netrow-chevron {
+  flex: none;
+  color: var(--ink-muted);
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* device detail drill-in */
+.devdetail-back {
+  background: none;
+  border: none;
+  padding: 0 0 12px;
+  color: var(--accent);
+  font-family: var(--font-ui);
   font-size: 13px;
   font-weight: 600;
+  cursor: pointer;
 }
 
-.network-signal {
+.devdetail-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.devdetail-headtext {
+  min-width: 0;
+}
+
+.devdetail-nameline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.devdetail-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.devdetail-pencil {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 6%, var(--surface));
+  color: var(--ink-secondary);
+  cursor: pointer;
+  flex: none;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.devdetail-pencil:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 12%, var(--surface));
+}
+
+.devdetail-rename {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.devdetail-section-label {
   font-family: var(--font-mono);
   font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  margin: 20px 0 10px;
+}
+
+.devdetail-collecting {
+  padding: 14px 0;
+}
+
+.devdetail-chart {
+  margin-bottom: 14px;
+}
+
+.devdetail-chart-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.devdetail-grid {
+  display: flex;
+  flex-direction: column;
+}
+
+.devdetail-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.devdetail-value {
+  font-size: 13px;
+  color: var(--ink);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.devdetail-ipv6 {
+  font-size: 11px;
+}
+
+.devdetail-note {
+  color: var(--ink-muted);
 }
 
 /* ---------- device actions (reboot / stow) ---------- */
@@ -1188,6 +1620,216 @@ button.card {
 
 .device-action-status {
   width: 100%;
+}
+
+/* ---------- settings modal ---------- */
+
+.settings-head {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 4px;
+  text-align: left;
+}
+
+.settings-title {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.settings-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 6%, var(--surface));
+  color: var(--ink-secondary);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.settings-close:hover {
+  color: var(--ink);
+}
+
+/* proper segmented switch: a sliding glider behind two labels */
+.settings-segment-wrap {
+  padding: 8px 20px 6px;
+}
+
+.settings-segment {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 7%, var(--surface));
+}
+
+.settings-segment-glider {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  border-radius: 999px;
+  background: var(--ink);
+  transition: transform 220ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.settings-segment-glider.right {
+  transform: translateX(100%);
+}
+
+.settings-segment button {
+  position: relative;
+  z-index: 1;
+  border: none;
+  background: transparent;
+  padding: 7px 0;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  transition: color 200ms ease;
+}
+
+.settings-segment button.active {
+  color: var(--page);
+}
+
+/* animated-height body */
+.settings-body-motion {
+  overflow: hidden;
+  transition: height 240ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.settings-panel {
+  padding: 4px 20px 20px;
+  max-height: 68vh;
+  overflow-y: auto;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 11px 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.settings-row:first-of-type,
+.settings-section-label + .settings-row {
+  border-top: none;
+}
+
+.settings-row--wrap {
+  flex-wrap: wrap;
+}
+
+.settings-row-text {
+  min-width: 0;
+}
+
+.settings-row-title {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.settings-row-caption {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-muted);
+  margin-top: 1px;
+}
+
+.settings-row-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.settings-subrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 11px 2px;
+}
+
+.settings-time {
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--ink);
+  font-size: 12px;
+  padding: 0 8px;
+}
+
+.settings-time:hover {
+  border-color: var(--baseline);
+}
+
+.settings-section-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  margin: 16px 0 2px;
+}
+
+.settings-band {
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-secondary);
+  border: 1px solid var(--baseline);
+  border-radius: 6px;
+  padding: 2px 7px;
+}
+
+.settings-firmware {
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.settings-note {
+  font-size: 13px;
+  color: var(--ink-muted);
+  padding: 14px 0;
+}
+
+.settings-note--foot {
+  padding: 14px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.settings-error {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--status-critical);
+  padding: 8px 0;
+}
+
+.settings-action-result {
+  width: 100%;
+  font-size: 12px;
+  color: var(--ink-muted);
+  margin-top: 2px;
 }
 
 /* ---------- data usage bars ---------- */
@@ -1304,22 +1946,27 @@ button.card {
   gap: 4px;
 }
 
+/* No bottom margin: the active underline lands on the metrics hairline below,
+   reading as a tab indicator rather than a second stray rule. */
 .speed-headlines {
   display: flex;
   width: 100%;
   gap: 12px;
-  margin-bottom: 4px;
 }
 
 .speed-headline {
   flex: 1;
-  padding: 8px 4px;
-  border-radius: 10px;
-  transition: background 150ms ease;
+  padding: 8px 0 9px;
+  border-bottom: 2px solid transparent;
+  opacity: 0.55;
+  transition:
+    opacity 150ms ease,
+    border-color 150ms ease;
 }
 
 .speed-headline.active {
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  border-bottom-color: var(--ink);
+  opacity: 1;
 }
 
 .speed-headline-label {
@@ -1457,7 +2104,9 @@ button.card {
   padding: 5px 18px;
   border-radius: 8px;
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
 }
 
 .speed-segment button.active {
@@ -1562,7 +2211,9 @@ button.card {
   --color-brand-accent: var(--page);
 }
 
-.speedtest-button:hover:not(:disabled) { opacity: 0.85; }
+.speedtest-button:hover:not(:disabled) {
+  opacity: 0.85;
+}
 
 .speedtest-button:disabled {
   opacity: 0.45;
@@ -1603,12 +2254,18 @@ button.card {
   content: "";
   position: absolute;
   inset: 0;
-  background: conic-gradient(from 0deg, transparent 78%, color-mix(in srgb, var(--ink) 45%, transparent));
+  background: conic-gradient(
+    from 0deg,
+    transparent 78%,
+    color-mix(in srgb, var(--ink) 45%, transparent)
+  );
   animation: sweep 2.6s linear infinite;
 }
 
 @keyframes sweep {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .searching-title {

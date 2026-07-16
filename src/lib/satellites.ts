@@ -23,6 +23,9 @@ export interface ObserverLocation {
 
 export interface SatelliteSky {
   name: string;
+  /** Height above Earth's surface and orbital speed, from the propagated state. */
+  altitudeKm?: number;
+  speedKmS?: number;
   azimuthDeg: number;
   elevationDeg: number;
   rangeKm: number;
@@ -99,11 +102,16 @@ export class StarlinkTracker {
     if (!propagated?.position) return null;
     const positionEcf = satelliteJs.eciToEcf(propagated.position, gmst);
     const look = satelliteJs.ecfToLookAngles(this.observerGd, positionEcf);
+    const position = propagated.position;
+    const velocity = propagated.velocity;
+    const EARTH_RADIUS_KM = 6371;
     return {
       name: "",
       azimuthDeg: satelliteJs.radiansToDegrees(look.azimuth),
       elevationDeg: satelliteJs.radiansToDegrees(look.elevation),
       rangeKm: look.rangeSat,
+      altitudeKm: Math.hypot(position.x, position.y, position.z) - EARTH_RADIUS_KM,
+      speedKmS: velocity ? Math.hypot(velocity.x, velocity.y, velocity.z) : undefined,
     };
   }
 

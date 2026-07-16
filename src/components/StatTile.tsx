@@ -14,15 +14,31 @@ interface StatTileProps {
 
 const SPARK_WIDTH = 120;
 const SPARK_HEIGHT = 30;
+const SPARK_POINTS = 28;
+
+/** Average the raw samples down to a fixed point count so bursty signals (idle
+ *  download traffic especially) read as a calm line instead of a full-height
+ *  zigzag. Buckets with no finite sample stay null and break the line. */
+function bucketAverage(sparkValues: (number | null)[]): (number | null)[] {
+  const bucketCount = Math.min(SPARK_POINTS, sparkValues.length);
+  if (bucketCount < 2) return sparkValues;
+  return Array.from({ length: bucketCount }, (_, bucketIndex) => {
+    const start = Math.floor((bucketIndex * sparkValues.length) / bucketCount);
+    const end = Math.floor(((bucketIndex + 1) * sparkValues.length) / bucketCount);
+    const slice = sparkValues.slice(start, end).filter((value): value is number => value !== null);
+    return slice.length === 0 ? null : slice.reduce((sum, value) => sum + value, 0) / slice.length;
+  });
+}
 
 function buildSparkPath(sparkValues: (number | null)[]): string {
-  const finiteValues = sparkValues.filter((value): value is number => value !== null);
+  const points = bucketAverage(sparkValues);
+  const finiteValues = points.filter((value): value is number => value !== null);
   if (finiteValues.length < 2) return "";
   const maxValue = Math.max(...finiteValues, 1e-9);
-  const stepX = SPARK_WIDTH / (sparkValues.length - 1);
+  const stepX = SPARK_WIDTH / (points.length - 1);
   let path = "";
   let pathOpen = false;
-  sparkValues.forEach((value, pointIndex) => {
+  points.forEach((value, pointIndex) => {
     if (value === null) {
       pathOpen = false;
       return;

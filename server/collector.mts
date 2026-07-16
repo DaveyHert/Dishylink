@@ -12,22 +12,25 @@
 //
 // Run: npm run collector   (foreground; see server/README for always-on setup)
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
 import { createFileRegistry, fromBinary, toJson } from "@bufbuild/protobuf";
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { grpcWebUnaryCall } from "../src/lib/grpcWeb.ts";
-import { decodeHistoryWindow } from "../src/lib/telemetry.ts";
+import { decodeHistoryWindow, TelemetryAccumulator, type TelemetrySample } from "../src/lib/telemetry.ts";
 import { EnergyStore, foldSamplesToMinutes, type MinuteBucket } from "./energyStore.mts";
 
 const DISH_URL =
   process.env.DISH_URL ?? "http://192.168.100.1:9201/SpaceX.API.Device.Device/Handle";
 const PROTOSET_PATH = resolve("public/dish.protoset");
 const DATA_FILE = resolve("server/data/energy.ndjson");
+const SAMPLES_SNAPSHOT_FILE = resolve("server/data/samples.json");
 const PORT = Number(process.env.COLLECTOR_PORT ?? 8088);
 const POLL_MS = 5_000;
 const GET_HISTORY_FIELD = 1007;
+const SAMPLE_WINDOW_SECONDS = 6 * 3_600;
+const SNAPSHOT_EVERY_MS = 60_000;
 
 const registry = createFileRegistry(fromBinary(FileDescriptorSetSchema, readFileSync(PROTOSET_PATH)));
 const responseSchema = registry.getMessage("SpaceX.API.Device.Response");
@@ -62,6 +65,48 @@ const store = new EnergyStore(DATA_FILE);
 // with the authoritative recompute from the ring buffer).
 const pending = new Map<number, MinuteBucket>();
 
+// Rolling full-resolution window served to the frontend so page reloads (and
+// collector restarts, via the snapshot file) never reset the charts.
+const sampleWindow = new TelemetryAccumulator(SAMPLE_WINDOW_SECONDS);
+
+function loadSampleSnapshot(): void {
+  if (!existsSync(SAMPLES_SNAPSHOT_FILE)) return;
+  try {
+    const persisted = JSON.parse(readFileSync(SAMPLES_SNAPSHOT_FILE, "utf8")) as TelemetrySample[];
+    const cutoffMs = Date.now() - SAMPLE_WINDOW_SECONDS * 1000;
+    latestSamples = sampleWindow.seed(persisted.filter((sample) => sample.timestampMs >= cutoffMs));
+    console.log(`[collector] restored ${latestSamples.length} samples from snapshot`);
+  } catch (error) {
+    console.warn(`[collector] snapshot unreadable, starting fresh: ${(error as Error).message}`);
+  }
+}
+
+/** Round for the snapshot/API payload — chart precision, not lab precision. */
+function compactSample(sample: TelemetrySample): TelemetrySample {
+  return {
+    timestampMs: sample.timestampMs,
+    latencyMs: sample.latencyMs === null ? null : Math.round(sample.latencyMs * 10) / 10,
+    dropRate: Math.round(sample.dropRate * 1000) / 1000,
+    downlinkBps: Math.round(sample.downlinkBps),
+    uplinkBps: Math.round(sample.uplinkBps),
+    powerW: Math.round(sample.powerW * 10) / 10,
+  };
+}
+
+let latestSamples: TelemetrySample[] = [];
+
+function writeSampleSnapshot(): void {
+  if (latestSamples.length === 0) return;
+  try {
+    // temp + rename so a crash mid-write never tears the snapshot
+    const tempPath = `${SAMPLES_SNAPSHOT_FILE}.tmp`;
+    writeFileSync(tempPath, JSON.stringify(latestSamples.map(compactSample)));
+    renameSync(tempPath, SAMPLES_SNAPSHOT_FILE);
+  } catch (error) {
+    console.warn(`[collector] snapshot write failed: ${(error as Error).message}`);
+  }
+}
+
 async function poll(): Promise<void> {
   let history: Awaited<ReturnType<typeof getHistory>>;
   try {
@@ -72,6 +117,7 @@ async function poll(): Promise<void> {
   }
 
   const now = Date.now();
+  latestSamples = sampleWindow.ingest(history, now);
   const { samples } = decodeHistoryWindow(history, now);
   const perMinute = foldSamplesToMinutes(samples);
 
@@ -173,23 +219,32 @@ function summarize(range: Range, now: Date) {
   const endSec = Math.floor(now.getTime() / 1000);
   const buckets = bucketsInRange(startSec, endSec);
 
-  const groups = new Map<number, { wattSeconds: number; samples: number }>();
+  const groups = new Map<number, { wattSeconds: number; samples: number; dlBits: number; ulBits: number }>();
   let totalWattSeconds = 0;
   let sampledSeconds = 0;
+  let totalDlBits = 0;
+  let totalUlBits = 0;
   for (const bucket of buckets) {
     const key = groupKeyOf(bucket.minute, spec);
-    const group = groups.get(key) ?? { wattSeconds: 0, samples: 0 };
+    const group = groups.get(key) ?? { wattSeconds: 0, samples: 0, dlBits: 0, ulBits: 0 };
     group.wattSeconds += bucket.wattSeconds;
     group.samples += bucket.samples;
+    group.dlBits += bucket.dlBits ?? 0;
+    group.ulBits += bucket.ulBits ?? 0;
     groups.set(key, group);
     totalWattSeconds += bucket.wattSeconds;
     sampledSeconds += bucket.samples;
+    totalDlBits += bucket.dlBits ?? 0;
+    totalUlBits += bucket.ulBits ?? 0;
   }
 
+  const BITS_PER_GB = 8e9;
   const expectedSeconds = Math.max(1, endSec - startSec);
   return {
     range,
     totalKWh: totalWattSeconds / 3_600_000,
+    totalDownGB: totalDlBits / BITS_PER_GB,
+    totalUpGB: totalUlBits / BITS_PER_GB,
     coverage: {
       sampledSeconds,
       expectedSeconds,
@@ -197,18 +252,37 @@ function summarize(range: Range, now: Date) {
     },
     buckets: [...groups.entries()]
       .sort((a, b) => a[0] - b[0])
-      .map(([t, group]) => ({ t, kWh: group.wattSeconds / 3_600_000, sampledSeconds: group.samples })),
+      .map(([t, group]) => ({
+        t,
+        kWh: group.wattSeconds / 3_600_000,
+        downGB: group.dlBits / BITS_PER_GB,
+        upGB: group.ulBits / BITS_PER_GB,
+        sampledSeconds: group.samples,
+      })),
   };
 }
 
 const server = createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://localhost:${PORT}`);
   response.setHeader("Access-Control-Allow-Origin", "*");
-  if (url.pathname === "/api/energy") {
+  // /api/usage shares the same summary (energy + traffic ride the same buckets)
+  if (url.pathname === "/api/energy" || url.pathname === "/api/usage") {
     const rangeParam = url.searchParams.get("range") as Range | null;
     const range: Range = rangeParam && RANGES.includes(rangeParam) ? rangeParam : "today";
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify(summarize(range, new Date())));
+    return;
+  }
+  // Full-resolution sample window for chart backfill after a page reload.
+  if (url.pathname === "/api/samples") {
+    const minutes = Math.min(360, Math.max(1, Number(url.searchParams.get("minutes") ?? 360)));
+    const cutoffMs = Date.now() - minutes * 60_000;
+    response.setHeader("Content-Type", "application/json");
+    response.end(
+      JSON.stringify({
+        samples: latestSamples.filter((sample) => sample.timestampMs >= cutoffMs).map(compactSample),
+      }),
+    );
     return;
   }
   if (url.pathname === "/api/health") {
@@ -225,5 +299,11 @@ server.listen(PORT, () => {
   console.log(`[collector] persisting to ${DATA_FILE}`);
 });
 
+loadSampleSnapshot();
 void poll();
 setInterval(() => void poll(), POLL_MS);
+setInterval(writeSampleSnapshot, SNAPSHOT_EVERY_MS);
+process.on("SIGTERM", () => {
+  writeSampleSnapshot();
+  process.exit(0);
+});

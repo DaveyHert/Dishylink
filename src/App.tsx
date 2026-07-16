@@ -13,6 +13,10 @@ import { StatDetailModal } from "./components/StatDetailModal";
 import { SheetModal } from "./components/SheetModal";
 import { SpeedTestPanel } from "./components/SpeedTestCard";
 import { AlignmentPanel } from "./components/AlignmentCard";
+import { DataUsagePanel } from "./components/DataUsagePanel";
+import { NetworkPanel } from "./components/NetworkPanel";
+import { SettingsModal } from "./components/SettingsModal";
+import { useRouterNetwork } from "./hooks/useRouterNetwork";
 import { THROUGHPUT_SERIES, LATENCY_SERIES, POWER_SERIES, buildStatDetails } from "./lib/statDetails";
 import { formatThroughput, formatThroughputLabel, formatThroughputTick } from "./lib/format";
 import { loadSavedLocation, saveLocation, clearSavedLocation } from "./lib/observerLocation";
@@ -20,7 +24,7 @@ import type { ObserverLocation } from "./lib/satellites";
 import type { TelemetrySample } from "./lib/telemetry";
 
 type ThemeName = "light" | "dark";
-type SheetName = "speedtest" | "alignment" | "skyview";
+type SheetName = "speedtest" | "alignment" | "skyview" | "datausage" | "network" | "settings";
 
 const WINDOW_CHOICES: { label: string; minutes: number }[] = [
   { label: "15M", minutes: 15 },
@@ -74,6 +78,8 @@ export default function App() {
   }, [telemetry.dishLocation, savedObserver]);
   const satellites = useSatellites(observerLocation, telemetry.obstructionMap);
   useOutageNotifications(telemetry);
+  // Router polling runs only while a router-backed surface is open.
+  const routerNetwork = useRouterNetwork(openSheet === "network" || openSheet === "settings");
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -109,6 +115,9 @@ export default function App() {
         }}
         onOpenSpeedTest={() => setOpenSheet("speedtest")}
         onOpenAlignment={() => setOpenSheet("alignment")}
+        onOpenDataUsage={() => setOpenSheet("datausage")}
+        onOpenNetwork={() => setOpenSheet("network")}
+        onOpenSettings={() => setOpenSheet("settings")}
       />
       {showSearchingHero ? (
         <SearchingHero />
@@ -121,6 +130,7 @@ export default function App() {
               unit={liveDownlink.unit}
               caption="current traffic"
               sparkValues={sparklineFrom(samples, (sample) => sample.downlinkBps)}
+              sparkColorVar="--series-down"
               onOpenDetail={() => setOpenDetailId("download")}
             />
             <StatTile
@@ -129,7 +139,7 @@ export default function App() {
               unit={liveUplink.unit}
               caption="current traffic"
               sparkValues={sparklineFrom(samples, (sample) => sample.uplinkBps)}
-              sparkColorVar="--chart-warm"
+              sparkColorVar="--series-up"
               onOpenDetail={() => setOpenDetailId("upload")}
             />
             <StatTile
@@ -168,10 +178,10 @@ export default function App() {
                 <span className="card-title">Throughput</span>
                 <div className="chart-legend">
                   <span className="legend-item">
-                    <span className="series-swatch" style={{ background: "var(--chart-ink)" }} /> Download
+                    <span className="series-swatch" style={{ background: "var(--series-down)" }} /> Download
                   </span>
                   <span className="legend-item">
-                    <span className="series-swatch" style={{ background: "var(--chart-warm)" }} /> Upload
+                    <span className="series-swatch" style={{ background: "var(--series-up)" }} /> Upload
                   </span>
                   <div className="window-picker">
                     {WINDOW_CHOICES.map((choice) => (
@@ -199,6 +209,7 @@ export default function App() {
             <SkyDome
               obstructionMap={telemetry.obstructionMap}
               obstructionStats={status?.obstructionStats}
+              status={status}
               theme={theme}
               satellites={satellites}
               observerLocation={observerLocation}
@@ -265,8 +276,26 @@ export default function App() {
           <AlignmentPanel status={status} />
         </SheetModal>
       )}
+      {openSheet === "datausage" && (
+        <SheetModal title="Data usage" onClose={() => setOpenSheet(null)} size="wide">
+          <DataUsagePanel />
+        </SheetModal>
+      )}
+      {openSheet === "network" && (
+        <SheetModal title="Network" onClose={() => setOpenSheet(null)} size="wide">
+          <NetworkPanel network={routerNetwork} />
+        </SheetModal>
+      )}
+      <SettingsModal
+        open={openSheet === "settings"}
+        onClose={() => setOpenSheet(null)}
+        status={status}
+        hardwareVersion={telemetry.deviceInfo?.hardwareVersion ?? status?.deviceInfo?.hardwareVersion}
+        wifiConfig={routerNetwork.wifiConfig}
+        routerReachable={routerNetwork.routerReachable}
+      />
       {openSheet === "skyview" && (
-        <SheetModal title="Sky view" onClose={() => setOpenSheet(null)} size="xl">
+        <SheetModal title="Satellite view" onClose={() => setOpenSheet(null)} size="xl">
           <SkyDome
             obstructionMap={telemetry.obstructionMap}
             obstructionStats={status?.obstructionStats}

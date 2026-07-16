@@ -12,6 +12,22 @@ import {
 import { GrpcWebError } from "../lib/grpcWeb";
 import { TelemetryAccumulator, decodeOutageEvents, type TelemetrySample, type OutageEvent } from "../lib/telemetry";
 
+/**
+ * Backfill from the always-on collector so a page reload never resets the
+ * charts. Best-effort: if the collector is down we just start from the dish's
+ * own ~15-minute ring buffer like before.
+ */
+async function fetchPersistedSamples(): Promise<TelemetrySample[]> {
+  try {
+    const response = await fetch("/api/samples?minutes=360", { signal: AbortSignal.timeout(4_000) });
+    if (!response.ok) return [];
+    const payload = (await response.json()) as { samples?: TelemetrySample[] };
+    return payload.samples ?? [];
+  } catch {
+    return [];
+  }
+}
+
 const STATUS_POLL_MS = 2_000;
 const HISTORY_POLL_MS = 5_000;
 const OBSTRUCTION_POLL_MS = 30_000;
@@ -103,8 +119,15 @@ export function useDishTelemetry(): DishTelemetry {
 
     (async () => {
       try {
-        client = await DishClient.load();
+        const [loadedClient, persistedSamples] = await Promise.all([
+          DishClient.load(),
+          fetchPersistedSamples(),
+        ]);
+        client = loadedClient;
         if (disposed) return;
+        if (persistedSamples.length > 0) {
+          setSamples([...accumulatorRef.current.seed(persistedSamples)]);
+        }
         client.getDeviceInfo().then((info) => !disposed && setDeviceInfo(info)).catch(() => {});
         await Promise.all([pollStatus(), pollHistory(), pollObstructionMap(), pollLocation()]);
         timerIds.push(window.setInterval(pollStatus, STATUS_POLL_MS));
