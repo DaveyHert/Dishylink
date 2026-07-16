@@ -1,5 +1,7 @@
 import path from "node:path";
-import { defineConfig } from "vite";
+// vitest's defineConfig, so the `test` block below is typed. It is a superset of
+// vite's — the dev/build config is unaffected.
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
@@ -18,6 +20,12 @@ export default defineConfig({
   // as iife by default, which can't do the top-level await that build uses.
   // Emit workers as ES modules so the production build succeeds.
   worker: { format: "es" },
+  // Tests run in node: everything under test is pure logic (decoders, stores,
+  // catalogues). Rendering is verified by driving the real app instead.
+  test: {
+    environment: "node",
+    include: ["src/**/*.test.ts", "server/**/*.test.mts"],
+  },
   server: {
     proxy: {
       "/dishy": {
