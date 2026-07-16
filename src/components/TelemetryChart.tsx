@@ -28,9 +28,50 @@ interface TelemetryChartProps {
 interface BucketPoint {
   timestampMs: number;
   values: (number | null)[];
+  /** No samples at all between the previous bucket and this one. */
+  hasGapBefore: boolean;
 }
 
 const PLOT_MARGIN = { top: 8, right: 12, bottom: 22, left: 46 };
+
+/**
+ * Shortest stretch without samples that counts as a hole rather than a hiccup.
+ * Samples arrive at 1 Hz, so anything approaching a minute is real absence —
+ * the collector's machine asleep, a restart, the dish unplugged — while a
+ * dropped second or two is not worth fracturing the line over.
+ */
+const MIN_GAP_MS = 30_000;
+
+interface PlotPoint {
+  x: number;
+  y: number;
+}
+
+/**
+ * Contiguous runs of drawable points for one series, split wherever the data
+ * has a hole. Joining across a hole would draw a straight line between
+ * readings hours apart and pass it off as measurement.
+ */
+function toRuns(
+  buckets: BucketPoint[],
+  seriesIndex: number,
+  xForTime: (timestampMs: number) => number,
+  yForValue: (value: number) => number,
+): PlotPoint[][] {
+  const runs: PlotPoint[][] = [];
+  let current: PlotPoint[] = [];
+  for (const bucket of buckets) {
+    const value = bucket.values[seriesIndex];
+    if (value === null || bucket.hasGapBefore) {
+      if (current.length > 0) runs.push(current);
+      current = [];
+    }
+    if (value === null) continue;
+    current.push({ x: xForTime(bucket.timestampMs), y: yForValue(value) });
+  }
+  if (current.length > 0) runs.push(current);
+  return runs;
+}
 
 function useElementWidth(): [React.RefObject<HTMLDivElement | null>, number] {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -73,9 +114,9 @@ export function TelemetryChart({
   const windowEndMs = samples.length > 0 ? samples[samples.length - 1].timestampMs : Date.now();
   const windowStartMs = windowEndMs - windowMinutes * 60_000;
 
-  const buckets = useMemo<BucketPoint[]>(() => {
+  const { buckets, bucketSpanMs } = useMemo<{ buckets: BucketPoint[]; bucketSpanMs: number }>(() => {
     const visibleSamples = samples.filter((sample) => sample.timestampMs >= windowStartMs);
-    if (visibleSamples.length === 0) return [];
+    if (visibleSamples.length === 0) return { buckets: [], bucketSpanMs: 0 };
     const bucketCount = Math.min(Math.max(Math.floor(plotWidth / 2), 30), visibleSamples.length);
     const bucketSpanMs = (windowEndMs - windowStartMs) / bucketCount;
     const grouped: TelemetrySample[][] = Array.from({ length: bucketCount }, () => []);
@@ -86,7 +127,7 @@ export function TelemetryChart({
       );
       grouped[bucketIndex].push(sample);
     }
-    return grouped
+    const populated = grouped
       .map((bucketSamples, bucketIndex) => {
         if (bucketSamples.length === 0) return null;
         return {
@@ -100,9 +141,20 @@ export function TelemetryChart({
               ? Math.max(...seriesValues)
               : seriesValues.reduce((sum, value) => sum + value, 0) / seriesValues.length;
           }),
+          hasGapBefore: false,
         };
       })
       .filter((bucket): bucket is BucketPoint => bucket !== null);
+
+    // Empty buckets are dropped above, so a hole shows up as two neighbours
+    // further apart than one bucket. Anything wider than that — and wider than
+    // a dropped sample or two — is time we never measured.
+    const gapThresholdMs = Math.max(bucketSpanMs * 1.5, MIN_GAP_MS);
+    for (let index = 1; index < populated.length; index++) {
+      populated[index].hasGapBefore =
+        populated[index].timestampMs - populated[index - 1].timestampMs > gapThresholdMs;
+    }
+    return { buckets: populated, bucketSpanMs };
   }, [samples, series, windowStartMs, windowEndMs, plotWidth]);
 
   const yMax = useMemo(() => {
@@ -130,48 +182,50 @@ export function TelemetryChart({
 
   const seriesPaths = useMemo(
     () =>
-      series.map((_, seriesIndex) => {
-        let linePath = "";
-        let pathOpen = false;
-        let firstPointDrawn = false;
-        for (const bucket of buckets) {
-          const value = bucket.values[seriesIndex];
-          if (value === null) {
-            pathOpen = false;
-            continue;
-          }
-          const pointX = xForTime(bucket.timestampMs).toFixed(1);
-          const pointY = yForValue(value).toFixed(1);
-          if (!pathOpen && !firstPointDrawn) {
-            // Emerge from the ground: run flat along the baseline from the left
-            // edge to where data begins, then rise into the first sample — so
-            // the line never materializes floating in mid-air.
-            linePath += `M${leftEdgeX.toFixed(1)},${baselineY.toFixed(1)}L${pointX},${baselineY.toFixed(1)}L${pointX},${pointY}`;
-          } else {
-            linePath += `${pathOpen ? "L" : "M"}${pointX},${pointY}`;
-          }
-          pathOpen = true;
-          firstPointDrawn = true;
-        }
-        return linePath;
-      }),
+      series.map((_, seriesIndex) =>
+        toRuns(buckets, seriesIndex, xForTime, yForValue)
+          .map((run, runIndex) => {
+            const head = run[0];
+            const headX = head.x.toFixed(1);
+            const headY = head.y.toFixed(1);
+            let linePath: string;
+            if (runIndex === 0) {
+              // Emerge from the ground: run flat along the baseline from the left
+              // edge to where data begins, then rise into the first sample — so
+              // the line never materializes floating in mid-air.
+              linePath = `M${leftEdgeX.toFixed(1)},${baselineY.toFixed(1)}L${headX},${baselineY.toFixed(1)}L${headX},${headY}`;
+            } else {
+              // Resuming after a hole: lift the pen rather than joining across.
+              linePath = `M${headX},${headY}`;
+            }
+            for (const point of run.slice(1)) {
+              linePath += `L${point.x.toFixed(1)},${point.y.toFixed(1)}`;
+            }
+            // A lone point needs a zero-length segment to show up under round caps.
+            if (run.length === 1) linePath += `L${headX},${headY}`;
+            return linePath;
+          })
+          .join(""),
+      ),
     [buckets, series, xForTime, yForValue, baselineY, leftEdgeX],
   );
 
   const areaPath = useMemo(() => {
     if (!areaWash || buckets.length === 0) return "";
-    const firstSeriesPoints = buckets.filter((bucket) => bucket.values[0] !== null);
-    if (firstSeriesPoints.length === 0) return "";
-    const lineSegment = firstSeriesPoints
-      .map(
-        (bucket) => `L${xForTime(bucket.timestampMs).toFixed(1)},${yForValue(bucket.values[0]!).toFixed(1)}`,
-      )
+    // One closed shape per run, so the wash leaves the same holes as the line
+    // instead of shading time we never measured.
+    return toRuns(buckets, 0, xForTime, yForValue)
+      .map((run, runIndex) => {
+        const firstX = run[0].x.toFixed(1);
+        const lastX = run[run.length - 1].x.toFixed(1);
+        const ground = baselineY.toFixed(1);
+        const lineSegment = run.map((point) => `L${point.x.toFixed(1)},${point.y.toFixed(1)}`).join("");
+        // Match the line: the first run fills from the ground at the left edge,
+        // later ones start where their data does.
+        const start = runIndex === 0 ? `M${leftEdgeX.toFixed(1)},${ground}L${firstX},${ground}` : `M${firstX},${ground}`;
+        return `${start}${lineSegment}L${lastX},${ground}Z`;
+      })
       .join("");
-    const firstX = xForTime(firstSeriesPoints[0].timestampMs).toFixed(1);
-    const lastX = xForTime(firstSeriesPoints[firstSeriesPoints.length - 1].timestampMs).toFixed(1);
-    // Match the line: fill from the ground at the left edge, run flat to the
-    // data start, then up through the series and back down to the baseline.
-    return `M${leftEdgeX.toFixed(1)},${baselineY.toFixed(1)}L${firstX},${baselineY.toFixed(1)}${lineSegment}L${lastX},${baselineY.toFixed(1)}Z`;
   }, [areaWash, buckets, baselineY, leftEdgeX, xForTime, yForValue]);
 
   const yTickValues = useMemo(() => {
@@ -186,6 +240,11 @@ export function TelemetryChart({
     (outage) => outage.startMs + outage.durationMs > windowStartMs && outage.startMs < windowEndMs,
   );
 
+  // How far the crosshair may reach for a reading. Inside a hole the nearest
+  // one can be hours away, and reporting it under the cursor would state a
+  // measurement for a moment nothing was measured.
+  const maxSnapPx = Math.max((bucketSpanMs / (windowEndMs - windowStartMs)) * plotWidth * 1.5, 8);
+
   const handlePointerMove = (moveEvent: React.PointerEvent<SVGSVGElement>) => {
     if (buckets.length === 0) return;
     const svgRect = moveEvent.currentTarget.getBoundingClientRect();
@@ -199,7 +258,7 @@ export function TelemetryChart({
         nearestIndex = bucketIndex;
       }
     });
-    setHoverIndex(nearestIndex);
+    setHoverIndex(nearestDistance > maxSnapPx ? null : nearestIndex);
   };
 
   const hoveredBucket = hoverIndex !== null ? buckets[hoverIndex] : null;
