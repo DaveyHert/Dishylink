@@ -256,8 +256,16 @@ export function TelemetryChart({
   }, [yMax]);
   const xTickTimes = [0.25, 0.5, 0.75].map((fraction) => windowStartMs + (windowEndMs - windowStartMs) * fraction);
 
+  // Only events that occupy a stretch of time shade the chart. The router's log
+  // carries point-in-time entries (power cycle, band switch) with no duration,
+  // and the band renderer floors every band at 2px — so without this they paint
+  // a red critical hairline on a chart whose caption reads "red bands = outages".
+  // Duration, not severity: the dish's own "outage booting" is advisory too.
   const visibleOutages = outageEvents.filter(
-    (outage) => outage.startMs + outage.durationMs > windowStartMs && outage.startMs < windowEndMs,
+    (outage) =>
+      outage.durationMs > 0 &&
+      outage.startMs + outage.durationMs > windowStartMs &&
+      outage.startMs < windowEndMs,
   );
 
   // How far the crosshair may reach for a reading. Inside a hole the nearest
@@ -285,7 +293,7 @@ export function TelemetryChart({
   const tooltipOnLeft = hoveredBucket !== null && xForTime(hoveredBucket.timestampMs) > containerWidth * 0.62;
 
   return (
-    <div className="chart-body" ref={containerRef}>
+    <div className="relative" ref={containerRef}>
       <svg
         width={containerWidth}
         height={height}
@@ -437,21 +445,21 @@ export function TelemetryChart({
 
       {hoveredBucket && (
         <div
-          className="chart-tooltip"
+          className="pointer-events-none absolute z-10 min-w-[138px] rounded-md bg-popover px-[11px] py-[9px] font-mono text-[11px] shadow-[0_8px_28px_rgba(0,0,0,0.35)]"
           style={{
             left: tooltipOnLeft ? undefined : xForTime(hoveredBucket.timestampMs) + 12,
             right: tooltipOnLeft ? containerWidth - xForTime(hoveredBucket.timestampMs) + 12 : undefined,
             top: PLOT_MARGIN.top + 4,
           }}
         >
-          <div className="chart-tooltip-time">{formatClockTime(hoveredBucket.timestampMs)}</div>
+          <div className="mb-[5px] text-[10px] tracking-[0.05em] text-muted-foreground">{formatClockTime(hoveredBucket.timestampMs)}</div>
           {series.map((chartSeries, seriesIndex) => (
-            <div className="chart-tooltip-row" key={chartSeries.id}>
-              <span className="series-key">
+            <div className="flex items-center justify-between gap-[7px] leading-[1.7]" key={chartSeries.id}>
+              <span className="inline-flex items-center gap-1.5 text-[var(--ink-secondary)]">
                 <span className="series-swatch" style={{ background: `var(${chartSeries.colorVar})` }} />
                 {chartSeries.label}
               </span>
-              <span className="mono-value">
+              <span className="font-mono tabular-nums">
                 {hoveredBucket.values[seriesIndex] === null
                   ? "—"
                   : formatValue(hoveredBucket.values[seriesIndex]!)}

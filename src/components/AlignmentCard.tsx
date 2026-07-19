@@ -1,5 +1,4 @@
-// Alignment instruments ported 1:1 from the dish's own web app (bundle
-// fetched from http://192.168.100.1/static/js/script.js.gz). The math is
+// Alignment instruments ported 1:1 from the dish's own web app. The math is
 // SpaceX's, not an interpretation:
 //  - alignment logic  = their `Nd`: great-circle separation < 5° against a
 //    target elevation band (70°…75° for fixed standard kits, up to 90° for
@@ -15,6 +14,8 @@
 
 import type { DishStatusJson } from "../lib/dishClient";
 import { formatHasActuators } from "../lib/format";
+import { Explainer } from "./ui/explainer";
+import { FactGrid, FactRow } from "./ui/fact-row";
 
 const DEG_TO_RAD = Math.PI / 180;
 const RAD_TO_DEG = 180 / Math.PI;
@@ -24,10 +25,17 @@ const NEEDLE_ORANGE = "#ffac30";
 // ---------- SpaceX's alignment math (their Nd/Ld/Ed) ----------
 
 /** Their `Ed`: great-circle angular separation between two pointing directions. */
-function angularSeparationDeg(azimuthA: number, elevationA: number, azimuthB: number, elevationB: number): number {
+function angularSeparationDeg(
+  azimuthA: number,
+  elevationA: number,
+  azimuthB: number,
+  elevationB: number,
+): number {
   const cosSeparation =
     Math.sin(elevationA * DEG_TO_RAD) * Math.sin(elevationB * DEG_TO_RAD) +
-    Math.cos(elevationA * DEG_TO_RAD) * Math.cos(elevationB * DEG_TO_RAD) * Math.cos((azimuthA - azimuthB) * DEG_TO_RAD);
+    Math.cos(elevationA * DEG_TO_RAD) *
+      Math.cos(elevationB * DEG_TO_RAD) *
+      Math.cos((azimuthA - azimuthB) * DEG_TO_RAD);
   const separation = Math.acos(Math.min(1, Math.max(-1, cosSeparation))) * RAD_TO_DEG;
   return Number.isNaN(separation) ? 0 : separation;
 }
@@ -38,7 +46,8 @@ function azimuthToleranceDeg(targetElevation: number, currentElevation: number):
   const currentRad = currentElevation * DEG_TO_RAD;
   const limitRad = SEPARATION_LIMIT_DEG * DEG_TO_RAD;
   const denominator = Math.cos(targetRad) * Math.cos(currentRad);
-  const cosAzimuth = (Math.cos(limitRad) - Math.sin(currentRad) * Math.sin(targetRad)) / denominator;
+  const cosAzimuth =
+    (Math.cos(limitRad) - Math.sin(currentRad) * Math.sin(targetRad)) / denominator;
   if (cosAzimuth < -1) return 180;
   const tolerance = Math.acos(cosAzimuth) * RAD_TO_DEG;
   return Number.isNaN(tolerance) ? 0 : tolerance;
@@ -71,16 +80,29 @@ export function computeAlignment(status: DishStatusJson): AlignmentReading {
   const maxTargetElevation = 75;
   const desiredElevationRaw = stats?.desiredBoresightElevationDeg;
   const targetElevation =
-    desiredElevationRaw !== undefined && desiredElevationRaw !== 0 ? Math.min(70, desiredElevationRaw) : 70;
+    desiredElevationRaw !== undefined && desiredElevationRaw !== 0
+      ? Math.min(70, desiredElevationRaw)
+      : 70;
   const desiredAzimuth = stats?.desiredBoresightAzimuthDeg ?? 0;
   const currentAzimuth = status.boresightAzimuthDeg ?? 0;
   const currentElevation = status.boresightElevationDeg ?? 0;
 
-  const separationAtTarget = angularSeparationDeg(desiredAzimuth, targetElevation, currentAzimuth, currentElevation);
-  const separationAtBandTop = angularSeparationDeg(desiredAzimuth, maxTargetElevation, currentAzimuth, currentElevation);
+  const separationAtTarget = angularSeparationDeg(
+    desiredAzimuth,
+    targetElevation,
+    currentAzimuth,
+    currentElevation,
+  );
+  const separationAtBandTop = angularSeparationDeg(
+    desiredAzimuth,
+    maxTargetElevation,
+    currentAzimuth,
+    currentElevation,
+  );
   const azimuthDiff = wrapDegrees(desiredAzimuth - currentAzimuth);
   const isValid =
-    stats?.attitudeEstimationState === "FILTER_CONVERGED" || stats?.attitudeEstimationState === "FILTER_UNCONVERGED";
+    stats?.attitudeEstimationState === "FILTER_CONVERGED" ||
+    stats?.attitudeEstimationState === "FILTER_UNCONVERGED";
   const bandUsable = targetElevation >= 50;
 
   // their `w`: azimuth error projected onto the sky at the current elevation
@@ -110,7 +132,10 @@ export function computeAlignment(status: DishStatusJson): AlignmentReading {
       ? azimuthToleranceDeg(currentElevation, currentElevation)
       : 0,
   );
-  const upperLimit = Math.max(Math.min((bandUsable ? maxTargetElevation : targetElevation) + 5, 90), 0);
+  const upperLimit = Math.max(
+    Math.min((bandUsable ? maxTargetElevation : targetElevation) + 5, 90),
+    0,
+  );
   const lowerLimit = Math.max(Math.min(targetElevation - 5, 90), 0);
 
   return {
@@ -131,7 +156,13 @@ export function computeAlignment(status: DishStatusJson): AlignmentReading {
 // ---------- shared drawing pieces (their Cd ring and Id sector) ----------
 
 /** Filled sector (pie slice), angles in SVG degrees from the +x axis. */
-function sectorPath(centerX: number, centerY: number, radius: number, thetaCenterDeg: number, thetaDeg: number): string {
+function sectorPath(
+  centerX: number,
+  centerY: number,
+  radius: number,
+  thetaCenterDeg: number,
+  thetaDeg: number,
+): string {
   const startRad = (thetaCenterDeg - thetaDeg / 2) * DEG_TO_RAD;
   const endRad = (thetaCenterDeg + thetaDeg / 2) * DEG_TO_RAD;
   const largeArc = thetaDeg > 180 ? 1 : 0;
@@ -144,11 +175,17 @@ function sectorPath(centerX: number, centerY: number, radius: number, thetaCente
 
 function InstrumentHead({ label, berry }: { label: string; berry: "good" | "bad" | "unknown" }) {
   const berryColor =
-    berry === "good" ? "var(--status-good)" : berry === "bad" ? "var(--status-critical)" : "var(--ink-muted)";
+    berry === "good"
+      ? "var(--status-good)"
+      : berry === "bad"
+        ? "var(--status-critical)"
+        : "var(--ink-muted)";
   return (
-    <div className="instrument-head">
-      <span className="micro-label">{label}</span>
-      <span className="status-dot" style={{ background: berryColor }} />
+    <div className='mb-1 flex items-center gap-[7px]'>
+      <span className='font-mono text-[10.5px] font-medium tracking-[0.09em] text-muted-foreground uppercase'>
+        {label}
+      </span>
+      <span className='status-dot' style={{ background: berryColor }} />
     </div>
   );
 }
@@ -179,12 +216,12 @@ function RotationInstrument({ reading }: { reading: AlignmentReading }) {
   ];
 
   return (
-    <div className="instrument-panel">
+    <div className='min-w-0 flex-1 rounded-lg bg-[color-mix(in_srgb,var(--ink)_3%,var(--surface))] px-3.5 pt-3 pb-1.5'>
       <InstrumentHead
-        label="Rotation"
+        label='Rotation'
         berry={reading.isAligned ? "good" : reading.isValid ? "bad" : "unknown"}
       />
-      <svg width="100%" viewBox={`0 0 ${size} ${size}`}>
+      <svg width='100%' viewBox={`0 0 ${size} ${size}`}>
         {ringDots.map((angleDeg) => {
           const angleRad = (angleDeg - 90) * DEG_TO_RAD;
           return (
@@ -193,7 +230,7 @@ function RotationInstrument({ reading }: { reading: AlignmentReading }) {
               cx={center + ringRadius * Math.cos(angleRad)}
               cy={center + ringRadius * Math.sin(angleRad)}
               r={1.2}
-              fill="var(--ink-secondary)"
+              fill='var(--ink-secondary)'
             />
           );
         })}
@@ -204,12 +241,12 @@ function RotationInstrument({ reading }: { reading: AlignmentReading }) {
               key={mark.label}
               x={center + ringRadius * Math.cos(angleRad)}
               y={center + ringRadius * Math.sin(angleRad)}
-              dy="0.35em"
-              textAnchor="middle"
+              dy='0.35em'
+              textAnchor='middle'
               fontSize={size / 20}
               fontWeight={600}
-              fill="var(--ink-secondary)"
-              fontFamily="var(--font-ui)"
+              fill='var(--ink-secondary)'
+              fontFamily='var(--font-ui)'
             >
               {mark.label}
             </text>
@@ -225,7 +262,7 @@ function RotationInstrument({ reading }: { reading: AlignmentReading }) {
               reading.desiredAzimuthDeg - 90,
               2 * reading.azimuthToleranceDeg,
             )}
-            fill="var(--ink-muted)"
+            fill='var(--ink-muted)'
             opacity={reading.isAligned ? 0.32 : 0.16}
           />
         )}
@@ -237,8 +274,8 @@ function RotationInstrument({ reading }: { reading: AlignmentReading }) {
             width={dishWidth}
             height={dishHeight}
             rx={1}
-            fill="var(--dish-body)"
-            stroke="var(--dish-edge)"
+            fill='var(--dish-body)'
+            stroke='var(--dish-edge)'
             strokeWidth={0.75}
           />
           {reading.isValid && (
@@ -249,7 +286,7 @@ function RotationInstrument({ reading }: { reading: AlignmentReading }) {
               y2={center - 0.94 * ringRadius}
               stroke={NEEDLE_ORANGE}
               strokeWidth={1.5}
-              strokeLinecap="round"
+              strokeLinecap='round'
             />
           )}
         </g>
@@ -272,12 +309,12 @@ function TiltInstrument({ reading }: { reading: AlignmentReading }) {
   for (let dotIndex = 0; dotIndex < 19; dotIndex++) arcDots.push(dotIndex * 5);
 
   return (
-    <div className="instrument-panel">
+    <div className='min-w-0 flex-1 rounded-lg bg-[color-mix(in_srgb,var(--ink)_3%,var(--surface))] px-3.5 pt-3 pb-1.5'>
       <InstrumentHead
-        label="Tilt"
+        label='Tilt'
         berry={reading.isElevationValid ? "good" : reading.isValid ? "bad" : "unknown"}
       />
-      <svg width="100%" viewBox={`0 0 ${size} ${size}`}>
+      <svg width='100%' viewBox={`0 0 ${size} ${size}`}>
         {/* their y-up coordinate system: translate(0, size) scale(1, -1) */}
         <g transform={`translate(0, ${size}) scale(1, -1)`}>
           {arcDots.map((angleDeg) => {
@@ -288,7 +325,7 @@ function TiltInstrument({ reading }: { reading: AlignmentReading }) {
                 cx={pivot + arcRadius * Math.cos(angleRad)}
                 cy={pivot + arcRadius * Math.sin(angleRad)}
                 r={1.2}
-                fill="var(--ink-secondary)"
+                fill='var(--ink-secondary)'
               />
             );
           })}
@@ -302,7 +339,7 @@ function TiltInstrument({ reading }: { reading: AlignmentReading }) {
                 (reading.upperElevationLimitDeg + reading.lowerElevationLimitDeg) / 2,
                 reading.upperElevationLimitDeg - reading.lowerElevationLimitDeg,
               )}
-              fill="var(--ink-muted)"
+              fill='var(--ink-muted)'
               opacity={reading.isElevationValid ? 0.32 : 0.16}
             />
           )}
@@ -314,8 +351,8 @@ function TiltInstrument({ reading }: { reading: AlignmentReading }) {
               width={dishLength}
               height={dishThickness}
               rx={1}
-              fill="var(--dish-body)"
-              stroke="var(--dish-edge)"
+              fill='var(--dish-body)'
+              stroke='var(--dish-edge)'
               strokeWidth={0.75}
             />
             {reading.isValid && (
@@ -326,7 +363,7 @@ function TiltInstrument({ reading }: { reading: AlignmentReading }) {
                 y2={pivot + 0.96 * arcRadius}
                 stroke={NEEDLE_ORANGE}
                 strokeWidth={1.5}
-                strokeLinecap="round"
+                strokeLinecap='round'
               />
             )}
           </g>
@@ -350,9 +387,11 @@ export function AlignmentPanel({
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+      <div
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
+      >
         <div
-          className="stat-caption"
+          className='text-[11.5px] font-medium text-muted-foreground'
           style={{
             color: reading.isAligned
               ? "var(--status-good)"
@@ -370,69 +409,75 @@ export function AlignmentPanel({
               : "Starlink is not aligned — adjust the dish toward the wedge."}
         </div>
         {onOpenSkyView && (
-          <button className="card-link" style={{ flexShrink: 0 }} onClick={onOpenSkyView}>
+          <button
+            className='shrink-0 cursor-pointer border-0 bg-transparent p-0 font-sans text-[13px] font-semibold text-[var(--accent)] transition-[color,opacity] duration-[120ms] hover:opacity-75'
+            onClick={onOpenSkyView}
+          >
             Satellite view ›
           </button>
         )}
       </div>
 
-      <div className="instrument-row">
+      <div className='my-3.5 flex gap-3.5 max-[720px]:flex-col'>
         <RotationInstrument reading={reading} />
         <TiltInstrument reading={reading} />
       </div>
 
-      <div className="device-grid device-grid-two">
-        <div className="device-row">
-          <span className="device-label">Azimuth</span>
-          <span className="mono-value">
-            {reading.boresightAzimuthDeg.toFixed(1)}° · target {reading.desiredAzimuthDeg.toFixed(1)}° ±
-            {reading.azimuthToleranceDeg.toFixed(0)}°
+      <FactGrid columns={2}>
+        <FactRow label='Azimuth'>
+          <span className='font-mono tabular-nums'>
+            {reading.boresightAzimuthDeg.toFixed(1)}° · target{" "}
+            {reading.desiredAzimuthDeg.toFixed(1)}° ±{reading.azimuthToleranceDeg.toFixed(0)}°
           </span>
-        </div>
-        <div className="device-row">
-          <span className="device-label">Elevation</span>
-          <span className="mono-value">
-            {reading.boresightElevationDeg.toFixed(1)}° · band {reading.lowerElevationLimitDeg.toFixed(0)}–
-            {reading.upperElevationLimitDeg.toFixed(0)}°
+        </FactRow>
+        <FactRow label='Elevation'>
+          <span className='font-mono tabular-nums'>
+            {reading.boresightElevationDeg.toFixed(1)}° · band{" "}
+            {reading.lowerElevationLimitDeg.toFixed(0)}–{reading.upperElevationLimitDeg.toFixed(0)}°
           </span>
-        </div>
-        <div className="device-row">
-          <span className="device-label">Tilt</span>
-          <span className="mono-value">{(stats?.tiltAngleDeg ?? 0).toFixed(1)}°</span>
-        </div>
-        <div className="device-row">
-          <span className="device-label">Attitude uncertainty</span>
-          <span className="mono-value">±{(stats?.attitudeUncertaintyDeg ?? 0).toFixed(2)}°</span>
-        </div>
-        <div className="device-row">
-          <span className="device-label">Attitude filter</span>
-          <span className="mono-value">{(stats?.attitudeEstimationState ?? "—").replaceAll("_", " ").toLowerCase()}</span>
-        </div>
-        <div className="device-row">
-          <span className="device-label">Satellites in View (GPS)</span>
-          <span className="mono-value">
+        </FactRow>
+        <FactRow label='Tilt'>
+          <span className='font-mono tabular-nums'>{(stats?.tiltAngleDeg ?? 0).toFixed(1)}°</span>
+        </FactRow>
+        <FactRow label='Attitude uncertainty'>
+          <span className='font-mono tabular-nums'>
+            ±{(stats?.attitudeUncertaintyDeg ?? 0).toFixed(2)}°
+          </span>
+        </FactRow>
+        <FactRow label='Attitude filter'>
+          <span className='font-mono tabular-nums'>
+            {(stats?.attitudeEstimationState ?? "—").replaceAll("_", " ").toLowerCase()}
+          </span>
+        </FactRow>
+        <FactRow label='Satellites in View (GPS)'>
+          <span className='font-mono tabular-nums'>
             {status.gpsStats?.gpsValid ? `${status.gpsStats.gpsSats ?? 0} satellites` : "no fix"}
           </span>
-        </div>
-        <div className="device-row">
-          <span className="device-label">Has actuators</span>
-          <span className="mono-value">{formatHasActuators(status.alignmentStats?.hasActuators ?? status.hasActuators)}</span>
-        </div>
+        </FactRow>
+        <FactRow label='Has actuators'>
+          <span className='font-mono tabular-nums'>
+            {formatHasActuators(status.alignmentStats?.hasActuators ?? status.hasActuators)}
+          </span>
+        </FactRow>
         {status.ned2dishQuaternion && (
-          <div className="device-row">
-            <span className="device-label">Orientation (quaternion)</span>
-            <span className="mono-value">
+          <FactRow label='Orientation (quaternion)'>
+            <span className='font-mono tabular-nums'>
               w {(status.ned2dishQuaternion.qScalar ?? 0).toFixed(2)} · x{" "}
-              {(status.ned2dishQuaternion.qX ?? 0).toFixed(2)} · y {(status.ned2dishQuaternion.qY ?? 0).toFixed(2)} · z{" "}
+              {(status.ned2dishQuaternion.qX ?? 0).toFixed(2)} · y{" "}
+              {(status.ned2dishQuaternion.qY ?? 0).toFixed(2)} · z{" "}
               {(status.ned2dishQuaternion.qZ ?? 0).toFixed(2)}
             </span>
-          </div>
+          </FactRow>
         )}
-      </div>
+      </FactGrid>
 
-      <div className="stat-caption" style={{ marginTop: 12 }}>
-        orange = where the dish is pointing · gray wedge = acceptable range. Geometry and thresholds are
-        ported 1:1 from the dish's own alignment code; values update live every 2 s.
+      <div className='text-[11.5px] font-medium text-muted-foreground' style={{ marginTop: 12 }}>
+        <Explainer title='How to read this'>
+          The wedge shows the desired pointing direction ± tolerance. The dish plate and orange
+          needle show where the dish is actually pointing. If the needle is inside the wedge, the
+          dish is aligned. If it’s outside, adjust the dish toward the wedge. Values update live
+          every 2s
+        </Explainer>
       </div>
     </div>
   );

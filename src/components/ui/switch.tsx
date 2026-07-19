@@ -3,7 +3,7 @@ import { Switch as SwitchPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 
-// Dishboard switch: explicit track/thumb sizing so the thumb pins hard left
+// DishyLink switch: explicit track/thumb sizing so the thumb pins hard left
 // (off) / hard right (on) instead of floating mid-track. The knob always
 // contrasts its track — a light knob on the subtle off-track, a dark knob on
 // the softened (never pure-white) on-track — so neither state reads as a

@@ -46,22 +46,64 @@ function labelWidthFor(range: EnergyRange): number {
 export interface RangeBarColumn {
   key: number | string;
   label: string;
-  /** Native tooltip for the whole column. */
+  /** Native tooltip for the whole column, and the text shown in the hover chip. */
   title: string;
   /** Fills the plot row — a bar, a stack, or the "no data" wash. */
   bar: ReactNode;
 }
 
-export function RangeBars({ columns, range }: { columns: RangeBarColumn[]; range: EnergyRange }) {
+/** A left-edge value scale, when the caller wants one (usage charts do; Energy
+ *  opts out and keeps its bare bars). Ticks are drawn top→bottom from max to 0. */
+export interface RangeBarYAxis {
+  max: number;
+  format: (value: number) => string;
+  /** Number of ticks including max and 0. Default 3 (max, mid, 0). */
+  ticks?: number;
+}
+
+interface RangeBarsProps {
+  columns: RangeBarColumn[];
+  range: EnergyRange;
+  /** Override the per-range label width used for stride — e.g. narrow day
+   *  numbers fit far more labels than a 42px clock time, so passing ~16 stops
+   *  the every-other-day skipping. */
+  labelWidthPx?: number;
+  /** Plot height in px. Defaults to the compact 96 the Energy sheet uses. */
+  heightPx?: number;
+  yAxis?: RangeBarYAxis;
+}
+
+function YAxis({ yAxis, heightPx }: { yAxis: RangeBarYAxis; heightPx: number }) {
+  const count = Math.max(yAxis.ticks ?? 3, 2);
+  const values = Array.from({ length: count }, (_, i) => (yAxis.max * (count - 1 - i)) / (count - 1));
+  return (
+    <div className="energy-yaxis" style={{ height: heightPx }}>
+      <div className="energy-yaxis-ticks">
+        {values.map((value, i) => (
+          <span key={i}>{yAxis.format(value)}</span>
+        ))}
+      </div>
+      {/* Invisible label matching the x-axis row height, so the 0 tick lines up
+          with the bar baseline rather than the bottom of the label. */}
+      <span className="energy-bar-label" style={{ visibility: "hidden" }}>0</span>
+    </div>
+  );
+}
+
+export function RangeBars({ columns, range, labelWidthPx, heightPx = 96, yAxis }: RangeBarsProps) {
   const [barsRef, barsWidth] = useElementWidth<HTMLDivElement>();
   // Skip labels only when the width genuinely forces it.
-  const labelEvery = labelStride(barsWidth, columns.length, labelWidthFor(range));
+  const labelEvery = labelStride(barsWidth, columns.length, labelWidthPx ?? labelWidthFor(range));
   if (columns.length === 0) return null;
-  return (
-    <div className="energy-bars" ref={barsRef}>
+  const bars = (
+    <div className="energy-bars" ref={barsRef} style={{ height: heightPx }}>
       {columns.map((column, index) => (
-        <div key={column.key} className="energy-bar-col" title={column.title}>
+        // No native title — it duplicates the hover chip below.
+        <div key={column.key} className="energy-bar-col">
           <div className="energy-bar-plot">{column.bar}</div>
+          <div className="energy-bar-tip" role="tooltip">
+            {column.title}
+          </div>
           {/* Skipped labels keep their box so the label row stays one height. */}
           <span
             className="energy-bar-label"
@@ -71,6 +113,13 @@ export function RangeBars({ columns, range }: { columns: RangeBarColumn[]; range
           </span>
         </div>
       ))}
+    </div>
+  );
+  if (!yAxis) return bars;
+  return (
+    <div className="energy-bars-axis">
+      <YAxis yAxis={yAxis} heightPx={heightPx} />
+      <div className="min-w-0 flex-1">{bars}</div>
     </div>
   );
 }

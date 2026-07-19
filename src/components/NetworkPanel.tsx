@@ -3,10 +3,23 @@
 // a per-device drill-in showing everything the API exposes, with rename.
 
 import { useEffect, useState } from "react";
+import { motion, useReducedMotion } from "motion/react";
 import type { RouterNetwork } from "../hooks/useRouterNetwork";
 import { useRadioTemps, type RadioReading } from "../hooks/useRadioTemps";
-import { throughputMbps, type WifiClientJson, type WifiNetworkConfigJson } from "../lib/dishClient";
+import { useSelfIdentity } from "../hooks/useSelfIdentity";
+import { matchesSelf } from "../lib/selfIdentity";
+import {
+  ROUTER_UNREACHABLE_MESSAGE,
+  throughputMbps,
+  type WifiClientJson,
+  type WifiNetworkConfigJson,
+} from "../lib/dishClient";
+import { GrpcWebError } from "../lib/grpcWeb";
+import { Loading } from "./ui/loading";
+import { Callout } from "./ui/callout";
+import { SegmentedControl } from "./ui/segmented-control";
 import type { TelemetrySample } from "../lib/telemetry";
+import type { ThroughputRates } from "../lib/throughputTracker";
 import { vendorForMac, ensureOuiLoaded } from "../lib/macVendor";
 import {
   formatUptime,
@@ -17,7 +30,9 @@ import {
 import { THROUGHPUT_SERIES } from "../lib/statDetails";
 import { TelemetryChart } from "./TelemetryChart";
 import { Input } from "@/components/ui/input";
+import { actionButton } from "./ui/action-button";
 import { InfoDot } from "./InfoDot";
+import { RouterIcon } from "./icons/RouterIcon";
 
 function bandLabel(client: WifiClientJson): string {
   const iface = client.iface ?? "";
@@ -56,7 +71,12 @@ const PER_DEVICE_GAP_MS = 150_000;
  *  between 1s and 5s on devices doing nothing but background chatter. */
 const IDLE_AFTER_S = 30;
 
-function liveThroughputMbps(client: WifiClientJson): number {
+/** Combined live rate for sorting. Reads the tracker's byte-delta rate where the
+ *  hook has one; a device seen for the first time this poll has none yet, so it
+ *  sorts on the router's average until its second reading lands. */
+function liveThroughputMbps(client: WifiClientJson, rates: Map<string, ThroughputRates>): number {
+  const rate = client.macAddress ? rates.get(client.macAddress) : undefined;
+  if (rate) return rate.downMbps + rate.upMbps;
   return throughputMbps(client.rxStats) + throughputMbps(client.txStats);
 }
 
@@ -71,8 +91,26 @@ function deviceSubtitle(client: WifiClientJson): string {
   const parts: string[] = [];
   if (client.name && client.name !== client.givenName) parts.push(client.name);
   const vendor = vendorForMac(client.macAddress);
-  if (vendor && vendor !== "Private" && !parts.includes(vendor)) parts.push(vendor);
+  // "Private" is a meaningful subtitle, not a missing brand — a device behind a
+  // randomized MAC. Show it like the official app does rather than hiding it.
+  if (vendor && !parts.includes(vendor)) parts.push(vendor);
   return parts.join(" · ") || "unknown device";
+}
+
+/** Subtitle with a leading "This device" for the viewer's own machine, as the
+ *  official app shows it ("This device · Apple"). "This device" is brighter and
+ *  semibold to stand out from the muted vendor. Drops the "unknown device"
+ *  filler so it never reads "This device · unknown device". */
+function deviceRowSubtitle(client: WifiClientJson, isSelf: boolean): React.ReactNode {
+  const base = deviceSubtitle(client);
+  if (!isSelf) return base;
+  const rest = base === "unknown device" ? "" : ` · ${base}`;
+  return (
+    <>
+      <span className='font-semibold text-foreground/60'>This device</span>
+      {rest}
+    </>
+  );
 }
 
 /** One row of the Nodes tab: the router itself plus every mesh node it has been
@@ -146,7 +184,7 @@ function WifiArcIcon({ bars }: { bars: number }) {
     { d: "M1.4 9a16 16 0 0 1 21.2 0", litAt: 4 },
   ];
   return (
-    <svg width='20' height='16' viewBox='0 0 24 20' className='wifi-arc' aria-hidden='true'>
+    <svg width='20' height='16' viewBox='0 0 24 20' className='block' aria-hidden='true'>
       {arcs.map((arc) => (
         <path
           key={arc.litAt}
@@ -163,51 +201,10 @@ function WifiArcIcon({ bars }: { bars: number }) {
   );
 }
 
-/** Router/mesh-node glyph for the Nodes tab — the hardware itself, not a link
- *  quality, so it dims wholesale when the node is down. */
-function RouterIcon({ dimmed }: { dimmed?: boolean }) {
-  return (
-    <svg
-      width='20'
-      height='16'
-      viewBox='0 0 24 20'
-      className='wifi-arc'
-      aria-hidden='true'
-      opacity={dimmed ? 0.35 : 1}
-    >
-      <rect
-        x={3}
-        y={11}
-        width={18}
-        height={7}
-        rx={2}
-        fill='none'
-        stroke='var(--ink)'
-        strokeWidth={2}
-      />
-      <circle cx={7} cy={14.5} r={1.1} fill='var(--ink)' />
-      <path
-        d='M8.5 7.4a5 5 0 0 1 7 0'
-        fill='none'
-        stroke='var(--ink)'
-        strokeWidth={1.8}
-        strokeLinecap='round'
-      />
-      <path
-        d='M5.6 4.2a9 9 0 0 1 12.8 0'
-        fill='none'
-        stroke='var(--ink)'
-        strokeWidth={1.8}
-        strokeLinecap='round'
-      />
-    </svg>
-  );
-}
-
 /** Ethernet-port glyph for wired clients (no RSSI to show as arcs). */
 function WiredIcon() {
   return (
-    <svg width='20' height='16' viewBox='0 0 24 20' className='wifi-arc' aria-hidden='true'>
+    <svg width='20' height='16' viewBox='0 0 24 20' className='block' aria-hidden='true'>
       <rect
         x={4}
         y={5}
@@ -261,9 +258,11 @@ function PencilIcon() {
 
 function DataRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className='devdetail-row'>
-      <span className='stat-caption'>{label}</span>
-      <span className='mono-value devdetail-value'>{value}</span>
+    <div className='flex items-baseline justify-between gap-4 border-t border-t-[var(--hairline)] py-[9px]'>
+      <span className='text-[11.5px] font-medium text-muted-foreground'>{label}</span>
+      <span className='font-mono tabular-nums text-[13px] text-right text-foreground [overflow-wrap:anywhere]'>
+        {value}
+      </span>
     </div>
   );
 }
@@ -279,11 +278,13 @@ function RadioTempsSection({ radios }: { radios: RadioReading[] }) {
   if (radios.length === 0) return null;
   return (
     <>
-      <div className='devdetail-section-head'>
-        <span className='devdetail-section-title'>Radio temperatures</span>
+      <div className='mt-5 mb-2.5 flex items-center gap-[7px]'>
+        <span className='text-[14px] font-semibold tracking-[0.01em] text-foreground'>
+          Radio temperatures
+        </span>
         <InfoDot tip="How warm each of the router's Wi-Fi radios is running. If one gets too hot, the router slows that band's Wi-Fi down to cool off — you'll see that noted here when it happens." />
       </div>
-      <div className='devdetail-grid'>
+      <div className='flex flex-col'>
         {radios.map((radio) => {
           const throttling = radio.dutyCycle < 100;
           return (
@@ -294,7 +295,7 @@ function RadioTempsSection({ radios }: { radios: RadioReading[] }) {
                 <>
                   {radio.tempC}°
                   <span
-                    className='devdetail-note'
+                    className='text-muted-foreground'
                     style={throttling ? { color: "var(--status-critical)" } : undefined}
                   >
                     {" · "}
@@ -329,37 +330,57 @@ function NodeDetail({
   const client = node.client;
   const meshConfig = node.key ? wifiConfig?.meshConfigs?.[node.key] : undefined;
   const isRouter = client?.role === "CONTROLLER";
+  const signal = client ? signalQuality(client) : null;
+  // The rate the link negotiated, not throughput — the same number the app shows
+  // as "Rx rate". The controller reports empty stats for itself, so this is
+  // absent there rather than zero.
+  const linkRxMbps = client?.rxStats?.rateMbps;
   // Only the main router's own firmware is in wifiConfig.boot; a mesh node
   // reports just its hardware revision in its config entry.
   const firmware = isRouter ? wifiConfig?.boot?.evenSideSoftwareVersion : undefined;
 
   return (
-    <div className='devdetail'>
-      <div className='devdetail-head'>
-        <RouterIcon dimmed={!node.connected} />
-        <div className='devdetail-headtext'>
-          <div className='devdetail-nameline'>
-            <span className='devdetail-name'>{node.name}</span>
+    <div>
+      <div className='mb-3.5 flex items-center gap-2.5'>
+        <RouterIcon size={20} className={!node.connected ? "opacity-35" : undefined} />
+        <div className='min-w-0'>
+          <div className='flex items-center gap-2'>
+            <span className='text-[18px] font-bold text-foreground'>{node.name}</span>
           </div>
-          <div className='stat-caption'>{node.status}</div>
+          <div className='text-[11.5px] font-medium text-muted-foreground'>{node.status}</div>
         </div>
       </div>
 
-      <div className='devdetail-grid'>
+      <div className='flex flex-col'>
         {client?.role && <DataRow label='Role' value={client.role} />}
         {node.connected ? (
           <DataRow label='Devices connected' value={node.deviceCount ?? 0} />
         ) : (
           <DataRow
             label='Devices connected'
-            value={<span className='devdetail-note'>none — node is down</span>}
+            value={<span className='text-muted-foreground'>none — node is down</span>}
           />
         )}
+        {/* A mesh node is a client entry like any other, so it carries the same
+            radio detail — the app's node screen leads with these two, and they
+            are what a "move it closer" prompt is actually asking you to fix. */}
+        {signal && (
+          <DataRow
+            label='Signal strength'
+            value={
+              <span style={{ color: `var(${signal.colorVar})` }}>
+                {client?.iface === "ETH" ? "wired" : `${client?.signalStrength} dBm · ${signal.label}`}
+              </span>
+            }
+          />
+        )}
+        {linkRxMbps !== undefined && <DataRow label='Rx rate' value={`${Math.round(linkRxMbps)} Mbps`} />}
         {client && <DataRow label='Connection' value={bandLabel(client)} />}
         {client?.iface && <DataRow label='Interface' value={client.iface} />}
         {isRouter && <DataRow label='Uplink' value='Starlink dish' />}
         {client?.macAddress && <DataRow label='MAC address' value={client.macAddress} />}
         {client?.deviceId && <DataRow label='Device ID' value={client.deviceId} />}
+        {client?.ipAddress && <DataRow label='IP address' value={client.ipAddress} />}
         {firmware && <DataRow label='Firmware' value={firmware} />}
         {meshConfig?.hardwareVersion && (
           <DataRow label='Hardware' value={meshConfig.hardwareVersion} />
@@ -372,7 +393,7 @@ function NodeDetail({
       {isRouter && <RadioTempsSection radios={radios} />}
 
       {!node.connected && (
-        <div className='stat-caption devdetail-collecting'>
+        <div className='text-[11.5px] font-medium text-muted-foreground py-3.5'>
           This node is paired with your network but not currently reachable. Power it on, or move it
           closer to the router, and it will reappear here.
         </div>
@@ -384,26 +405,40 @@ function NodeDetail({
 function DeviceDetail({
   client,
   history,
+  rates,
   upstreamName,
+  isThisDevice,
   onRename,
 }: {
   client: WifiClientJson;
+  /** Live per-MAC rates from the hook's byte-delta tracker. */
+  rates: Map<string, ThroughputRates>;
   history: TelemetrySample[];
   /** Resolved name of the node this client is attached to (via upstreamMacAddress). */
   upstreamName?: string;
+  /** True when this is the device viewing the dashboard. */
+  isThisDevice: boolean;
   onRename: (macAddress: string, givenName: string) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
   const [draftName, setDraftName] = useState(client.givenName ?? client.name ?? "");
   const [renameBusy, setRenameBusy] = useState(false);
   const [renameState, setRenameState] = useState<"idle" | "saved" | "error">("idle");
+  const [renameError, setRenameError] = useState<string | null>(null);
+  // The facts list runs ~17 rows; only the identity + link summary stays open,
+  // the rest sit behind a toggle so Throughput isn't pushed off-screen.
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
+  const reduceMotion = useReducedMotion();
 
   const quality = signalQuality(client);
   const linkRx = client.rxStats?.rateMbps;
   const linkTx = client.txStats?.rateMbps;
   const vendor = vendorForMac(client.macAddress);
-  const downMbps = throughputMbps(client.rxStats);
-  const upMbps = throughputMbps(client.txStats);
+  // Byte-delta rate, so the headline number matches a speed test instead of the
+  // router's 60-second average of it. Falls back until the second reading lands.
+  const liveRate = client.macAddress ? rates.get(client.macAddress) : undefined;
+  const downMbps = liveRate?.downMbps ?? throughputMbps(client.rxStats);
+  const upMbps = liveRate?.upMbps ?? throughputMbps(client.txStats);
   const idleSeconds = client.noDataIdleS ?? 0;
   // Cumulative counters since the client associated. uploadMb/downloadMb are
   // misdecoded by the router, so these are the only trustworthy totals.
@@ -421,23 +456,99 @@ function DeviceDetail({
       await onRename(client.macAddress, draftName.trim());
       setRenameState("saved");
       setEditing(false);
-    } catch {
+    } catch (renameFailure) {
+      // Status 7 = the firmware's LAN write lock (measured 2026-07: the router
+      // refuses every rename shape from the LAN; only the official app's cloud
+      // path can write). Anything else really is a transport problem.
+      setRenameError(
+        renameFailure instanceof GrpcWebError && renameFailure.grpcStatus === 7
+          ? "Starlink's current firmware blocks renames from the local network — rename this device in the official Starlink app instead."
+          : "The router refused the rename.",
+      );
       setRenameState("error");
     } finally {
       setRenameBusy(false);
     }
   };
 
+  // Ordered facts; the first PRIMARY_FACT_COUNT stay visible, the rest collapse.
+  const facts: { key: string; label: string; value: React.ReactNode }[] = [
+    {
+      key: "status",
+      label: "Status",
+      value: idleSeconds < IDLE_AFTER_S ? "active" : `idle · ${formatUptime(idleSeconds)}`,
+    },
+  ];
+  if (client.role) facts.push({ key: "role", label: "Role", value: client.role });
+  if (upstreamName) facts.push({ key: "connectedTo", label: "Connected to", value: upstreamName });
+  // Always shown. A randomized MAC carries no vendor, so the row reads "Private"
+  // as the app's does — an absent row just looks broken.
+  facts.push({ key: "manufacturer", label: "Manufacturer", value: vendor ?? "Unknown" });
+  facts.push({ key: "connection", label: "Connection", value: bandLabel(client) });
+  if (quality) {
+    facts.push({
+      key: "signal",
+      label: "Signal",
+      value: (
+        <span style={{ color: `var(${quality.colorVar})` }}>
+          {client.iface === "ETH" ? "wired" : `${client.signalStrength} dBm · ${quality.label}`}
+        </span>
+      ),
+    });
+  }
+  if (client.snr !== undefined && client.snr > 0) {
+    facts.push({ key: "snr", label: "Signal-to-noise", value: `${client.snr} dB` });
+  }
+  if (client.channelWidth) {
+    facts.push({ key: "bandwidth", label: "Bandwidth", value: `${client.channelWidth} MHz` });
+  }
+  if (client.rxStats?.mcs !== undefined) {
+    facts.push({ key: "mcs", label: "MCS index", value: client.rxStats.mcs });
+  }
+  if (client.rxStats?.nss !== undefined) {
+    facts.push({ key: "nss", label: "Spatial streams", value: client.rxStats.nss });
+  }
+  if (linkRx) facts.push({ key: "rx", label: "Rx rate", value: `${linkRx} Mbps` });
+  if (linkTx) facts.push({ key: "tx", label: "Tx rate", value: `${linkTx} Mbps` });
+  if (client.ipAddress) facts.push({ key: "ipv4", label: "IPv4", value: client.ipAddress });
+  if (client.ipv6Addresses && client.ipv6Addresses.length > 0) {
+    facts.push({
+      key: "ipv6",
+      label: "IPv6",
+      value: <span className='text-[11px]'>{client.ipv6Addresses[0]}</span>,
+    });
+  }
+  if (client.macAddress) facts.push({ key: "mac", label: "MAC address", value: client.macAddress });
+  if (client.associatedTimeS) {
+    facts.push({
+      key: "connectedFor",
+      label: "Connected for",
+      value: formatUptime(client.associatedTimeS),
+    });
+  }
+  if (rxBytes > 0 || txBytes > 0) {
+    facts.push({
+      key: "dataUsage",
+      label: "Data usage (session)",
+      value: `${formatBytes(rxBytes)} ↓ / ${formatBytes(txBytes)} ↑`,
+    });
+  }
+
+  // Above this many rows the list is capped to a scroll box by default; "View
+  // full" drops the cap and spreads every row out.
+  const DETAILS_COLLAPSED_PX = 280;
+  const detailsScrollable = facts.length > 8;
+
   return (
-    <div className='devdetail'>
-      <div className='devdetail-head'>
+    <div>
+      <div className='mb-3.5 flex items-center gap-2.5'>
         <DeviceSignalIcon client={client} quality={quality} />
-        <div className='devdetail-headtext'>
-          <div className='devdetail-nameline'>
-            <span className='devdetail-name'>{displayName(client)}</span>
+        <div className='min-w-0'>
+          <div className='flex items-center gap-2'>
+            <span className='text-[18px] font-bold text-foreground'>{displayName(client)}</span>
             {!editing && (
               <button
-                className='devdetail-pencil'
+                className='inline-flex h-[26px] w-[26px] flex-none cursor-pointer items-center justify-center rounded-[999px] border-none bg-[color-mix(in_srgb,var(--ink)_6%,var(--surface))] text-[var(--ink-secondary)] [transition:background_120ms_ease,color_120ms_ease] hover:bg-[color-mix(in_srgb,var(--ink)_12%,var(--surface))] hover:text-foreground'
                 aria-label='Rename device'
                 onClick={() => {
                   setDraftName(client.givenName ?? client.name ?? "");
@@ -449,12 +560,14 @@ function DeviceDetail({
               </button>
             )}
           </div>
-          <div className='stat-caption'>{deviceSubtitle(client)}</div>
+          <div className='text-[11.5px] font-medium text-muted-foreground'>
+            {deviceRowSubtitle(client, isThisDevice)}
+          </div>
         </div>
       </div>
 
       {editing && (
-        <div className='devdetail-rename'>
+        <div className='mb-3.5 flex gap-2'>
           <Input
             className='h-8 text-sm'
             autoFocus
@@ -471,14 +584,14 @@ function DeviceDetail({
             }}
           />
           <button
-            className='device-action-button'
+            className={actionButton()}
             disabled={renameBusy}
             onClick={() => void commitRename()}
           >
             {renameBusy ? "Saving…" : "Save"}
           </button>
           <button
-            className='device-action-button subtle'
+            className={actionButton("subtle")}
             disabled={renameBusy}
             onClick={() => setEditing(false)}
           >
@@ -487,84 +600,68 @@ function DeviceDetail({
         </div>
       )}
       {renameState === "error" && (
-        <div className='settings-error'>The router refused the rename.</div>
+        <div className='py-2 text-[12.5px] leading-[1.5] text-destructive'>
+          {renameError ?? "The router refused the rename."}
+        </div>
       )}
 
-      <div className='devdetail-grid'>
-        {/* noDataIdleS is the router's own "seconds since this device last passed
-            traffic"; proto3 omits it at zero, so absent means traffic right now.
-            Observed live, it oscillates a few seconds on devices with background
-            chatter, so the threshold sits well clear of that rather than flapping
-            between active and idle every poll. */}
-        <DataRow
-          label='Status'
-          value={idleSeconds < IDLE_AFTER_S ? "active" : `idle · ${formatUptime(idleSeconds)}`}
-        />
-        {client.role && <DataRow label='Role' value={client.role} />}
-        {upstreamName && <DataRow label='Connected to' value={upstreamName} />}
-        {/* Always shown. A randomized MAC carries no vendor, so the row reads
-            "Private" as the app's does — an absent row just looks broken. */}
-        <DataRow label='Manufacturer' value={vendor ?? "Unknown"} />
-        <DataRow label='Connection' value={bandLabel(client)} />
-        {quality && (
-          <DataRow
-            label='Signal'
-            value={
-              <span style={{ color: `var(${quality.colorVar})` }}>
-                {client.iface === "ETH"
-                  ? "wired"
-                  : `${client.signalStrength} dBm · ${quality.label}`}
-              </span>
-            }
-          />
-        )}
-        {client.snr !== undefined && client.snr > 0 && (
-          <DataRow label='Signal-to-noise' value={`${client.snr} dB`} />
-        )}
-        {client.channelWidth ? (
-          <DataRow label='Bandwidth' value={`${client.channelWidth} MHz`} />
-        ) : null}
-        {client.rxStats?.mcs !== undefined && (
-          <DataRow label='MCS index' value={client.rxStats.mcs} />
-        )}
-        {client.rxStats?.nss !== undefined && (
-          <DataRow label='Spatial streams' value={client.rxStats.nss} />
-        )}
-        {linkRx ? <DataRow label='Rx rate' value={`${linkRx} Mbps`} /> : null}
-        {linkTx ? <DataRow label='Tx rate' value={`${linkTx} Mbps`} /> : null}
-        {client.ipAddress && <DataRow label='IPv4' value={client.ipAddress} />}
-        {client.ipv6Addresses && client.ipv6Addresses.length > 0 && (
-          <DataRow
-            label='IPv6'
-            value={<span className='devdetail-ipv6'>{client.ipv6Addresses[0]}</span>}
-          />
-        )}
-        {client.macAddress && <DataRow label='MAC address' value={client.macAddress} />}
-        {client.associatedTimeS ? (
-          <DataRow label='Connected for' value={formatUptime(client.associatedTimeS)} />
-        ) : null}
-        {(rxBytes > 0 || txBytes > 0) && (
-          <DataRow
-            label='Data usage (session)'
-            value={`${formatBytes(rxBytes)} ↓ / ${formatBytes(txBytes)} ↑`}
-          />
-        )}
-      </div>
+      {/* noDataIdleS is the router's own "seconds since this device last passed
+          traffic"; proto3 omits it at zero, so absent means traffic right now.
+          Observed live, it oscillates a few seconds on devices with background
+          chatter, so the threshold sits well clear of that rather than flapping
+          between active and idle every poll. */}
+      {detailsScrollable ? (
+        <>
+          {/* Capped by default so the whole list scrolls in place (thin scrollbar)
+              instead of pushing Throughput off-screen; "View full" drops the cap. */}
+          <motion.div
+            initial={false}
+            animate={{ height: detailsExpanded ? "auto" : DETAILS_COLLAPSED_PX }}
+            transition={reduceMotion ? { duration: 0 } : { duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
+            className={`flex flex-col ${detailsExpanded ? "overflow-hidden" : "thin-scroll overflow-y-auto"}`}
+          >
+            {facts.map((fact) => (
+              <DataRow key={fact.key} label={fact.label} value={fact.value} />
+            ))}
+          </motion.div>
+          <button
+            className='flex w-full cursor-pointer items-center justify-center gap-1 border-0 bg-transparent py-2.5 text-[12.5px] font-semibold text-muted-foreground transition-colors hover:text-foreground'
+            onClick={() => setDetailsExpanded((open) => !open)}
+            aria-expanded={detailsExpanded}
+          >
+            {detailsExpanded ? "Collapse" : "View full details"}
+            <span
+              className={`text-[14px] leading-none transition-transform ${detailsExpanded ? "-rotate-90" : "rotate-90"}`}
+              aria-hidden='true'
+            >
+              ›
+            </span>
+          </button>
+        </>
+      ) : (
+        <div className='flex flex-col'>
+          {facts.map((fact) => (
+            <DataRow key={fact.key} label={fact.label} value={fact.value} />
+          ))}
+        </div>
+      )}
 
-      <div className='devdetail-section-head'>
-        <span className='devdetail-section-title'>Throughput</span>
+      <div className='mt-5 mb-2.5 flex items-center gap-[7px]'>
+        <span className='text-[14px] font-semibold tracking-[0.01em] text-foreground'>
+          Throughput
+        </span>
         <InfoDot tip='How much data this device is transferring right now. Stream a video and watch it jump.' />
       </div>
       {history.length < 2 ? (
-        <div className='stat-caption devdetail-collecting'>
+        <div className='text-[11.5px] font-medium text-muted-foreground py-3.5'>
           Collecting live throughput… charts fill in as the router is polled (every 5 s).
         </div>
       ) : (
         <>
-          <div className='devdetail-chart'>
-            <div className='devdetail-chart-head'>
-              <span className='stat-caption'>Download</span>
-              <span className='mono-value devdetail-value'>
+          <div className='mb-3.5'>
+            <div className='mb-0.5 flex items-baseline justify-between'>
+              <span className='text-[11.5px] font-medium text-muted-foreground'>Download</span>
+              <span className='font-mono tabular-nums text-[13px] text-right text-foreground [overflow-wrap:anywhere]'>
                 {formatThroughputLabel(downMbps * 1_000_000)}
               </span>
             </div>
@@ -578,10 +675,10 @@ function DeviceDetail({
               height={140}
             />
           </div>
-          <div className='devdetail-chart'>
-            <div className='devdetail-chart-head'>
-              <span className='stat-caption'>Upload</span>
-              <span className='mono-value devdetail-value'>
+          <div className='mb-3.5'>
+            <div className='mb-0.5 flex items-baseline justify-between'>
+              <span className='text-[11.5px] font-medium text-muted-foreground'>Upload</span>
+              <span className='font-mono tabular-nums text-[13px] text-right text-foreground [overflow-wrap:anywhere]'>
                 {formatThroughputLabel(upMbps * 1_000_000)}
               </span>
             </div>
@@ -598,6 +695,62 @@ function DeviceDetail({
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * One row in the device / node list. Was `.netrow` + six child classes, rendered twice.
+ *
+ * The offline state maps to `disabled:` and `group-disabled:` because an offline row is
+ * already a disabled button — `.netrow-offline` was a parallel way of saying the same
+ * thing, including a :hover rule whose only job was to cancel the base :hover.
+ */
+function NetRow({
+  icon,
+  name,
+  sub,
+  band,
+  showChevron,
+  disabled,
+  highlight,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  name: string;
+  sub: React.ReactNode;
+  band?: React.ReactNode;
+  showChevron?: boolean;
+  disabled?: boolean;
+  /** The viewer's own device — resting tint bumped so it reads as pinned, like
+   *  the official app's "This device" row. */
+  highlight?: boolean;
+  onClick?: () => void;
+}) {
+  const restBg = highlight
+    ? "bg-[color-mix(in_srgb,var(--ink)_9%,var(--surface))]"
+    : "bg-[color-mix(in_srgb,var(--ink)_4%,var(--surface))]";
+  return (
+    <button
+      className={`group flex w-full cursor-pointer items-center gap-[13px] rounded-lg border-none ${restBg} px-3 py-[11px] text-left [transition:background_120ms_ease] hover:bg-[color-mix(in_srgb,var(--ink)_8%,var(--surface))] disabled:cursor-default disabled:hover:bg-[color-mix(in_srgb,var(--ink)_4%,var(--surface))]`}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <span className='inline-flex flex-none items-center'>{icon}</span>
+      <span className='flex min-w-0 flex-1 flex-col gap-px'>
+        <span className='overflow-hidden text-[14px] font-semibold text-ellipsis whitespace-nowrap text-foreground group-disabled:text-[var(--ink-secondary)]'>
+          {name}
+        </span>
+        <span className='text-[11.5px] text-muted-foreground'>{sub}</span>
+      </span>
+      {band && (
+        <span className='flex-none rounded-[6px] border border-[var(--baseline)] px-[7px] py-0.5 font-mono text-[10px] tracking-[0.04em] text-[var(--ink-secondary)] tabular-nums'>
+          {band}
+        </span>
+      )}
+      {showChevron && (
+        <span className='flex-none text-[18px] leading-none text-muted-foreground'>›</span>
+      )}
+    </button>
   );
 }
 
@@ -620,28 +773,32 @@ export function NetworkPanel({
   // Radio temps come from the collector, not the router directly. Poll only
   // while the panel is mounted (i.e. the Network sheet is open).
   const radio = useRadioTemps(true);
+  // The viewer's own address(es), to flag "This device" in the list.
+  const self = useSelfIdentity(true);
 
   if (network.routerReachable === null) {
-    return <div className='empty-note'>contacting the router…</div>;
+    return <Loading message='Contacting the router…' />;
   }
   if (network.routerReachable === false) {
-    return (
-      <div className='empty-note'>
-        Couldn't reach the Starlink router at 192.168.1.1 — it may be in bypass mode or on a
-        different subnet.
-      </div>
-    );
+    return <Callout tone='error'>{ROUTER_UNREACHABLE_MESSAGE}</Callout>;
   }
 
   const devices = network.clients.filter((client) => !client.role || client.role === "CLIENT");
   const nodes = buildNodeRoster(network.clients, network.wifiConfig);
-  const sortedDevices = [...devices].sort((a, b) => liveThroughputMbps(b) - liveThroughputMbps(a));
+  // The viewer's own device pins to the top (like the app), then by throughput.
+  const sortedDevices = [...devices].sort((a, b) => {
+    const selfDelta = Number(matchesSelf(b, self)) - Number(matchesSelf(a, self));
+    if (selfDelta !== 0) return selfDelta;
+    return liveThroughputMbps(b, network.rates) - liveThroughputMbps(a, network.rates);
+  });
 
   const selectedNode = selectedMac
     ? nodes.find((node) => node.client?.macAddress === selectedMac)
     : null;
   if (selectedNode) {
-    return <NodeDetail node={selectedNode} wifiConfig={network.wifiConfig} radios={radio.current} />;
+    return (
+      <NodeDetail node={selectedNode} wifiConfig={network.wifiConfig} radios={radio.current} />
+    );
   }
 
   const selected = selectedMac
@@ -651,10 +808,12 @@ export function NetworkPanel({
     return (
       <DeviceDetail
         client={selected}
+        rates={network.rates}
         history={(selected.macAddress && network.throughputHistory.get(selected.macAddress)) || []}
         upstreamName={
           nodes.find((node) => node.client?.macAddress === selected.upstreamMacAddress)?.name
         }
+        isThisDevice={matchesSelf(selected, self)}
         onRename={network.renameClient}
       />
     );
@@ -662,56 +821,62 @@ export function NetworkPanel({
 
   return (
     <div>
-      <div
-        className='settings-segment'
-        role='tablist'
-        style={{ maxWidth: 260, margin: "0 auto 14px" }}
-      >
-        <span
-          className={`settings-segment-glider ${tab === "nodes" ? "right" : ""}`}
-          aria-hidden='true'
-        />
-        <button
-          role='tab'
-          className={tab === "devices" ? "active" : ""}
-          onClick={() => setTab("devices")}
-        >
-          Devices <span className='settings-segment-count'>{devices.length}</span>
-        </button>
-        <button
-          role='tab'
-          className={tab === "nodes" ? "active" : ""}
-          onClick={() => setTab("nodes")}
-        >
-          Nodes <span className='settings-segment-count'>{nodes.length}</span>
-        </button>
-      </div>
+      <SegmentedControl
+        variant='glider'
+        label='Network view'
+        className='mb-3.5'
+        value={tab}
+        onChange={setTab}
+        options={[
+          {
+            value: "devices",
+            label: (
+              <>
+                Devices{" "}
+                <span className='ml-[3px] font-mono text-[11px] tabular-nums opacity-60'>
+                  {devices.length}
+                </span>
+              </>
+            ),
+          },
+          {
+            value: "nodes",
+            label: (
+              <>
+                Nodes{" "}
+                <span className='ml-[3px] font-mono text-[11px] tabular-nums opacity-60'>
+                  {nodes.length}
+                </span>
+              </>
+            ),
+          },
+        ]}
+      />
 
       {tab === "devices" && (
         <>
-          <div className='stat-caption' style={{ marginBottom: 8 }}>
+          <div
+            className='text-[11.5px] font-medium text-muted-foreground'
+            style={{ marginBottom: 8 }}
+          >
             {devices.length} device{devices.length === 1 ? "" : "s"} · live from the router,
             refreshed every 5 s
           </div>
-          <div className='netlist'>
+          <div className='flex flex-col gap-1.5 max-h-[460px] overflow-y-auto'>
             {sortedDevices.map((client, index) => {
               const quality = signalQuality(client);
+              const isSelf = matchesSelf(client, self);
               return (
-                <button
-                  className='netrow'
+                <NetRow
                   key={client.macAddress ?? index}
+                  icon={<DeviceSignalIcon client={client} quality={quality} />}
+                  name={displayName(client)}
+                  sub={deviceRowSubtitle(client, isSelf)}
+                  band={bandLabel(client)}
+                  highlight={isSelf}
+                  showChevron
                   onClick={() => client.macAddress && onSelect(client.macAddress)}
-                >
-                  <span className='netrow-signal'>
-                    <DeviceSignalIcon client={client} quality={quality} />
-                  </span>
-                  <span className='netrow-main'>
-                    <span className='netrow-name'>{displayName(client)}</span>
-                    <span className='netrow-sub'>{deviceSubtitle(client)}</span>
-                  </span>
-                  <span className='netrow-band mono-value'>{bandLabel(client)}</span>
-                  <span className='netrow-chevron'>›</span>
-                </button>
+                />
               );
             })}
           </div>
@@ -720,31 +885,30 @@ export function NetworkPanel({
 
       {tab === "nodes" && (
         <>
-          <div className='stat-caption' style={{ marginBottom: 8 }}>
+          <div
+            className='text-[11.5px] font-medium text-muted-foreground'
+            style={{ marginBottom: 8 }}
+          >
             Router and mesh nodes
           </div>
-          <div className='netlist'>
+          <div className='flex flex-col gap-1.5 max-h-[460px] overflow-y-auto'>
             {nodes.map((node) => (
-              <button
-                className={`netrow ${node.connected ? "" : "netrow-offline"}`}
+              <NetRow
                 key={node.key}
+                icon={
+                  <RouterIcon size={20} className={!node.connected ? "opacity-35" : undefined} />
+                }
+                name={node.name}
+                sub={node.status}
+                band={
+                  node.deviceCount
+                    ? `${node.deviceCount} device${node.deviceCount === 1 ? "" : "s"}`
+                    : undefined
+                }
+                showChevron={node.connected}
                 disabled={!node.connected}
                 onClick={() => node.client?.macAddress && onSelect(node.client.macAddress)}
-              >
-                <span className='netrow-signal'>
-                  <RouterIcon dimmed={!node.connected} />
-                </span>
-                <span className='netrow-main'>
-                  <span className='netrow-name'>{node.name}</span>
-                  <span className='netrow-sub'>{node.status}</span>
-                </span>
-                {node.deviceCount ? (
-                  <span className='netrow-band mono-value'>
-                    {node.deviceCount} device{node.deviceCount === 1 ? "" : "s"}
-                  </span>
-                ) : null}
-                {node.connected && <span className='netrow-chevron'>›</span>}
-              </button>
+              />
             ))}
           </div>
         </>

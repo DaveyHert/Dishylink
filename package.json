@@ -1,5 +1,5 @@
 {
-  "name": "dishboard",
+  "name": "dishylink",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -31,11 +31,15 @@
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
+    "@vitest/browser": "^4.1.10",
+    "@vitest/browser-playwright": "^4.1.10",
+    "playwright": "^1.61.1",
     "playwright-core": "^1.53.0",
     "tailwindcss": "^4.3.2",
     "tsx": "^4.23.1",
     "typescript": "~5.8.3",
     "vite": "^7.0.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "vitest-browser-react": "^2.2.0"
   }
 }

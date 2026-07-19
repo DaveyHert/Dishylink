@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" fill="none">
+  <!-- The AppLogo mark (src/components/icons/AppLogo.tsx) on a dark plate.
+       In-app the mark runs plateless and takes its color from the theme; a tab
+       strip gives it neither a known background nor a theme to follow, so the
+       icon form keeps the plate and states its own colors.
+       Strokes are heavier and the inner ellipse is dropped: at 16-32px the
+       in-app weights fall below a pixel and smear into grey. -->
+  <defs>
+    <linearGradient id="edge" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#555555"/>
+    </linearGradient>
+  </defs>
+  <rect x="3" y="3" width="294" height="294" rx="75" fill="#0a0a0a" stroke="url(#edge)" stroke-width="6"/>
+  <g transform="translate(150, 150)">
+    <circle r="95" fill="none" stroke="#ffffff" stroke-width="10" opacity="0.85"/>
+    <circle cx="67" cy="-67" r="26" fill="#0a0a0a"/>
+    <circle cx="67" cy="-67" r="16" fill="#ffffff"/>
+    <circle r="30" fill="#ffffff"/>
+    <circle r="13" fill="#0a0a0a"/>
+  </g>
+</svg>

@@ -9,6 +9,10 @@ import { useState } from "react";
 import type { ObserverLocation } from "../lib/satellites";
 import { requestBrowserLocation, requestIpLocation, parseCoordinateText } from "../lib/observerLocation";
 
+const actionButton =
+  "cursor-pointer rounded-sm border-0 bg-[color-mix(in_srgb,var(--ink)_10%,var(--surface))] font-sans text-[12.5px] font-semibold text-foreground";
+const sourceButton = `${actionButton} flex-1 py-[9px] [transition:background_120ms_ease] enabled:hover:bg-[color-mix(in_srgb,var(--ink)_16%,var(--surface))] disabled:cursor-default disabled:opacity-50`;
+
 export function LocationSetup({ onLocationSaved }: { onLocationSaved: (location: ObserverLocation) => void }) {
   const [coordinateText, setCoordinateText] = useState("");
   const [errorText, setErrorText] = useState<string | null>(null);
@@ -46,13 +50,13 @@ export function LocationSetup({ onLocationSaved }: { onLocationSaved: (location:
   };
 
   return (
-    <div className="location-setup">
-      <p>
+    <div className="mt-3 flex flex-col gap-2.5 rounded-lg bg-[color-mix(in_srgb,var(--ink)_5%,var(--surface))] px-[13px] py-3">
+      <p className="text-[12.5px] leading-[1.5] text-[var(--ink-secondary)]">
         Live satellites need your dish's coordinates — SpaceX no longer exposes GPS to consumer plans over
         the local API. Tip: long-press your home in Google Maps, or open the iPhone <strong>Compass</strong>{" "}
         app, and paste what it shows.
       </p>
-      <div className="location-manual">
+      <div className="flex gap-2">
         <input
           type="text"
           inputMode="text"
@@ -63,18 +67,21 @@ export function LocationSetup({ onLocationSaved }: { onLocationSaved: (location:
             if (keyEvent.key === "Enter") submitPasted();
           }}
           aria-label="Latitude, longitude"
+          className="min-w-0 flex-1 rounded-sm border border-[var(--baseline)] bg-card px-2.5 py-[7px] font-mono text-[12px] text-foreground focus:border-[var(--ink)] focus:outline-none"
         />
-        <button onClick={submitPasted}>Save</button>
+        <button onClick={submitPasted} className={`${actionButton} px-4`}>
+          Save
+        </button>
       </div>
-      <div className="location-buttons">
-        <button onClick={useBrowserLocation} disabled={busySource !== null}>
+      <div className="flex gap-2">
+        <button onClick={useBrowserLocation} disabled={busySource !== null} className={sourceButton}>
           {busySource === "device" ? "Locating…" : "Use this device's location"}
         </button>
-        <button onClick={useIpLocation} disabled={busySource !== null}>
+        <button onClick={useIpLocation} disabled={busySource !== null} className={sourceButton}>
           {busySource === "ip" ? "Looking up…" : "Approximate from IP"}
         </button>
       </div>
-      {errorText && <div className="location-error">{errorText}</div>}
+      {errorText && <div className="text-[12px] text-[var(--status-critical)]">{errorText}</div>}
     </div>
   );
 }

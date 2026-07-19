@@ -1,12 +1,24 @@
 // Data usage sheet: self-measured download/upload volume from the collector,
 // in the layout of the Starlink account page's usage chart — headline GB,
-// range tabs, stacked down/up bars. Clearly labeled as measured by Dishboard
+// range tabs, stacked down/up bars. Clearly labeled as measured by DishyLink
 // (Starlink's own billing meter is cloud-side and not exposed locally).
 
 import { useState } from "react";
 import { useDataUsage, type UsageBucket } from "../hooks/useDataUsage";
 import type { EnergyRange } from "../hooks/useEnergyHistory";
 import { RANGE_TABS, RangeBars, bucketLabel, type RangeBarColumn } from "./RangeBarChart";
+import { SegmentedControl } from "./ui/segmented-control";
+import { Callout } from "./ui/callout";
+import { Explainer } from "./ui/explainer";
+import { FigureRow } from "./ui/figure-row";
+import { CloudDataUsage } from "./CloudDataUsage";
+
+type UsageSource = "local" | "cloud";
+
+const SOURCE_TABS = [
+  { label: "Local Session", value: "local" as const },
+  { label: "Starlink billing", value: "cloud" as const },
+];
 
 function formatGB(gigabytes: number): string {
   if (gigabytes >= 100) return gigabytes.toFixed(0);
@@ -32,85 +44,91 @@ function UsageBars({ buckets, range }: { buckets: UsageBucket[]; range: EnergyRa
         // bar claiming no traffic passed.
         <div style={{ height: "100%", width: "100%", background: "var(--ink-muted)", opacity: 0.06 }} />
       ) : (
-        <div className="usage-bar-stack" style={{ height: `${(total / maxTotalGB) * 100}%` }}>
+        <div
+          className="flex min-h-0.5 w-full flex-col overflow-hidden rounded-t-[3px]"
+          style={{ height: `${(total / maxTotalGB) * 100}%` }}
+        >
           <div
-            className="usage-bar-up"
+            className="min-h-0 bg-[var(--chart-warm)]"
             style={{ height: `${((bucket.upGB ?? 0) / Math.max(total, 1e-9)) * 100}%` }}
           />
-          <div className="usage-bar-down" style={{ flex: 1 }} />
+          <div className="bg-[var(--chart-ink)] opacity-75" style={{ flex: 1 }} />
         </div>
       ),
     };
   });
-  return <RangeBars columns={columns} range={range} />;
+  return (
+    <RangeBars
+      columns={columns}
+      range={range}
+      heightPx={150}
+      yAxis={{ max: maxTotalGB, format: (v) => `${formatGB(v)} GB` }}
+    />
+  );
 }
 
 export function DataUsagePanel() {
+  const [source, setSource] = useState<UsageSource>("local");
+
+  return (
+    <div>
+      <SegmentedControl
+        options={SOURCE_TABS}
+        value={source}
+        onChange={setSource}
+        label="Data usage source"
+        variant="glider"
+        className="mb-1"
+      />
+      {source === "local" ? <LocalDataUsage /> : <CloudDataUsage active={source === "cloud"} />}
+    </div>
+  );
+}
+
+function LocalDataUsage() {
   const [range, setRange] = useState<EnergyRange>("today");
   const { data, unavailable } = useDataUsage(range, true);
   const coveragePct = data ? Math.round(data.coverage.fraction * 100) : 0;
 
   if (unavailable) {
     return (
-      <p className="energy-history-hint">
-        Data usage needs the collector running. Start it with <code>npm run collector</code> and Dishboard
+      <Callout className="mt-2.5">
+        Data usage needs the collector running. Start it with <code>npm run collector</code> and DishyLink
         will meter traffic from now on.
-      </p>
+      </Callout>
     );
   }
 
   return (
     <div>
-      <div className="detail-figures">
-        <div className="detail-figure">
-          <div className="detail-figure-value">
-            {data ? formatGB(data.totalDownGB) : "—"}
-            <span className="detail-figure-unit">GB</span>
-          </div>
-          <div className="detail-figure-label">↓ Download</div>
-        </div>
-        <div className="detail-figure-divider" />
-        <div className="detail-figure">
-          <div className="detail-figure-value">
-            {data ? formatGB(data.totalUpGB) : "—"}
-            <span className="detail-figure-unit">GB</span>
-          </div>
-          <div className="detail-figure-label">↑ Upload</div>
-        </div>
-        <div className="detail-figure-divider" />
-        <div className="detail-figure">
-          <div className="detail-figure-value">
-            {data ? formatGB(data.totalDownGB + data.totalUpGB) : "—"}
-            <span className="detail-figure-unit">GB</span>
-          </div>
-          <div className="detail-figure-label">Total</div>
-        </div>
-      </div>
-
-      <div className="window-picker detail-window-picker">
-        {RANGE_TABS.map((tab) => (
-          <button key={tab.value} className={range === tab.value ? "active" : ""} onClick={() => setRange(tab.value)}>
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <FigureRow
+        figures={[
+          { label: "↓ Download", value: data ? formatGB(data.totalDownGB) : "—", unit: "GB" },
+          { label: "↑ Upload", value: data ? formatGB(data.totalUpGB) : "—", unit: "GB" },
+          { label: "Total", value: data ? formatGB(data.totalDownGB + data.totalUpGB) : "—", unit: "GB" },
+        ]}
+      />
+      <SegmentedControl
+        options={RANGE_TABS}
+        value={range}
+        onChange={setRange}
+        label="Data usage range"
+        className="mb-2.5"
+      />
 
       {data && <UsageBars buckets={data.buckets} range={range} />}
       {data && (
-        <div className="energy-history-coverage">
+        <div className="mt-0.5 text-[12px] font-medium text-muted-foreground">
           collected {coveragePct}% of this period
           {coveragePct < 95 && " — totals cover only the time the collector was running"}
         </div>
       )}
 
-      <div className="detail-explainer">
-        <div className="detail-explainer-title">How is this measured?</div>
-        <p>
-          Dishboard integrates the dish's own per-second throughput telemetry into per-minute volume, on
-          this machine. It tracks your real traffic from the moment the collector started — it is not
-          Starlink's billing meter, which lives in their cloud and counts in UTC.
-        </p>
-      </div>
+      <Explainer title="How is this measured?">
+        DishyLink integrates the dish's own per-second throughput telemetry into per-minute volume, on this
+        machine. It tracks your real traffic from the moment the collector started — it is not Starlink's
+        billing meter, which lives in their cloud and counts in UTC.
+      </Explainer>
     </div>
   );
 }

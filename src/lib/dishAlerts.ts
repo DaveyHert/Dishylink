@@ -15,8 +15,18 @@ export interface AlertSpec {
   key: string;
   /** Shown when the flag is false — phrased as the good news, like the app. */
   ok: string;
-  /** Shown when the flag is true. Plain language: what is wrong, in the user's terms. */
+  /**
+   * Shown when the flag is true. Plain language: what is wrong, in the user's
+   * terms — the condition only. It is the alert's one message, used verbatim
+   * live and in history, so the same event never reads two different ways.
+   */
   firing: string;
+  /**
+   * What to do about it, if there is anything. Kept out of `firing` so the
+   * message stays a statement of fact: an instruction is useful next to a live
+   * alert and noise against one that cleared an hour ago. Surfaced on the ⓘ.
+   */
+  advice?: string;
   severity: AlertSeverity;
   /** Worth interrupting someone with a desktop notification. */
   notify?: boolean;
@@ -26,14 +36,14 @@ export interface AlertSpec {
 export const DISH_ALERTS: AlertSpec[] = [
   {
     key: "dishWaterDetected",
-    ok: "Dish is dry",
+    ok: "No water inside the dish",
     firing: "Water detected inside the dish",
     severity: "critical",
     notify: true,
   },
   {
     key: "routerWaterDetected",
-    ok: "Router is dry",
+    ok: "No water inside the router",
     firing: "Water detected inside the router",
     severity: "critical",
     notify: true,
@@ -83,7 +93,8 @@ export const DISH_ALERTS: AlertSpec[] = [
   {
     key: "slowEthernetSpeeds100",
     ok: "Ethernet running at full speed",
-    firing: "Ethernet is capped at 100 Mbps — check the cable",
+    firing: "Ethernet is capped at 100 Mbps",
+    advice: "Check the cable between the dish and the router.",
     severity: "warning",
   },
   {
@@ -107,7 +118,9 @@ export const DISH_ALERTS: AlertSpec[] = [
   {
     key: "lowerSignalThanPredicted",
     ok: "Signal as predicted",
-    firing: "Signal is weaker than predicted — check for obstructions",
+    firing: "Weather interference",
+    advice:
+      "Heavy rain, snow, or thick cloud is weakening the signal below what the dish predicted — it clears when the weather does. If skies are clear, check the dish's view of the sky for new obstructions.",
     severity: "warning",
   },
   {
@@ -208,7 +221,8 @@ export const ROUTER_ALERTS: AlertSpec[] = [
   {
     key: "highCablePingDropRate",
     ok: "Cable link clean",
-    firing: "Cable is dropping pings — check the Starlink cable",
+    firing: "Cable is dropping pings",
+    advice: "Check the Starlink cable and its connections at both ends.",
     severity: "warning",
     notify: true,
   },
@@ -293,17 +307,21 @@ export const ROUTER_ALERTS: AlertSpec[] = [
   },
 ];
 
+/** The two real devices, plus "system" for alerts the app raises about itself
+ *  (e.g. the history recorder being down) rather than reading off a device. */
+export type AlertSource = "dish" | "router" | "system";
+
 export interface AlertState extends AlertSpec {
   active: boolean;
-  /** "dish" | "router" — both devices use overlapping keys (e.g. thermalThrottle). */
-  source: "dish" | "router";
+  /** Both devices use overlapping keys (e.g. thermalThrottle), so source disambiguates. */
+  source: AlertSource;
 }
 
 /** Fold a device's raw alert booleans against its catalogue. Absent = clear. */
 export function resolveAlerts(
   specs: AlertSpec[],
   alerts: Record<string, boolean> | undefined,
-  source: AlertState["source"],
+  source: AlertSource,
 ): AlertState[] {
   return specs.map((spec) => ({ ...spec, source, active: alerts?.[spec.key] === true }));
 }

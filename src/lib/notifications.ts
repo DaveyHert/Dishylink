@@ -29,7 +29,7 @@ export async function toggleNotifications(): Promise<boolean> {
   const granted = permission === "granted";
   localStorage.setItem(ENABLED_STORAGE_KEY, granted ? "on" : "off");
   if (granted) {
-    sendNotification("test", "Notifications on", "Dishboard will alert you about Starlink outages.");
+    sendNotification("test", "Notifications on", "DishyLink will alert you about Starlink outages.");
   }
   return granted;
 }

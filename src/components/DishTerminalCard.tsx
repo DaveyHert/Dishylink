@@ -2,10 +2,8 @@
 
 import type { DishStatusJson, DishReadyStatesJson } from "../lib/dishClient";
 import { formatUptime } from "../lib/format";
-
-function humanizeAlertKey(alertKey: string): string {
-  return alertKey.replace(/([A-Z])/g, " $1").toLowerCase().trim();
-}
+import { FactGrid, FactRow } from "./ui/fact-row";
+import { DishIcon } from "./icons/DishIcon";
 
 /** Plan tier. The API's CONSUMER is what the Starlink app labels "Residential". */
 function formatServiceClass(classOfService?: string): string {
@@ -83,27 +81,28 @@ function signalCondition(status: DishStatusJson): DeviceFact {
     return { label: "Signal", value: "weak — below noise floor", tone: "bad" };
   }
   if (status.isSnrAboveNoiseFloor) {
-    return { label: "Signal", value: "clear", tone: "good" };
+    return { label: "Signal", value: "normal", tone: "good" };
   }
   return { label: "Signal", value: "—" };
 }
 
-export function DevicePanel({
+export function DishTerminalCard({
   status,
   expanded = false,
+  stale = false,
   onExpand,
 }: {
   status: DishStatusJson;
   /** True in the popup: renders bare (no card chrome/title) inside the sheet.
    *  Both views show every fact; the sheet just gives it its own width. */
   expanded?: boolean;
+  /** True while the dish isn't answering: the facts below are the last known
+   *  snapshot, not live, and the header says so. */
+  stale?: boolean;
   /** When set on the card, an expand icon opens the full popup view. */
   onExpand?: () => void;
 }) {
   const alignment = status.alignmentStats;
-  const activeAlerts = Object.entries(status.alerts ?? {})
-    .filter(([, isActive]) => isActive)
-    .map(([alertKey]) => humanizeAlertKey(alertKey));
 
   const facts: DeviceFact[] = [
     signalCondition(status),
@@ -158,41 +157,52 @@ export function DevicePanel({
         : null;
 
   return (
-    <div className={expanded ? "" : "card span-12"}>
-      <div className="card-header">
-        {!expanded && <span className="card-title">Starlink Dish Terminal</span>}
-        <div className="device-header-right">
-          <span className="card-meta mono-value">{status.deviceInfo?.id ?? ""}</span>
+    <div className={expanded ? "" : "col-span-12 min-w-0 rounded-xl bg-card px-[18px] py-4"}>
+      <div className="mb-2.5 flex items-center justify-between gap-3">
+        {!expanded && (
+          <span className="flex items-center gap-2 text-[16px] font-semibold tracking-[0.005em] text-foreground">
+            <DishIcon size={26} className={stale ? "opacity-40" : undefined} />
+            Starlink Dish Terminal
+          </span>
+        )}
+        <div className="flex items-center gap-2.5">
+          {/* Same wording as the alerts panel's Status header for this state. */}
+          {stale && (
+            <span className="text-[12px] font-medium" style={{ color: "var(--status-critical)" }}>
+              not answering · last known
+            </span>
+          )}
+          <span className="font-mono text-[12px] font-medium text-muted-foreground tabular-nums">
+            {status.deviceInfo?.id ?? ""}
+          </span>
           {onExpand && (
-            <button className="device-expand" onClick={onExpand} aria-label="Open full terminal view">
+            <button
+              className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-muted-foreground transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_8%,var(--surface))] hover:text-foreground"
+              onClick={onExpand}
+              aria-label="Open full terminal view"
+            >
               <ExpandIcon />
             </button>
           )}
         </div>
       </div>
-      {updateBanner && <div className="device-update-banner">↻ {updateBanner}</div>}
-      <div className="device-grid">
+      {updateBanner && (
+        <div className="mb-3 flex items-center gap-2 rounded-md bg-[color-mix(in_srgb,var(--chart-warm)_14%,var(--surface))] px-3 py-[9px] text-[13px] font-semibold text-[color:var(--chart-warm)]">
+          ↻ {updateBanner}
+        </div>
+      )}
+      <FactGrid columns={3}>
         {facts.map((fact) => (
-          <div className="device-row" key={fact.label}>
-            <span className="device-label">{fact.label}</span>
+          <FactRow key={fact.label} label={fact.label}>
             <span
-              className="mono-value"
+              className="overflow-hidden text-right font-mono text-[12px] text-ellipsis whitespace-nowrap text-foreground tabular-nums"
               style={fact.tone ? { color: `var(${TONE_VAR[fact.tone]})` } : undefined}
             >
               {fact.value}
             </span>
-          </div>
+          </FactRow>
         ))}
-      </div>
-      {activeAlerts.length > 0 && (
-        <div className="alert-chips">
-          {activeAlerts.map((alertName) => (
-            <span className="alert-chip" key={alertName}>
-              ⚠ {alertName}
-            </span>
-          ))}
-        </div>
-      )}
+      </FactGrid>
     </div>
   );
 }

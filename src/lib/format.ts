@@ -34,12 +34,35 @@ export function formatDurationMs(durationMs: number): string {
   return `${Math.floor(durationMs / 60_000)}m ${Math.round((durationMs % 60_000) / 1000)}s`;
 }
 
+/** Event-log duration the way the official app shows it: whole seconds (no ms),
+ *  rounded up so a sub-second blip still reads "1s" rather than "0s".
+ *
+ *  Point-in-time events have no duration at all — the router logs power cycles
+ *  and band switches with `durationNs: 0` — and get an empty string. Rounding
+ *  those up to "1s" would state a length the event never had. */
+export function formatEventDuration(durationMs: number): string {
+  if (durationMs <= 0) return "";
+  const totalSeconds = Math.max(1, Math.round(durationMs / 1000));
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes < 60) return seconds ? `${minutes}m ${seconds}s` : `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remMinutes = minutes % 60;
+  return remMinutes ? `${hours}h ${remMinutes}m` : `${hours}h`;
+}
+
 export function formatClockTime(timestampMs: number): string {
   return new Date(timestampMs).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+/** Hour and minute only, no seconds ("5:48 PM"), as the official app shows event times. */
+export function formatClockTimeShort(timestampMs: number): string {
+  return new Date(timestampMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
 /** The dish's `hasActuators` enum ("HAS_ACTUATORS_YES"/"_NO") → plain Yes/No.

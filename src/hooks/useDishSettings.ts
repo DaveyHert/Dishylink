@@ -51,12 +51,14 @@ export function useDishSettings(active: boolean): DishSettingsState {
         await dishClient.setConfig(changes);
         await loadConfig();
       } catch (saveError) {
-        // Status 7 = the dish's local-access lock, same one that gates
-        // get_location — not a bug in the request.
+        // Status 7 = the firmware's LAN write lock (measured 2026-07: every
+        // write RPC on dish and router refuses LAN callers; only the official
+        // app's cloud path can write). Nothing local unlocks it — not a bug in
+        // the request, and no setting to flip.
         if (saveError instanceof GrpcWebError && saveError.grpcStatus === 7) {
           setError(
-            "The dish refused the write (permission denied). Config changes over the local network are locked on this " +
-              "firmware/plan — flip “Allow access on local network” in the official app (Settings → Advanced), then retry.",
+            "The dish refused the write (permission denied). Starlink's current firmware only accepts config changes " +
+              "through its own cloud, so local tools are read-only here — use the official Starlink app to change this.",
           );
         } else {
           setError(`Dish refused the change: ${(saveError as Error).message}`);

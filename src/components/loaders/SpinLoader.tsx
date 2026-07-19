@@ -1,31 +1,23 @@
 import { motion, useReducedMotion } from "motion/react";
 
 /**
- * SpinLoader — four classic spinner treatments behind one `variant` prop.
- * Separate from JobMateLoader (the elaborate mark-tracing loader); this is the
- * lightweight, "just a spinner" set.
+ * SpinLoader — three spinner treatments behind one `variant` prop.
  *
  *   "conic"    — a gradient arc sweeping around a ring. The quietest option.
  *   "activity" — twelve fading spokes rotating around a center (Apple style).
- *   "orbit"    — a segment ring turning around the fixed JobMate mark.
  *   "segment"  — a solid track with one bright arc. The universal workhorse.
  *
- * Everything paints in the brand indigo (`--color-brand-accent`), set once on
- * the root `color` so children inherit it via `currentColor`. Respects
- * `prefers-reduced-motion` by holding a static frame.
+ * Everything paints in the inherited text color, and holds a static frame under
+ * `prefers-reduced-motion`.
  */
 
-// The JobMate mark — first path of JobMateLogo.tsx, centred in a 47×47 box.
-const MARK_PATH =
-  "M23.4468 3.9078H41.0319V16.9338V29.9598H23.4468V42.9858H5.86169V29.9598V16.9338H23.4468V3.9078Z";
-
-const BRAND_INK = "var(--color-brand-accent)";
+const INK = "currentColor";
 // Faint same-hue track, so the ring reads on both light and dark grounds.
-const TRACK = "color-mix(in srgb, var(--color-brand-accent) 16%, transparent)";
+const TRACK = "color-mix(in srgb, currentColor 16%, transparent)";
 
 const SPIN = { duration: 1, repeat: Infinity, ease: "linear" as const };
 
-export type SpinLoaderVariant = "conic" | "activity" | "orbit" | "segment";
+export type SpinLoaderVariant = "conic" | "activity" | "segment";
 
 interface SpinLoaderProps {
   size?: number;
@@ -41,8 +33,6 @@ export function SpinLoader({ size = 48, variant = "conic", label = "Loading" }: 
   switch (variant) {
     case "activity":
       return <ActivitySpinner {...shared} />;
-    case "orbit":
-      return <OrbitSpinner {...shared} />;
     case "segment":
       return <SegmentSpinner {...shared} />;
     default:
@@ -69,8 +59,9 @@ function ConicSpinner({ size, reduce, label }: VariantProps) {
       style={{
         width: size,
         height: size,
+        flex: "none",
         borderRadius: "50%",
-        background: `conic-gradient(from 0deg, transparent 0%, ${BRAND_INK} 85%, ${BRAND_INK} 100%)`,
+        background: `conic-gradient(from 0deg, transparent 0%, ${INK} 85%, ${INK} 100%)`,
         WebkitMask: ringMask,
         mask: ringMask,
       }}
@@ -91,43 +82,14 @@ function SegmentSpinner({ size, reduce, label }: VariantProps) {
       style={{
         width: size,
         height: size,
+        flex: "none",
         borderRadius: "50%",
         border: `${width}px solid ${TRACK}`,
-        borderTopColor: BRAND_INK,
+        borderTopColor: INK,
       }}
       animate={reduce ? undefined : { rotate: 360 }}
       transition={reduce ? undefined : { ...SPIN, duration: 0.8 }}
     />
-  );
-}
-
-// ── orbit ──────────────────────────────────────────────────────────────────
-// A segment ring turning around the fixed JobMate mark.
-function OrbitSpinner({ size, reduce, label }: VariantProps) {
-  const width = Math.max(4, Math.round(size * 0.055));
-  const markSize = Math.round(size * 0.46);
-  return (
-    <div
-      role="status"
-      aria-label={label}
-      style={{ position: "relative", width: size, height: size, display: "grid", placeItems: "center" }}
-    >
-      <motion.div
-        aria-hidden
-        style={{
-          position: "absolute",
-          inset: 0,
-          borderRadius: "50%",
-          border: `${width}px solid ${TRACK}`,
-          borderTopColor: BRAND_INK,
-        }}
-        animate={reduce ? undefined : { rotate: 360 }}
-        transition={reduce ? undefined : { ...SPIN, duration: 0.9 }}
-      />
-      <svg width={markSize} height={markSize} viewBox="0 0 47 47" fill="currentColor" style={{ color: BRAND_INK }}>
-        <path fillRule="evenodd" clipRule="evenodd" d={MARK_PATH} />
-      </svg>
-    </div>
   );
 }
 
@@ -139,11 +101,7 @@ function ActivitySpinner({ size, reduce, label }: VariantProps) {
   const spokeHeight = size * 0.2727;
 
   return (
-    <div
-      role="status"
-      aria-label={label}
-      style={{ position: "relative", width: size, height: size }}
-    >
+    <div role="status" aria-label={label} style={{ position: "relative", width: size, height: size, flex: "none" }}>
       {Array.from({ length: 12 }, (_, spoke) => (
         <motion.span
           key={spoke}
@@ -157,16 +115,12 @@ function ActivitySpinner({ size, reduce, label }: VariantProps) {
             marginTop: -pivot,
             marginLeft: -spokeWidth / 2,
             borderRadius: spokeWidth,
-            background: BRAND_INK,
+            background: INK,
             transformOrigin: `${spokeWidth / 2}px ${pivot}px`,
             transform: `rotate(${spoke * 30}deg)`,
           }}
           animate={reduce ? undefined : { opacity: [1, 0.15] }}
-          transition={
-            reduce
-              ? undefined
-              : { duration: 1, repeat: Infinity, ease: "linear", delay: -((11 - spoke) / 12) }
-          }
+          transition={reduce ? undefined : { duration: 1, repeat: Infinity, ease: "linear", delay: -((11 - spoke) / 12) }}
         />
       ))}
     </div>

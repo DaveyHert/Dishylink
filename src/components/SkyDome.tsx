@@ -8,6 +8,9 @@
 // Hand-rolled orthographic projection on 2D canvas; drag to orbit and tilt.
 
 import { useEffect, useRef, useCallback, useState, useMemo } from "react";
+import { Callout } from "./ui/callout";
+import { SectionCard } from "./ui/section-card";
+import { Loading } from "./ui/loading";
 import type {
   DishObstructionMapJson,
   DishObstructionStatsJson,
@@ -24,6 +27,9 @@ import {
   unpackCells,
   CELL_UNMAPPED,
   CELL_CLEAR,
+  CELL_PARTIAL,
+  OBSTRUCTED_FRACTION_FLOOR,
+  PARTIAL_FRACTION_CEILING,
   type ObstructionSnapshot,
 } from "../lib/obstructionSnapshots";
 
@@ -44,7 +50,7 @@ interface SkyDomeProps {
   caption?: string;
 }
 
-type DomePointKind = "clear" | "obstructed" | "unmapped";
+type DomePointKind = "clear" | "partial" | "obstructed" | "unmapped";
 
 interface DomePoint {
   x: number; // east
@@ -58,6 +64,14 @@ interface TrailPoint {
   elevationDeg: number;
   atMs: number;
 }
+
+// Legend and stats shared by the standard card and the immersive sheet.
+const skyLegend = "flex flex-wrap gap-x-4 gap-y-2.5 pt-1";
+const skyStats = "mt-2.5 grid grid-cols-2 gap-x-3.5 gap-y-2";
+const legendItem = "inline-flex items-center gap-[7px] text-[12.5px] font-medium text-[var(--ink-secondary)]";
+const legendCell = "size-[9px] flex-none rounded-full";
+// Satellite pill (DTC / serving) — same frame, color set by which one it is.
+const satTag = "rounded border px-[5px] py-px font-mono text-[8.5px] uppercase tracking-[0.08em]";
 
 const STANDARD_CANVAS_SIZE = 330;
 const IMMERSIVE_CANVAS_SIZE = 540;
@@ -122,7 +136,9 @@ function liveKindAtCell(grid: number[], gridSize: number) {
   return (rowIndex: number, columnIndex: number): DomePointKind => {
     const fractionUsable = grid[rowIndex * gridSize + columnIndex];
     if (fractionUsable < 0) return "unmapped";
-    return 1 - fractionUsable > 0.005 ? "obstructed" : "clear";
+    const obstructedFraction = 1 - fractionUsable;
+    if (obstructedFraction <= OBSTRUCTED_FRACTION_FLOOR) return "clear";
+    return obstructedFraction <= PARTIAL_FRACTION_CEILING ? "partial" : "obstructed";
   };
 }
 
@@ -130,7 +146,8 @@ function snapshotKindAtCell(cells: Uint8Array, gridSize: number) {
   return (rowIndex: number, columnIndex: number): DomePointKind => {
     const cellKind = cells[rowIndex * gridSize + columnIndex];
     if (cellKind === CELL_UNMAPPED) return "unmapped";
-    return cellKind === CELL_CLEAR ? "clear" : "obstructed";
+    if (cellKind === CELL_CLEAR) return "clear";
+    return cellKind === CELL_PARTIAL ? "partial" : "obstructed";
   };
 }
 
@@ -282,14 +299,21 @@ export function SkyDome({
     projectedDots.sort((first, second) => second.depth - first.depth);
     for (const dot of projectedDots) {
       const nearness = 1 - (dot.depth + 1) / 2;
-      const dotRadius =
-        (dot.kind === "obstructed" ? 2.4 : 1.7) * pixelRatio * (0.72 + 0.5 * nearness);
+      // Partial sits between clear and obstructed on both size and weight, so
+      // a thin branch reads as lighter than a roofline instead of identical.
+      const kindRadius = dot.kind === "obstructed" ? 2.4 : dot.kind === "partial" ? 2.05 : 1.7;
+      const dotRadius = kindRadius * pixelRatio * (0.72 + 0.5 * nearness);
       if (dot.kind === "unmapped") {
         context.fillStyle = mutedColor;
         context.globalAlpha = 0.16 + 0.12 * nearness;
       } else if (dot.kind === "obstructed") {
         context.fillStyle = criticalColor;
         context.globalAlpha = 0.85 + 0.15 * nearness;
+      } else if (dot.kind === "partial") {
+        // Same hue as a full obstruction, carried lighter — warm is spoken for
+        // by the serving satellite, and partial belongs in the obstruction family.
+        context.fillStyle = criticalColor;
+        context.globalAlpha = 0.4 + 0.2 * nearness;
       } else {
         context.fillStyle = inkColor;
         context.globalAlpha = 0.5 + 0.5 * nearness;
@@ -543,7 +567,9 @@ export function SkyDome({
       const snapshot = snapshots[scrubIndex];
       pointsRef.current = buildDomePoints(
         snapshot.gridSize,
-        obstructionMap?.maxThetaDeg ?? 80,
+        // The angle this grid was captured at. Snapshots taken before that was
+        // recorded fall back to the live map, which is the best guess available.
+        snapshot.maxThetaDeg ?? obstructionMap?.maxThetaDeg ?? 80,
         snapshotKindAtCell(unpackCells(snapshot), snapshot.gridSize),
       );
     } else if (obstructionMap?.snr) {
@@ -692,15 +718,27 @@ export function SkyDome({
   const validHours = (obstructionStats?.validS ?? 0) / 3600;
   const { stats, feedState } = satellites;
 
-  const immersiveNote = isViewingHistory
-    ? `Viewing the obstruction map as of ${new Date(snapshots[scrubIndex].takenAtMs).toLocaleString()}.`
+  /**
+   * The note under the immersive dome reports three different KINDS of thing —
+   * advice, a pending fetch, and a failure. They used to be one string in one ⓘ box,
+   * so "couldn't load ephemerides" was dressed as a helpful tip.
+   */
+  const immersiveNote: { kind: "info" | "loading" | "error"; text: string } = isViewingHistory
+    ? {
+        kind: "info",
+        text: `Viewing the obstruction map as of ${new Date(snapshots[scrubIndex].takenAtMs).toLocaleString()}.`,
+      }
     : feedState === "loading"
-      ? "Loading SpaceX's published constellation ephemerides…"
+      ? { kind: "loading", text: "Loading SpaceX's published constellation ephemerides…" }
       : feedState === "error"
-        ? "Couldn't load satellite ephemerides — check the internet connection and reload."
-        : fractionObstructed < 0.005
-          ? "Your Starlink has an unobstructed view of the sky. The orange beam marks the best unobstructed satellite."
-          : "Obstructed patches cause brief interruptions as satellites pass behind them. The orange beam marks the best unobstructed satellite.";
+        ? { kind: "error", text: "Couldn't load satellite ephemerides — check the internet connection and reload." }
+        : {
+            kind: "info",
+            text:
+              fractionObstructed < 0.005
+                ? "Your Starlink has an unobstructed view of the sky. The orange beam marks the best unobstructed satellite."
+                : "Obstructed patches cause brief interruptions as satellites pass behind them. The orange beam marks the best unobstructed satellite.",
+          };
   const standardNote =
     fractionObstructed < 0.005
       ? "Your Starlink has an unobstructed view of the sky. The map becomes more accurate as the dish collects data."
@@ -710,6 +748,7 @@ export function SkyDome({
     obstructionMap?.snr || isViewingHistory ? (
       <canvas
         ref={canvasRef}
+        className='max-w-full cursor-grab touch-none active:cursor-grabbing'
         style={{ width: canvasSize, height: canvasSize }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -717,21 +756,28 @@ export function SkyDome({
         onPointerCancel={handlePointerUp}
       />
     ) : (
-      <div className='empty-note'>waiting for obstruction data…</div>
+      <Loading message='Waiting for obstruction data…' />
     );
 
   const baseLegend = (
     <>
-      <span className='legend-item'>
-        <span className='legend-cell' style={{ background: "var(--ink-muted)", opacity: 0.45 }} />
+      <span className={legendItem}>
+        <span className={legendCell} style={{ background: "var(--ink-muted)", opacity: 0.45 }} />
         Unmapped
       </span>
-      <span className='legend-item'>
-        <span className='legend-cell' style={{ background: "var(--chart-ink)" }} />
+      <span className={legendItem}>
+        <span className={legendCell} style={{ background: "var(--chart-ink)" }} />
         Clear view
       </span>
-      <span className='legend-item'>
-        <span className='legend-cell' style={{ background: "var(--status-critical)" }} />
+      <span className={legendItem}>
+        <span
+          className={legendCell}
+          style={{ background: "color-mix(in srgb, var(--status-critical) 45%, transparent)" }}
+        />
+        Partial
+      </span>
+      <span className={legendItem}>
+        <span className={legendCell} style={{ background: "var(--status-critical)" }} />
         Obstructions
       </span>
     </>
@@ -740,67 +786,75 @@ export function SkyDome({
   const baseStats = (
     <>
       <div className='skydome-stat'>
-        <span className='stat-caption'>Sky obstructed</span>
-        <span className='mono-value'>{(fractionObstructed * 100).toFixed(2)}%</span>
+        <span className='block text-[11.5px] font-medium text-muted-foreground'>Sky obstructed</span>
+        <span className='font-mono text-[16px] font-semibold tabular-nums'>
+          {(fractionObstructed * 100).toFixed(2)}%
+        </span>
       </div>
       <div className='skydome-stat'>
-        <span className='stat-caption'>Observed for</span>
-        <span className='mono-value'>{validHours.toFixed(1)} h</span>
+        <span className='block text-[11.5px] font-medium text-muted-foreground'>Observed for</span>
+        <span className='font-mono text-[16px] font-semibold tabular-nums'>{validHours.toFixed(1)} h</span>
       </div>
     </>
   );
 
   if (!isImmersive) {
     return (
-      <div className='card row-span-2 span-4'>
-        <div className='card-header'>
-          <span className='card-title'>Obstructions</span>
-          <button className='card-link' onClick={onOpenImmersive}>
+      <SectionCard
+        title='Obstructions'
+        className='row-span-2 col-span-4'
+        headerAction={
+          <button
+            className='cursor-pointer border-0 bg-transparent p-0 font-sans text-[13px] font-semibold text-[var(--accent)] transition-[color,opacity] duration-[120ms] hover:opacity-75'
+            onClick={onOpenImmersive}
+          >
             Satellite view ›
           </button>
-        </div>
-        <div className='skydome-canvas-wrap'>{domeCanvas}</div>
-        <div className='skydome-legend'>{baseLegend}</div>
-        <div className='skydome-stats'>{baseStats}</div>
-        <div className='skydome-note'>
-          <span aria-hidden='true'>ⓘ</span>
-          <span>{standardNote}</span>
-        </div>
-      </div>
+        }
+      >
+        <div className='relative flex justify-center pt-0.5 pb-2'>{domeCanvas}</div>
+        <div className={skyLegend}>{baseLegend}</div>
+        <div className={skyStats}>{baseStats}</div>
+        <Callout className='mt-3'>{standardNote}</Callout>
+      </SectionCard>
     );
   }
 
   return (
-    <div className='skydome-immersive'>
+    <div>
       {(caption || (feedState === "active" && observerLocation)) && (
         // Caption and site line are ends of one row: the caption is the sheet's
         // sub-title, so it must sit on the title's baseline row, not above it.
-        <div
-          className='card-header'
-          style={{ marginBottom: 0, justifyContent: "space-between", gap: 12 }}
-        >
-          <span className='stat-caption'>{caption}</span>
+        <div className='flex items-center justify-between gap-3'>
+          <span className='text-[11.5px] font-medium text-muted-foreground'>{caption}</span>
           {feedState === "active" && observerLocation && (
-            <span className='site-line' style={{ marginTop: 0, flexShrink: 0 }}>
-              <span className='stat-caption'>
+            <span className='flex shrink-0 items-center gap-2'>
+              <span className='text-[11.5px] font-medium text-muted-foreground'>
                 site {observerLocation.latitudeDeg.toFixed(4)},{" "}
                 {observerLocation.longitudeDeg.toFixed(4)}
               </span>
-              <button className='site-change' onClick={onClearLocation}>
+              <button
+                className='cursor-pointer border-0 bg-transparent p-0 font-sans text-[11.5px] font-semibold text-muted-foreground underline underline-offset-2 hover:text-foreground'
+                onClick={onClearLocation}
+              >
                 change
               </button>
             </span>
           )}
         </div>
       )}
-      <div className='skydome-canvas-wrap' style={{ position: "relative" }}>
+      <div className='relative flex justify-center pt-2 pb-3'>
         {domeCanvas}
-        <div ref={calloutRef} className='sat-callout' style={{ display: "none" }}>
+        <div
+          ref={calloutRef}
+          className='pointer-events-auto absolute z-[6] min-w-[176px] rounded-md border border-border bg-[color-mix(in_srgb,var(--surface-raised)_92%,transparent)] px-3 pt-[9px] pb-2.5 shadow-[0_6px_24px_rgba(0,0,0,0.25)] backdrop-blur-[6px]'
+          style={{ display: "none" }}
+        >
           {selectedSatellite && (
             <>
-              <div className='sat-callout-head'>
+              <div className='mb-[7px] flex items-center gap-[7px]'>
                 <span
-                  className='sat-callout-name mono-value'
+                  className='font-mono text-[11.5px] font-semibold tracking-[0.04em] tabular-nums'
                   style={{
                     color: selectedSatellite.isServing ? "var(--chart-warm)" : "var(--satellite)",
                   }}
@@ -808,13 +862,13 @@ export function SkyDome({
                   {selectedSatellite.sky.name.replace(/\s*\[DTC\]\s*/, "")}
                 </span>
                 {/\[DTC\]/.test(selectedSatellite.sky.name) && (
-                  <span className='sat-callout-tag'>DTC</span>
+                  <span className={`${satTag} border-[var(--baseline)] text-[var(--ink-secondary)]`}>DTC</span>
                 )}
                 {selectedSatellite.isServing && (
-                  <span className='sat-callout-tag serving'>serving</span>
+                  <span className={`${satTag} border-[var(--chart-warm)] text-[var(--chart-warm)]`}>serving</span>
                 )}
                 <button
-                  className='sat-callout-close'
+                  className='ml-auto cursor-pointer border-0 bg-transparent pl-1 text-[15px] leading-none text-muted-foreground hover:text-foreground'
                   aria-label='Close satellite details'
                   onClick={() => {
                     selectedNameRef.current = null;
@@ -824,7 +878,7 @@ export function SkyDome({
                   ×
                 </button>
               </div>
-              <div className='sat-callout-grid mono-value'>
+              <div className='grid grid-cols-[auto_1fr] gap-x-3.5 gap-y-[3px] font-mono text-[11px] tabular-nums [&>span:nth-child(odd)]:text-muted-foreground [&>span:nth-child(even)]:text-right'>
                 <span>elevation</span>
                 <span>{selectedSatellite.sky.elevationDeg.toFixed(1)}°</span>
                 <span>azimuth</span>
@@ -848,26 +902,37 @@ export function SkyDome({
           )}
         </div>
       </div>
-      <div className='skydome-hint card-meta'>
+      <div className='pt-0.5 pb-1.5 text-center text-[12px] font-medium text-muted-foreground opacity-70'>
         {isViewingHistory ? "time-lapse" : "drag to orbit · tap a satellite for details"}
       </div>
       {snapshots.length >= 2 && (
-        <div className='skydome-scrub'>
-          <span className='stat-caption' style={{ whiteSpace: "nowrap" }}>
+        <div className='flex items-center gap-2.5 px-0.5 pt-0.5 pb-2.5'>
+          <span className='text-[11.5px] font-medium text-muted-foreground' style={{ whiteSpace: "nowrap" }}>
             Obstruction time-lapse
           </span>
-          <div className='scrub-track'>
-            <div className='scrub-ticks' aria-hidden='true'>
+          <div className='relative flex h-[22px] flex-1 items-center'>
+            <div className='pointer-events-none absolute inset-x-2 inset-y-0 flex items-center justify-between' aria-hidden='true'>
               {/* one tick per hourly snapshot + the LIVE stop, so the slidable points are visible */}
-              {Array.from({ length: snapshots.length + 1 }, (_, tickIndex) => (
-                <span
-                  key={tickIndex}
-                  className={`scrub-tick${tickIndex === (scrubIndex ?? snapshots.length) ? " active" : ""}${tickIndex === snapshots.length ? " live" : ""}`}
-                />
-              ))}
+              {Array.from({ length: snapshots.length + 1 }, (_, tickIndex) => {
+                const isActive = tickIndex === (scrubIndex ?? snapshots.length);
+                const isLive = tickIndex === snapshots.length;
+                return (
+                  <span
+                    key={tickIndex}
+                    className={`w-[2px] rounded-[1px] ${isActive ? "h-3" : "h-2"} ${
+                      isLive
+                        ? "bg-[var(--status-good)]"
+                        : isActive
+                          ? "bg-[var(--ink)]"
+                          : "bg-[var(--baseline)]"
+                    }`}
+                  />
+                );
+              })}
             </div>
             <input
               type='range'
+              className='relative z-[1] h-[3px] w-full accent-[var(--ink)]'
               min={0}
               max={snapshots.length}
               step={1}
@@ -880,7 +945,7 @@ export function SkyDome({
             />
           </div>
           <span
-            className='stat-caption'
+            className='text-[11.5px] font-medium text-muted-foreground'
             style={{ whiteSpace: "nowrap", minWidth: 44, textAlign: "right" }}
           >
             {isViewingHistory
@@ -892,44 +957,44 @@ export function SkyDome({
           </span>
         </div>
       )}
-      <div className='skydome-legend'>
+      <div className={skyLegend}>
         {baseLegend}
-        <span className='legend-item'>
-          <span className='legend-cell' style={{ background: "var(--satellite)" }} />
+        <span className={legendItem}>
+          <span className={legendCell} style={{ background: "var(--satellite)" }} />
           Satellite
         </span>
-        <span className='legend-item'>
-          <span className='legend-cell' style={{ background: "var(--chart-warm)" }} />
+        <span className={legendItem}>
+          <span className={legendCell} style={{ background: "var(--chart-warm)" }} />
           Serving satellite
         </span>
       </div>
-      <div className='skydome-stats'>
+      <div className={skyStats}>
         {baseStats}
         {feedState === "active" && (
           <>
             <div className='skydome-stat'>
-              <StatLabel tip="Starlink satellites currently above your horizon. 'Serviceable' ones are high enough (above ~25° elevation) that your dish could actually lock onto them.">
+              <StatLabel className='block' tip="Starlink satellites currently above your horizon. 'Serviceable' ones are high enough (above ~25° elevation) that your dish could actually lock onto them.">
                 Satellites overhead
               </StatLabel>
-              <span className='mono-value'>
+              <span className='font-mono text-[16px] font-semibold tabular-nums'>
                 {stats.inViewCount} · {stats.serviceableCount} serviceable
               </span>
             </div>
             <div className='skydome-stat'>
-              <StatLabel tip="The fewest serviceable satellites at any moment over the next 30 minutes, from SpaceX's published orbits. A low number can mean brief drops as satellites hand off.">
+              <StatLabel className='block' tip="The fewest serviceable satellites at any moment over the next 30 minutes, from SpaceX's published orbits. A low number can mean brief drops as satellites hand off.">
                 Next 30 min minimum
               </StatLabel>
-              <span className='mono-value'>
+              <span className='font-mono text-[16px] font-semibold tabular-nums'>
                 {stats.forecastMinServiceable30m === null
                   ? "…"
                   : `${stats.forecastMinServiceable30m} serviceable`}
               </span>
             </div>
             <div className='skydome-stat' style={{ gridColumn: "1 / -1" }}>
-              <StatLabel tip='Our best guess at the satellite your dish is talking to right now — the highest, unobstructed one, inferred from live orbits.'>
+              <StatLabel className='block' tip='Our best guess at the satellite your dish is talking to right now — the highest, unobstructed one, inferred from live orbits.'>
                 Likely serving satellite
               </StatLabel>
-              <span className='mono-value'>
+              <span className='font-mono text-[16px] font-semibold tabular-nums'>
                 {stats.servingCandidate
                   ? `${stats.servingCandidate.name} · ${stats.servingCandidate.elevationDeg.toFixed(0)}° el · ${stats.servingCandidate.rangeKm.toFixed(0)} km`
                   : "none above 25°"}
@@ -941,10 +1006,13 @@ export function SkyDome({
       {feedState === "location-needed" && !isViewingHistory ? (
         <LocationSetup onLocationSaved={onLocationSaved} />
       ) : (
-        <div className='skydome-note'>
-          <span aria-hidden='true'>ⓘ</span>
-          <span>{immersiveNote}</span>
-        </div>
+        immersiveNote.kind === "loading" ? (
+          <Loading message={immersiveNote.text} />
+        ) : (
+          <Callout className='mt-3' tone={immersiveNote.kind === "error" ? "error" : "info"}>
+            {immersiveNote.text}
+          </Callout>
+        )
       )}
     </div>
   );

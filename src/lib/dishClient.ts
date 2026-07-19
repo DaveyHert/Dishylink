@@ -23,6 +23,16 @@ import { grpcWebUnaryCall } from "./grpcWeb";
 const DISH_HANDLE_URL = "/dishy/SpaceX.API.Device.Device/Handle";
 const ROUTER_HANDLE_URL = "/router/SpaceX.API.Device.Device/Handle";
 
+/** The router's LAN address. */
+export const ROUTER_LAN_ADDRESS = "192.168.1.1";
+
+/**
+ * One wording for "we can't reach the router". The Network panel and Settings both
+ * report this; they had drifted into two different sentences saying the same thing.
+ */
+export const ROUTER_UNREACHABLE_MESSAGE =
+  `Couldn't reach the Starlink router at ${ROUTER_LAN_ADDRESS} — it may be in bypass mode or on a different subnet.`;
+
 // Oneof field numbers inside SpaceX.API.Device.Request (from the dish schema).
 const REQUEST_FIELD = {
   reboot: 1001,
@@ -408,8 +418,9 @@ export class DishClient {
   }
 
   /**
-   * Dish GPS position. Throws GrpcWebError status 7 (PermissionDenied) until
-   * the user enables "Allow access on local network" in the Starlink app.
+   * Dish GPS position. Throws GrpcWebError status 7 on consumer plans —
+   * "Disabled due to policy" since the May 2026 firmware; the app's old
+   * "Allow access on local network" toggle no longer exists.
    */
   async getLocation(abortSignal?: AbortSignal): Promise<DishLocationJson> {
     return (await this.call(REQUEST_FIELD.getLocation, abortSignal)).getLocation ?? {};

@@ -1,0 +1,24 @@
+// Empty-first-run state: shown when the app has never heard from the dish.
+// A sweeping radar dial over instructions for reaching the terminal directly.
+
+export function SearchingHero() {
+  return (
+    <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3.5 p-6 text-center">
+      <div className="relative size-[74px] overflow-hidden rounded-full border border-[var(--baseline)]">
+        {/* inner ring */}
+        <div className="absolute inset-[18px] rounded-full border border-[var(--baseline)]" />
+        {/* the rotating sweep */}
+        <div className="absolute inset-0 animate-[sweep_2.6s_linear_infinite] [background:conic-gradient(from_0deg,transparent_78%,color-mix(in_srgb,var(--ink)_45%,transparent))]" />
+      </div>
+      <div className="text-[19px] font-bold tracking-[0.18em]">SEARCHING FOR DISH</div>
+      <p className="max-w-[420px] text-[13.5px] text-[var(--ink-secondary)]">
+        DishyLink talks to your Starlink terminal directly at{" "}
+        <code className="rounded-[5px] bg-[var(--surface)] px-1.5 py-px font-mono text-[12px]">
+          192.168.100.1
+        </code>
+        . Make sure this machine is connected to the Starlink network (Wi‑Fi or ethernet behind the
+        Starlink router) and that the dish is powered. Retrying automatically…
+      </p>
+    </div>
+  );
+}

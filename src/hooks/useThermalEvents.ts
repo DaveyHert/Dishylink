@@ -11,10 +11,8 @@
 // (modem_asic_temp, tx_if_temp) live on TransceiverGetStatus, which this
 // firmware answers with Unimplemented. The flags are the whole signal.
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { DishStatusJson } from "../lib/dishClient";
+import { useEffect, useMemo, useState } from "react";
 import type { OutageEvent } from "../lib/telemetry";
-import { sendNotification } from "../lib/notifications";
 
 interface ThermalAlertSpec {
   /** Key on `alerts`, as emitted by the protobuf JSON mapping. */
@@ -66,31 +64,11 @@ interface ThermalEpisodeJson {
   endMs: number | null;
 }
 
-/** Browser notifications on the live thermal flags, on the way in and out. */
-export function useThermalNotifications(status: DishStatusJson | null): void {
-  // alertKey -> currently set? Seeded lazily so the first observation can fire:
-  // if the dish is already throttling when the app opens, that is worth saying.
-  const wasActiveRef = useRef(new Map<string, boolean>());
-
-  useEffect(() => {
-    // An unreachable dish means no reading, not a cleared alert.
-    if (!status) return;
-    const alerts = status.alerts ?? {};
-    for (const spec of THERMAL_ALERTS) {
-      const isActive = alerts[spec.alertKey] === true;
-      const wasActive = wasActiveRef.current.get(spec.alertKey) ?? false;
-      if (isActive && !wasActive) {
-        sendNotification(`thermal-${spec.alertKey}`, spec.onsetTitle, spec.onsetBody);
-      }
-      if (!isActive && wasActive) {
-        // Distinct kind from the onset, so a clear is never swallowed by the
-        // per-kind notification throttle.
-        sendNotification(`thermal-${spec.alertKey}-cleared`, spec.clearedTitle, spec.clearedBody);
-      }
-      wasActiveRef.current.set(spec.alertKey, isActive);
-    }
-  }, [status]);
-}
+// Live thermal notifications used to live here (useThermalNotifications). They
+// were folded into useDeviceAlerts, which notifies on every notifiable alert on
+// both devices off the same live status — a superset. This file now only reads
+// the durable thermal log back for the event list. THERMAL_ALERTS stays: it maps
+// the collector's stored keys to the wording the event log shows.
 
 /**
  * Thermal episodes from the collector's durable log, shaped as OutageEvents for

@@ -2,8 +2,10 @@ import path from "node:path";
 // vitest's defineConfig, so the `test` block below is typed. It is a superset of
 // vite's — the dev/build config is unaffected.
 import { defineConfig } from "vitest/config";
+import { playwright } from "@vitest/browser-playwright";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { starlinkCloudProxy } from "./dev/starlinkCloudProxy";
 
 interface OutgoingProxyRequest {
   removeHeader(headerName: string): void;
@@ -12,7 +14,7 @@ interface OutgoingProxyRequest {
 // The dish's grpc-web endpoint (port 9201) only allows CORS from its own
 // origin, so the dev server proxies it same-origin under /dishy.
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), starlinkCloudProxy()],
   resolve: {
     alias: { "@": path.resolve(__dirname, "./src") },
   },
@@ -20,11 +22,35 @@ export default defineConfig({
   // as iife by default, which can't do the top-level await that build uses.
   // Emit workers as ES modules so the production build succeeds.
   worker: { format: "es" },
-  // Tests run in node: everything under test is pure logic (decoders, stores,
-  // catalogues). Rendering is verified by driving the real app instead.
   test: {
-    environment: "node",
-    include: ["src/**/*.test.ts", "server/**/*.test.mts"],
+    projects: [
+      // Pure logic — decoders, stores, catalogues. No DOM, no browser, fast.
+      {
+        extends: true,
+        test: {
+          name: "node",
+          environment: "node",
+          include: ["src/**/*.test.ts", "server/**/*.test.mts", "dev/**/*.test.mts"],
+        },
+      },
+      // Component tests in real Chromium. NOT jsdom: jsdom has no CSS engine, so
+      // getComputedStyle returns nothing useful and it cannot verify design fidelity
+      // at all — which is the entire reason these tests exist.
+      {
+        extends: true,
+        test: {
+          name: "browser",
+          include: ["src/**/*.test.tsx"],
+          setupFiles: ["./src/test-setup.ts"],
+          browser: {
+            enabled: true,
+            provider: playwright(),
+            headless: true,
+            instances: [{ browser: "chromium" }],
+          },
+        },
+      },
+    ],
   },
   server: {
     proxy: {
@@ -69,9 +95,12 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/celestrak/, ""),
       },
       // Long-term energy totals from the local collector service (server/).
+      // xfwd adds x-forwarded-for so /api/whoami sees the browser's LAN IP, not
+      // this proxy's loopback address.
       "/api": {
         target: "http://localhost:8088",
         changeOrigin: true,
+        xfwd: true,
       },
       // Cloudflare speed endpoints for the browser-measured speed test
       // (the dish's own speedtest RPCs are unimplemented on current firmware).

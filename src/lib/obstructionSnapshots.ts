@@ -18,13 +18,21 @@ export interface ObstructionSnapshot {
   takenAtMs: number;
   gridSize: number;
   packedCells: string;
+  /** Half-angle of the sky cone this grid covers. Absent on snapshots taken
+   *  before it was recorded — those fall back to the live map's value. */
+  maxThetaDeg?: number;
 }
+
+/** Anything blocked beyond this reads as obstructed rather than clear. */
+export const OBSTRUCTED_FRACTION_FLOOR = 0.005;
+/** Up to this much blockage is "partial" — a thin branch, not a roofline. */
+export const PARTIAL_FRACTION_CEILING = 0.25;
 
 export function quantizeCell(fractionUsable: number): number {
   if (fractionUsable < 0) return CELL_UNMAPPED;
   const obstructedFraction = 1 - fractionUsable;
-  if (obstructedFraction <= 0.005) return CELL_CLEAR;
-  if (obstructedFraction <= 0.25) return CELL_PARTIAL;
+  if (obstructedFraction <= OBSTRUCTED_FRACTION_FLOOR) return CELL_CLEAR;
+  if (obstructedFraction <= PARTIAL_FRACTION_CEILING) return CELL_PARTIAL;
   return CELL_OBSTRUCTED;
 }
 
@@ -68,6 +76,9 @@ export function saveSnapshotIfDue(obstructionMap: DishObstructionMapJson): Obstr
     takenAtMs: Date.now(),
     gridSize: obstructionMap.numRows ?? Math.round(Math.sqrt(grid.length)),
     packedCells: packCells(grid),
+    // Recorded per snapshot: the scrubber must re-project old grids at the
+    // angle they were captured at, not whatever the dish reports today.
+    maxThetaDeg: obstructionMap.maxThetaDeg,
   });
   const capped = snapshots.slice(-MAX_SNAPSHOTS);
   try {

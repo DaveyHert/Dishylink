@@ -5,6 +5,8 @@
 import { useState } from "react";
 import { useEnergyHistory, type EnergyRange, type EnergyBucket } from "../hooks/useEnergyHistory";
 import { RANGE_TABS, RangeBars, bucketLabel, type RangeBarColumn } from "./RangeBarChart";
+import { SegmentedControl } from "./ui/segmented-control";
+import { Callout } from "./ui/callout";
 
 /** Slot the collector only caught part of: its total is real but understates the period. */
 function isPartial(bucket: EnergyBucket): boolean {
@@ -62,24 +64,14 @@ export function EnergyHistoryPanel({ active }: { active: boolean }) {
     <div className="energy-history">
       <div className="energy-history-header">
         <span className="energy-history-title">Total energy used</span>
-        <div className="window-picker">
-          {RANGE_TABS.map((tab) => (
-            <button
-              key={tab.value}
-              className={range === tab.value ? "active" : ""}
-              onClick={() => setRange(tab.value)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl options={RANGE_TABS} value={range} onChange={setRange} label="Energy range" />
       </div>
 
       {unavailable ? (
-        <p className="energy-history-hint">
+        <Callout className="mt-2.5">
           Long-term energy needs the collector running. Start it with <code>npm run collector</code> and it
           will build up day / week / month history from now on.
-        </p>
+        </Callout>
       ) : (
         <>
           <div className="energy-history-total">

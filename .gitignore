@@ -3,3 +3,11 @@ dist
 .DS_Store
 
 server/data
+
+# Vitest browser mode writes failure screenshots next to the test file, and
+# attachments (diffs, traces) under .vitest-attachments. Diagnostic, not source.
+**/__screenshots__/
+.vitest-attachments/
+
+# Local Starlink account session for the dev cloud proxy (never commit).
+.starlink-cookie

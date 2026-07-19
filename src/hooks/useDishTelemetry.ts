@@ -28,8 +28,15 @@ async function fetchPersistedSamples(): Promise<TelemetrySample[]> {
   }
 }
 
-const STATUS_POLL_MS = 2_000;
-const HISTORY_POLL_MS = 5_000;
+// The dish's history ring advances once a second, so 1s is its true sample
+// rate — polling faster just reads the same value twice.
+const STATUS_POLL_MS = 1_000;
+// 1s, matching the dish's own sample clock. Every poll returns the whole 900-
+// sample ring, so this is not about resolution — that is already 1 Hz at any
+// poll rate — but about freshness: at 5s the chart's leading edge jumped five
+// samples at a time while the stat tiles (polled every second) moved smoothly,
+// which reads as a laggy chart rather than a live one.
+const HISTORY_POLL_MS = 1_000;
 const OBSTRUCTION_POLL_MS = 30_000;
 const LOCATION_RETRY_MS = 60_000; // picks up the app-side toggle without a reload
 const MAX_ACCUMULATED_SAMPLES = 6 * 3_600; // keep up to six hours
@@ -65,37 +72,56 @@ export function useDishTelemetry(): DishTelemetry {
     let client: DishClient | null = null;
     const timerIds: number[] = [];
 
+    // Every poll is bounded and never overlaps itself. An unplugged dish leaves
+    // the proxy's TCP connect hanging for the OS timeout (~75s); unbounded polls
+    // stack up behind it every interval until they exhaust the browser's
+    // ~6-connections-per-origin budget, and then the router poll and the
+    // collector fetches can't get a socket either — the app reports a router and
+    // recorder outage that isn't happening. Same rule the router poll in
+    // useDeviceAlerts already follows.
+    let statusInFlight = false;
     const pollStatus = async () => {
-      if (!client) return;
+      if (!client || statusInFlight) return;
+      statusInFlight = true;
       try {
-        const dishStatus = await client.getStatus();
+        const dishStatus = await client.getStatus(AbortSignal.timeout(4_000));
         if (disposed) return;
         setStatus(dishStatus);
         setConnectionState("online");
       } catch {
         if (!disposed) setConnectionState("unreachable");
+      } finally {
+        statusInFlight = false;
       }
     };
 
+    let historyInFlight = false;
     const pollHistory = async () => {
-      if (!client) return;
+      if (!client || historyInFlight) return;
+      historyInFlight = true;
       try {
-        const history = await client.getHistory();
+        const history = await client.getHistory(AbortSignal.timeout(4_000));
         if (disposed) return;
         setSamples([...accumulatorRef.current.ingest(history, Date.now())]);
         setOutageEvents(decodeOutageEvents(history));
       } catch {
         // status polling owns the connection indicator
+      } finally {
+        historyInFlight = false;
       }
     };
 
+    let obstructionInFlight = false;
     const pollObstructionMap = async () => {
-      if (!client) return;
+      if (!client || obstructionInFlight) return;
+      obstructionInFlight = true;
       try {
-        const skyMap = await client.getObstructionMap();
+        const skyMap = await client.getObstructionMap(AbortSignal.timeout(10_000));
         if (!disposed) setObstructionMap(skyMap);
       } catch {
         // non-fatal; keep the last map
+      } finally {
+        obstructionInFlight = false;
       }
     };
 
@@ -103,7 +129,7 @@ export function useDishTelemetry(): DishTelemetry {
     const pollLocation = async () => {
       if (!client || locationResolved) return;
       try {
-        const location = await client.getLocation();
+        const location = await client.getLocation(AbortSignal.timeout(10_000));
         if (disposed) return;
         if (location.lla?.lat !== undefined) {
           locationResolved = true;
@@ -128,7 +154,7 @@ export function useDishTelemetry(): DishTelemetry {
         if (persistedSamples.length > 0) {
           setSamples([...accumulatorRef.current.seed(persistedSamples)]);
         }
-        client.getDeviceInfo().then((info) => !disposed && setDeviceInfo(info)).catch(() => {});
+        client.getDeviceInfo(AbortSignal.timeout(4_000)).then((info) => !disposed && setDeviceInfo(info)).catch(() => {});
         await Promise.all([pollStatus(), pollHistory(), pollObstructionMap(), pollLocation()]);
         timerIds.push(window.setInterval(pollStatus, STATUS_POLL_MS));
         timerIds.push(window.setInterval(pollHistory, HISTORY_POLL_MS));

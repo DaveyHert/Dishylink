@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useDishTelemetry } from "./hooks/useDishTelemetry";
 import { useSatellites } from "./hooks/useSatellites";
 import { useOutageNotifications } from "./hooks/useOutageNotifications";
-import { useThermalEvents, useThermalNotifications } from "./hooks/useThermalEvents";
+import { useThermalEvents } from "./hooks/useThermalEvents";
+import { useDeviceAlerts } from "./hooks/useDeviceAlerts";
 import { useOutageHistory, mergeOutages } from "./hooks/useOutageHistory";
 import { notificationsEnabled, toggleNotifications } from "./lib/notifications";
 import { TopBar } from "./components/TopBar";
@@ -10,13 +11,17 @@ import { StatTile } from "./components/StatTile";
 import { TelemetryChart } from "./components/TelemetryChart";
 import { SkyDome } from "./components/SkyDome";
 import { OutageLog } from "./components/OutageLog";
-import { DevicePanel } from "./components/DevicePanel";
-import { StatDetailModal } from "./components/StatDetailModal";
-import { SheetModal } from "./components/SheetModal";
+import { SearchingHero } from "./components/SearchingHero";
+import { DishTerminalCard } from "./components/DishTerminalCard";
+import { StatDetailPanel } from "./components/StatDetailPanel";
+import { DetailsModal } from "./components/ui/details-modal";
+import { SegmentedControl } from "./components/ui/segmented-control";
+import { SectionCard } from "./components/ui/section-card";
 import { SpeedTestPanel } from "./components/SpeedTestCard";
 import { AlignmentPanel } from "./components/AlignmentCard";
 import { DataUsagePanel } from "./components/DataUsagePanel";
 import { NetworkPanel } from "./components/NetworkPanel";
+import { AccountPanel } from "./components/AccountPanel";
 import { SettingsModal } from "./components/SettingsModal";
 import { useRouterNetwork } from "./hooks/useRouterNetwork";
 import { THROUGHPUT_SERIES, LATENCY_SERIES, POWER_SERIES, buildStatDetails } from "./lib/statDetails";
@@ -32,6 +37,7 @@ type SheetName =
   | "skyview"
   | "datausage"
   | "network"
+  | "account"
   | "settings"
   | "terminal";
 
@@ -40,6 +46,12 @@ const WINDOW_CHOICES: { label: string; minutes: number }[] = [
   { label: "1H", minutes: 60 },
   { label: "6H", minutes: 360 },
 ];
+
+/** ToggleGroup values are strings; minutes stay the source of truth. */
+const WINDOW_OPTIONS = WINDOW_CHOICES.map((choice) => ({ label: choice.label, value: String(choice.minutes) }));
+
+// Throughput legend entry (swatch + series name).
+const legendItem = "inline-flex items-center gap-1.5 text-[12px] font-medium text-[var(--ink-secondary)]";
 
 function sparklineFrom(samples: TelemetrySample[], getValue: (sample: TelemetrySample) => number | null) {
   return samples.slice(-90).map(getValue);
@@ -52,20 +64,6 @@ function recentAverage(samples: TelemetrySample[], getValue: (sample: TelemetryS
     .filter((value): value is number => value !== null);
   if (recentValues.length === 0) return 0;
   return recentValues.reduce((sum, value) => sum + value, 0) / recentValues.length;
-}
-
-function SearchingHero() {
-  return (
-    <div className="searching-hero">
-      <div className="radar" />
-      <div className="searching-title">SEARCHING FOR DISH</div>
-      <p className="searching-copy">
-        Dishboard talks to your Starlink terminal directly at <code>192.168.100.1</code>. Make sure this
-        machine is connected to the Starlink network (Wi‑Fi or ethernet behind the Starlink router) and
-        that the dish is powered. Retrying automatically…
-      </p>
-    </div>
-  );
 }
 
 export default function App() {
@@ -90,7 +88,9 @@ export default function App() {
   }, [telemetry.dishLocation, savedObserver]);
   const satellites = useSatellites(observerLocation, telemetry.obstructionMap);
   useOutageNotifications(telemetry);
-  useThermalNotifications(telemetry.status);
+  // Live alerts for both devices, and the notifications that go with them —
+  // a superset of the old thermal-only notifications, off live device status.
+  const deviceAlerts = useDeviceAlerts(telemetry.status, telemetry.connectionState);
   const thermalEvents = useThermalEvents();
   // The dish's own event list is short and resets on reboot; the collector's log
   // reaches further back, so the two are folded together.
@@ -120,8 +120,11 @@ export default function App() {
   );
   const openDetail = openDetailId ? statDetails[openDetailId] : null;
 
-  const hasEverConnected = status !== null;
-  const showSearchingHero = telemetry.connectionState === "unreachable" && !hasEverConnected;
+  // The hero is for a genuinely empty first run only. A refresh mid-outage also
+  // starts with a null status, but the collector's backfilled samples mean there
+  // is a dashboard worth showing — and an outage is exactly when it's needed.
+  const showSearchingHero =
+    telemetry.connectionState === "unreachable" && status === null && samples.length === 0;
 
   return (
     <>
@@ -130,6 +133,7 @@ export default function App() {
         status={status}
         theme={theme}
         onToggleTheme={() => setTheme(theme === "light" ? "dark" : "light")}
+        deviceAlerts={deviceAlerts}
         notificationsOn={notificationsOn}
         onToggleNotifications={() => {
           toggleNotifications().then(setNotificationsOn);
@@ -138,6 +142,7 @@ export default function App() {
         onOpenAlignment={() => setOpenSheet("alignment")}
         onOpenDataUsage={() => setOpenSheet("datausage")}
         onOpenNetwork={() => setOpenSheet("network")}
+        onOpenAccount={() => setOpenSheet("account")}
         onOpenSettings={() => setOpenSheet("settings")}
       />
       {showSearchingHero ? (
@@ -198,29 +203,18 @@ export default function App() {
           </section>
 
           <section className="charts-grid">
-            <div className="card span-8">
-              <div className="card-header">
-                <span className="card-title">Throughput</span>
-                <div className="chart-legend">
-                  <span className="legend-item">
-                    <span className="series-swatch" style={{ background: "var(--series-down)" }} /> Download
-                  </span>
-                  <span className="legend-item">
-                    <span className="series-swatch" style={{ background: "var(--series-up)" }} /> Upload
-                  </span>
-                  <div className="window-picker">
-                    {WINDOW_CHOICES.map((choice) => (
-                      <button
-                        key={choice.minutes}
-                        className={windowMinutes === choice.minutes ? "active" : ""}
-                        onClick={() => setWindowMinutes(choice.minutes)}
-                      >
-                        {choice.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
+            <SectionCard
+              title="Throughput"
+              className="col-span-8"
+              headerAction={
+                <SegmentedControl
+                  options={WINDOW_OPTIONS}
+                  value={String(windowMinutes)}
+                  onChange={(minutes) => setWindowMinutes(Number(minutes))}
+                  label="Chart time window"
+                />
+              }
+            >
               <TelemetryChart
                 samples={samples}
                 series={THROUGHPUT_SERIES}
@@ -229,7 +223,15 @@ export default function App() {
                 formatTick={formatThroughputTick}
                 outageEvents={outageEvents}
               />
-            </div>
+              <div className="mt-2 flex items-center justify-center gap-3.5">
+                <span className={legendItem}>
+                  <span className="series-swatch" style={{ background: "var(--series-down)" }} /> Download
+                </span>
+                <span className={legendItem}>
+                  <span className="series-swatch" style={{ background: "var(--series-up)" }} /> Upload
+                </span>
+              </div>
+            </SectionCard>
 
             <SkyDome
               obstructionMap={telemetry.obstructionMap}
@@ -250,11 +252,11 @@ export default function App() {
               onOpenImmersive={() => setOpenSheet("skyview")}
             />
 
-            <div className="card span-8">
-              <div className="card-header">
-                <span className="card-title">Latency</span>
-                <span className="card-meta">pop ping · spikes preserved · red bands = outages</span>
-              </div>
+            <SectionCard
+              title="Latency"
+              className="col-span-8"
+              meta="pop ping · spikes preserved · red bands = outages"
+            >
               <TelemetryChart
                 samples={samples}
                 series={LATENCY_SERIES}
@@ -263,15 +265,13 @@ export default function App() {
                 outageEvents={outageEvents}
                 height={160}
               />
-            </div>
+            </SectionCard>
 
-            <div className="card span-8">
-              <div className="card-header">
-                <span className="card-title">Power draw</span>
-                <span className="card-meta">
-                  ≈ {((livePowerW * 24) / 1000).toFixed(2)} kWh/day at current draw
-                </span>
-              </div>
+            <SectionCard
+              title="Power draw"
+              className="col-span-8"
+              meta={`≈ ${((livePowerW * 24) / 1000).toFixed(2)} kWh/day at current draw`}
+            >
               <TelemetryChart
                 samples={samples}
                 series={POWER_SERIES}
@@ -279,42 +279,68 @@ export default function App() {
                 formatValue={(value) => `${value.toFixed(0)} W`}
                 height={160}
               />
-            </div>
+            </SectionCard>
 
             {/* Thermal episodes join the event list, but not the charts above:
                 those shade outage bands, and a throttle is not an outage. */}
             <OutageLog outageEvents={[...outageEvents, ...thermalEvents]} />
 
-            {status && <DevicePanel status={status} onExpand={() => setOpenSheet("terminal")} />}
+            {/* The card never unmounts on an outage: last-known facts with a
+                stale caveat beat a silently missing card. Only a session that
+                has never heard from the dish has nothing to render. */}
+            {status ? (
+              <DishTerminalCard
+                status={status}
+                stale={telemetry.connectionState !== "online"}
+                onExpand={() => setOpenSheet("terminal")}
+              />
+            ) : (
+              <SectionCard
+                title="Starlink Dish Terminal"
+                className="col-span-12"
+                meta={
+                  telemetry.connectionState === "unreachable"
+                    ? "dish isn’t answering — no status received yet"
+                    : "waiting for the dish’s first reply…"
+                }
+              />
+            )}
           </section>
         </main>
       )}
 
       {openDetail && (
-        <StatDetailModal detail={openDetail} samples={samples} onClose={() => setOpenDetailId(null)} />
+        <DetailsModal title={openDetail.label} onClose={() => setOpenDetailId(null)}>
+          <StatDetailPanel detail={openDetail} samples={samples} />
+        </DetailsModal>
       )}
       {openSheet === "terminal" && status && (
-        <SheetModal title="Starlink Dish Terminal" onClose={() => setOpenSheet(null)} size="xxl">
-          <DevicePanel status={status} expanded />
-        </SheetModal>
+        <DetailsModal title="Starlink Dish Terminal" onClose={() => setOpenSheet(null)} size="xxl">
+          <DishTerminalCard status={status} stale={telemetry.connectionState !== "online"} expanded />
+        </DetailsModal>
       )}
       {openSheet === "speedtest" && (
-        <SheetModal title="Speed test" onClose={() => setOpenSheet(null)}>
+        <DetailsModal title="Speed test" onClose={() => setOpenSheet(null)}>
           <SpeedTestPanel samples={samples} />
-        </SheetModal>
+        </DetailsModal>
       )}
       {openSheet === "alignment" && status && (
-        <SheetModal title="Alignment" onClose={() => setOpenSheet(null)} size="wide">
+        <DetailsModal title="Alignment" onClose={() => setOpenSheet(null)} size="wide">
           <AlignmentPanel status={status} onOpenSkyView={() => setOpenSheet("skyview")} />
-        </SheetModal>
+        </DetailsModal>
       )}
       {openSheet === "datausage" && (
-        <SheetModal title="Data usage" onClose={() => setOpenSheet(null)} size="wide">
+        <DetailsModal title="Data usage" onClose={() => setOpenSheet(null)} size="wide">
           <DataUsagePanel />
-        </SheetModal>
+        </DetailsModal>
+      )}
+      {openSheet === "account" && (
+        <DetailsModal title="Starlink account" onClose={() => setOpenSheet(null)} size="wide">
+          <AccountPanel />
+        </DetailsModal>
       )}
       {openSheet === "network" && (
-        <SheetModal
+        <DetailsModal
           title="Network"
           onBack={networkSelectedMac ? () => setNetworkSelectedMac(null) : undefined}
           onClose={() => {
@@ -328,7 +354,7 @@ export default function App() {
             selectedMac={networkSelectedMac}
             onSelect={setNetworkSelectedMac}
           />
-        </SheetModal>
+        </DetailsModal>
       )}
       <SettingsModal
         open={openSheet === "settings"}
@@ -339,7 +365,7 @@ export default function App() {
         routerReachable={routerNetwork.routerReachable}
       />
       {openSheet === "skyview" && (
-        <SheetModal title="Satellite view" onClose={() => setOpenSheet(null)} size="xl">
+        <DetailsModal title="Satellite view" onClose={() => setOpenSheet(null)} size="xl">
           <SkyDome
             caption="Satellites shown are propagated live from SpaceX's published ephemerides."
             status={status}
@@ -358,7 +384,7 @@ export default function App() {
             }}
             variant="immersive"
           />
-        </SheetModal>
+        </DetailsModal>
       )}
     </>
   );

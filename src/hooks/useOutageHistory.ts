@@ -6,13 +6,15 @@
 // but only over the time the collector has been running.
 
 import { useEffect, useMemo, useState } from "react";
-import type { OutageEvent } from "../lib/telemetry";
+import { canonicalCause, type OutageEvent } from "../lib/telemetry";
 
 const REFRESH_MS = 30_000;
 
-/** Same outage from two sources: the dish restates it as its duration grows. */
+/** Same outage from two sources: the dish restates it as its duration grows. Keyed
+ *  on the canonical cause token so the live decode and a differently-labelled
+ *  persisted copy of the same event fold together instead of showing twice. */
 function keyOf(event: OutageEvent): string {
-  return `${event.startMs}:${event.cause}`;
+  return `${event.startMs}:${canonicalCause(event.cause)}`;
 }
 
 /**

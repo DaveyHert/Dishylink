@@ -10,6 +10,7 @@ import { runSpeedTest, type SpeedTestProgress } from "../lib/speedTest";
 import type { TelemetrySample } from "../lib/telemetry";
 import { SpeedGauge } from "./SpeedGauge";
 import { SpeedBeam } from "./SpeedBeam";
+import { SegmentedControl } from "./ui/segmented-control";
 
 type SpeedView = "gauge" | "beam";
 
@@ -80,22 +81,29 @@ function HeadlineFigure({
 }) {
   const pending = value === null;
   return (
-    <div className={`speed-headline${active ? " active" : ""}`}>
-      <div className="speed-headline-label">
-        <span className="speed-headline-icon">{icon}</span> {label} <span className="speed-headline-unit">{unit}</span>
+    <div className={`flex-1 pt-2 pb-[9px] text-center transition-opacity ${active ? "opacity-100" : "opacity-50"}`}>
+      <div
+        className={`text-[11px] font-semibold tracking-[0.04em] ${active ? "text-foreground" : "text-muted-foreground"}`}
+      >
+        <span className="inline-flex align-[-1px]">{icon}</span> {label}{" "}
+        <span className="font-medium">{unit}</span>
       </div>
-      <div className={`speed-headline-value${pending ? " pending" : ""}`}>{pending ? "0" : fmt(value)}</div>
+      <div
+        className={`text-[28px] font-bold leading-[1.1] tracking-[-0.01em] ${pending ? "text-muted-foreground" : "text-foreground"}`}
+      >
+        {pending ? "0" : fmt(value)}
+      </div>
     </div>
   );
 }
 
 function MetricPill({ label, value, unit }: { label: string; value: string; unit: string }) {
   return (
-    <div className="speed-metric">
-      <span className="speed-metric-label">{label}</span>
-      <span className="speed-metric-value">
+    <div className="flex items-center gap-[7px]">
+      <span className="text-[12px] text-muted-foreground">{label}</span>
+      <span className="text-[13px] font-semibold text-foreground tabular-nums">
         {value}
-        <span className="speed-metric-unit"> {unit}</span>
+        <span className="font-medium text-muted-foreground"> {unit}</span>
       </span>
     </div>
   );
@@ -119,29 +127,21 @@ export function SpeedTestPanel({ samples }: { samples: TelemetrySample[] }) {
           : { value: null, mode: "idle" as const, caption: "Ready" };
 
   return (
-    <div className="speedtest">
-      <div className="speed-segment" role="tablist" aria-label="Speed test view">
-        <button
-          role="tab"
-          aria-selected={view === "beam"}
-          className={view === "beam" ? "active" : ""}
-          disabled={isRunning}
-          onClick={() => setView("beam")}
-        >
-          Starlink
-        </button>
-        <button
-          role="tab"
-          aria-selected={view === "gauge"}
-          className={view === "gauge" ? "active" : ""}
-          disabled={isRunning}
-          onClick={() => setView("gauge")}
-        >
-          Gauge
-        </button>
-      </div>
+    <div className="flex flex-col items-center gap-1">
+      <SegmentedControl
+        variant="glider"
+        label="Speed test view"
+        className="mb-3"
+        disabled={isRunning}
+        value={view}
+        onChange={setView}
+        options={[
+          { value: "beam", label: "Starlink" },
+          { value: "gauge", label: "Gauge" },
+        ]}
+      />
 
-      <div className="speed-headlines">
+      <div className="flex w-full gap-3">
         {/* Emphasis marks the phase being measured; with nothing running they read equally. */}
         <HeadlineFigure
           icon={<ArrowDownIcon size={12} strokeWidth={2.5} />}
@@ -166,7 +166,7 @@ export function SpeedTestPanel({ samples }: { samples: TelemetrySample[] }) {
         />
       </div>
 
-      <div className="speed-metrics">
+      <div className="flex w-full justify-center gap-[18px] border-t border-b border-border py-2">
         {/* a decimal place: real Starlink jitter is often sub-1ms and would round to a bare 0 */}
         <MetricPill label="Jitter" value={fmt(quality.jitterMs, 1)} unit="ms" />
         <MetricPill label="Loss" value={fmt(quality.lossPct, 1)} unit="%" />
@@ -179,14 +179,19 @@ export function SpeedTestPanel({ samples }: { samples: TelemetrySample[] }) {
       )}
 
       <button
-        className="speedtest-button"
+        className="mt-2 flex min-h-[42px] w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-0 bg-[color-mix(in_srgb,var(--ink)_12%,transparent)] py-[11px] font-sans text-[14px] font-semibold text-foreground transition-colors enabled:hover:bg-[color-mix(in_srgb,var(--ink)_18%,transparent)] disabled:cursor-default disabled:bg-[color-mix(in_srgb,var(--ink)_8%,transparent)] disabled:text-muted-foreground"
         disabled={isRunning}
         onClick={() => {
           void runSpeedTest(setProgress);
         }}
       >
         {isRunning ? (
-          <LoaderIcon className="speedtest-spinner" size={20} strokeWidth={2.5} aria-label="Running speed test" />
+          <LoaderIcon
+            className="animate-[speedtest-spin_1s_steps(12,end)_infinite] motion-reduce:animate-none"
+            size={20}
+            strokeWidth={2.5}
+            aria-label="Running speed test"
+          />
         ) : phase === "done" ? (
           <>
             <RotateCcwIcon size={15} strokeWidth={2.5} /> Run again
@@ -195,8 +200,10 @@ export function SpeedTestPanel({ samples }: { samples: TelemetrySample[] }) {
           "Go"
         )}
       </button>
-      <div className="stat-caption speedtest-status">{PHASE_LABEL[phase]}</div>
-      <div className="stat-caption speedtest-source">Measured against Cloudflare · may read lower than tests to a nearby server</div>
+      <div className="mt-2.5 text-center text-[11.5px] font-medium text-muted-foreground">{PHASE_LABEL[phase]}</div>
+      <div className="mt-1 text-center text-[10.5px] font-medium text-muted-foreground opacity-70">
+        Measured against Cloudflare · may read lower than tests to a nearby server
+      </div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-# Dishboard
+# DishyLink
 
 Live telemetry dashboard for a Starlink dish, rendered in the browser straight
 from the terminal's local gRPC API. No cloud, no account — if you're on the
@@ -11,7 +11,7 @@ Starlink network, `npm run dev` and you have instruments.
 - **Stat tiles** — live downlink/uplink, pop-ping latency, power draw (watts),
   60s ping-drop rate, sky-obstruction fraction, each with a 90s sparkline.
 - **Throughput chart** — down + up, 15m/1h/6h windows (the dish only keeps
-  15 minutes; Dishboard accumulates up to 6 hours while the tab is open).
+  15 minutes; DishyLink accumulates up to 6 hours while the tab is open).
 - **Latency chart** — bucketed *max* so spikes survive downsampling; outages
   drawn as red bands.
 - **Power chart** — the dish's actual draw over time with a kWh/day estimate.

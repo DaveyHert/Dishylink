@@ -7,6 +7,7 @@
 import { useEffect, useRef } from "react";
 import type { DishTelemetry } from "./useDishTelemetry";
 import { sendNotification } from "../lib/notifications";
+import { outageEventLabel } from "../lib/telemetry";
 import { formatDurationMs } from "../lib/format";
 
 export function useOutageNotifications(telemetry: DishTelemetry): void {
@@ -22,7 +23,7 @@ export function useOutageNotifications(telemetry: DishTelemetry): void {
       sendNotification(
         "dish-unreachable",
         "Dish unreachable",
-        "Dishboard lost contact with the dish on your local network — check power and cabling. (This is a local issue, not a Starlink outage.)",
+        "DishyLink lost contact with the dish on your local network — check power and cabling. (This is a local issue, not a Starlink outage.)",
       );
     }
     if (previous === "unreachable" && current === "online") {
@@ -58,10 +59,11 @@ export function useOutageNotifications(telemetry: DishTelemetry): void {
     const isFirstObservation = lastSeenOutageStartRef.current === 0;
     const isFresh = Date.now() - newestOutage.startMs < 5 * 60_000;
     if (!isFirstObservation && newestOutage.startMs > lastSeenOutageStartRef.current && isFresh) {
+      const label = outageEventLabel(newestOutage.cause);
       sendNotification(
         "outage-event",
-        `Outage recorded: ${newestOutage.cause}`,
-        `The dish logged a ${formatDurationMs(newestOutage.durationMs)} outage (${newestOutage.cause}).`,
+        `Outage recorded: ${label}`,
+        `The dish logged a ${formatDurationMs(newestOutage.durationMs)} outage (${label}).`,
       );
     }
     lastSeenOutageStartRef.current = Math.max(lastSeenOutageStartRef.current, newestOutage.startMs);

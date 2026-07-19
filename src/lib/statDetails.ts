@@ -3,7 +3,7 @@
 // needs. Kept out of App so the component just wires data to views.
 
 import type { ChartSeries } from "../components/TelemetryChart";
-import type { StatDetail } from "../components/StatDetailModal";
+import type { StatDetail } from "../components/StatDetailPanel";
 import type { TelemetrySample, OutageEvent } from "./telemetry";
 import type { DishStatusJson } from "./dishClient";
 import { formatThroughput, formatThroughputLabel, formatThroughputTick } from "./format";
@@ -101,7 +101,6 @@ export function buildStatDetails({ status, currentPowerW, outageEvents }: StatDe
         "Power draw is how much electricity the Starlink terminal is using. It rises under heavy load and when the dish heats itself to melt snow or ice.",
       showWindowEnergy: true,
       showEnergyHistory: true,
-      defaultWindowMinutes: 15,
     },
   };
 }
