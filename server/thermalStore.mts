@@ -21,7 +21,10 @@ export interface ThermalEpisode {
   endMs: number | null;
 }
 
-const RETENTION_MS = 30 * 24 * 3_600_000;
+// 24 hours, matching the event store: both feed the same "Events & outages"
+// panel, and a panel that is a day deep for outages and a month deep for
+// throttles is worse than either window chosen on its own.
+const RETENTION_MS = 24 * 3_600_000;
 
 export class ThermalStore {
   private episodes: ThermalEpisode[] = [];
@@ -59,9 +62,18 @@ export class ThermalStore {
     renameSync(tempPath, this.filePath);
   }
 
-  /** Episodes newest-first, for the API. */
+  /**
+   * Episodes newest-first, for the API. Cutoff applied here as well as in flush,
+   * which only runs when an episode opens or closes — a quiet stretch or a
+   * restart would otherwise serve episodes past the window. An open episode is
+   * kept regardless of age, for the same reason flush keeps it: an unresolved
+   * throttle is current state, not history.
+   */
   all(): ThermalEpisode[] {
-    return [...this.episodes].sort((a, b) => b.startMs - a.startMs);
+    const cutoffMs = Date.now() - RETENTION_MS;
+    return [...this.episodes]
+      .filter((episode) => episode.endMs === null || episode.startMs >= cutoffMs)
+      .sort((a, b) => b.startMs - a.startMs);
   }
 
   isOpen(alertKey: string): boolean {

@@ -8,10 +8,17 @@
 //
 // Events are few, and an in-progress outage's duration grows across polls, so
 // this keeps the whole log in memory and rewrites the file on change rather
-// than appending. Anything older than the retention window is dropped on write.
+// than appending. Anything older than the retention window is dropped on write,
+// and filtered again on read so the window holds even when nothing is being
+// written.
+//
+// The window is deliberately short (a day). This log reaches past the dish's own
+// rolling buffer so the panel survives a reboot and covers overnight — it is not
+// an archive, and nothing in the UI reads events older than the 6H chart window.
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { canonicalCause } from "../src/lib/telemetry.ts";
 
 export interface StoredEvent {
   startMs: number;
@@ -20,11 +27,17 @@ export interface StoredEvent {
   severity: "advisory" | "warning" | "critical";
 }
 
-const RETENTION_MS = 30 * 24 * 3_600_000;
+// 24 hours. Sized to what the UI actually reads: the longest chart window that
+// shades outage bands is 6H, and the event log is a "what happened recently"
+// panel, not an archive. Kept at a day rather than 6H so the log still covers
+// overnight — you come back in the morning and last night is still there.
+const RETENTION_MS = 24 * 3_600_000;
 
-/** Same outage seen again across polls: the dish restates it with a longer duration. */
+/** Same outage seen again across polls: the dish restates it with a longer
+ *  duration. Keyed on the canonical cause token (not the raw/label spelling) so
+ *  a row saved by an older build under a different label still folds into one. */
 function keyOf(event: StoredEvent): string {
-  return `${event.startMs}:${event.cause}`;
+  return `${event.startMs}:${canonicalCause(event.cause)}`;
 }
 
 export class EventStore {
@@ -81,8 +94,16 @@ export class EventStore {
     return changed;
   }
 
-  /** Events newest-first, for the API. */
+  /**
+   * Events newest-first, for the API. The retention cutoff is applied here, not
+   * just in flush: flush only runs when a new event arrives, so a quiet stretch
+   * — or a restart, which reloads the whole file — would otherwise serve rows
+   * well past the window. Filtering on read makes it hold unconditionally.
+   */
   all(): StoredEvent[] {
-    return [...this.events.values()].sort((a, b) => b.startMs - a.startMs);
+    const cutoffMs = Date.now() - RETENTION_MS;
+    return [...this.events.values()]
+      .filter((event) => event.startMs >= cutoffMs)
+      .sort((a, b) => b.startMs - a.startMs);
   }
 }

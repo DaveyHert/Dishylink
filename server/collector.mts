@@ -14,6 +14,7 @@
 
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
+import { networkInterfaces } from "node:os";
 import { resolve } from "node:path";
 import { createFileRegistry, fromBinary, toJson, type DescMessage } from "@bufbuild/protobuf";
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
@@ -21,6 +22,7 @@ import { grpcWebUnaryCall } from "../src/lib/grpcWeb.ts";
 import {
   decodeHistoryWindow,
   decodeOutageEvents,
+  decodeWifiHistoryEvents,
   TelemetryAccumulator,
   type TelemetrySample,
 } from "../src/lib/telemetry.ts";
@@ -29,6 +31,9 @@ import { ThermalStore } from "./thermalStore.mts";
 import { EventStore } from "./eventStore.mts";
 import { RadioStore, type RadioReading } from "./radioStore.mts";
 import { ClientStore, type ClientReading } from "./clientStore.mts";
+import { ClientWindow } from "./clientWindow.mts";
+import { ThroughputTracker } from "../src/lib/throughputTracker.ts";
+import { AlertStore } from "./alertStore.mts";
 
 const DISH_URL =
   process.env.DISH_URL ?? "http://192.168.100.1:9201/SpaceX.API.Device.Device/Handle";
@@ -39,8 +44,20 @@ const THERMAL_FILE = resolve("server/data/thermal.ndjson");
 const EVENTS_FILE = resolve("server/data/events.ndjson");
 const RADIO_FILE = resolve("server/data/radio.ndjson");
 const CLIENTS_FILE = resolve("server/data/clients.ndjson");
+const CLIENT_SAMPLES_FILE = resolve("server/data/client-samples.json");
+const ALERTS_FILE = resolve("server/data/alerts.ndjson");
 const PORT = Number(process.env.COLLECTOR_PORT ?? 8088);
 const POLL_MS = 5_000;
+/**
+ * Faster than the router's ~1005 ms stats refresh, so every counter step is
+ * caught as an edge rather than sampled on our clock and aliased. Five polls per
+ * step leaves room for a slow response without missing one. See
+ * `src/lib/throughputTracker.ts` for why the edge is what gets measured.
+ */
+const CLIENTS_POLL_MS = 200;
+/** Recording cadence. The rates are already exact per refresh interval, so this
+ *  sets how densely they are stored, independent of how often they are read. */
+const CLIENTS_RECORD_MS = 1_000;
 const GET_HISTORY_FIELD = 1007;
 const GET_STATUS_FIELD = 1004;
 const GET_RADIO_STATS_FIELD = 1036;
@@ -97,6 +114,17 @@ async function getHistory(): Promise<any> {
   return json.dishGetHistory ?? {};
 }
 
+// get_history (1007) is a shared request: sent to the router it answers with
+// wifi_get_history — the router's own event log (power cycles, reboots, software
+// updates, client band-switching, …), the same UXEvent shape as the dish's.
+async function getWifiHistory(): Promise<{ eventLog?: { events?: unknown[] } }> {
+  const bytes = await grpcWebUnaryCall(ROUTER_URL, requestBytes(GET_HISTORY_FIELD));
+  const json = toJson(responseSchema, fromBinary(responseSchema, bytes), { registry }) as {
+    wifiGetHistory?: { eventLog?: { events?: unknown[] } };
+  };
+  return json.wifiGetHistory ?? {};
+}
+
 /**
  * `toJson` omits false fields, so an alert key is absent unless it is true —
  * `=== true` is the check, and absence means clear.
@@ -107,6 +135,15 @@ async function getStatusAlerts(): Promise<Record<string, boolean>> {
     dishGetStatus?: { alerts?: Record<string, boolean> };
   };
   return json.dishGetStatus?.alerts ?? {};
+}
+
+/** The router answers the same get_status field with its own alert set. */
+async function getRouterStatusAlerts(): Promise<Record<string, boolean>> {
+  const bytes = await grpcWebUnaryCall(ROUTER_URL, requestBytes(GET_STATUS_FIELD));
+  const json = toJson(responseSchema, fromBinary(responseSchema, bytes), { registry }) as {
+    wifiGetStatus?: { alerts?: Record<string, boolean> };
+  };
+  return json.wifiGetStatus?.alerts ?? {};
 }
 
 /**
@@ -152,6 +189,10 @@ interface WireStats {
   throughputMbpsLast15sAvg?: number | "NaN";
 }
 
+/** Turns the router's cumulative byte counters into real per-second rates.
+ *  Module-level because it has to remember the previous poll. */
+const clientThroughput = new ThroughputTracker();
+
 function finiteMbps(value: number | "NaN" | undefined): number | null {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
@@ -172,24 +213,40 @@ async function getClientReadings(): Promise<ClientReading[]> {
     };
   };
   const readings: ClientReading[] = [];
+  const nowMs = Date.now();
   for (const client of json.wifiGetClients?.clients ?? []) {
     // The router itself reports empty stats — it is the network, not a client of it.
     if (!client.macAddress || (client.role && client.role !== "CLIENT")) continue;
+
+    const rxBytes = client.rxStats?.bytes;
+    const txBytes = client.txStats?.bytes;
+    // The router intermittently returns a client with no stats block at all.
+    // Absent counters are "we did not get a reading", not zero bytes moved —
+    // passing 0 here would read as the counter resetting and, worse, would be
+    // recorded as a one-second dropout on an otherwise busy device.
+    const counters =
+      rxBytes === undefined || txBytes === undefined
+        ? undefined
+        : { rxBytes: Number(rxBytes), txBytes: Number(txBytes) };
+
+    // 15s, not 1m: the shorter window is closer to the truth whenever a delta is
+    // unavailable, and txStats has no 1m field at all — preferring it would leave
+    // download smoothed over 60s and upload over 15s on the same chart.
+    const rates = clientThroughput.rates(client.macAddress, counters, nowMs, {
+      downMbps: finiteMbps(client.rxStats?.throughputMbpsLast15sAvg) ?? 0,
+      upMbps: finiteMbps(client.txStats?.throughputMbpsLast15sAvg) ?? 0,
+    });
+
     readings.push({
       macAddress: client.macAddress,
       name: client.givenName ?? client.name,
-      downMbps:
-        finiteMbps(client.rxStats?.throughputMbpsLast1mAvg) ??
-        finiteMbps(client.rxStats?.throughputMbpsLast15sAvg) ??
-        0,
-      upMbps:
-        finiteMbps(client.txStats?.throughputMbpsLast1mAvg) ??
-        finiteMbps(client.txStats?.throughputMbpsLast15sAvg) ??
-        0,
-      rxBytes: Number(client.rxStats?.bytes ?? 0),
-      txBytes: Number(client.txStats?.bytes ?? 0),
+      downMbps: rates.downMbps,
+      upMbps: rates.upMbps,
+      rxBytes: counters?.rxBytes ?? 0,
+      txBytes: counters?.txBytes ?? 0,
     });
   }
+  clientThroughput.retain(readings.map((reading) => reading.macAddress));
   return readings;
 }
 
@@ -201,6 +258,8 @@ const thermalStore = new ThermalStore(THERMAL_FILE);
 const eventStore = new EventStore(EVENTS_FILE);
 const radioStore = new RadioStore(RADIO_FILE);
 const clientStore = new ClientStore(CLIENTS_FILE);
+const clientWindow = new ClientWindow(CLIENT_SAMPLES_FILE);
+const alertStore = new AlertStore(ALERTS_FILE);
 let latestRadio: { readings: RadioReading[]; atMs: number } | null = null;
 // Minutes seen but not yet completed (the in-progress minute, replaced each poll
 // with the authoritative recompute from the ring buffer).
@@ -249,28 +308,49 @@ function writeSampleSnapshot(): void {
 }
 
 /**
- * Record thermal alert edges. An unreachable dish means no reading, not a
- * cleared alert, so a failed poll leaves open episodes open.
+ * Record alert edges from both devices. An unreachable device means no reading,
+ * not a cleared alert, so a failed fetch leaves that device's open episodes open
+ * and never touches the other's.
+ *
+ * The dish's status is fetched once and fed to two stores: thermalStore (the
+ * three thermal keys, kept for the event log) and alertStore (every key). The
+ * duplication for thermal keys is deliberate — the event log reads thermalStore.
  */
-async function pollThermal(): Promise<void> {
-  let alerts: Record<string, boolean>;
-  try {
-    alerts = await getStatusAlerts();
-  } catch {
-    return; // the history poll already logs dish-unreachable
-  }
+async function pollAlerts(): Promise<void> {
   const now = Date.now();
-  for (const alertKey of THERMAL_ALERT_KEYS) {
-    const isActive = alerts[alertKey] === true;
-    const wasActive = thermalStore.isOpen(alertKey);
-    if (isActive && !wasActive) {
-      thermalStore.open(alertKey, now);
-      console.log(`[collector] thermal alert ON: ${alertKey}`);
+  try {
+    const dishAlerts = await getStatusAlerts();
+    for (const alertKey of THERMAL_ALERT_KEYS) {
+      const isActive = dishAlerts[alertKey] === true;
+      const wasActive = thermalStore.isOpen(alertKey);
+      if (isActive && !wasActive) {
+        thermalStore.open(alertKey, now);
+        console.log(`[collector] thermal alert ON: ${alertKey}`);
+      }
+      if (!isActive && wasActive) {
+        thermalStore.close(alertKey, now);
+        console.log(`[collector] thermal alert cleared: ${alertKey}`);
+      }
     }
-    if (!isActive && wasActive) {
-      thermalStore.close(alertKey, now);
-      console.log(`[collector] thermal alert cleared: ${alertKey}`);
-    }
+    alertStore.ingest("dish", dishAlerts, now);
+    // The dish answered, so it is reachable. Recorded as an alert in its own
+    // right: the 20 keys above only exist inside a reply, so the one condition
+    // that silences them all can never be one of them.
+    alertStore.close("system", "dishUnreachable", now);
+  } catch {
+    // No reply. Leave the dish's own episodes open — an unreachable dish means
+    // no reading, not a cleared alert — and record the unreachability itself so
+    // it survives in history instead of only being a console warning.
+    alertStore.open("system", "dishUnreachable", now);
+  }
+  try {
+    const routerAlerts = await getRouterStatusAlerts();
+    const routerNow = Date.now();
+    alertStore.ingest("router", routerAlerts, routerNow);
+    alertStore.close("system", "routerUnreachable", routerNow);
+  } catch {
+    // router unreachable (or bypass mode) — leave its open episodes open
+    alertStore.open("system", "routerUnreachable", Date.now());
   }
 }
 
@@ -290,22 +370,61 @@ async function pollRadio(): Promise<void> {
   }
 }
 
-/** Same contract as pollRadio: the router is a separate box and its failures
- *  must not read as a dish problem. */
+/**
+ * Same contract as pollRadio: the router is a separate box and its failures
+ * must not read as a dish problem.
+ *
+ * Runs on its own fast timer rather than the main 5s cycle, because unlike the
+ * dish this reading has no buffer behind it — the router reports a counter and
+ * remembers nothing, so whatever is not sampled here is gone. (The per-client
+ * history RPC that would have supplied a buffer returns all zeros on this
+ * firmware; see the note in src/lib/telemetry.ts.)
+ *
+ * Polling is decoupled from recording: it runs at 5 Hz to catch the router's
+ * counter steps as they happen, while the resulting rates are written to the
+ * stores once a second. Recording every poll would quintuple both tiers to store
+ * the same per-second numbers five times over.
+ */
+let clientPollInFlight = false;
+/** Newest rates from the fast poll, waiting to be recorded. */
+let latestClientReadings: ClientReading[] = [];
 async function pollClients(): Promise<void> {
+  // A router that stops answering must not stack a request every poll until the
+  // connection budget starves the dish poll — the tighter interval makes this
+  // guard matter more, not less.
+  if (clientPollInFlight) return;
+  clientPollInFlight = true;
   try {
     const readings = await getClientReadings();
-    if (readings.length === 0) return;
-    clientStore.ingest(readings, Date.now());
+    if (readings.length > 0) latestClientReadings = readings;
   } catch {
     // router unreachable (or bypass mode) — keep what we have
+  } finally {
+    clientPollInFlight = false;
   }
 }
 
+/**
+ * Write the newest rates to both tiers: the raw window behind the 15-minute
+ * detail chart, and the per-minute store behind the 6h view.
+ *
+ * Rates are held between the router's counter steps, so a recording tick that
+ * falls between two edges records the last completed interval rather than a gap.
+ * With a 1000 ms tick against a 1005 ms refresh the two drift, so roughly once
+ * every few minutes an interval is recorded twice or skipped — which costs a
+ * duplicated point, never a wrong value, because each recorded number is still
+ * exactly one refresh interval's measured traffic.
+ */
+function recordClients(): void {
+  if (latestClientReadings.length === 0) return;
+  const now = Date.now();
+  clientWindow.ingest(latestClientReadings, now);
+  clientStore.ingest(latestClientReadings, now);
+}
+
 async function poll(): Promise<void> {
-  await pollThermal();
+  await pollAlerts();
   await pollRadio();
-  await pollClients();
 
   let history: Awaited<ReturnType<typeof getHistory>>;
   try {
@@ -319,6 +438,17 @@ async function poll(): Promise<void> {
   // into the durable log while we still have it.
   const newEvents = eventStore.upsert(decodeOutageEvents(history));
   if (newEvents > 0) console.log(`[collector] recorded ${newEvents} event(s) from the dish log`);
+
+  // The router keeps its own event log (power cycles, band-switching, updates …)
+  // in wifi_get_history — same rolling/reset behaviour, so persist it the same way.
+  try {
+    const wifiHistory = await getWifiHistory();
+    const newRouterEvents = eventStore.upsert(decodeWifiHistoryEvents(wifiHistory));
+    if (newRouterEvents > 0)
+      console.log(`[collector] recorded ${newRouterEvents} event(s) from the router log`);
+  } catch (error) {
+    console.warn(`[collector] router history unreachable: ${(error as Error).message}`);
+  }
 
   const now = Date.now();
   latestSamples = sampleWindow.ingest(history, now);
@@ -555,8 +685,20 @@ const server = createServer((request, response) => {
   if (url.pathname === "/api/clients") {
     const hours = Math.min(6, Math.max(1, Number(url.searchParams.get("hours") ?? 6)));
     const mac = url.searchParams.get("mac") ?? undefined;
+    // Two tiers, like the dish: `samples` is the raw 1 Hz window behind the
+    // 15-minute detail chart, `history` the per-minute rows behind the 6h view.
+    // Opt in, because the raw window is far larger than the aggregate.
+    const wantSamples = url.searchParams.get("samples") === "1";
+    const sinceMs = Number(url.searchParams.get("since") ?? 0) || undefined;
     response.setHeader("Content-Type", "application/json");
-    response.end(JSON.stringify({ history: clientStore.history(hours, mac) }));
+    response.end(
+      JSON.stringify({
+        // `since` callers are tailing the live window and already hold the
+        // per-minute rows; re-sending 6h of them every second is pure waste.
+        history: sinceMs ? [] : clientStore.history(hours, mac),
+        ...(wantSamples ? { samples: clientWindow.samples(mac, sinceMs) } : {}),
+      }),
+    );
     return;
   }
   if (url.pathname === "/api/outages") {
@@ -567,6 +709,42 @@ const server = createServer((request, response) => {
   if (url.pathname === "/api/thermal") {
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify({ episodes: thermalStore.all() }));
+    return;
+  }
+  if (url.pathname === "/api/alerts") {
+    response.setHeader("Content-Type", "application/json");
+    response.end(JSON.stringify({ episodes: alertStore.all() }));
+    return;
+  }
+  // Identifies the device viewing the dashboard so it can flag "This device" in
+  // the network list. Returns address(es) to match against the router's client
+  // entries. Two cases:
+  //   • A remote viewer (phone on the LAN) — the x-forwarded-for first hop (Vite
+  //     sets it with xfwd), else the raw socket; that IP is the device.
+  //   • A loopback request — the viewer IS this host (dashboard opened on the
+  //     machine running the collector, incl. the desktop/Electron case). The
+  //     socket IP is useless (::1), so identify by this host's own interfaces,
+  //     which also yields the MAC for a stronger match.
+  // IPv4-mapped v6 (::ffff:1.2.3.4) is unwrapped to the bare v4 the router lists.
+  if (url.pathname === "/api/whoami") {
+    const forwarded = request.headers["x-forwarded-for"];
+    const firstHop = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(",")[0]?.trim();
+    const remote = (firstHop || request.socket.remoteAddress || "").replace(/^::ffff:/i, "");
+    const loopback = remote === "" || remote === "::1" || remote === "127.0.0.1";
+    let ips: string[];
+    let macs: string[];
+    if (loopback) {
+      const own = Object.values(networkInterfaces())
+        .flat()
+        .filter((iface) => iface && !iface.internal);
+      ips = own.map((iface) => iface!.address);
+      macs = [...new Set(own.map((iface) => iface!.mac).filter((mac) => mac && mac !== "00:00:00:00:00:00"))];
+    } else {
+      ips = [remote];
+      macs = [];
+    }
+    response.setHeader("Content-Type", "application/json");
+    response.end(JSON.stringify({ ips, macs }));
     return;
   }
   if (url.pathname === "/api/health") {
@@ -587,6 +765,14 @@ loadSampleSnapshot();
 void poll();
 setInterval(() => void poll(), POLL_MS);
 setInterval(writeSampleSnapshot, SNAPSHOT_EVERY_MS);
+// Clients run on their own timers: the router keeps no history, so nothing is
+// recoverable after the fact. Polling is fast enough to catch each counter step
+// as it happens; recording runs at 1 Hz and is what sets chart resolution. One
+// call covers every client.
+void pollClients();
+setInterval(() => void pollClients(), CLIENTS_POLL_MS);
+setInterval(recordClients, CLIENTS_RECORD_MS);
+setInterval(() => clientWindow.snapshot(), SNAPSHOT_EVERY_MS);
 setInterval(() => {
   const folded = store.compact();
   if (folded > 0) console.log(`[collector] folded ${folded} minute(s) from past years into monthly summaries`);
@@ -600,5 +786,6 @@ setInterval(() => {
 }, 3_600_000);
 process.on("SIGTERM", () => {
   writeSampleSnapshot();
+  clientWindow.snapshot();
   process.exit(0);
 });

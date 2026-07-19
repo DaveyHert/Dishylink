@@ -18,7 +18,10 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-export type AlertSource = "dish" | "router";
+/** The two devices, plus "system" for conditions the collector observes about
+ *  them rather than reads off them — chiefly a device not answering at all,
+ *  which by definition can never appear in that device's own alert payload. */
+export type AlertSource = "dish" | "router" | "system";
 
 export interface AlertEpisode {
   /** Which device raised it — both use overlapping keys (e.g. thermalThrottle). */
@@ -30,7 +33,10 @@ export interface AlertEpisode {
   endMs: number | null;
 }
 
-const RETENTION_MS = 30 * 24 * 3_600_000;
+// 7 days. Longer than the events panel's 24h because alerts answer a different
+// question — "has this dish been flagging water ingress / thermal trouble
+// lately?" is a pattern over days, not a list of what happened last night.
+const RETENTION_MS = 7 * 24 * 3_600_000;
 
 export class AlertStore {
   private episodes: AlertEpisode[] = [];
@@ -67,9 +73,18 @@ export class AlertStore {
     renameSync(tempPath, this.filePath);
   }
 
-  /** Episodes newest-first, for the API. */
+  /**
+   * Episodes newest-first, for the API. Cutoff applied here as well as in flush,
+   * which only runs when an episode opens or closes — a quiet stretch (the usual
+   * case: a healthy dish raises nothing for weeks) or a restart would otherwise
+   * serve episodes past the window. An open episode is kept regardless of age,
+   * for the same reason flush keeps it: it is current state, not history.
+   */
   all(): AlertEpisode[] {
-    return [...this.episodes].sort((a, b) => b.startMs - a.startMs);
+    const cutoffMs = Date.now() - RETENTION_MS;
+    return [...this.episodes]
+      .filter((episode) => episode.endMs === null || episode.startMs >= cutoffMs)
+      .sort((a, b) => b.startMs - a.startMs);
   }
 
   isOpen(source: AlertSource, key: string): boolean {
