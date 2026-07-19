@@ -101,6 +101,17 @@ function niceCeiling(rawMax: number): number {
   return magnitude * 10;
 }
 
+/** The tail of a series the chart would actually draw for `windowMinutes`.
+ *  Callers holding long buffers (the dish keeps 6h, per-device history 6h) pass
+ *  this so the chart isn't handed points its own window filter drops. Mirrors
+ *  the windowEndMs/windowStartMs pair below, so the two stay in step. */
+export function windowTail(samples: TelemetrySample[], windowMinutes: number): TelemetrySample[] {
+  if (samples.length === 0) return samples;
+  const startMs = samples[samples.length - 1].timestampMs - windowMinutes * 60_000;
+  const firstVisible = samples.findIndex((sample) => sample.timestampMs >= startMs);
+  return firstVisible <= 0 ? samples : samples.slice(firstVisible);
+}
+
 export function TelemetryChart({
   samples,
   series,

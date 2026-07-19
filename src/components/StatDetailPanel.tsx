@@ -105,7 +105,7 @@ export function StatDetailPanel({ detail, samples }: StatDetailPanelProps) {
       />
 
       <TelemetryChart
-        samples={samples}
+        samples={windowed}
         series={detail.series}
         windowMinutes={windowMinutes}
         formatValue={detail.formatValue}

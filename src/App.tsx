@@ -8,7 +8,7 @@ import { useOutageHistory, mergeOutages } from "./hooks/useOutageHistory";
 import { notificationsEnabled, toggleNotifications } from "./lib/notifications";
 import { TopBar } from "./components/TopBar";
 import { StatTile } from "./components/StatTile";
-import { TelemetryChart } from "./components/TelemetryChart";
+import { TelemetryChart, windowTail } from "./components/TelemetryChart";
 import { SkyDome } from "./components/SkyDome";
 import { OutageLog } from "./components/OutageLog";
 import { SearchingHero } from "./components/SearchingHero";
@@ -111,6 +111,9 @@ export default function App() {
 
   const liveDownlink = formatThroughput(status?.downlinkThroughputBps ?? 0);
   const liveUplink = formatThroughput(status?.uplinkThroughputBps ?? 0);
+  // The buffer holds 6h; the charts draw one window of it. Trim once here rather
+  // than handing each chart the whole thing.
+  const chartSamples = useMemo(() => windowTail(samples, windowMinutes), [samples, windowMinutes]);
   const livePowerW = useMemo(() => recentAverage(samples, (sample) => sample.powerW), [samples]);
   const recentDropRate = useMemo(() => recentAverage(samples, (sample) => sample.dropRate), [samples]);
 
@@ -216,7 +219,7 @@ export default function App() {
               }
             >
               <TelemetryChart
-                samples={samples}
+                samples={chartSamples}
                 series={THROUGHPUT_SERIES}
                 windowMinutes={windowMinutes}
                 formatValue={formatThroughputLabel}
@@ -258,7 +261,7 @@ export default function App() {
               meta="pop ping · spikes preserved · red bands = outages"
             >
               <TelemetryChart
-                samples={samples}
+                samples={chartSamples}
                 series={LATENCY_SERIES}
                 windowMinutes={windowMinutes}
                 formatValue={(value) => `${value.toFixed(0)} ms`}
@@ -273,7 +276,7 @@ export default function App() {
               meta={`≈ ${((livePowerW * 24) / 1000).toFixed(2)} kWh/day at current draw`}
             >
               <TelemetryChart
-                samples={samples}
+                samples={chartSamples}
                 series={POWER_SERIES}
                 windowMinutes={windowMinutes}
                 formatValue={(value) => `${value.toFixed(0)} W`}

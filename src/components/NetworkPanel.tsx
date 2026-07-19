@@ -2,7 +2,7 @@
 // Nodes), rows with a signal icon on the left + band/chevron on the right, and
 // a per-device drill-in showing everything the API exposes, with rename.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import type { RouterNetwork } from "../hooks/useRouterNetwork";
 import { useRadioTemps, type RadioReading } from "../hooks/useRadioTemps";
@@ -28,7 +28,7 @@ import {
   formatThroughputTick,
 } from "../lib/format";
 import { THROUGHPUT_SERIES } from "../lib/statDetails";
-import { TelemetryChart } from "./TelemetryChart";
+import { TelemetryChart, windowTail } from "./TelemetryChart";
 import { Input } from "@/components/ui/input";
 import { actionButton } from "./ui/action-button";
 import { InfoDot } from "./InfoDot";
@@ -66,6 +66,15 @@ function signalQuality(
 /** Seeded per-device history is one point per minute, so only a stretch past a
  *  couple of minutes is a real hole — 30s would fracture a healthy line. */
 const PER_DEVICE_GAP_MS = 150_000;
+
+/** Windows for the per-device throughput charts. The hook retains 6h, so every
+ *  option is already in memory; older points are the collector's per-minute
+ *  seed, recent ones the per-second live tail. */
+const WINDOW_OPTIONS = [
+  { label: "15M", value: "15" },
+  { label: "1H", value: "60" },
+  { label: "6H", value: "360" },
+];
 
 /** Silence past this reads as idle. Live polling shows noDataIdleS bouncing
  *  between 1s and 5s on devices doing nothing but background chatter. */
@@ -428,7 +437,11 @@ function DeviceDetail({
   // The facts list runs ~17 rows; only the identity + link summary stays open,
   // the rest sit behind a toggle so Throughput isn't pushed off-screen.
   const [detailsExpanded, setDetailsExpanded] = useState(false);
+  const [windowMinutes, setWindowMinutes] = useState(15);
   const reduceMotion = useReducedMotion();
+
+  // The hook retains 6h per device; the charts draw one window of it.
+  const chartHistory = useMemo(() => windowTail(history, windowMinutes), [history, windowMinutes]);
 
   const quality = signalQuality(client);
   const linkRx = client.rxStats?.rateMbps;
@@ -651,6 +664,13 @@ function DeviceDetail({
           Throughput
         </span>
         <InfoDot tip='How much data this device is transferring right now. Stream a video and watch it jump.' />
+        <SegmentedControl
+          options={WINDOW_OPTIONS}
+          value={String(windowMinutes)}
+          onChange={(minutes) => setWindowMinutes(Number(minutes))}
+          label='Chart time window'
+          className='ml-auto'
+        />
       </div>
       {history.length < 2 ? (
         <div className='text-[11.5px] font-medium text-muted-foreground py-3.5'>
@@ -666,9 +686,9 @@ function DeviceDetail({
               </span>
             </div>
             <TelemetryChart
-              samples={history}
+              samples={chartHistory}
               series={[THROUGHPUT_SERIES[0]]}
-              windowMinutes={15}
+              windowMinutes={windowMinutes}
               formatValue={formatThroughputLabel}
               formatTick={formatThroughputTick}
               minGapMs={PER_DEVICE_GAP_MS}
@@ -683,9 +703,9 @@ function DeviceDetail({
               </span>
             </div>
             <TelemetryChart
-              samples={history}
+              samples={chartHistory}
               series={[THROUGHPUT_SERIES[1]]}
-              windowMinutes={15}
+              windowMinutes={windowMinutes}
               formatValue={formatThroughputLabel}
               formatTick={formatThroughputTick}
               minGapMs={PER_DEVICE_GAP_MS}
