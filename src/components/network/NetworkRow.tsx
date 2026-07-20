@@ -11,6 +11,7 @@ import { matchesSelf } from "../../lib/selfIdentity";
 import type { SelfIdentity } from "../../lib/selfIdentity";
 import { classifyDevice } from "../../lib/deviceKind";
 import { DeviceTypeIcon } from "../icons/DeviceTypeIcon";
+import { Badge } from "../ui/badge";
 import { DeviceSignalIcon } from "./DeviceSignalIcon";
 import { bandLabel, deviceSubtitle, displayName, signalQuality } from "./networkFormat";
 
@@ -60,11 +61,7 @@ export function NetworkRow({
           {sub}
         </span>
       </span>
-      {band && (
-        <span className='flex-none rounded-[6px] border border-[var(--baseline)] px-[7px] py-0.5 font-mono text-[10px] tracking-[0.04em] text-[var(--ink-secondary)] tabular-nums'>
-          {band}
-        </span>
-      )}
+      {band && <Badge className='flex-none'>{band}</Badge>}
       {showChevron && (
         <span className='flex-none text-[18px] leading-none text-muted-foreground'>›</span>
       )}

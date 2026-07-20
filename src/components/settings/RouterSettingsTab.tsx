@@ -9,7 +9,8 @@ import {
   ROUTER_UNREACHABLE_MESSAGE,
   type WifiNetworkConfigJson,
 } from "../../lib/dishClient";
-import { Chip, DangerAction, SectionLabel, SettingRow } from "./settingsChrome";
+import { Badge } from "@/components/ui/badge";
+import { DangerAction, SectionLabel, SettingRow } from "./settingsChrome";
 
 /** SSIDs with the bands each is broadcast on. One network can appear on several
  *  radios, so they are folded by name rather than listed once per radio. */
@@ -47,7 +48,7 @@ export function RouterSettingsTab({
       {ssids.map(([ssid, bands]) => (
         <SettingRow key={ssid} title={ssid} caption='WPA2 · password managed in the Starlink app'>
           {[...new Set(bands)].map((band) => (
-            <Chip key={band}>{band}</Chip>
+            <Badge key={band}>{band}</Badge>
           ))}
         </SettingRow>
       ))}
@@ -61,9 +62,9 @@ export function RouterSettingsTab({
               title={node.displayName ?? "Mesh node"}
               caption={node.hardwareVersion ? `hardware ${node.hardwareVersion}` : undefined}
             >
-              <Chip tone={node.auth !== "MESH_AUTH_TRUSTED" ? "critical" : undefined}>
+              <Badge tone={node.auth !== "MESH_AUTH_TRUSTED" ? "critical" : "neutral"}>
                 {node.auth === "MESH_AUTH_TRUSTED" ? "trusted" : (node.auth ?? "unknown")}
-              </Chip>
+              </Badge>
             </SettingRow>
           ))}
         </>

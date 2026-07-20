@@ -1,48 +1,63 @@
-import * as React from "react"
-import { cva, type VariantProps } from "class-variance-authority"
-import { Slot } from "radix-ui"
+// The app's pill vocabulary, in one place.
+//
+// This file used to hold shadcn's stock Badge, which nothing imported: it is
+// built on primary/secondary theme tokens, and this app speaks in --ink /
+// --baseline / --status-* CSS variables with mono, tabular type. So every
+// surface hand-rolled its own pill instead, and they drifted — the band chip on
+// a network row and the band chip in Settings were the same pill written twice,
+// at 10px and 10.5px, one using `text-[var(--x)]` and the other
+// `text-[color:var(--x)]`.
+//
+// Three shapes cover every use:
+//   spec   — a machine fact: band, firmware, hardware, auth state
+//   tag    — a terse marker on something small (DTC, serving)
+//   status — a word about state, in its own colour (Active)
 
-import { cn } from "@/lib/utils"
+import { cva, type VariantProps } from "class-variance-authority";
+import { cn } from "@/lib/utils";
+
+/** Semantic colour, so a call site never hand-writes a CSS variable pair. */
+const TONE_VAR = {
+  neutral: undefined,
+  good: "var(--status-good)",
+  critical: "var(--status-critical)",
+  warm: "var(--chart-warm)",
+} as const;
 
 const badgeVariants = cva(
-  "inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3",
+  "inline-flex w-fit shrink-0 items-center justify-center whitespace-nowrap",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground [a&]:hover:bg-primary/90",
-        secondary:
-          "bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90",
-        destructive:
-          "bg-destructive text-white focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40 [a&]:hover:bg-destructive/90",
-        outline:
-          "border-border text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
-        ghost: "[a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
-        link: "text-primary underline-offset-4 [a&]:hover:underline",
+        spec: "rounded-[6px] border border-solid border-[var(--baseline)] px-[7px] py-0.5 font-mono text-[10px] tracking-[0.04em] text-[var(--ink-secondary)] tabular-nums",
+        tag: "rounded border border-solid border-[var(--baseline)] px-[5px] py-px font-mono text-[8.5px] uppercase tracking-[0.08em] text-[var(--ink-secondary)]",
+        status: "rounded-full border border-solid px-2 py-0.5 text-[11px] font-semibold",
       },
     },
-    defaultVariants: {
-      variant: "default",
-    },
-  }
-)
+    defaultVariants: { variant: "spec" },
+  },
+);
 
-function Badge({
+export function Badge({
   className,
-  variant = "default",
-  asChild = false,
+  variant,
+  tone = "neutral",
+  style,
   ...props
 }: React.ComponentProps<"span"> &
-  VariantProps<typeof badgeVariants> & { asChild?: boolean }) {
-  const Comp = asChild ? Slot.Root : "span"
-
+  VariantProps<typeof badgeVariants> & {
+    /** Colours both text and border; neutral keeps the variant's own colours. */
+    tone?: keyof typeof TONE_VAR;
+  }) {
+  const toneColor = TONE_VAR[tone];
   return (
-    <Comp
-      data-slot="badge"
-      data-variant={variant}
+    <span
+      data-slot='badge'
       className={cn(badgeVariants({ variant }), className)}
+      style={toneColor ? { color: toneColor, borderColor: toneColor, ...style } : style}
       {...props}
     />
-  )
+  );
 }
 
-export { Badge, badgeVariants }
+export { badgeVariants };

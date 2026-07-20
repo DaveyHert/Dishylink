@@ -52,17 +52,6 @@ export function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Bordered mono chip — a band on a network row, an auth state on a mesh node. */
-export function Chip({ children, tone }: { children: React.ReactNode; tone?: "critical" }) {
-  return (
-    <span
-      className='rounded-[6px] border border-[var(--baseline)] px-[7px] py-0.5 font-mono text-[10.5px] tracking-[0.04em] text-[color:var(--ink-secondary)] tabular-nums'
-      style={tone === "critical" ? { color: "var(--status-critical)" } : undefined}
-    >
-      {children}
-    </span>
-  );
-}
 
 /** Destructive action with inline armed-confirm, using the app's buttons. */
 export function DangerAction({

@@ -7,9 +7,7 @@
 
 import { forwardRef } from "react";
 import type { SatelliteSky } from "../../lib/satellites";
-
-/** Satellite pill (DTC / serving) — same frame, color set by which one it is. */
-const satTag = "rounded border px-[5px] py-px font-mono text-[8.5px] uppercase tracking-[0.08em]";
+import { Badge } from "../ui/badge";
 
 export interface SelectedSatellite {
   sky: SatelliteSky;
@@ -36,14 +34,12 @@ export const SatelliteCallout = forwardRef<
               {selected.sky.name.replace(/\s*\[DTC\]\s*/, "")}
             </span>
             {/\[DTC\]/.test(selected.sky.name) && (
-              <span className={`${satTag} border-[var(--baseline)] text-[var(--ink-secondary)]`}>
-                DTC
-              </span>
+              <Badge variant='tag'>DTC</Badge>
             )}
             {selected.isServing && (
-              <span className={`${satTag} border-[var(--chart-warm)] text-[var(--chart-warm)]`}>
+              <Badge variant='tag' tone='warm'>
                 serving
-              </span>
+              </Badge>
             )}
             <button
               className='ml-auto cursor-pointer border-0 bg-transparent pl-1 text-[15px] leading-none text-muted-foreground hover:text-foreground'
