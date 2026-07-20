@@ -67,7 +67,9 @@ function recentAverage(samples: TelemetrySample[], getValue: (sample: TelemetryS
 }
 
 export default function App() {
-  const [theme, setTheme] = useState<ThemeName>(() => (localStorage.getItem("dishboard-theme") as ThemeName) ?? "light");
+  // Dark is the instrument's resting state — it's how the Starlink app ships and
+  // what the charts and beam were coloured against. A stored choice still wins.
+  const [theme, setTheme] = useState<ThemeName>(() => (localStorage.getItem("dishboard-theme") as ThemeName) ?? "dark");
   const [windowMinutes, setWindowMinutes] = useState(15);
   const [notificationsOn, setNotificationsOn] = useState(notificationsEnabled);
   const [openDetailId, setOpenDetailId] = useState<string | null>(null);

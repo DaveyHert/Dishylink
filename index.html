@@ -11,6 +11,12 @@
       rel="stylesheet"
     />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- App sets data-theme in an effect, which lands after the first paint — on a
+         dark-by-default dashboard that showed as a white flash on every load. Same
+         key and same default as the useState initialiser in App.tsx. -->
+    <script>
+      document.documentElement.dataset.theme = localStorage.getItem("dishboard-theme") || "dark";
+    </script>
   </head>
   <body>
     <div id="root"></div>
