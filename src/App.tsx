@@ -253,6 +253,13 @@ export default function App() {
               }}
               variant="standard"
               onOpenImmersive={() => setOpenSheet("skyview")}
+              // Freeze the dome's cosmetic auto-rotate while a modal covers it: a
+              // backdrop-filter over a canvas that repaints every frame makes
+              // Chromium flicker the blur. Data-driven redraws (obstruction map,
+              // dish mesh, theme) are on separate ungated effects, so nothing
+              // stale is shown — this is the same redraw regime reduced-motion
+              // users already run in permanently.
+              paused={openDetailId !== null || openSheet !== null}
             />
 
             <SectionCard

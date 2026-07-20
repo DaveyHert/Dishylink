@@ -292,6 +292,12 @@ export interface WifiClientJson {
   deviceId?: string;
   upstreamMacAddress?: string;
   hopsFromController?: number;
+  /** Router's estimate of the link back to the controller, per direction. On a
+   *  mesh node this is the backhaul everything it relays has to fit through —
+   *  measured at ~320/1000 Mbps on 5 GHz and ~216/187 after it fell to 2.4 GHz.
+   *  Absent on the controller itself, which has no upstream radio link. */
+  estRxRateMbpsFromController?: number;
+  estTxRateMbpsFromController?: number;
   associatedTimeS?: number;
   secondsUntilDhcpLeaseExpires?: number;
   dhcpLeaseActive?: boolean;

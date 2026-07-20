@@ -11,6 +11,7 @@ import { SegmentedControl } from "./ui/segmented-control";
 import { Callout } from "./ui/callout";
 import { Explainer } from "./ui/explainer";
 import { FigureRow } from "./ui/figure-row";
+import { DeviceUsageList } from "./DeviceUsageList";
 import { CloudDataUsage } from "./CloudDataUsage";
 
 type UsageSource = "local" | "cloud";
@@ -129,6 +130,8 @@ function LocalDataUsage() {
         machine. It tracks your real traffic from the moment the collector started — it is not Starlink's
         billing meter, which lives in their cloud and counts in UTC.
       </Explainer>
+
+      <DeviceUsageList />
     </div>
   );
 }

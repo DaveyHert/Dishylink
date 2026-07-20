@@ -12,7 +12,8 @@
 // boundary sample is excluded rather than resent — that closes the loop.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchPersistedClientHistory } from "./useRouterNetwork";
+import { appendClientSamples, fetchPersistedClientHistory } from "./useRouterNetwork";
+import type { TelemetrySample } from "../lib/telemetry";
 
 const MAC = "aa:bb:cc:dd:ee:ff";
 
@@ -87,5 +88,57 @@ describe("fetchPersistedClientHistory", () => {
     stubCollector({}, false);
 
     expect((await fetchPersistedClientHistory()).newestSampleMs).toBe(0);
+  });
+});
+
+// The chart froze once: the tail appended with `series.push` in place, so
+// `throughputHistory.get(mac)` handed back the same array every second. The
+// hook signals change by shallow-copying the Map, not the arrays, so the
+// per-device chart's `useMemo(windowTail, [history])` never saw a new reference
+// and only advanced when the panel was remounted. What must hold is identity:
+// an appended-to series is a NEW array; an untouched one is not.
+describe("appendClientSamples", () => {
+  it("replaces a touched series with a new array reference", () => {
+    const history = new Map<string, TelemetrySample[]>();
+    const before = appendClientSamples(history, [
+      { macAddress: MAC, atMs: 1_000, downMbps: 1, upMbps: 0.1 },
+    ]);
+    const firstRef = history.get(MAC)!;
+    expect(before).toBe(1_000);
+
+    appendClientSamples(history, [{ macAddress: MAC, atMs: 2_000, downMbps: 2, upMbps: 0.2 }]);
+    const secondRef = history.get(MAC)!;
+
+    // A new reference is the whole fix — the memo downstream keys on it.
+    expect(secondRef).not.toBe(firstRef);
+    expect(secondRef.map((sample) => sample.timestampMs)).toEqual([1_000, 2_000]);
+  });
+
+  it("leaves an untouched device's array reference alone", () => {
+    const history = new Map<string, TelemetrySample[]>();
+    appendClientSamples(history, [{ macAddress: "other", atMs: 1_000, downMbps: 1, upMbps: 0 }]);
+    const untouchedRef = history.get("other")!;
+
+    appendClientSamples(history, [{ macAddress: MAC, atMs: 2_000, downMbps: 2, upMbps: 0 }]);
+
+    expect(history.get("other")!).toBe(untouchedRef);
+  });
+
+  it("appends both samples to one fresh array when a batch repeats a MAC", () => {
+    const history = new Map<string, TelemetrySample[]>([
+      [MAC, [{ timestampMs: 0, latencyMs: null, dropRate: 0, downlinkBps: 0, uplinkBps: 0, powerW: 0 }]],
+    ]);
+    const originalRef = history.get(MAC)!;
+    const newestMs = appendClientSamples(history, [
+      { macAddress: MAC, atMs: 1_000, downMbps: 1, upMbps: 0 },
+      { macAddress: MAC, atMs: 2_000, downMbps: 2, upMbps: 0 },
+    ]);
+
+    expect(newestMs).toBe(2_000);
+    // One copy for the batch, both new points on it, seed point kept, and the
+    // in-place seed array is never mutated.
+    expect(history.get(MAC)!).not.toBe(originalRef);
+    expect(history.get(MAC)!.map((sample) => sample.timestampMs)).toEqual([0, 1_000, 2_000]);
+    expect(originalRef.map((sample) => sample.timestampMs)).toEqual([0]);
   });
 });

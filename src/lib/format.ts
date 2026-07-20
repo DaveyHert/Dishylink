@@ -81,3 +81,16 @@ export function formatBytes(bytes: number): string {
   if (bytes >= 1e3) return `${Math.round(bytes / 1e3)} kB`;
   return `${Math.round(bytes)} B`;
 }
+
+/** Coarse "how long ago" for a past timestamp: "just now", "5 min ago",
+ *  "3 hours ago", "2 days ago". For last-seen labels, not precise timing. */
+export function formatRelativeTime(timestampMs: number, nowMs: number = Date.now()): string {
+  const seconds = Math.max(0, Math.round((nowMs - timestampMs) / 1000));
+  if (seconds < 60) return "just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.round(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}

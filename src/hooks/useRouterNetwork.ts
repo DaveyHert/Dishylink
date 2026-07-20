@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { DishClient, type WifiClientJson, type WifiNetworkConfigJson } from "../lib/dishClient";
 import type { ThroughputRates } from "../lib/throughputTracker";
 import type { TelemetrySample } from "../lib/telemetry";
+import type { ClientUsageTotal } from "../lib/clientUsage";
 
 // Roster only — names, signal, addresses, link rates. These change on the order
 // of minutes, so there is nothing to gain from asking faster.
@@ -20,11 +21,36 @@ const CLIENTS_POLL_MS = 5_000;
 
 /** Tail of the collector's 1 Hz window — small, incremental, purely local. */
 const SAMPLES_POLL_MS = 1_000;
+
+/** How many 1 Hz tails between asks for the monthly totals. They are a list of
+ *  every device, and a month's odometer does not move meaningfully inside a
+ *  second, so riding every fifth tick keeps them at the 5s roster cadence. */
+const TOTALS_EVERY_TICKS = 5;
 // Per-device throughput history. The router returns only a point-in-time rate,
 // so the series is accumulated — but by the always-on collector, not here. This
 // hook seeds from it (/api/clients) and then appends what it polls itself, so a
 // reload or a closed panel no longer costs the user their history.
 const HISTORY_WINDOW_MS = 6 * 3_600_000;
+
+/** Whether a freshly fetched totals list carries nothing the current map does not
+ *  already say, so the map can be kept by identity instead of rebuilt. */
+function sameTotals(
+  current: Map<string, ClientUsageTotal>,
+  next: readonly ClientUsageTotal[],
+): boolean {
+  if (current.size !== next.length) return false;
+  return next.every((total) => {
+    const held = current.get(total.macAddress);
+    return (
+      held !== undefined &&
+      held.rxBytes === total.rxBytes &&
+      held.txBytes === total.txBytes &&
+      held.sinceMs === total.sinceMs &&
+      held.lastSeenMs === total.lastSeenMs &&
+      held.name === total.name
+    );
+  });
+}
 
 interface ClientMinuteJson {
   minute: number;
@@ -125,6 +151,46 @@ export async function fetchPersistedClientHistory(): Promise<SeededClientHistory
   return { history, newestSampleMs };
 }
 
+/**
+ * Copy-on-write append of a batch of raw samples into the per-MAC history map.
+ * Returns the newest timestamp seen (0 if `fresh` is empty).
+ *
+ * Every series this batch touches is replaced with a NEW array. That matters
+ * because the hook only ever shallow-copies the Map (`new Map(history)`) to
+ * signal a change, and consumers read series by key: a series mutated in place
+ * keeps its reference, so a `useMemo` keyed on it — the per-device chart's
+ * `windowTail` — never recomputes and the chart freezes until the panel is
+ * remounted. `touched` lets a second sample for the same MAC in one batch keep
+ * appending to that fresh array instead of copying it again.
+ */
+export function appendClientSamples(
+  history: Map<string, TelemetrySample[]>,
+  fresh: ClientSampleJson[],
+): number {
+  const touched = new Set<string>();
+  let newestMs = 0;
+  for (const sample of fresh) {
+    const existing = history.get(sample.macAddress);
+    const series = touched.has(sample.macAddress)
+      ? existing! // already this batch's fresh array
+      : existing
+        ? existing.slice()
+        : [];
+    touched.add(sample.macAddress);
+    series.push({
+      timestampMs: sample.atMs,
+      latencyMs: null,
+      dropRate: 0,
+      downlinkBps: sample.downMbps * 1_000_000,
+      uplinkBps: sample.upMbps * 1_000_000,
+      powerW: 0,
+    });
+    history.set(sample.macAddress, series);
+    if (sample.atMs > newestMs) newestMs = sample.atMs;
+  }
+  return newestMs;
+}
+
 export interface RouterNetwork {
   clients: WifiClientJson[];
   wifiConfig: WifiNetworkConfigJson | null;
@@ -136,6 +202,9 @@ export interface RouterNetwork {
   /** Live per-MAC rate — the newest sample from the collector's window, which
    *  computes it from byte-counter deltas rather than the router's averages. */
   rates: Map<string, ThroughputRates>;
+  /** Per-MAC monthly usage total from the collector's odometer — survives the
+   *  reconnects that reset the router's own per-client counter. */
+  totals: Map<string, ClientUsageTotal>;
 }
 
 export function useRouterNetwork(active: boolean): RouterNetwork {
@@ -144,6 +213,7 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
   const [routerReachable, setRouterReachable] = useState<boolean | null>(null);
   const [throughputHistory, setThroughputHistory] = useState<Map<string, TelemetrySample[]>>(new Map());
   const [rates, setRates] = useState<Map<string, ThroughputRates>>(new Map());
+  const [totals, setTotals] = useState<Map<string, ClientUsageTotal>>(new Map());
   const ratesRef = useRef<Map<string, ThroughputRates>>(new Map());
   /** Newest sample already merged, so each tail asks only for what is new. */
   const lastSampleMsRef = useRef(0);
@@ -198,39 +268,47 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
         // Tail the collector's window: append what is new, drop what has aged
         // out. The collector is the only thing computing rates, so every tab
         // shows the same series and the router sees one poller, not one per tab.
+        // Totals move slowly and are a per-device list; asking for them on every
+        // 1 Hz tick would resend the whole set 5x more often than it can change
+        // meaningfully. Ride along with every fifth tail instead.
+        let tailTick = 0;
         const tailSamples = async () => {
           if (tailInFlight) return;
           tailInFlight = true;
           try {
             const since = lastSampleMsRef.current;
+            const wantTotals = tailTick++ % TOTALS_EVERY_TICKS === 0;
             const response = await fetch(
-              `/api/clients?samples=1${since ? `&since=${since}` : "&hours=6"}`,
+              `/api/clients?samples=1${wantTotals ? "&totals=1" : ""}${since ? `&since=${since}` : "&hours=6"}`,
               { signal: AbortSignal.timeout(4_000) },
             );
             if (!response.ok || disposed) return;
-            const payload = (await response.json()) as { samples?: ClientSampleJson[] };
+            const payload = (await response.json()) as {
+              samples?: ClientSampleJson[];
+              totals?: ClientUsageTotal[];
+            };
+            // Independent of whether new rate samples landed — an idle device
+            // still has a total worth keeping current. Kept by identity when
+            // nothing actually moved, so a quiet network stops re-rendering
+            // every consumer of `totals` on each beat.
+            const nextTotals = payload.totals;
+            if (nextTotals) {
+              setTotals((current) =>
+                sameTotals(current, nextTotals)
+                  ? current
+                  : new Map(nextTotals.map((total) => [total.macAddress, total])),
+              );
+            }
             const fresh = payload.samples ?? [];
             if (fresh.length === 0) return;
 
             const history = historyRef.current;
+            const newestMs = appendClientSamples(history, fresh);
+            lastSampleMsRef.current = Math.max(lastSampleMsRef.current, newestMs);
+            // Newest sample per device is the live reading the panel shows.
             const nextRates = new Map(ratesRef.current);
             for (const sample of fresh) {
-              const series = history.get(sample.macAddress) ?? [];
-              series.push({
-                timestampMs: sample.atMs,
-                latencyMs: null,
-                dropRate: 0,
-                downlinkBps: sample.downMbps * 1_000_000,
-                uplinkBps: sample.upMbps * 1_000_000,
-                powerW: 0,
-              });
-              history.set(sample.macAddress, series);
-              // Newest sample per device is the live reading the panel shows.
-              nextRates.set(sample.macAddress, {
-                downMbps: sample.downMbps,
-                upMbps: sample.upMbps,
-              });
-              lastSampleMsRef.current = Math.max(lastSampleMsRef.current, sample.atMs);
+              nextRates.set(sample.macAddress, { downMbps: sample.downMbps, upMbps: sample.upMbps });
             }
             const cutoff = Date.now() - HISTORY_WINDOW_MS;
             for (const series of history.values()) {
@@ -273,5 +351,5 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
     );
   }, []);
 
-  return { clients, wifiConfig, routerReachable, renameClient, throughputHistory, rates };
+  return { clients, wifiConfig, routerReachable, renameClient, throughputHistory, rates, totals };
 }

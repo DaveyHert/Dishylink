@@ -48,6 +48,11 @@ interface SkyDomeProps {
   onOpenImmersive?: () => void;
   /** Immersive only: sub-text under the sheet title, sharing the row with the site line. */
   caption?: string;
+  /** Freeze the animation loops while the dome is hidden behind a modal. A
+   *  backdrop-filter over a canvas that repaints every frame makes Chromium
+   *  recompute the blur each frame and drop the backdrop layer intermittently
+   *  (the "panel flicker"); a static backdrop has nothing to recompute. */
+  paused?: boolean;
 }
 
 type DomePointKind = "clear" | "partial" | "obstructed" | "unmapped";
@@ -163,6 +168,7 @@ export function SkyDome({
   variant = "standard",
   onOpenImmersive,
   caption,
+  paused = false,
 }: SkyDomeProps) {
   const isImmersive = variant === "immersive";
   const canvasSize = isImmersive ? IMMERSIVE_CANVAS_SIZE : STANDARD_CANVAS_SIZE;
@@ -596,7 +602,7 @@ export function SkyDome({
 
   // animation loop while satellites are live (immersive only)
   useEffect(() => {
-    if (!isImmersive || !satellites.sampleSky || isViewingHistory) return;
+    if (paused || !isImmersive || !satellites.sampleSky || isViewingHistory) return;
     let animationFrameId = 0;
     let lastFrameAt = 0;
     const animate = (frameTime: number) => {
@@ -608,12 +614,12 @@ export function SkyDome({
     };
     animationFrameId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animationFrameId);
-  }, [satellites.sampleSky, isViewingHistory, drawDome]);
+  }, [paused, isImmersive, satellites.sampleSky, isViewingHistory, drawDome]);
 
   // Slow drift for the dashboard dome, as the Starlink app does it. Skipped for
   // anyone who asked the OS to reduce motion — this one never stops on its own.
   useEffect(() => {
-    if (isImmersive) return;
+    if (paused || isImmersive) return;
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     let animationFrameId = 0;
     let lastFrameAt = 0;
@@ -630,7 +636,7 @@ export function SkyDome({
     };
     animationFrameId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animationFrameId);
-  }, [isImmersive, drawDome]);
+  }, [paused, isImmersive, drawDome]);
 
   const handlePointerDown = (downEvent: React.PointerEvent<HTMLCanvasElement>) => {
     lastInteractionRef.current = performance.now();

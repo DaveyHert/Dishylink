@@ -32,6 +32,7 @@ import { EventStore } from "./eventStore.mts";
 import { RadioStore, type RadioReading } from "./radioStore.mts";
 import { ClientStore, type ClientReading } from "./clientStore.mts";
 import { ClientWindow } from "./clientWindow.mts";
+import { ClientTotalsStore } from "./clientTotals.mts";
 import { ThroughputTracker } from "../src/lib/throughputTracker.ts";
 import { AlertStore } from "./alertStore.mts";
 
@@ -45,6 +46,7 @@ const EVENTS_FILE = resolve("server/data/events.ndjson");
 const RADIO_FILE = resolve("server/data/radio.ndjson");
 const CLIENTS_FILE = resolve("server/data/clients.ndjson");
 const CLIENT_SAMPLES_FILE = resolve("server/data/client-samples.json");
+const CLIENT_TOTALS_FILE = resolve("server/data/client-totals.json");
 const ALERTS_FILE = resolve("server/data/alerts.ndjson");
 const PORT = Number(process.env.COLLECTOR_PORT ?? 8088);
 const POLL_MS = 5_000;
@@ -193,6 +195,10 @@ interface WireStats {
  *  Module-level because it has to remember the previous poll. */
 const clientThroughput = new ThroughputTracker();
 
+/** Per-device monthly data-usage odometer. Accumulates the same byte counters,
+ *  reset-aware, so a total survives the reconnects that zero the router's own. */
+const clientTotals = new ClientTotalsStore(CLIENT_TOTALS_FILE);
+
 function finiteMbps(value: number | "NaN" | undefined): number | null {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
@@ -228,6 +234,19 @@ async function getClientReadings(): Promise<ClientReading[]> {
       rxBytes === undefined || txBytes === undefined
         ? undefined
         : { rxBytes: Number(rxBytes), txBytes: Number(txBytes) };
+
+    // Fold the raw counter into the monthly odometer. Done here, at the fast
+    // poll, so a re-association's counter reset is caught the moment it happens
+    // rather than a second later when it has already climbed back up.
+    if (counters) {
+      clientTotals.observe(
+        client.macAddress,
+        counters.rxBytes,
+        counters.txBytes,
+        nowMs,
+        client.givenName ?? client.name,
+      );
+    }
 
     // 15s, not 1m: the shorter window is closer to the truth whenever a delta is
     // unavailable, and txStats has no 1m field at all — preferring it would leave
@@ -420,6 +439,41 @@ function recordClients(): void {
   const now = Date.now();
   clientWindow.ingest(latestClientReadings, now);
   clientStore.ingest(latestClientReadings, now);
+}
+
+/**
+ * Backfill each device's opening monthly total from the per-minute history the
+ * collector already holds on disk, so a first-ever run does not start everyone
+ * at zero. Integrates the recorded mean rates into bytes, clamped to this month
+ * so last month's traffic never counts into it. No-op per device once a total
+ * exists — a restart reloads the accumulated figure rather than re-seeding.
+ */
+function seedClientTotals(nowMs: number): void {
+  const monthStart = new Date(nowMs);
+  monthStart.setHours(0, 0, 0, 0);
+  monthStart.setDate(1);
+  const monthStartSec = Math.floor(monthStart.getTime() / 1000);
+  const perMac = new Map<string, { rx: number; tx: number; lastMs: number; name?: string }>();
+  for (const row of clientStore.history(6)) {
+    if (row.minute < monthStartSec) continue;
+    const agg = perMac.get(row.macAddress) ?? { rx: 0, tx: 0, lastMs: 0, name: row.name };
+    // downMbps/upMbps are the minute's mean rate; × 60 s ÷ 8 bits = bytes.
+    agg.rx += (row.downMbps * 1_000_000 * 60) / 8;
+    agg.tx += (row.upMbps * 1_000_000 * 60) / 8;
+    agg.lastMs = Math.max(agg.lastMs, row.minute * 1_000);
+    if (row.name) agg.name = row.name;
+    perMac.set(row.macAddress, agg);
+  }
+  let seeded = 0;
+  for (const [mac, agg] of perMac) {
+    if (clientTotals.has(mac)) continue;
+    // Seed at the minute the device was last recorded, not now: most of this
+    // history belongs to devices that are currently offline, and stamping them
+    // with `nowMs` would have the list report every one of them as active.
+    clientTotals.seed(mac, Math.round(agg.rx), Math.round(agg.tx), agg.lastMs, agg.name);
+    seeded++;
+  }
+  if (seeded > 0) console.log(`[collector] seeded ${seeded} device total(s) from recorded history`);
 }
 
 async function poll(): Promise<void> {
@@ -647,9 +701,54 @@ function summarize(range: Range, now: Date) {
   };
 }
 
+/**
+ * Whether a request's `Origin` is this machine or the LAN — the dashboard is
+ * reached both at localhost and, from a phone, at the host's private address, so
+ * both have to pass. A missing Origin is a non-browser client (curl, a script),
+ * which is not the drive-by case this guards.
+ */
+function isLocalOrigin(origin?: string): boolean {
+  if (!origin) return true;
+  let hostname: string;
+  try {
+    hostname = new URL(origin).hostname.replace(/^\[|\]$/g, "");
+  } catch {
+    return false;
+  }
+  if (hostname === "localhost" || hostname === "::1" || /^127\./.test(hostname)) return true;
+  // A name with no dot is a bare LAN hostname; a public site always has one.
+  if (!hostname.includes(".")) return true;
+  if (/\.(local|internal|home\.arpa|ts\.net)$/.test(hostname)) return true;
+  // RFC1918 private ranges.
+  if (/^10\./.test(hostname) || /^192\.168\./.test(hostname)) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) return true;
+  // Tailscale and other CGNAT (100.64.0.0/10), plus link-local and IPv6 ULA.
+  if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(hostname)) return true;
+  if (/^169\.254\./.test(hostname)) return true;
+  return /^f[cd][0-9a-f]{2}:/i.test(hostname);
+}
+
 const server = createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://localhost:${PORT}`);
   response.setHeader("Access-Control-Allow-Origin", "*");
+  // The usage list can reset (POST) and delete (DELETE) records — allow both,
+  // plus answer the preflight.
+  response.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  if (request.method === "OPTIONS") {
+    response.statusCode = 204;
+    response.end();
+    return;
+  }
+  // Reads stay open to anything. Writes do not: a wildcard policy in front of
+  // DELETE /api/clients/totals would let any page the user happens to visit wipe
+  // their usage history from across the internet. Only a page served from this
+  // machine or the LAN may mutate.
+  if (request.method !== "GET" && !isLocalOrigin(request.headers.origin)) {
+    response.statusCode = 403;
+    response.setHeader("Content-Type", "application/json");
+    response.end(JSON.stringify({ error: "cross-origin write refused" }));
+    return;
+  }
   // /api/usage shares the same summary (energy + traffic ride the same buckets)
   if (url.pathname === "/api/energy" || url.pathname === "/api/usage") {
     const rangeParam = url.searchParams.get("range") as Range | null;
@@ -682,6 +781,36 @@ const server = createServer((request, response) => {
     );
     return;
   }
+  // Zero one device's total but keep it listed (a reset, distinct from delete).
+  if (url.pathname === "/api/clients/totals/reset" && request.method === "POST") {
+    const mac = url.searchParams.get("mac");
+    const reset = mac ? clientTotals.reset(mac, Date.now()) : false;
+    if (reset) clientTotals.snapshot();
+    response.setHeader("Content-Type", "application/json");
+    response.end(JSON.stringify({ reset }));
+    return;
+  }
+  // Per-device monthly usage odometer: read the list, or delete one device's
+  // record (?mac=) or all of them (no mac). Deleting removes the entry; use
+  // /reset above to zero a device while keeping it listed.
+  if (url.pathname === "/api/clients/totals") {
+    response.setHeader("Content-Type", "application/json");
+    if (request.method === "DELETE") {
+      const mac = url.searchParams.get("mac");
+      if (mac) {
+        const removed = clientTotals.remove(mac);
+        clientTotals.snapshot();
+        response.end(JSON.stringify({ removed }));
+      } else {
+        clientTotals.clear();
+        clientTotals.snapshot();
+        response.end(JSON.stringify({ cleared: true }));
+      }
+      return;
+    }
+    response.end(JSON.stringify({ totals: clientTotals.totals() }));
+    return;
+  }
   if (url.pathname === "/api/clients") {
     const hours = Math.min(6, Math.max(1, Number(url.searchParams.get("hours") ?? 6)));
     const mac = url.searchParams.get("mac") ?? undefined;
@@ -697,6 +826,14 @@ const server = createServer((request, response) => {
         // per-minute rows; re-sending 6h of them every second is pure waste.
         history: sinceMs ? [] : clientStore.history(hours, mac),
         ...(wantSamples ? { samples: clientWindow.samples(mac, sinceMs) } : {}),
+        // Monthly odometer, so the device detail can show a real total that
+        // survives the reconnects the router's own counter resets on. Asked for
+        // explicitly (or implied by a seed request): the sample tail polls at 1 Hz
+        // and re-sending every device's total that often is pure waste, so it
+        // requests these on a slower beat.
+        ...(url.searchParams.get("totals") === "1" || !sinceMs
+          ? { totals: clientTotals.totals(mac) }
+          : {}),
       }),
     );
     return;
@@ -762,6 +899,10 @@ server.listen(PORT, () => {
 });
 
 loadSampleSnapshot();
+// Seed device totals from history already on disk before the first poll, so a
+// fresh install opens with real figures instead of zero. No-op after a restart,
+// which reloads the accumulated totals from their own snapshot instead.
+seedClientTotals(Date.now());
 void poll();
 setInterval(() => void poll(), POLL_MS);
 setInterval(writeSampleSnapshot, SNAPSHOT_EVERY_MS);
@@ -773,6 +914,7 @@ void pollClients();
 setInterval(() => void pollClients(), CLIENTS_POLL_MS);
 setInterval(recordClients, CLIENTS_RECORD_MS);
 setInterval(() => clientWindow.snapshot(), SNAPSHOT_EVERY_MS);
+setInterval(() => clientTotals.snapshot(), SNAPSHOT_EVERY_MS);
 setInterval(() => {
   const folded = store.compact();
   if (folded > 0) console.log(`[collector] folded ${folded} minute(s) from past years into monthly summaries`);
@@ -783,9 +925,17 @@ setInterval(() => {
 setInterval(() => {
   const dropped = clientStore.compact();
   if (dropped > 0) console.log(`[collector] compacted client log, dropped ${dropped} old row(s)`);
+  // Drop usage records for devices unseen since before last month, on the same
+  // hourly sweep, then persist so the trim survives a restart.
+  const totalsDropped = clientTotals.compact(Date.now());
+  if (totalsDropped > 0) {
+    clientTotals.snapshot();
+    console.log(`[collector] dropped ${totalsDropped} stale device total(s)`);
+  }
 }, 3_600_000);
 process.on("SIGTERM", () => {
   writeSampleSnapshot();
   clientWindow.snapshot();
+  clientTotals.snapshot();
   process.exit(0);
 });
