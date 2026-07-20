@@ -6,6 +6,7 @@
 // the value itself. Theme-aware via CSS variables.
 
 import { useEasedValue } from "../../hooks/useEasedValue";
+import { SpeedCaption } from "./SpeedCaption";
 
 const CENTER = 130;
 const RADIUS = 100;
@@ -53,7 +54,7 @@ export function SpeedGauge({ value, mode, caption }: SpeedGaugeProps) {
 
   return (
     <div className="speed-gauge">
-      <svg viewBox="0 0 260 240" className="speed-gauge-svg" role="img" aria-label={`${caption} ${value?.toFixed(0) ?? "—"} Mbps`}>
+      <svg viewBox="0 0 260 240" className="speed-gauge-svg" role="img" aria-label={`${caption} ${value?.toFixed(1) ?? "—"} Mbps`}>
         {/* track */}
         <path d={arcPath(RADIUS, 0, 1)} className="gauge-track" fill="none" strokeLinecap="round" />
         {/* fill up to the needle */}
@@ -86,13 +87,14 @@ export function SpeedGauge({ value, mode, caption }: SpeedGaugeProps) {
         <circle cx={CENTER} cy={CENTER} r={7} fill={fillColor} />
         {/* center readout — eases with the needle; a muted 0 only when idle at rest */}
         <text x={CENTER} y={CENTER + 52} className={`gauge-value${pending ? " pending" : ""}`} textAnchor="middle">
-          {pending ? "0" : eased.toFixed(eased < 100 ? 1 : 0)}
+          {/* one decimal at every magnitude — see the same readout in SpeedBeam */}
+          {pending ? "0" : eased.toFixed(1)}
         </text>
         <text x={CENTER} y={CENTER + 72} className="gauge-unit" textAnchor="middle">
           Mbps
         </text>
       </svg>
-      <div className="speed-gauge-caption">{caption}</div>
+      <SpeedCaption mode={mode} caption={caption} />
     </div>
   );
 }

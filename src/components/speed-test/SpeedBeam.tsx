@@ -10,6 +10,7 @@
 
 import { motion, useReducedMotion } from "motion/react";
 import { useEasedValue } from "../../hooks/useEasedValue";
+import { SpeedCaption } from "./SpeedCaption";
 
 interface SpeedBeamProps {
   value: number | null;
@@ -32,15 +33,17 @@ export function SpeedBeam({ value, mode, caption, running = false }: SpeedBeamPr
   const active = mode !== "idle";
   const animating = running && !reduce;
   const pending = value === null && eased < 0.1;
-  // Upload uses the dashboard's upload series colour so the two views agree.
-  const beamColor = mode === "upload" ? "var(--series-up)" : "var(--chart-ink)";
+  // One colour in both directions — the packet's direction of travel already says
+  // which phase is running, so recolouring the whole beam only made the view flicker
+  // between two looks mid-test.
+  const beamColor = "var(--chart-ink)";
   // Packet direction: download flows down to the dish, upload flows up.
   const from = mode === "upload" ? DISH : SAT;
   const to = mode === "upload" ? SAT : DISH;
 
   return (
     <div className="speed-beam">
-      <svg viewBox="0 0 260 200" className="speed-beam-svg" role="img" aria-label={`${caption} ${value?.toFixed(0) ?? "—"} Mbps`}>
+      <svg viewBox="0 0 260 200" className="speed-beam-svg" role="img" aria-label={`${caption} ${value?.toFixed(1) ?? "—"} Mbps`}>
         <defs>
           {/* bloom around the beam and satellite, as in the Starlink app */}
           <filter id="beam-glow" x="-60%" y="-60%" width="220%" height="220%">
@@ -124,10 +127,13 @@ export function SpeedBeam({ value, mode, caption, running = false }: SpeedBeamPr
       </svg>
 
       <div className="speed-beam-readout">
-        <span className={`speed-beam-value${pending ? " pending" : ""}`}>{pending ? "0" : eased.toFixed(eased < 100 ? 1 : 0)}</span>
+        {/* One decimal at every magnitude, so this agrees with the headline figure
+            above it — dropping it past 100 made a 118.5 Mbps run read as two
+            different numbers on the same screen. */}
+        <span className={`speed-beam-value${pending ? " pending" : ""}`}>{pending ? "0" : eased.toFixed(1)}</span>
         <span className="speed-beam-unit">Mbps</span>
       </div>
-      <div className="speed-gauge-caption">{caption}</div>
+      <SpeedCaption mode={mode} caption={caption} />
     </div>
   );
 }

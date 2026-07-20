@@ -66,17 +66,21 @@ function fmt(value: number | null, digits = 0): string {
 }
 
 // Unmeasured figures read as a muted 0 rather than a dash, as in the Starlink app.
+// The unit sits next to the number, not up in the label, so the row reads the same
+// way as every other figure in the app (see FigureRow).
 function HeadlineFigure({
   icon,
   label,
   unit,
   value,
+  digits,
   active,
 }: {
   icon: ReactNode;
   label: string;
   unit: string;
   value: number | null;
+  digits: number;
   active: boolean;
 }) {
   const pending = value === null;
@@ -85,13 +89,20 @@ function HeadlineFigure({
       <div
         className={`text-[11px] font-semibold tracking-[0.04em] ${active ? "text-foreground" : "text-muted-foreground"}`}
       >
-        <span className="inline-flex align-[-1px]">{icon}</span> {label}{" "}
-        <span className="font-medium">{unit}</span>
+        <span className="inline-flex align-[-1px]">{icon}</span> {label}
       </div>
+      {/* The number is what the eye tracks down the column, so it — not the
+          number-plus-unit — is what sits centred under the label. The unit rides
+          along outside the flow so a 1- or 3-digit reading doesn't shift it. */}
       <div
-        className={`text-[28px] font-bold leading-[1.1] tracking-[-0.01em] ${pending ? "text-muted-foreground" : "text-foreground"}`}
+        className={`text-[28px] font-bold leading-[1.1] tracking-[-0.01em] tabular-nums ${pending ? "text-muted-foreground" : "text-foreground"}`}
       >
-        {pending ? "0" : fmt(value)}
+        <span className="relative inline-block">
+          {pending ? "0" : fmt(value, digits)}
+          <span className="absolute bottom-[0.14em] left-full ml-[4px] text-[13px] font-medium text-muted-foreground">
+            {unit}
+          </span>
+        </span>
       </div>
     </div>
   );
@@ -117,6 +128,10 @@ export function SpeedTestPanel({ samples }: { samples: TelemetrySample[] }) {
   const quality = linkQualityOver(samples, progress.startedAtMs, progress.endedAtMs);
 
   const failed = phase === "error";
+  // The filled button belongs to the untouched panel only. It hands off the moment
+  // a run starts, not when one finishes — carrying the fill through the run made the
+  // button change colour under a spinner nobody was looking at.
+  const untouched = phase === "idle";
 
   // What the gauge needle currently reflects. A failed run says so rather than
   // resting on "Ready": every other element on the panel returns to its idle
@@ -150,10 +165,13 @@ export function SpeedTestPanel({ samples }: { samples: TelemetrySample[] }) {
 
       <div className="flex w-full gap-3">
         {/* Emphasis marks the phase being measured; with nothing running they read equally. */}
+        {/* Throughput carries the decimal the gauge shows; latency is a median of
+            whole-millisecond pings, so a decimal there would be invented precision. */}
         <HeadlineFigure
           icon={<ArrowDownIcon size={12} strokeWidth={2.5} />}
           label="DOWNLOAD"
           unit="Mbps"
+          digits={1}
           value={progress.downloadMbps}
           active={!isRunning || phase === "download"}
         />
@@ -161,6 +179,7 @@ export function SpeedTestPanel({ samples }: { samples: TelemetrySample[] }) {
           icon={<ArrowUpIcon size={12} strokeWidth={2.5} />}
           label="UPLOAD"
           unit="Mbps"
+          digits={1}
           value={progress.uploadMbps}
           active={!isRunning || phase === "upload"}
         />
@@ -168,6 +187,7 @@ export function SpeedTestPanel({ samples }: { samples: TelemetrySample[] }) {
           icon={<ClockIcon size={12} strokeWidth={2.5} />}
           label="LATENCY"
           unit="ms"
+          digits={0}
           value={quality.latencyMs}
           active={!isRunning}
         />
@@ -185,8 +205,16 @@ export function SpeedTestPanel({ samples }: { samples: TelemetrySample[] }) {
         <SpeedGauge value={gauge.value} mode={gauge.mode} caption={gauge.caption} />
       )}
 
+      {/* Filled until you've run something: with nothing on the panel to look at,
+          the button is the one thing to press, and the translucent treatment left
+          it competing with the empty gauge. Once a reading is up the reading is the
+          point, so "Run again" steps back to the quieter fill. */}
       <button
-        className="mt-2 flex min-h-[42px] w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-0 bg-[color-mix(in_srgb,var(--ink)_12%,transparent)] py-[11px] font-sans text-[14px] font-semibold text-foreground transition-colors enabled:hover:bg-[color-mix(in_srgb,var(--ink)_18%,transparent)] disabled:cursor-default disabled:bg-[color-mix(in_srgb,var(--ink)_8%,transparent)] disabled:text-muted-foreground"
+        className={`mt-2 flex min-h-[42px] w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-0 py-[11px] font-sans text-[14px] font-semibold transition-colors duration-300 motion-reduce:transition-none disabled:cursor-default ${
+          untouched
+            ? "bg-[color-mix(in_srgb,var(--ink)_86%,transparent)] text-[var(--page)] enabled:hover:bg-[var(--ink)]"
+            : "bg-[color-mix(in_srgb,var(--ink)_12%,transparent)] text-foreground enabled:hover:bg-[color-mix(in_srgb,var(--ink)_18%,transparent)] disabled:bg-[color-mix(in_srgb,var(--ink)_8%,transparent)] disabled:text-muted-foreground"
+        }`}
         disabled={isRunning}
         onClick={() => {
           void runSpeedTest(setProgress);
