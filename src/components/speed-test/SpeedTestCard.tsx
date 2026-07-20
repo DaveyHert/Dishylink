@@ -116,7 +116,12 @@ export function SpeedTestPanel({ samples }: { samples: TelemetrySample[] }) {
   const isRunning = phase === "download" || phase === "upload";
   const quality = linkQualityOver(samples, progress.startedAtMs, progress.endedAtMs);
 
-  // What the gauge needle currently reflects.
+  const failed = phase === "error";
+
+  // What the gauge needle currently reflects. A failed run says so rather than
+  // resting on "Ready": every other element on the panel returns to its idle
+  // look when a test fails, so a gauge that also reads "Ready" left nothing at
+  // all to distinguish "it broke" from "you haven't pressed Go yet".
   const gauge =
     phase === "upload"
       ? { value: progress.uploadMbps, mode: "upload" as const, caption: "Upload" }
@@ -124,7 +129,9 @@ export function SpeedTestPanel({ samples }: { samples: TelemetrySample[] }) {
         ? { value: progress.downloadMbps, mode: "download" as const, caption: "Download" }
         : phase === "done"
           ? { value: progress.downloadMbps, mode: "download" as const, caption: "Download" }
-          : { value: null, mode: "idle" as const, caption: "Ready" };
+          : failed
+            ? { value: null, mode: "idle" as const, caption: "Failed" }
+            : { value: null, mode: "idle" as const, caption: "Ready" };
 
   return (
     <div className="flex flex-col items-center gap-1">
@@ -196,11 +203,24 @@ export function SpeedTestPanel({ samples }: { samples: TelemetrySample[] }) {
           <>
             <RotateCcwIcon size={15} strokeWidth={2.5} /> Run again
           </>
+        ) : failed ? (
+          <>
+            <RotateCcwIcon size={15} strokeWidth={2.5} /> Try again
+          </>
         ) : (
           "Go"
         )}
       </button>
-      <div className="mt-2.5 text-center text-[11.5px] font-medium text-muted-foreground">{PHASE_LABEL[phase]}</div>
+      {/* A failure has to look like one. This line is the only place the panel
+          reports an outcome, and in muted grey it was indistinguishable from the
+          idle helper text it replaces — so a failed run read as "nothing
+          happened", which is exactly how it was reported. */}
+      <div
+        className={`mt-2.5 text-center text-[11.5px] font-medium ${failed ? "text-destructive" : "text-muted-foreground"}`}
+        role={failed ? "alert" : undefined}
+      >
+        {PHASE_LABEL[phase]}
+      </div>
       <div className="mt-1 text-center text-[10.5px] font-medium text-muted-foreground opacity-70">
         Measured against Cloudflare · may read lower than tests to a nearby server
       </div>
