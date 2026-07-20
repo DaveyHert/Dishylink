@@ -155,8 +155,12 @@ function DeviceUsageRow({
         <span className='font-mono text-[14px] font-semibold tabular-nums text-foreground'>
           {formatBytes(totalBytes)}
         </span>
+        {/* Arrows carry the dashboard's series colours — the same blue down and
+            green up the throughput charts use — so the split reads at a glance
+            without the numbers themselves competing with the total above. */}
         <span className='font-mono text-[10.5px] tabular-nums text-muted-foreground'>
-          {formatBytes(total.rxBytes)} ↓ · {formatBytes(total.txBytes)} ↑
+          {formatBytes(total.rxBytes)} <span className='text-[var(--series-down)]'>↓</span> ·{" "}
+          {formatBytes(total.txBytes)} <span className='text-[var(--series-up)]'>↑</span>
         </span>
       </span>
       {/* Actions live at the end of the row, always visible next to the usage. */}
