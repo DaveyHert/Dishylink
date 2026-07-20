@@ -9,7 +9,7 @@ import { notificationsEnabled, toggleNotifications } from "./lib/notifications";
 import { TopBar } from "./components/dashboard/TopBar";
 import { StatTile } from "./components/dashboard/StatTile";
 import { TelemetryChart, windowTail } from "./components/shared/TelemetryChart";
-import { SkyDome } from "./components/sky/SkyDome";
+import { SkyDome } from "./components/skydome/SkyDome";
 import { OutageLog } from "./components/alerts/OutageLog";
 import { SearchingHero } from "./components/dashboard/SearchingHero";
 import { DishTerminalCard } from "./components/dashboard/DishTerminalCard";
@@ -18,7 +18,7 @@ import { DetailsModal } from "./components/ui/details-modal";
 import { SegmentedControl } from "./components/ui/segmented-control";
 import { SectionCard } from "./components/ui/section-card";
 import { SpeedTestPanel } from "./components/speed-test/SpeedTestCard";
-import { AlignmentPanel } from "./components/sky/AlignmentCard";
+import { AlignmentPanel } from "./components/alignment/AlignmentCard";
 import { DataUsagePanel } from "./components/data-usage/DataUsagePanel";
 import { NetworkPanel } from "./components/network/NetworkPanel";
 import { AccountPanel } from "./components/account/AccountPanel";
@@ -253,13 +253,6 @@ export default function App() {
               }}
               variant="standard"
               onOpenImmersive={() => setOpenSheet("skyview")}
-              // Freeze the dome's cosmetic auto-rotate while a modal covers it: a
-              // backdrop-filter over a canvas that repaints every frame makes
-              // Chromium flicker the blur. Data-driven redraws (obstruction map,
-              // dish mesh, theme) are on separate ungated effects, so nothing
-              // stale is shown — this is the same redraw regime reduced-motion
-              // users already run in permanently.
-              paused={openDetailId !== null || openSheet !== null}
             />
 
             <SectionCard
