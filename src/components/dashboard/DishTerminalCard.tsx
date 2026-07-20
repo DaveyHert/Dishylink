@@ -1,9 +1,9 @@
 // Hardware, alignment, GPS, and network facts from the live status message.
 
-import type { DishStatusJson, DishReadyStatesJson } from "../lib/dishClient";
-import { formatUptime } from "../lib/format";
-import { FactGrid, FactRow } from "./ui/fact-row";
-import { DishIcon } from "./icons/DishIcon";
+import type { DishStatusJson, DishReadyStatesJson } from "../../lib/dishClient";
+import { formatUptime } from "../../lib/format";
+import { FactGrid, FactRow } from "../ui/fact-row";
+import { DishIcon } from "../icons/DishIcon";
 
 /** Plan tier. The API's CONSUMER is what the Starlink app labels "Residential". */
 function formatServiceClass(classOfService?: string): string {

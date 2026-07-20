@@ -12,10 +12,10 @@
 //    the valid elevation band, dish plate + orange needle at the ACTUAL
 //    elevation. Their needle orange is #ffac30.
 
-import type { DishStatusJson } from "../lib/dishClient";
-import { formatHasActuators } from "../lib/format";
-import { Explainer } from "./ui/explainer";
-import { FactGrid, FactRow } from "./ui/fact-row";
+import type { DishStatusJson } from "../../lib/dishClient";
+import { formatHasActuators } from "../../lib/format";
+import { Explainer } from "../ui/explainer";
+import { FactGrid, FactRow } from "../ui/fact-row";
 
 const DEG_TO_RAD = Math.PI / 180;
 const RAD_TO_DEG = 180 / Math.PI;

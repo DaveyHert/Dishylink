@@ -11,14 +11,14 @@
 // charts — that history is a separate store.
 
 import { useEffect, useState } from "react";
-import { useClientTotals } from "../hooks/useClientTotals";
-import type { ClientUsageTotal } from "../lib/clientUsage";
-import { classifyDevice } from "../lib/deviceKind";
-import { formatBytes, formatRelativeTime } from "../lib/format";
-import { vendorForMac, ensureOuiLoaded } from "../lib/macVendor";
-import { DeviceTypeIcon } from "./icons/DeviceTypeIcon";
-import { InfoDot } from "./InfoDot";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
+import { useClientTotals } from "../../hooks/useClientTotals";
+import type { ClientUsageTotal } from "../../lib/clientUsage";
+import { classifyDevice } from "../../lib/deviceKind";
+import { formatBytes, formatRelativeTime } from "../../lib/format";
+import { vendorForMac, ensureOuiLoaded } from "../../lib/macVendor";
+import { DeviceTypeIcon } from "../icons/DeviceTypeIcon";
+import { InfoDot } from "../shared/InfoDot";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 
 /** Local `year * 12 + month` — which monthly bucket an instant belongs to. */
 function monthKey(atMs: number): number {

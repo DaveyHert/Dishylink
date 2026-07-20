@@ -5,7 +5,7 @@
 // SVG geometry attributes (d, x2/y2) can't be CSS-transitioned, so we animate
 // the value itself. Theme-aware via CSS variables.
 
-import { useEasedValue } from "../hooks/useEasedValue";
+import { useEasedValue } from "../../hooks/useEasedValue";
 
 const CENTER = 130;
 const RADIUS = 100;

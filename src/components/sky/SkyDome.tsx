@@ -8,18 +8,18 @@
 // Hand-rolled orthographic projection on 2D canvas; drag to orbit and tilt.
 
 import { useEffect, useRef, useCallback, useState, useMemo } from "react";
-import { Callout } from "./ui/callout";
-import { SectionCard } from "./ui/section-card";
-import { Loading } from "./ui/loading";
+import { Callout } from "../ui/callout";
+import { SectionCard } from "../ui/section-card";
+import { Loading } from "../ui/loading";
 import type {
   DishObstructionMapJson,
   DishObstructionStatsJson,
   DishStatusJson,
-} from "../lib/dishClient";
-import { specForHardware, buildDishMesh, type MeshTriangle } from "../lib/dishMesh";
-import { StatLabel } from "./InfoDot";
-import type { SatelliteFeed } from "../hooks/useSatellites";
-import type { ObserverLocation, SatelliteSky } from "../lib/satellites";
+} from "../../lib/dishClient";
+import { specForHardware, buildDishMesh, type MeshTriangle } from "../../lib/dishMesh";
+import { StatLabel } from "../shared/InfoDot";
+import type { SatelliteFeed } from "../../hooks/useSatellites";
+import type { ObserverLocation, SatelliteSky } from "../../lib/satellites";
 import { LocationSetup } from "./LocationSetup";
 import {
   listSnapshots,
@@ -31,7 +31,7 @@ import {
   OBSTRUCTED_FRACTION_FLOOR,
   PARTIAL_FRACTION_CEILING,
   type ObstructionSnapshot,
-} from "../lib/obstructionSnapshots";
+} from "../../lib/obstructionSnapshots";
 
 interface SkyDomeProps {
   obstructionMap: DishObstructionMapJson | null;

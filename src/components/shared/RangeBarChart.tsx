@@ -9,8 +9,8 @@
 // taller box than their neighbours.
 
 import type { ReactNode } from "react";
-import { useElementWidth, labelStride } from "../hooks/useElementWidth";
-import type { EnergyRange } from "../hooks/useEnergyHistory";
+import { useElementWidth, labelStride } from "../../hooks/useElementWidth";
+import type { EnergyRange } from "../../hooks/useEnergyHistory";
 
 export const RANGE_TABS: { label: string; value: EnergyRange }[] = [
   { label: "1H", value: "1h" },

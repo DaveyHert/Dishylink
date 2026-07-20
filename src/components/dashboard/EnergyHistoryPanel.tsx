@@ -3,10 +3,10 @@
 // energy above it — fetched from the collector, not the in-memory samples.
 
 import { useState } from "react";
-import { useEnergyHistory, type EnergyRange, type EnergyBucket } from "../hooks/useEnergyHistory";
-import { RANGE_TABS, RangeBars, bucketLabel, type RangeBarColumn } from "./RangeBarChart";
-import { SegmentedControl } from "./ui/segmented-control";
-import { Callout } from "./ui/callout";
+import { useEnergyHistory, type EnergyRange, type EnergyBucket } from "../../hooks/useEnergyHistory";
+import { RANGE_TABS, RangeBars, bucketLabel, type RangeBarColumn } from "../shared/RangeBarChart";
+import { SegmentedControl } from "../ui/segmented-control";
+import { Callout } from "../ui/callout";
 
 /** Slot the collector only caught part of: its total is real but understates the period. */
 function isPartial(bucket: EnergyBucket): boolean {

@@ -4,7 +4,7 @@
 // from the local dish surfaces.
 
 import { useMemo, useState, type ReactNode } from "react";
-import { useCloudAccount } from "../hooks/useCloudAccount";
+import { useCloudAccount } from "../../hooks/useCloudAccount";
 import {
   dishDisplayName,
   routerDisplayName,
@@ -21,13 +21,13 @@ import {
   type DeviceTelemetry,
   type DishTelemetry,
   type RouterTelemetry,
-} from "../lib/starlinkCloud";
-import { Loading } from "./ui/loading";
-import { Callout } from "./ui/callout";
-import { ConnectAccount } from "./ConnectAccount";
-import { disconnectCloud } from "../lib/starlinkCloud";
-import { DishIcon } from "./icons/DishIcon";
-import { RouterIcon } from "./icons/RouterIcon";
+} from "../../lib/starlinkCloud";
+import { Loading } from "../ui/loading";
+import { Callout } from "../ui/callout";
+import { ConnectAccount } from "../shared/ConnectAccount";
+import { disconnectCloud } from "../../lib/starlinkCloud";
+import { DishIcon } from "../icons/DishIcon";
+import { RouterIcon } from "../icons/RouterIcon";
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (

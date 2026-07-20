@@ -23,9 +23,9 @@ import {
   type DishStatusJson,
   type SnowMeltMode,
   type WifiNetworkConfigJson,
-} from "../lib/dishClient";
-import { useDishSettings } from "../hooks/useDishSettings";
-import { specForHardware } from "../lib/dishMesh";
+} from "../../lib/dishClient";
+import { useDishSettings } from "../../hooks/useDishSettings";
+import { specForHardware } from "../../lib/dishMesh";
 
 interface SettingsModalProps {
   open: boolean;

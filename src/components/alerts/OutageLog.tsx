@@ -3,10 +3,10 @@
 // duration on the right. Each cause carries a plain-English tooltip (the dish's
 // raw jargon explained) via outageEventMeta.
 
-import { outageEventMeta, type OutageEvent } from "../lib/telemetry";
-import { formatClockTimeShort, formatEventDuration } from "../lib/format";
-import { EmptyState } from "./ui/empty-state";
-import { InfoDot } from "./InfoDot";
+import { outageEventMeta, type OutageEvent } from "../../lib/telemetry";
+import { formatClockTimeShort, formatEventDuration } from "../../lib/format";
+import { EmptyState } from "../ui/empty-state";
+import { InfoDot } from "../shared/InfoDot";
 
 const SEVERITY_COLOR_VAR: Record<OutageEvent["severity"], string> = {
   advisory: "--ink-muted",

@@ -9,7 +9,7 @@
 // motion loops must key off `running` or they'd never stop.
 
 import { motion, useReducedMotion } from "motion/react";
-import { useEasedValue } from "../hooks/useEasedValue";
+import { useEasedValue } from "../../hooks/useEasedValue";
 
 interface SpeedBeamProps {
   value: number | null;

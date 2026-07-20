@@ -2,8 +2,8 @@
 // raw telemetry into the Average/Current/energy config each stat-detail sheet
 // needs. Kept out of App so the component just wires data to views.
 
-import type { ChartSeries } from "../components/TelemetryChart";
-import type { StatDetail } from "../components/StatDetailPanel";
+import type { ChartSeries } from "../components/shared/TelemetryChart";
+import type { StatDetail } from "../components/dashboard/StatDetailPanel";
 import type { TelemetrySample, OutageEvent } from "./telemetry";
 import type { DishStatusJson } from "./dishClient";
 import { formatThroughput, formatThroughputLabel, formatThroughputTick } from "./format";

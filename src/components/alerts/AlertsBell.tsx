@@ -10,12 +10,12 @@
 
 import { Fragment, useState } from "react";
 import { cn } from "@/lib/utils";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
-import { InfoDot } from "./InfoDot";
-import type { AlertHistoryEntry, DeviceAlerts } from "../hooks/useDeviceAlerts";
-import type { AlertSeverity, AlertSource, AlertState } from "../lib/dishAlerts";
-import { notificationsSupported } from "../lib/notifications";
-import { EmptyState } from "./ui/empty-state";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { InfoDot } from "../shared/InfoDot";
+import type { AlertHistoryEntry, DeviceAlerts } from "../../hooks/useDeviceAlerts";
+import type { AlertSeverity, AlertSource, AlertState } from "../../lib/dishAlerts";
+import { notificationsSupported } from "../../lib/notifications";
+import { EmptyState } from "../ui/empty-state";
 
 const BTN_RESET = "cursor-pointer appearance-none border-0 bg-transparent p-0 text-inherit";
 

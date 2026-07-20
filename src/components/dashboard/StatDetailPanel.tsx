@@ -7,14 +7,14 @@
 // dashboard's window behind it.
 
 import { useMemo, useState } from "react";
-import { TelemetryChart, type ChartSeries } from "./TelemetryChart";
+import { TelemetryChart, type ChartSeries } from "../shared/TelemetryChart";
 import { EnergyHistoryPanel } from "./EnergyHistoryPanel";
-import { windowSlice, averageOf, energyKWh, coverageNote } from "../lib/statDetails";
-import { useEnergyHistory, type EnergyRange } from "../hooks/useEnergyHistory";
-import type { TelemetrySample, OutageEvent } from "../lib/telemetry";
-import { SegmentedControl } from "./ui/segmented-control";
-import { Explainer } from "./ui/explainer";
-import { FigureRow } from "./ui/figure-row";
+import { windowSlice, averageOf, energyKWh, coverageNote } from "../../lib/statDetails";
+import { useEnergyHistory, type EnergyRange } from "../../hooks/useEnergyHistory";
+import type { TelemetrySample, OutageEvent } from "../../lib/telemetry";
+import { SegmentedControl } from "../ui/segmented-control";
+import { Explainer } from "../ui/explainer";
+import { FigureRow } from "../ui/figure-row";
 
 // Window minutes → the collector's matching range, so the live-window energy
 // readout can show the SAME persisted total as the "Total energy used" panel

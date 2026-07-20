@@ -6,8 +6,8 @@
 import { expect, describe, test } from "vitest";
 import { render } from "vitest-browser-react";
 import { TelemetryChart } from "./TelemetryChart";
-import { LATENCY_SERIES } from "../lib/statDetails";
-import type { OutageEvent, TelemetrySample } from "../lib/telemetry";
+import { LATENCY_SERIES } from "../../lib/statDetails";
+import type { OutageEvent, TelemetrySample } from "../../lib/telemetry";
 
 const NOW = 1_784_400_000_000;
 

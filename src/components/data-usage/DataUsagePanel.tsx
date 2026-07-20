@@ -4,13 +4,13 @@
 // (Starlink's own billing meter is cloud-side and not exposed locally).
 
 import { useState } from "react";
-import { useDataUsage, type UsageBucket } from "../hooks/useDataUsage";
-import type { EnergyRange } from "../hooks/useEnergyHistory";
-import { RANGE_TABS, RangeBars, bucketLabel, type RangeBarColumn } from "./RangeBarChart";
-import { SegmentedControl } from "./ui/segmented-control";
-import { Callout } from "./ui/callout";
-import { Explainer } from "./ui/explainer";
-import { FigureRow } from "./ui/figure-row";
+import { useDataUsage, type UsageBucket } from "../../hooks/useDataUsage";
+import type { EnergyRange } from "../../hooks/useEnergyHistory";
+import { RANGE_TABS, RangeBars, bucketLabel, type RangeBarColumn } from "../shared/RangeBarChart";
+import { SegmentedControl } from "../ui/segmented-control";
+import { Callout } from "../ui/callout";
+import { Explainer } from "../ui/explainer";
+import { FigureRow } from "../ui/figure-row";
 import { DeviceUsageList } from "./DeviceUsageList";
 import { CloudDataUsage } from "./CloudDataUsage";
 

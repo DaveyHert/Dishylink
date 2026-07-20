@@ -4,15 +4,15 @@
 // "Local Session" tab, which is collector-recorded and honest about gaps.
 
 import { useMemo, useState } from "react";
-import { useCloudUsage } from "../hooks/useCloudAccount";
-import { isUnlimited, formatAllowance, type UsageCycle } from "../lib/starlinkCloud";
-import { RangeBars, type RangeBarColumn } from "./RangeBarChart";
-import { SegmentedControl } from "./ui/segmented-control";
-import { Callout } from "./ui/callout";
-import { EmptyState } from "./ui/empty-state";
-import { Loading } from "./ui/loading";
-import { Explainer } from "./ui/explainer";
-import { ConnectAccount } from "./ConnectAccount";
+import { useCloudUsage } from "../../hooks/useCloudAccount";
+import { isUnlimited, formatAllowance, type UsageCycle } from "../../lib/starlinkCloud";
+import { RangeBars, type RangeBarColumn } from "../shared/RangeBarChart";
+import { SegmentedControl } from "../ui/segmented-control";
+import { Callout } from "../ui/callout";
+import { EmptyState } from "../ui/empty-state";
+import { Loading } from "../ui/loading";
+import { Explainer } from "../ui/explainer";
+import { ConnectAccount } from "../shared/ConnectAccount";
 
 function formatGB(gb: number): string {
   if (gb >= 1000) return `${(gb / 1000).toFixed(2)} TB`;

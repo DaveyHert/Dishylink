@@ -1,12 +1,12 @@
 // Sticky instrument header: wordmark, live connection state, dish identity,
 // theme toggle.
 
-import type { DishConnectionState } from "../hooks/useDishTelemetry";
-import type { DishStatusJson } from "../lib/dishClient";
-import { formatUptime } from "../lib/format";
-import { AlertsBell } from "./AlertsBell";
-import { AppLogo } from "./icons/AppLogo";
-import type { DeviceAlerts } from "../hooks/useDeviceAlerts";
+import type { DishConnectionState } from "../../hooks/useDishTelemetry";
+import type { DishStatusJson } from "../../lib/dishClient";
+import { formatUptime } from "../../lib/format";
+import { AlertsBell } from "../alerts/AlertsBell";
+import { AppLogo } from "../icons/AppLogo";
+import type { DeviceAlerts } from "../../hooks/useDeviceAlerts";
 
 interface TopBarProps {
   connectionState: DishConnectionState;

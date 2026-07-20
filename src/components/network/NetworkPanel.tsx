@@ -4,38 +4,38 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
-import type { RouterNetwork } from "../hooks/useRouterNetwork";
-import { useRadioTemps, type RadioReading } from "../hooks/useRadioTemps";
-import { useSelfIdentity } from "../hooks/useSelfIdentity";
-import { matchesSelf, type SelfIdentity } from "../lib/selfIdentity";
+import type { RouterNetwork } from "../../hooks/useRouterNetwork";
+import { useRadioTemps, type RadioReading } from "../../hooks/useRadioTemps";
+import { useSelfIdentity } from "../../hooks/useSelfIdentity";
+import { matchesSelf, type SelfIdentity } from "../../lib/selfIdentity";
 import {
   ROUTER_UNREACHABLE_MESSAGE,
   throughputMbps,
   type WifiClientJson,
   type WifiNetworkConfigJson,
-} from "../lib/dishClient";
-import { GrpcWebError } from "../lib/grpcWeb";
-import { Loading } from "./ui/loading";
-import { Callout } from "./ui/callout";
-import { SegmentedControl } from "./ui/segmented-control";
-import type { TelemetrySample } from "../lib/telemetry";
-import type { ThroughputRates } from "../lib/throughputTracker";
-import type { ClientUsageTotal } from "../lib/clientUsage";
-import { vendorForMac, ensureOuiLoaded } from "../lib/macVendor";
+} from "../../lib/dishClient";
+import { GrpcWebError } from "../../lib/grpcWeb";
+import { Loading } from "../ui/loading";
+import { Callout } from "../ui/callout";
+import { SegmentedControl } from "../ui/segmented-control";
+import type { TelemetrySample } from "../../lib/telemetry";
+import type { ThroughputRates } from "../../lib/throughputTracker";
+import type { ClientUsageTotal } from "../../lib/clientUsage";
+import { vendorForMac, ensureOuiLoaded } from "../../lib/macVendor";
 import {
   formatUptime,
   formatBytes,
   formatThroughputLabel,
   formatThroughputTick,
-} from "../lib/format";
-import { THROUGHPUT_SERIES } from "../lib/statDetails";
-import { TelemetryChart, windowTail } from "./TelemetryChart";
+} from "../../lib/format";
+import { THROUGHPUT_SERIES } from "../../lib/statDetails";
+import { TelemetryChart, windowTail } from "../shared/TelemetryChart";
 import { Input } from "@/components/ui/input";
-import { actionButton } from "./ui/action-button";
-import { InfoDot } from "./InfoDot";
-import { RouterIcon } from "./icons/RouterIcon";
-import { DeviceTypeIcon } from "./icons/DeviceTypeIcon";
-import { classifyDevice } from "../lib/deviceKind";
+import { actionButton } from "../ui/action-button";
+import { InfoDot } from "../shared/InfoDot";
+import { RouterIcon } from "../icons/RouterIcon";
+import { DeviceTypeIcon } from "../icons/DeviceTypeIcon";
+import { classifyDevice } from "../../lib/deviceKind";
 
 function bandLabel(client: WifiClientJson): string {
   const iface = client.iface ?? "";

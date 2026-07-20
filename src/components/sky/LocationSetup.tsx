@@ -6,8 +6,8 @@
 // or city-level IP lookup.
 
 import { useState } from "react";
-import type { ObserverLocation } from "../lib/satellites";
-import { requestBrowserLocation, requestIpLocation, parseCoordinateText } from "../lib/observerLocation";
+import type { ObserverLocation } from "../../lib/satellites";
+import { requestBrowserLocation, requestIpLocation, parseCoordinateText } from "../../lib/observerLocation";
 
 const actionButton =
   "cursor-pointer rounded-sm border-0 bg-[color-mix(in_srgb,var(--ink)_10%,var(--surface))] font-sans text-[12.5px] font-semibold text-foreground";

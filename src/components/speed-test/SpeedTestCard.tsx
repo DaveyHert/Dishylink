@@ -6,11 +6,11 @@
 
 import { useState, type ReactNode } from "react";
 import { ArrowDownIcon, ArrowUpIcon, ClockIcon, LoaderIcon, RotateCcwIcon } from "lucide-react";
-import { runSpeedTest, type SpeedTestProgress } from "../lib/speedTest";
-import type { TelemetrySample } from "../lib/telemetry";
+import { runSpeedTest, type SpeedTestProgress } from "../../lib/speedTest";
+import type { TelemetrySample } from "../../lib/telemetry";
 import { SpeedGauge } from "./SpeedGauge";
 import { SpeedBeam } from "./SpeedBeam";
-import { SegmentedControl } from "./ui/segmented-control";
+import { SegmentedControl } from "../ui/segmented-control";
 
 type SpeedView = "gauge" | "beam";
 

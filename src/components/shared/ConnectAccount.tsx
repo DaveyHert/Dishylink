@@ -6,9 +6,9 @@
 // HttpOnly Starlink.Com.Sso that the token refresh needs.
 
 import { useState } from "react";
-import { connectCloud } from "../lib/starlinkCloud";
-import { Button } from "./ui/button";
-import { SpinLoader } from "./loaders/SpinLoader";
+import { connectCloud } from "../../lib/starlinkCloud";
+import { Button } from "../ui/button";
+import { SpinLoader } from "../loaders/SpinLoader";
 
 const STEPS = [
   <>
