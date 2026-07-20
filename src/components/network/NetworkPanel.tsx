@@ -4,7 +4,7 @@
 // This file is the router: it owns the tab, resolves `selectedMac` to a node or
 // a device, and hands off. The rows and both detail views live beside it.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { RouterNetwork } from "../../hooks/useRouterNetwork";
 import { useRadioTemps } from "../../hooks/useRadioTemps";
 import { useSelfIdentity } from "../../hooks/useSelfIdentity";
@@ -43,6 +43,24 @@ export function NetworkPanel({
   // The viewer's own address(es), to flag "This device" in the list.
   const self = useSelfIdentity(true);
 
+  const devices = useMemo(
+    () => network.clients.filter((client) => !client.role || client.role === "CLIENT"),
+    [network.clients],
+  );
+  // The viewer's own device pins to the top (like the app), then by throughput.
+  //
+  // Deliberately not keyed on `network.rates`: the sort key is live throughput, and
+  // recomputing it on every 1 Hz rate tick reordered the list once a second while
+  // the header promised a 5 s one. The order is decided from whatever rates were
+  // current when the roster last landed, and holds until the next roster.
+  const sortedDevices = useMemo(() => {
+    return [...devices].sort((a, b) => {
+      const selfDelta = Number(matchesSelf(b, self)) - Number(matchesSelf(a, self));
+      if (selfDelta !== 0) return selfDelta;
+      return liveThroughputMbps(b, network.rates) - liveThroughputMbps(a, network.rates);
+    });
+  }, [devices, self]);
+
   if (network.routerReachable === null) {
     return <Loading message='Contacting the router…' />;
   }
@@ -50,14 +68,7 @@ export function NetworkPanel({
     return <Callout tone='error'>{ROUTER_UNREACHABLE_MESSAGE}</Callout>;
   }
 
-  const devices = network.clients.filter((client) => !client.role || client.role === "CLIENT");
   const nodes = buildNodeRoster(network.clients, network.wifiConfig);
-  // The viewer's own device pins to the top (like the app), then by throughput.
-  const sortedDevices = [...devices].sort((a, b) => {
-    const selfDelta = Number(matchesSelf(b, self)) - Number(matchesSelf(a, self));
-    if (selfDelta !== 0) return selfDelta;
-    return liveThroughputMbps(b, network.rates) - liveThroughputMbps(a, network.rates);
-  });
 
   const selectedNode = selectedMac
     ? nodes.find((node) => node.client?.macAddress === selectedMac)
