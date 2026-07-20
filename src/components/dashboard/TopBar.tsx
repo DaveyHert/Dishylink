@@ -4,7 +4,7 @@
 import type { DishConnectionState } from "../../hooks/useDishTelemetry";
 import type { DishStatusJson } from "../../lib/dishClient";
 import { formatUptime } from "../../lib/format";
-import { AlertsBell } from "../alerts/AlertsBell";
+import { AlertsMenu } from "../alerts/AlertsMenu";
 import { AppLogo } from "../icons/AppLogo";
 import type { DeviceAlerts } from "../../hooks/useDeviceAlerts";
 
@@ -94,7 +94,7 @@ export function TopBar({
             <span className={`${statusItem} ${statusDivider}`}>up {formatUptime(Number(status.deviceState.uptimeS))}</span>
           )}
         </div>
-        <AlertsBell
+        <AlertsMenu
           alerts={deviceAlerts}
           notificationsOn={notificationsOn}
           onToggleNotifications={onToggleNotifications}
