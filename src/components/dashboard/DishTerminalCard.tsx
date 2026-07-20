@@ -1,7 +1,7 @@
 // Hardware, alignment, GPS, and network facts from the live status message.
 
 import type { DishStatusJson, DishReadyStatesJson } from "../../lib/dishClient";
-import { formatUptime } from "../../lib/format";
+import { formatAttitudeState, formatRelativeTime, formatUptime } from "../../lib/format";
 import { FactGrid, FactRow } from "../ui/fact-row";
 import { DishIcon } from "../icons/DishIcon";
 
@@ -90,6 +90,7 @@ export function DishTerminalCard({
   status,
   expanded = false,
   stale = false,
+  lastStatusAtMs = null,
   onExpand,
 }: {
   status: DishStatusJson;
@@ -99,10 +100,15 @@ export function DishTerminalCard({
   /** True while the dish isn't answering: the facts below are the last known
    *  snapshot, not live, and the header says so. */
   stale?: boolean;
+  /** When the dish last answered, so the stale badge can say how old this is. */
+  lastStatusAtMs?: number | null;
   /** When set on the card, an expand icon opens the full popup view. */
   onExpand?: () => void;
 }) {
   const alignment = status.alignmentStats;
+  // The dish's position/navigation filter, in the app's own vocabulary
+  // ("Converged"). Null when the dish doesn't report it.
+  const positionState = formatAttitudeState(status.gpsStats?.pntFilterConvergenceState);
 
   const facts: DeviceFact[] = [
     signalCondition(status),
@@ -117,11 +123,23 @@ export function DishTerminalCard({
       value: status.gpsStats?.gpsValid ? `${status.gpsStats.gpsSats ?? 0} satellites` : "no fix",
     },
     {
-      label: "GPS fix",
-      value: status.gpsStats?.gpsValid
-        ? `locked${status.gpsStats.pntFilterConvergenceState ? ` · ${status.gpsStats.pntFilterConvergenceState.replaceAll("_", " ").toLowerCase()}` : ""}`
-        : "no fix",
-      tone: status.gpsStats?.gpsValid ? "good" : "warn",
+      // "GPS fix" is receiver jargon — a "fix" is a computed position — and it
+      // read as though something had been repaired. What the row answers is
+      // whether the dish knows where it is, so it says that.
+      //
+      // The state clause only appears when the filter is NOT converged: settled
+      // is the healthy case, and "filter converged" sat there permanently saying
+      // nothing. An absent state stays silent rather than printing a dash — this
+      // row used to append one, which was worse than the jargon it replaced.
+      label: "Position",
+      value: !status.gpsStats?.gpsValid
+        ? "no fix"
+        : positionState && positionState !== "Converged"
+          ? `locked · ${positionState}`
+          : "locked",
+      // Green whenever the dish has a position. An absent state is unknown, not
+      // a fault, so it must not downgrade a perfectly good lock.
+      tone: status.gpsStats?.gpsValid && positionState !== "Unconverged" ? "good" : "warn",
     },
     { label: "Ethernet link", value: status.ethSpeedMbps ? `${status.ethSpeedMbps} Mbps` : "—" },
     { label: "NAT", value: (status.natFlag ?? "—").replace("NAT_", "").replaceAll("_", " ").toLowerCase() },
@@ -169,7 +187,10 @@ export function DishTerminalCard({
           {/* Same wording as the alerts panel's Status header for this state. */}
           {stale && (
             <span className="text-[12px] font-medium" style={{ color: "var(--status-critical)" }}>
-              not answering · last known
+              {/* "last known" alone left the reader unable to tell a five-second
+                  gap from a five-hour one, while every figure below still looked
+                  live. Say how old the snapshot actually is. */}
+              not answering · {lastStatusAtMs ? `from ${formatRelativeTime(lastStatusAtMs)}` : "last known"}
             </span>
           )}
           <span className="font-mono text-[12px] font-medium text-muted-foreground tabular-nums">

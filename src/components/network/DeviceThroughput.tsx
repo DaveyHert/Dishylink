@@ -94,6 +94,10 @@ function DirectionChart({
         formatValue={formatThroughputLabel}
         formatTick={formatThroughputTick}
         minGapMs={PER_DEVICE_GAP_MS}
+        // Per-device rates are honest per-second readings, so the line is
+        // naturally spiky; give it air (a 12 Mbps peak draws on a ~20 axis)
+        // so real traffic reads as busy, not as pinned at the ceiling.
+        headroom={1.7}
         height={140}
       />
     </div>

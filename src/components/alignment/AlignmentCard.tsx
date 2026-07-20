@@ -4,7 +4,7 @@
 // the sheet that arranges them.
 
 import type { DishStatusJson } from "../../lib/dishClient";
-import { formatHasActuators } from "../../lib/format";
+import { formatActuatorState, formatAttitudeState, formatHasActuators } from "../../lib/format";
 import { Explainer } from "../ui/explainer";
 import { FactGrid, FactRow } from "../ui/fact-row";
 import { RotationInstrument, TiltInstrument } from "./AlignmentInstruments";
@@ -44,41 +44,58 @@ function AlignmentFacts({
   reading: AlignmentReading;
 }) {
   const stats = status.alignmentStats;
+  // Labels, order and wording follow the official app's Alignment debug section
+  // verbatim — this sheet is a port of that screen, so it uses SpaceX's terms
+  // rather than friendlier ones we invented. Where we carry more than they do
+  // (the azimuth tolerance and elevation band the dials draw as wedges), it
+  // rides on their row instead of becoming a row of our own.
   return (
     <FactGrid columns={2}>
-      <FactRow label='Azimuth'>
-        <span className='font-mono tabular-nums'>
-          {reading.boresightAzimuthDeg.toFixed(1)}° · target{" "}
-          {reading.desiredAzimuthDeg.toFixed(1)}° ±{reading.azimuthToleranceDeg.toFixed(0)}°
-        </span>
+      <FactRow label='Boresight azimuth'>
+        <span className='font-mono tabular-nums'>{reading.boresightAzimuthDeg.toFixed(1)}°</span>
       </FactRow>
-      <FactRow label='Elevation'>
-        <span className='font-mono tabular-nums'>
-          {reading.boresightElevationDeg.toFixed(1)}° · band{" "}
-          {reading.lowerElevationLimitDeg.toFixed(0)}–{reading.upperElevationLimitDeg.toFixed(0)}°
-        </span>
-      </FactRow>
-      <FactRow label='Tilt'>
-        <span className='font-mono tabular-nums'>{(stats?.tiltAngleDeg ?? 0).toFixed(1)}°</span>
+      <FactRow label='Boresight elevation'>
+        <span className='font-mono tabular-nums'>{reading.boresightElevationDeg.toFixed(1)}°</span>
       </FactRow>
       <FactRow label='Attitude uncertainty'>
         <span className='font-mono tabular-nums'>
           ±{(stats?.attitudeUncertaintyDeg ?? 0).toFixed(2)}°
         </span>
       </FactRow>
-      <FactRow label='Attitude filter'>
+      <FactRow label='Target azimuth'>
         <span className='font-mono tabular-nums'>
-          {(stats?.attitudeEstimationState ?? "—").replaceAll("_", " ").toLowerCase()}
+          {reading.desiredAzimuthDeg.toFixed(1)}° ±{reading.azimuthToleranceDeg.toFixed(0)}°
         </span>
       </FactRow>
-      <FactRow label='Satellites in View (GPS)'>
+      {/* The dish's own reported target, as the app prints it — NOT
+          `reading.targetElevationDeg`, which computeAlignment clamps to the
+          band floor (min(70, desired)) for the alignment test. On this dish
+          that clamp turns a reported 76.0° into 70.0°. */}
+      <FactRow label='Target elevation'>
         <span className='font-mono tabular-nums'>
-          {status.gpsStats?.gpsValid ? `${status.gpsStats.gpsSats ?? 0} satellites` : "no fix"}
+          {(stats?.desiredBoresightElevationDeg ?? 0).toFixed(1)}° · band{" "}
+          {reading.lowerElevationLimitDeg.toFixed(0)}–{reading.upperElevationLimitDeg.toFixed(0)}°
         </span>
+      </FactRow>
+      <FactRow label='Tilt'>
+        <span className='font-mono tabular-nums'>{(stats?.tiltAngleDeg ?? 0).toFixed(1)}°</span>
       </FactRow>
       <FactRow label='Has actuators'>
         <span className='font-mono tabular-nums'>
           {formatHasActuators(status.alignmentStats?.hasActuators ?? status.hasActuators)}
+        </span>
+      </FactRow>
+      <FactRow label='Attitude estimation state'>
+        <span className='font-mono tabular-nums'>
+          {formatAttitudeState(stats?.attitudeEstimationState) ?? "—"}
+        </span>
+      </FactRow>
+      <FactRow label='Actuation state'>
+        <span className='font-mono tabular-nums'>{formatActuatorState(stats?.actuatorState)}</span>
+      </FactRow>
+      <FactRow label='Satellites in View (GPS)'>
+        <span className='font-mono tabular-nums'>
+          {status.gpsStats?.gpsValid ? `${status.gpsStats.gpsSats ?? 0} satellites` : "no fix"}
         </span>
       </FactRow>
       {status.ned2dishQuaternion && (

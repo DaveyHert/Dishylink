@@ -12,7 +12,7 @@
 //
 // Run: npm run collector   (foreground; see server/README for always-on setup)
 
-import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { networkInterfaces } from "node:os";
 import { resolve } from "node:path";
@@ -23,6 +23,8 @@ import {
   decodeHistoryWindow,
   decodeOutageEvents,
   decodeWifiHistoryEvents,
+  readRouterLatencyMs,
+  readRouterPingSuccessPercent,
   TelemetryAccumulator,
   type TelemetrySample,
 } from "../src/lib/telemetry.ts";
@@ -52,9 +54,16 @@ const PORT = Number(process.env.COLLECTOR_PORT ?? 8088);
 const POLL_MS = 5_000;
 /**
  * Faster than the router's ~1005 ms stats refresh, so every counter step is
- * caught as an edge rather than sampled on our clock and aliased. Five polls per
- * step leaves room for a slow response without missing one. See
+ * caught as an edge rather than sampled on our clock and aliased. See
  * `src/lib/throughputTracker.ts` for why the edge is what gets measured.
+ *
+ * 200 ms (five polls per step) is the comfortable margin. Restored 2026-07-21
+ * as a deliberate trial: the 2026-07-20 watchdog reboots were traced to
+ * get_ping, not this poll, and running at full rate is the way to prove the
+ * router stays healthy under it. If SOFTWARE_WATCHDOG reboots return, drop to
+ * 500 ms — two polls per step still catches every edge (one slow reply can
+ * land an edge a step late, briefly smearing a per-device reading) at 2 req/s
+ * instead of 5, the chattiest thing we send the router.
  */
 const CLIENTS_POLL_MS = 200;
 /** Recording cadence. The rates are already exact per refresh interval, so this
@@ -69,7 +78,8 @@ const WIFI_GET_CLIENTS_FIELD = 3002;
  * The router answers get_radio_stats on its own endpoint; the dish answers it
  * Unimplemented. This is the only live temperature either device will give up.
  */
-const ROUTER_URL = process.env.ROUTER_URL ?? "http://192.168.1.1:9001/SpaceX.API.Device.Device/Handle";
+const ROUTER_URL =
+  process.env.ROUTER_URL ?? "http://192.168.1.1:9001/SpaceX.API.Device.Device/Handle";
 
 /**
  * Thermal flags on get_status → alerts. The dish has no temperature reading to
@@ -81,7 +91,9 @@ const THERMAL_ALERT_KEYS = ["thermalThrottle", "thermalShutdown", "powerSupplyTh
 const SAMPLE_WINDOW_SECONDS = 6 * 3_600;
 const SNAPSHOT_EVERY_MS = 60_000;
 
-const registry = createFileRegistry(fromBinary(FileDescriptorSetSchema, readFileSync(PROTOSET_PATH)));
+const registry = createFileRegistry(
+  fromBinary(FileDescriptorSetSchema, readFileSync(PROTOSET_PATH)),
+);
 
 /** Fail at startup, not on the first poll, if the protoset lacks a message. */
 function requireMessage(typeName: string): DescMessage {
@@ -139,14 +151,48 @@ async function getStatusAlerts(): Promise<Record<string, boolean>> {
   return json.dishGetStatus?.alerts ?? {};
 }
 
-/** The router answers the same get_status field with its own alert set. */
-async function getRouterStatusAlerts(): Promise<Record<string, boolean>> {
+/**
+ * The router's whole get_status. One call, because two things here want it: the
+ * alert set and the router's own ping to the PoP. Asking twice per poll is two
+ * round trips for one reply.
+ */
+async function getRouterStatus(): Promise<{
+  alerts?: Record<string, boolean>;
+  popPingLatencyMs?: number;
+  popPingDropRate5m?: number;
+}> {
   const bytes = await grpcWebUnaryCall(ROUTER_URL, requestBytes(GET_STATUS_FIELD));
   const json = toJson(responseSchema, fromBinary(responseSchema, bytes), { registry }) as {
-    wifiGetStatus?: { alerts?: Record<string, boolean> };
+    wifiGetStatus?: {
+      alerts?: Record<string, boolean>;
+      popPingLatencyMs?: number;
+      popPingDropRate5m?: number;
+    };
   };
-  return json.wifiGetStatus?.alerts ?? {};
+  return json.wifiGetStatus ?? {};
 }
+
+/**
+ * The router's readings as of the last poll, held so the sample stamping can
+ * use a reply already fetched this cycle. Null whenever the router failed to
+ * answer, so an unreachable router leaves a gap rather than a repeated value.
+ *
+ * The collector has to be what records these. The router keeps no history for
+ * either: all it gives up is a point-in-time value, so the series only exist if
+ * something samples them continuously and persists them — which is the whole
+ * job of this process. Read live in the browser they could never fill a 1H or
+ * 6H window, and a chart that can't answer its own time filter is not worth
+ * drawing.
+ *
+ * Both come out of the ONE get_status this file already polls. Ping success is
+ * NEVER to be sourced from get_ping (1009): three trials on 2026-07-20 — at
+ * 2s+5s, then alone at 30s after hours of stable control — each rebooted the
+ * router within ~15 minutes, while this get_status poll ran at 5s all day
+ * without incident. popPingDropRate5m is the router's own rolling five-minute
+ * measure, so it needs no smoothing here.
+ */
+let latestRouterLatencyMs: number | null = null;
+let latestRouterPingSuccessPercent: number | null = null;
 
 /**
  * Wi-Fi radio temperatures from the router. Only `temp2` is ever populated —
@@ -300,6 +346,24 @@ function loadSampleSnapshot(): void {
   }
 }
 
+/**
+ * History can only hold what this process witnessed. The sample snapshot is
+ * rewritten every minute while running, so its mtime is a heartbeat: a boot
+ * that finds it stale means the recorder was off in between. Record the gap
+ * itself as an episode, so absence in the History tab reads "not recorded"
+ * rather than implying "nothing happened". (2026-07-20: the recorder was off
+ * 12:45–16:15 during diagnosis and that window's alerts silently vanished.)
+ */
+function recordRecorderGap(): void {
+  if (!existsSync(SAMPLES_SNAPSHOT_FILE)) return;
+  const lastAliveMs = statSync(SAMPLES_SNAPSHOT_FILE).mtimeMs;
+  const nowMs = Date.now();
+  // Under three minutes is a restart, not an outage worth a history row.
+  if (nowMs - lastAliveMs < 3 * 60_000) return;
+  alertStore.open("system", "recorderOff", lastAliveMs);
+  alertStore.close("system", "recorderOff", nowMs);
+}
+
 /** Round for the snapshot/API payload — chart precision, not lab precision. */
 function compactSample(sample: TelemetrySample): TelemetrySample {
   return {
@@ -309,6 +373,14 @@ function compactSample(sample: TelemetrySample): TelemetrySample {
     downlinkBps: Math.round(sample.downlinkBps),
     uplinkBps: Math.round(sample.uplinkBps),
     powerW: Math.round(sample.powerW * 10) / 10,
+    // Finite-checked rather than null-checked: a snapshot written before this
+    // field existed restores it as undefined, which must not become NaN here.
+    routerLatencyMs: Number.isFinite(sample.routerLatencyMs)
+      ? Math.round(sample.routerLatencyMs! * 10) / 10
+      : null,
+    routerPingSuccessPercent: Number.isFinite(sample.routerPingSuccessPercent)
+      ? Math.round(sample.routerPingSuccessPercent! * 100) / 100
+      : null,
   };
 }
 
@@ -363,12 +435,18 @@ async function pollAlerts(): Promise<void> {
     alertStore.open("system", "dishUnreachable", now);
   }
   try {
-    const routerAlerts = await getRouterStatusAlerts();
+    // One status reply, two consumers: the alert set, and the ping the sample
+    // stamping picks up below.
+    const routerStatus = await getRouterStatus();
+    latestRouterLatencyMs = readRouterLatencyMs(routerStatus.popPingLatencyMs);
+    latestRouterPingSuccessPercent = readRouterPingSuccessPercent(routerStatus.popPingDropRate5m);
     const routerNow = Date.now();
-    alertStore.ingest("router", routerAlerts, routerNow);
+    alertStore.ingest("router", routerStatus.alerts ?? {}, routerNow);
     alertStore.close("system", "routerUnreachable", routerNow);
   } catch {
     // router unreachable (or bypass mode) — leave its open episodes open
+    latestRouterLatencyMs = null;
+    latestRouterPingSuccessPercent = null;
     alertStore.open("system", "routerUnreachable", Date.now());
   }
 }
@@ -504,8 +582,14 @@ async function poll(): Promise<void> {
     console.warn(`[collector] router history unreachable: ${(error as Error).message}`);
   }
 
+  // Stamped onto the samples this poll appends, from the status pollAlerts read
+  // at the top of this same cycle — so the router series persists in the
+  // snapshot alongside the dish's and answers the same 15M/1H/6H filter.
   const now = Date.now();
-  latestSamples = sampleWindow.ingest(history, now);
+  latestSamples = sampleWindow.ingest(history, now, {
+    latencyMs: latestRouterLatencyMs,
+    pingSuccessPercent: latestRouterPingSuccessPercent,
+  });
   const { samples } = decodeHistoryWindow(history, now);
   const perMinute = foldSamplesToMinutes(samples);
 
@@ -515,7 +599,9 @@ async function poll(): Promise<void> {
   }
 
   const currentMinute = Math.floor(now / 60_000) * 60;
-  const completed = [...pending.keys()].filter((minute) => minute < currentMinute).sort((a, b) => a - b);
+  const completed = [...pending.keys()]
+    .filter((minute) => minute < currentMinute)
+    .sort((a, b) => a - b);
   for (const minute of completed) {
     store.append(pending.get(minute)!);
     pending.delete(minute);
@@ -645,7 +731,10 @@ function summarize(range: Range, now: Date) {
   const endSec = Math.floor(now.getTime() / 1000);
   const buckets = bucketsInRange(startSec, endSec);
 
-  const groups = new Map<number, { wattSeconds: number; samples: number; dlBits: number; ulBits: number }>();
+  const groups = new Map<
+    number,
+    { wattSeconds: number; samples: number; dlBits: number; ulBits: number }
+  >();
   let totalWattSeconds = 0;
   let sampledSeconds = 0;
   let totalDlBits = 0;
@@ -764,7 +853,9 @@ const server = createServer((request, response) => {
     response.setHeader("Content-Type", "application/json");
     response.end(
       JSON.stringify({
-        samples: latestSamples.filter((sample) => sample.timestampMs >= cutoffMs).map(compactSample),
+        samples: latestSamples
+          .filter((sample) => sample.timestampMs >= cutoffMs)
+          .map(compactSample),
       }),
     );
     return;
@@ -875,7 +966,11 @@ const server = createServer((request, response) => {
         .flat()
         .filter((iface) => iface && !iface.internal);
       ips = own.map((iface) => iface!.address);
-      macs = [...new Set(own.map((iface) => iface!.mac).filter((mac) => mac && mac !== "00:00:00:00:00:00"))];
+      macs = [
+        ...new Set(
+          own.map((iface) => iface!.mac).filter((mac) => mac && mac !== "00:00:00:00:00:00"),
+        ),
+      ];
     } else {
       ips = [remote];
       macs = [];
@@ -899,6 +994,7 @@ server.listen(PORT, () => {
 });
 
 loadSampleSnapshot();
+recordRecorderGap();
 // Seed device totals from history already on disk before the first poll, so a
 // fresh install opens with real figures instead of zero. No-op after a restart,
 // which reloads the accumulated totals from their own snapshot instead.
@@ -917,9 +1013,11 @@ setInterval(() => clientWindow.snapshot(), SNAPSHOT_EVERY_MS);
 setInterval(() => clientTotals.snapshot(), SNAPSHOT_EVERY_MS);
 setInterval(() => {
   const folded = store.compact();
-  if (folded > 0) console.log(`[collector] folded ${folded} minute(s) from past years into monthly summaries`);
+  if (folded > 0)
+    console.log(`[collector] folded ${folded} minute(s) from past years into monthly summaries`);
   const radioDropped = radioStore.compact();
-  if (radioDropped > 0) console.log(`[collector] compacted radio log, dropped ${radioDropped} old row(s)`);
+  if (radioDropped > 0)
+    console.log(`[collector] compacted radio log, dropped ${radioDropped} old row(s)`);
 }, COMPACT_EVERY_MS);
 // The per-device log keeps only six hours, so it cannot wait for the daily sweep.
 setInterval(() => {

@@ -94,3 +94,35 @@ export function formatRelativeTime(timestampMs: number, nowMs: number = Date.now
   const days = Math.round(hours / 24);
   return `${days} day${days === 1 ? "" : "s"} ago`;
 }
+
+/**
+ * Renders a protobuf enum the way the official Starlink app does: drop the
+ * enum's own type prefix and sentence-case the rest, so FILTER_CONVERGED reads
+ * "Converged" and ACTUATOR_STATE_TILT reads "Tilt".
+ *
+ * The app keeps SpaceX's vocabulary on its debug screens rather than inventing
+ * friendlier words, and the alignment sheet is ported from that screen — so it
+ * matches, and no term here is one we made up. Returns null for an absent value
+ * so callers decide what silence means; for some fields proto3 omission is a
+ * real zero value, for others it is genuinely unknown.
+ */
+export function formatDeviceEnum(value: string | undefined, typePrefix: string): string | null {
+  if (!value) return null;
+  const tail = value.startsWith(typePrefix) ? value.slice(typePrefix.length) : value;
+  const words = tail.replaceAll("_", " ").toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** Attitude filter state — "Converged". Absent is NOT assumed to be the zero
+ *  value: firmware that never sends the field would otherwise be reported as
+ *  having reset, so an absent state stays unknown. */
+export function formatAttitudeState(value: string | undefined): string | null {
+  return formatDeviceEnum(value, "FILTER_");
+}
+
+/** Motor state — "Idle", "Tilt". Absent IS the zero value here: our dish omits
+ *  the field and the official app shows "Idle" for it, which is the mapping
+ *  proto3 specifies and the app confirms. */
+export function formatActuatorState(value: string | undefined): string {
+  return formatDeviceEnum(value, "ACTUATOR_STATE_") ?? "Idle";
+}

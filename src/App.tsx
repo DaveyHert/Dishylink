@@ -6,6 +6,7 @@ import { useThermalEvents } from "./hooks/useThermalEvents";
 import { useDeviceAlerts } from "./hooks/useDeviceAlerts";
 import { useOutageHistory, mergeOutages } from "./hooks/useOutageHistory";
 import { notificationsEnabled, toggleNotifications } from "./lib/notifications";
+import { armAlertSoundOnFirstGesture } from "./lib/alertSound";
 import { TopBar } from "./components/dashboard/TopBar";
 import { StatTile } from "./components/dashboard/StatTile";
 import { TelemetryChart, windowTail } from "./components/shared/TelemetryChart";
@@ -104,6 +105,9 @@ export default function App() {
   // Router polling runs only while a router-backed surface is open.
   const routerNetwork = useRouterNetwork(openSheet === "network" || openSheet === "settings");
 
+  // Browsers only let audio start after a gesture; take the first one going.
+  useEffect(() => armAlertSoundOnFirstGesture(), []);
+
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("dishboard-theme", theme);
@@ -120,8 +124,8 @@ export default function App() {
   const recentDropRate = useMemo(() => recentAverage(samples, (sample) => sample.dropRate), [samples]);
 
   const statDetails = useMemo(
-    () => buildStatDetails({ status, currentPowerW: livePowerW, outageEvents }),
-    [status, livePowerW, outageEvents],
+    () => buildStatDetails({ status, currentPowerW: livePowerW, recentDropRate, outageEvents }),
+    [status, livePowerW, recentDropRate, outageEvents],
   );
   const openDetail = openDetailId ? statDetails[openDetailId] : null;
 
@@ -194,6 +198,8 @@ export default function App() {
               value={(100 - recentDropRate * 100).toFixed(1)}
               unit="%"
               caption="last minute"
+              sparkValues={sparklineFrom(samples, (sample) => (1 - sample.dropRate) * 100)}
+              onOpenDetail={() => setOpenDetailId("pingSuccess")}
             />
             <StatTile
               label="Sky obstructed"
@@ -315,7 +321,7 @@ export default function App() {
       )}
 
       {openDetail && (
-        <DetailsModal title={openDetail.label} onClose={() => setOpenDetailId(null)}>
+        <DetailsModal title={openDetail.modalTitle ?? openDetail.label} onClose={() => setOpenDetailId(null)}>
           <StatDetailPanel detail={openDetail} samples={samples} />
         </DetailsModal>
       )}

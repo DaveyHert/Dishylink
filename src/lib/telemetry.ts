@@ -11,6 +11,18 @@ export interface TelemetrySample {
   downlinkBps: number;
   uplinkBps: number;
   powerW: number;
+  /** The router's own ping to the PoP — a second opinion on the same round trip.
+   *  The router keeps no ring buffer for it (its history RPC is
+   *  permission-denied), so unlike every other field here this one is not
+   *  decoded from a replayable buffer: it is sampled and stamped on, by the
+   *  collector for persisted history and by the browser for the live edge.
+   *  Null wherever nothing was sampling — never a stale value carried forward. */
+  routerLatencyMs: number | null;
+  /** Router → PoP ping success (0–100), from get_status's popPingDropRate5m —
+   *  the router's own rolling five-minute measure, riding a reply already
+   *  fetched. NEVER sourced from get_ping (1009), which reboots the router.
+   *  Stamped the same way and for the same reason as routerLatencyMs. */
+  routerPingSuccessPercent: number | null;
 }
 
 export interface OutageEvent {
@@ -133,7 +145,7 @@ const OUTAGE_META: Record<string, OutageMeta> = {
   },
   // Router (wifi_get_history) events. The rest of the EventReason set auto-cleans
   // via prettifyToken ("Router software update", "Router reboot", …); only these
-  // two need bespoke wording.
+  // need bespoke wording.
   ROUTER_POWER_CYCLE: {
     label: "Router powered on",
     tip: "The router lost and regained power (unplugged/replugged, or a power blip)",
@@ -141,6 +153,11 @@ const OUTAGE_META: Record<string, OutageMeta> = {
   CLIENT_SWITCHING_BAND: {
     label: "Device switching WiFi band",
     tip: "A connected device moved between the 2.4 GHz and 5 GHz bands",
+  },
+  // prettifyToken renders this one as "Eth no link", which explains nothing.
+  ETH_NO_LINK: {
+    label: "Ethernet cable link to dish disconnected",
+    tip: "The ethernet link between the router and the dish went dead. Expected for a few seconds while either device reboots; at any other time, check the cable at both ends",
   },
 };
 
@@ -197,6 +214,8 @@ export function decodeHistoryWindow(
       downlinkBps: history.downlinkThroughputBps?.[ringIndex] ?? 0,
       uplinkBps: history.uplinkThroughputBps?.[ringIndex] ?? 0,
       powerW: history.powerIn?.[ringIndex] ?? 0,
+      routerLatencyMs: null,
+      routerPingSuccessPercent: null,
     });
   }
   return { samples, newestCounter };
@@ -251,6 +270,39 @@ export function decodeWifiHistoryEvents(wifiHistory: {
   return decodeEventLog((wifiHistory.eventLog?.events ?? []) as DishEventJson[]);
 }
 
+/** Readings the router reports live, which no ring buffer can replay. */
+export interface RouterReadings {
+  latencyMs?: number | null;
+  pingSuccessPercent?: number | null;
+}
+
+/**
+ * A latency reading only if it is one. proto3 omits a zero and toJson renders
+ * NaN as the string "NaN"; neither is a measurement. One guard shared by every
+ * consumer of `popPingLatencyMs` — the collector and the browser must agree on
+ * what counts as a reading, or the persisted series and the live edge diverge.
+ */
+export function readRouterLatencyMs(value: number | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/**
+ * Router ping success (0–100) from get_status's `popPingDropRate5M`. Call it
+ * only with a reply in hand: absent IS the proto3 zero — no drops, 100% — and
+ * only an answering router can assert that. (An unreachable router is the
+ * caller's null, not this function's.) toJson renders NaN as a string, and a
+ * rate outside 0–1 is not a rate; neither becomes a percentage.
+ */
+export function readRouterPingSuccessPercent(dropRate5M: number | undefined): number | null {
+  if (dropRate5M === undefined) return 100;
+  return typeof dropRate5M === "number" &&
+    Number.isFinite(dropRate5M) &&
+    dropRate5M >= 0 &&
+    dropRate5M <= 1
+    ? (1 - dropRate5M) * 100
+    : null;
+}
+
 /** Stitches ring-buffer polls into one continuous capped series. */
 export class TelemetryAccumulator {
   private samples: TelemetrySample[] = [];
@@ -269,7 +321,14 @@ export class TelemetryAccumulator {
     return this.samples;
   }
 
-  ingest(history: DishHistoryJson, nowMs: number): TelemetrySample[] {
+  /**
+   * `router` holds the latest readings taken from the router, stamped onto the
+   * samples this poll appends. The router is polled slower than the dish's 1 Hz
+   * ring, so one reading lands on the handful of samples it spans — a step-wise
+   * series, which is what a point-in-time value honestly is. A field left null
+   * stays null on those samples rather than repeating the last known value.
+   */
+  ingest(history: DishHistoryJson, nowMs: number, router: RouterReadings = {}): TelemetrySample[] {
     const window = decodeHistoryWindow(history, nowMs);
     if (window.samples.length === 0) return this.samples;
 
@@ -295,6 +354,12 @@ export class TelemetryAccumulator {
           ? window.samples.length
           : Math.min(window.newestCounter - this.newestCounter, window.samples.length);
       freshSamples = window.samples.slice(window.samples.length - freshSampleCount);
+    }
+    for (const sample of freshSamples) {
+      if (router.latencyMs != null) sample.routerLatencyMs = router.latencyMs;
+      if (router.pingSuccessPercent != null) {
+        sample.routerPingSuccessPercent = router.pingSuccessPercent;
+      }
     }
     this.samples.push(...freshSamples);
     this.newestCounter = window.newestCounter;

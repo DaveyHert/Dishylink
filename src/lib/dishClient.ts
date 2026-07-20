@@ -76,6 +76,10 @@ export interface DishAlignmentStatsJson {
   attitudeUncertaintyDeg?: number;
   /** "HAS_ACTUATORS_NO" on electronically-steered kits, "HAS_ACTUATORS_YES" on motorized. */
   hasActuators?: string;
+  /** What the motors are doing ("ACTUATOR_STATE_TILT", …). Absent means the zero
+   *  value, ACTUATOR_STATE_IDLE — which is why a dish that sends nothing here
+   *  still reads "Idle" in the official app. */
+  actuatorState?: string;
 }
 
 export interface DishGpsStatsJson {
@@ -337,6 +341,15 @@ export interface WifiStatusJson {
   pingLatencyMs?: number;
   dishPingLatencyMs?: number;
   popPingLatencyMs?: number;
+  /** Share of the router's own pings to the PoP lost over a rolling five
+   *  minutes, 0–1, computed by the router. The safe source for router ping
+   *  success: it rides the get_status reply already polled everywhere, unlike
+   *  get_ping (1009), which rebooted the router every time it was polled
+   *  (2026-07-20, three trials at three cadences). Absent means the proto3
+   *  zero — no drops — not "unsupported": this firmware sends the field.
+   *  NOTE the lowercase trailing `m`: the LAN reply spells it `5m`, unlike the
+   *  app's cloud debug dump (`5M`) — verified by probe on this firmware. */
+  popPingDropRate5m?: number;
   ipv4WanAddress?: string;
 }
 

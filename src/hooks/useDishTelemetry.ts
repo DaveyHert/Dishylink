@@ -10,7 +10,8 @@ import {
   type DishLocationJson,
 } from "../lib/dishClient";
 import { GrpcWebError } from "../lib/grpcWeb";
-import { TelemetryAccumulator, decodeOutageEvents, type TelemetrySample, type OutageEvent } from "../lib/telemetry";
+import { subscribeRouterStatus } from "../lib/routerStatusFeed";
+import { TelemetryAccumulator, decodeOutageEvents, readRouterLatencyMs, readRouterPingSuccessPercent, type TelemetrySample, type OutageEvent, type RouterReadings } from "../lib/telemetry";
 
 /**
  * Backfill from the always-on collector so a page reload never resets the
@@ -54,12 +55,16 @@ export interface DishTelemetry {
   dishLocation: DishLocationJson | null;
   /** True while get_location returns PermissionDenied (toggle off in the app). */
   locationDenied: boolean;
+  /** When the dish last answered, so a stale card can say how old its facts are
+   *  rather than only that they are old. Null until the first reply. */
+  lastStatusAtMs: number | null;
 }
 
 export function useDishTelemetry(): DishTelemetry {
   const [connectionState, setConnectionState] = useState<DishConnectionState>("connecting");
   const [deviceInfo, setDeviceInfo] = useState<DishDeviceInfoJson | null>(null);
   const [status, setStatus] = useState<DishStatusJson | null>(null);
+  const [lastStatusAtMs, setLastStatusAtMs] = useState<number | null>(null);
   const [samples, setSamples] = useState<TelemetrySample[]>([]);
   const [outageEvents, setOutageEvents] = useState<OutageEvent[]>([]);
   const [obstructionMap, setObstructionMap] = useState<DishObstructionMapJson | null>(null);
@@ -87,6 +92,7 @@ export function useDishTelemetry(): DishTelemetry {
         const dishStatus = await client.getStatus(AbortSignal.timeout(4_000));
         if (disposed) return;
         setStatus(dishStatus);
+        setLastStatusAtMs(Date.now());
         setConnectionState("online");
       } catch {
         if (!disposed) setConnectionState("unreachable");
@@ -95,6 +101,28 @@ export function useDishTelemetry(): DishTelemetry {
       }
     };
 
+    // The router's second opinion on latency and ping success, stamped onto the
+    // samples each history poll appends. The collector is what makes these real
+    // series — it samples and persists the same readings, so the 1H and 6H
+    // windows have something to draw; these cover only the live edge, the
+    // stretch since the page opened that no seed can reach.
+    //
+    // Both readings ride the app's one shared get_status poll (routerStatusFeed)
+    // — this hook costs the router nothing. Ping success comes from that reply's
+    // popPingDropRate5m, the router's own rolling five-minute measure; it must
+    // never be sourced from get_ping (1009), which rebooted the router at every
+    // cadence it was tried at (2026-07-20). A browser tab must never be what
+    // destabilises the router it is monitoring.
+    const routerReadings: RouterReadings = { latencyMs: null, pingSuccessPercent: null };
+    const unsubscribeRouterStatus = subscribeRouterStatus(({ status, reachable }) => {
+      // An unreachable router leaves the series empty rather than repeating a
+      // stale reading; it is not an app error.
+      routerReadings.latencyMs =
+        reachable && status ? readRouterLatencyMs(status.popPingLatencyMs) : null;
+      routerReadings.pingSuccessPercent =
+        reachable && status ? readRouterPingSuccessPercent(status.popPingDropRate5m) : null;
+    });
+
     let historyInFlight = false;
     const pollHistory = async () => {
       if (!client || historyInFlight) return;
@@ -102,7 +130,7 @@ export function useDishTelemetry(): DishTelemetry {
       try {
         const history = await client.getHistory(AbortSignal.timeout(4_000));
         if (disposed) return;
-        setSamples([...accumulatorRef.current.ingest(history, Date.now())]);
+        setSamples([...accumulatorRef.current.ingest(history, Date.now(), routerReadings)]);
         setOutageEvents(decodeOutageEvents(history));
       } catch {
         // status polling owns the connection indicator
@@ -167,9 +195,10 @@ export function useDishTelemetry(): DishTelemetry {
 
     return () => {
       disposed = true;
+      unsubscribeRouterStatus();
       timerIds.forEach((timerId) => window.clearInterval(timerId));
     };
   }, []);
 
-  return { connectionState, deviceInfo, status, samples, outageEvents, obstructionMap, dishLocation, locationDenied };
+  return { connectionState, deviceInfo, status, samples, outageEvents, obstructionMap, dishLocation, locationDenied, lastStatusAtMs };
 }

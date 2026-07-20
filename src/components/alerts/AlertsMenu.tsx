@@ -16,10 +16,39 @@ import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import type { DeviceAlerts } from "../../hooks/useDeviceAlerts";
 import { notificationsSupported } from "../../lib/notifications";
+import {
+  alertSoundEnabled,
+  setAlertSoundEnabled,
+  unlockAlertSound,
+  playAlertSound,
+} from "../../lib/alertSound";
+import { BellIcon } from "../icons/BellIcon";
+import { SpeakerIcon } from "../icons/SpeakerIcon";
 import { ALERTS_TABS, ActiveTab, HistoryTab, StatusTab, type AlertsTab } from "./AlertsTabs";
 import { SEVERITY_COLOR } from "./alertFormat";
 
 const BTN_RESET = "cursor-pointer appearance-none border-0 bg-transparent p-0 text-inherit";
+
+/** Mute/unmute for the alert chime. Chime and notifications are separate
+ *  channels on purpose — sound works even where notifications are blocked —
+ *  so each gets its own control. Unmuting sounds one soft note: the click is
+ *  the unlock gesture browsers require, and it proves the volume immediately
+ *  instead of during the next outage. */
+function SoundToggle({ soundOn, onToggle }: { soundOn: boolean; onToggle: () => void }) {
+  return (
+    <button
+      className={cn(BTN_RESET, "flex items-center transition-colors")}
+      // Not green: that's the online indicator's color, and this is a
+      // preference, not a health state. Ink when on, dimmed when muted.
+      style={{ color: soundOn ? "var(--ink)" : "var(--ink-muted)" }}
+      aria-label={soundOn ? "Mute alert sounds" : "Unmute alert sounds"}
+      title={soundOn ? "Alert sounds on — click to mute" : "Alert sounds muted — click to unmute"}
+      onClick={onToggle}
+    >
+      <SpeakerIcon on={soundOn} />
+    </button>
+  );
+}
 
 /**
  * The bell itself, with the active-alert count riding on it.
@@ -31,21 +60,21 @@ const BTN_RESET = "cursor-pointer appearance-none border-0 bg-transparent p-0 te
  */
 const AlertsBellTrigger = forwardRef<
   HTMLButtonElement,
-  { count: number; color: string } & React.ComponentPropsWithoutRef<"button">
->(function AlertsBellTrigger({ count, color, ...triggerProps }, ref) {
+  { count: number; color: string; muted: boolean } & React.ComponentPropsWithoutRef<"button">
+>(function AlertsBellTrigger({ count, color, muted, ...triggerProps }, ref) {
   return (
     <button
       ref={ref}
       className='theme-toggle relative'
       aria-label='Alerts and notifications'
-      title={count > 0 ? `${count} active alert${count === 1 ? "" : "s"}` : "Alerts — all healthy"}
+      title={
+        (count > 0 ? `${count} active alert${count === 1 ? "" : "s"}` : "Alerts — all healthy") +
+        (muted ? " · sounds muted" : "")
+      }
       style={count > 0 ? { color } : undefined}
       {...triggerProps}
     >
-      <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'>
-        <path d='M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9' />
-        <path d='M13.7 21a2 2 0 0 1-3.4 0' />
-      </svg>
+      <BellIcon />
       {count > 0 && (
         <span
           className='absolute -top-1 -right-1 flex h-[15px] min-w-[15px] items-center justify-center rounded-full border-[1.5px] border-solid border-[var(--page)] px-1 text-[10px] font-bold leading-none text-white'
@@ -68,6 +97,18 @@ export function AlertsMenu({
   onToggleNotifications: () => void;
 }) {
   const [tab, setTab] = useState<AlertsTab>("active");
+  // Lifted to the menu so the bell's tooltip and the panel's speaker toggle
+  // report the same muted state.
+  const [soundOn, setSoundOn] = useState(alertSoundEnabled);
+  const toggleSound = () => {
+    const next = !soundOn;
+    setAlertSoundEnabled(next);
+    setSoundOn(next);
+    if (next) {
+      unlockAlertSound();
+      playAlertSound("advisory");
+    }
+  };
   const { active, statusList, history, routerReachable, collectorUp, dishReachable, firstSeen } =
     alerts;
   const activeCount = active.length;
@@ -76,7 +117,7 @@ export function AlertsMenu({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <AlertsBellTrigger count={activeCount} color={badgeColor} />
+        <AlertsBellTrigger count={activeCount} color={badgeColor} muted={!soundOn} />
       </PopoverTrigger>
 
       <PopoverContent
@@ -87,15 +128,18 @@ export function AlertsMenu({
       >
         <div className='flex items-center justify-between px-4 py-2'>
           <span className='text-[15px] font-semibold text-[var(--ink)]'>Alerts</span>
-          {notificationsSupported() && (
-            <button
-              className={cn(BTN_RESET, "text-xs font-medium transition-colors")}
-              style={{ color: notificationsOn ? "var(--status-good)" : "var(--ink-muted)" }}
-              onClick={onToggleNotifications}
-            >
-              {notificationsOn ? "Notifications on" : "Enable notifications"}
-            </button>
-          )}
+          <span className='flex items-center gap-3.5'>
+            <SoundToggle soundOn={soundOn} onToggle={toggleSound} />
+            {notificationsSupported() && (
+              <button
+                className={cn(BTN_RESET, "text-xs font-medium transition-colors")}
+                style={{ color: notificationsOn ? "var(--status-good)" : "var(--ink-muted)" }}
+                onClick={onToggleNotifications}
+              >
+                {notificationsOn ? "Notifications on" : "Enable notifications"}
+              </button>
+            )}
+          </span>
         </div>
 
         <div className='flex items-center gap-5 px-4'>

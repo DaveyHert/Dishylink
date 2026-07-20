@@ -69,8 +69,8 @@ export function EnergyHistoryPanel({ active }: { active: boolean }) {
 
       {unavailable ? (
         <Callout className="mt-2.5">
-          Long-term energy needs the collector running. Start it with <code>npm run collector</code> and it
-          will build up day / week / month history from now on.
+          Long-term energy needs the history recorder running. Start it with <code>npm run collector</code>
+          and it will build up day / week / month history from now on.
         </Callout>
       ) : (
         <>
@@ -80,7 +80,7 @@ export function EnergyHistoryPanel({ active }: { active: boolean }) {
           {data && (
             <div className="energy-history-coverage">
               collected {coveragePct}% of this period
-              {coveragePct < 95 && " — total covers only the time the collector was running"}
+              {coveragePct < 95 && " — total covers only the time the recorder was running"}
             </div>
           )}
           {data && <EnergyBars buckets={data.buckets} range={range} />}

@@ -10,7 +10,7 @@ export interface ChartSeries {
   label: string;
   colorVar: string;
   getValue: (sample: TelemetrySample) => number | null;
-  bucketReduce?: "avg" | "max";
+  bucketReduce?: "avg" | "max" | "min";
 }
 
 interface TelemetryChartProps {
@@ -27,6 +27,14 @@ interface TelemetryChartProps {
    *  than 1 Hz — per-device history is per-minute, so 30s would mark every
    *  normal step as "no data". */
   minGapMs?: number;
+  /** Hard ceiling for the y-axis. Set it for series with a real upper bound —
+   *  a percentage tops out at 100, and the usual headroom above the highest
+   *  sample would otherwise label the axis 120%. */
+  maxValue?: number;
+  /** Multiplier of clearance above the tallest sample before the axis rounds
+   *  up. The default hugs the data; raise it for jittery series (per-device
+   *  throughput) where a full frame reads as alarming rather than busy. */
+  headroom?: number;
 }
 
 interface BucketPoint {
@@ -122,6 +130,8 @@ export function TelemetryChart({
   outageEvents = [],
   areaWash = true,
   minGapMs = MIN_GAP_MS,
+  maxValue,
+  headroom = 1.08,
 }: TelemetryChartProps) {
   const [containerRef, containerWidth] = useElementWidth();
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
@@ -155,9 +165,9 @@ export function TelemetryChart({
               .map(chartSeries.getValue)
               .filter((value): value is number => value !== null && Number.isFinite(value));
             if (seriesValues.length === 0) return null;
-            return chartSeries.bucketReduce === "max"
-              ? Math.max(...seriesValues)
-              : seriesValues.reduce((sum, value) => sum + value, 0) / seriesValues.length;
+            if (chartSeries.bucketReduce === "max") return Math.max(...seriesValues);
+            if (chartSeries.bucketReduce === "min") return Math.min(...seriesValues);
+            return seriesValues.reduce((sum, value) => sum + value, 0) / seriesValues.length;
           }),
           hasGapBefore: false,
         };
@@ -175,15 +185,25 @@ export function TelemetryChart({
     return { buckets: populated, bucketSpanMs };
   }, [samples, series, windowStartMs, windowEndMs, plotWidth]);
 
-  const yMax = useMemo(() => {
+  // Ceiling and gridlines come out of ONE derivation: the ceiling is a whole
+  // number of tick steps, so the top gridline is always the ceiling. Choosing
+  // them independently (a "nice" ceiling, then a "nice" step) let them disagree
+  // — a 130 ms spike got a 150 ceiling with gridlines every 40, and drew in the
+  // unlabeled band above the 120 line as if it had escaped the chart.
+  const { yMax, yTickValues } = useMemo(() => {
     let observedMax = 0;
     for (const bucket of buckets) {
       for (const value of bucket.values) {
         if (value !== null && value > observedMax) observedMax = value;
       }
     }
-    return niceCeiling(observedMax * 1.08);
-  }, [buckets]);
+    const rawCeiling = maxValue ?? observedMax * headroom;
+    const tickStep = niceCeiling(rawCeiling / 4);
+    const ceiling = maxValue ?? Math.max(Math.ceil(rawCeiling / tickStep), 1) * tickStep;
+    const ticks: number[] = [];
+    for (let tickValue = tickStep; tickValue <= ceiling * 1.001; tickValue += tickStep) ticks.push(tickValue);
+    return { yMax: ceiling, yTickValues: ticks };
+  }, [buckets, maxValue, headroom]);
 
   const xForTime = useCallback(
     (timestampMs: number) =>
@@ -259,12 +279,6 @@ export function TelemetryChart({
     return regions;
   }, [buckets, bucketSpanMs, windowStartMs]);
 
-  const yTickValues = useMemo(() => {
-    const tickStep = niceCeiling(yMax / 4);
-    const ticks: number[] = [];
-    for (let tickValue = tickStep; tickValue <= yMax * 1.001; tickValue += tickStep) ticks.push(tickValue);
-    return ticks;
-  }, [yMax]);
   const xTickTimes = [0.25, 0.5, 0.75].map((fraction) => windowStartMs + (windowEndMs - windowStartMs) * fraction);
 
   // Only events that occupy a stretch of time shade the chart. The router's log

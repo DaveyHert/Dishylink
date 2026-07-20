@@ -14,7 +14,8 @@
 // health is surfaced as an alert (a dead-man's switch), never as a dependency.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DishClient, type DishStatusJson } from "../lib/dishClient";
+import type { DishStatusJson } from "../lib/dishClient";
+import { subscribeRouterStatus } from "../lib/routerStatusFeed";
 import type { DishConnectionState } from "./useDishTelemetry";
 import {
   DISH_ALERTS,
@@ -26,8 +27,8 @@ import {
   type AlertState,
 } from "../lib/dishAlerts";
 import { sendNotification } from "../lib/notifications";
+import { playAlertSound } from "../lib/alertSound";
 
-const ROUTER_POLL_MS = 5_000;
 const HISTORY_POLL_MS = 30_000;
 
 /** An episode as the collector serves it on /api/alerts. */
@@ -128,6 +129,15 @@ const SYSTEM_ALERTS: AlertSpec[] = [
     severity: "warning",
     notify: true,
   },
+  // Recorded by the recorder about itself: a boot that finds its heartbeat
+  // stale logs the gap, so History can say "not recorded" instead of implying
+  // "nothing happened". Never fires live — COLLECTOR_DOWN covers the present.
+  {
+    key: "recorderOff",
+    ok: "Recording ran continuously",
+    firing: "Recording was off — anything in this gap went unrecorded",
+    severity: "advisory",
+  },
 ];
 
 const SPEC_BY_SOURCE_KEY = new Map<string, AlertSpec>([
@@ -171,41 +181,14 @@ export function useDeviceAlerts(
   const [episodes, setEpisodes] = useState<AlertEpisodeJson[]>([]);
   const [collectorUp, setCollectorUp] = useState<boolean | null>(null);
 
-  // Live router alerts: an always-on get_status poll straight to the router.
+  // Live router alerts, off the app's one shared router get_status poll. On
+  // failure the last known alerts stand rather than reporting everything clear;
+  // `reachable` is the flag the panel caveats with.
   useEffect(() => {
-    let disposed = false;
-    let timerId = 0;
-    let clientPromise: Promise<DishClient> | null = null;
-    // A poll must never outlive its interval. Without a deadline, an unanswering
-    // router leaves every request hanging; at one per 5s they pile up until they
-    // exhaust the browser's ~6-connections-per-origin budget, and then the DISH
-    // poll can't get a socket either and the app reports a dish outage that
-    // isn't happening. Bound the request, and never overlap two.
-    let inFlight = false;
-    const poll = async () => {
-      if (inFlight) return;
-      inFlight = true;
-      try {
-        clientPromise ??= DishClient.load("router");
-        const router = await clientPromise;
-        const status = await router.getRouterStatus(AbortSignal.timeout(4_000));
-        if (disposed) return;
-        setRouterAlerts(status.alerts ?? {});
-        setRouterReachable(true);
-      } catch {
-        // Router unreachable or in bypass mode. Keep the last known alerts rather
-        // than reporting everything clear, but flag it so the panel can caveat.
-        if (!disposed) setRouterReachable(false);
-      } finally {
-        inFlight = false;
-      }
-    };
-    void poll();
-    timerId = window.setInterval(() => void poll(), ROUTER_POLL_MS);
-    return () => {
-      disposed = true;
-      window.clearInterval(timerId);
-    };
+    return subscribeRouterStatus(({ status, reachable }) => {
+      if (status !== null) setRouterAlerts(status.alerts ?? {});
+      setRouterReachable(reachable);
+    });
   }, []);
 
   // History + collector health: both come from the collector, and its silence is
@@ -236,13 +219,21 @@ export function useDeviceAlerts(
   // Every check on both devices, clear and firing, in catalogue order — the
   // Status list. `active` is just the firing subset, plus the collector-down
   // synthetic, sorted worst-first for the notifications view.
-  const statusList = useMemo<AlertState[]>(
-    () => [
-      ...resolveAlerts(DISH_ALERTS, dishStatus?.alerts, "dish"),
-      ...resolveAlerts(ROUTER_ALERTS, routerAlerts ?? undefined, "router"),
-    ],
-    [dishStatus?.alerts, routerAlerts],
-  );
+  const statusList = useMemo<AlertState[]>(() => {
+    // The dish latches noEthernetLink long after a flap ends: probed live
+    // (2026-07-20), the flag stayed set 40+ minutes while the same reply
+    // reported a working 1000 Mbps link. When the reply contradicts itself —
+    // link flagged down AND a negotiated speed present — trust the speed. A
+    // genuinely dead link makes the dish unreachable from the LAN, which
+    // raises its own critical alert instead, so nothing real is silenced.
+    const ethLinkUp = (dishStatus?.ethSpeedMbps ?? 0) > 0;
+    const dishAlertList = resolveAlerts(DISH_ALERTS, dishStatus?.alerts, "dish").map((alert) =>
+      alert.key === "noEthernetLink" && alert.active && ethLinkUp
+        ? { ...alert, active: false }
+        : alert,
+    );
+    return [...dishAlertList, ...resolveAlerts(ROUTER_ALERTS, routerAlerts ?? undefined, "router")];
+  }, [dishStatus?.alerts, dishStatus?.ethSpeedMbps, routerAlerts]);
 
   const active = useMemo<AlertState[]>(() => {
     // An unreachable dish means its 20 checks are a stale snapshot, not "clear":
@@ -269,14 +260,20 @@ export function useDeviceAlerts(
     const current = new Map(active.map((a) => [`${a.source}:${a.key}`, a]));
     const previous = previousActiveRef.current;
     if (previous !== null) {
+      // The chime is the app's own alert channel and stands alone — it fires
+      // whether or not browser notifications are enabled. The notification is
+      // optional escalation on top. Each keeps its own per-alert throttle, so
+      // disabling or blocking one never silences the other.
       for (const [id, alert] of current) {
         if (alert.notify && !previous.has(id)) {
+          playAlertSound(alert.severity, false, `alert-${id}`);
           sendNotification(`alert-${id}`, alertTitle(alert.source, false), alert.firing);
         }
       }
       for (const [id, alert] of previous) {
         if (alert.notify && !current.has(id)) {
-          // Distinct kind so the clear is not swallowed by the onset's throttle.
+          // Distinct key so the clear is not swallowed by the onset's throttle.
+          playAlertSound(alert.severity, true, `alert-${id}-cleared`);
           sendNotification(`alert-${id}-cleared`, alertTitle(alert.source, true), alert.ok);
         }
       }

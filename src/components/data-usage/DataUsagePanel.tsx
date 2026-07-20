@@ -94,8 +94,8 @@ function LocalDataUsage() {
   if (unavailable) {
     return (
       <Callout className="mt-2.5">
-        Data usage needs the collector running. Start it with <code>npm run collector</code> and DishyLink
-        will meter traffic from now on.
+        Data usage needs the history recorder running. Start it with <code>npm run collector</code> and
+        DishyLink will meter traffic from now on.
       </Callout>
     );
   }
@@ -121,7 +121,7 @@ function LocalDataUsage() {
       {data && (
         <div className="mt-0.5 text-[12px] font-medium text-muted-foreground">
           collected {coveragePct}% of this period
-          {coveragePct < 95 && " — totals cover only the time the collector was running"}
+          {coveragePct < 95 && " — totals cover only the time the recorder was running"}
         </div>
       )}
 

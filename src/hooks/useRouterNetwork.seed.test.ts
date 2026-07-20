@@ -126,7 +126,7 @@ describe("appendClientSamples", () => {
 
   it("appends both samples to one fresh array when a batch repeats a MAC", () => {
     const history = new Map<string, TelemetrySample[]>([
-      [MAC, [{ timestampMs: 0, latencyMs: null, dropRate: 0, downlinkBps: 0, uplinkBps: 0, powerW: 0 }]],
+      [MAC, [{ timestampMs: 0, latencyMs: null, dropRate: 0, downlinkBps: 0, uplinkBps: 0, powerW: 0, routerLatencyMs: null, routerPingSuccessPercent: null }]],
     ]);
     const originalRef = history.get(MAC)!;
     const newestMs = appendClientSamples(history, [

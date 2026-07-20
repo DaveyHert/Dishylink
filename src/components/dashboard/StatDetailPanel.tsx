@@ -8,12 +8,14 @@
 
 import { useMemo, useState } from "react";
 import { TelemetryChart, type ChartSeries } from "../shared/TelemetryChart";
+import { LatencyHistogram } from "./LatencyHistogram";
 import { EnergyHistoryPanel } from "./EnergyHistoryPanel";
 import { windowSlice, averageOf, energyKWh, coverageNote } from "../../lib/statDetails";
 import { useEnergyHistory, type EnergyRange } from "../../hooks/useEnergyHistory";
 import type { TelemetrySample, OutageEvent } from "../../lib/telemetry";
 import { SegmentedControl } from "../ui/segmented-control";
 import { Explainer } from "../ui/explainer";
+import { EmptyState } from "../ui/empty-state";
 import { FigureRow } from "../ui/figure-row";
 
 // Window minutes → the collector's matching range, so the live-window energy
@@ -33,6 +35,29 @@ export interface StatDetail {
   formatTick?: (value: number) => string;
   explainer: string;
   outageEvents?: OutageEvent[];
+  /** Hard y-axis ceiling, for series with a real upper bound (percentages). */
+  maxValue?: number;
+  /** Show the per-series latency distribution histogram under the chart. */
+  distribution?: boolean;
+  /** Overrides the DetailsModal header for this detail only — its top
+   *  figures/chart are one device, and a secondaryChart names the other, so the
+   *  header names the first (e.g. "Starlink ping success"). `label` stays the
+   *  plain noun the tile and explainer use. */
+  modalTitle?: string;
+  /** A related series that deserves its own chart rather than a line over the
+   *  main one — a different source, or a shorter history than the main series.
+   *
+   *  It is the same measurement in the same unit, so it is drawn by the same
+   *  chart at the same size with the same formatters and axis as the primary.
+   *  Only the series (and so the colour) differs. */
+  secondaryChart?: {
+    title: string;
+    note: string;
+    series: ChartSeries[];
+    /** Shown instead of the chart when nothing in this window was measured —
+     *  says why, since for these series an empty window is a real answer. */
+    emptyNote: string;
+  };
   /** Show the live "energy used over this window" readout (Power detail only). */
   showWindowEnergy?: boolean;
   /** Show the persistent day/week/month energy section (Power detail only). */
@@ -82,8 +107,44 @@ export function StatDetailPanel({ detail, samples }: StatDetailPanelProps) {
   const energyNote = useCollectorEnergy
     ? energyHistory.data!.coverage.fraction >= 0.95
       ? "over the selected window"
-      : `collector has ${Math.round(energyHistory.data!.coverage.fraction * 100)}% of this window`
+      : `recorded ${Math.round(energyHistory.data!.coverage.fraction * 100)}% of this window`
     : coverageNote(windowed, windowMinutes);
+
+  // An empty chart is just a confusing box; say so in words until a reading
+  // lands. Finite-checked, not merely non-null: a snapshot written before this
+  // series existed has the field absent, which reads as undefined, not null.
+  const secondaryGetValue = detail.secondaryChart?.series[0].getValue;
+  const hasSecondaryData = useMemo(
+    () =>
+      secondaryGetValue
+        ? windowed.some((sample) => Number.isFinite(secondaryGetValue(sample)))
+        : false,
+    [windowed, secondaryGetValue],
+  );
+  // The secondary series is the same measurement in the same unit as the
+  // primary (see the type), so it gets the primary's formatter and its own
+  // Average | Current pair — the app gives each device one, we did not. Average
+  // is over the window; Current is the latest reading from the full buffer
+  // (window-independent, like the primary's `current`), and is dropped when the
+  // series has no reading rather than shown as a formatted zero.
+  const secondaryAverage = useMemo(
+    () => (secondaryGetValue ? averageOf(windowed, secondaryGetValue) : 0),
+    [windowed, secondaryGetValue],
+  );
+  const secondaryCurrent = useMemo(() => {
+    if (!secondaryGetValue) return null;
+    for (let index = samples.length - 1; index >= 0; index--) {
+      const value = secondaryGetValue(samples[index]);
+      if (value !== null && Number.isFinite(value)) return value;
+    }
+    return null;
+  }, [samples, secondaryGetValue]);
+  const secondaryFigures = [
+    { label: "Average", ...detail.formatBig(secondaryAverage) },
+    ...(secondaryCurrent !== null
+      ? [{ label: "Current", ...detail.formatBig(secondaryCurrent) }]
+      : []),
+  ];
 
   const current = detail.formatBig(detail.current);
   const average = detail.formatBig(averageValue);
@@ -111,8 +172,61 @@ export function StatDetailPanel({ detail, samples }: StatDetailPanelProps) {
         formatValue={detail.formatValue}
         formatTick={detail.formatTick}
         outageEvents={detail.outageEvents}
+        maxValue={detail.maxValue}
         height={220}
       />
+
+      {/* Two lines on one axis need naming; a single line is named by the sheet
+          title. Same placement as the official app: dots under the chart. */}
+      {detail.series.length > 1 && (
+        <div className="mt-2 flex items-center justify-center gap-5">
+          {detail.series.map((chartSeries) => (
+            <span
+              key={chartSeries.id}
+              className="inline-flex items-center gap-1.5 text-[12px] font-semibold"
+            >
+              <span className="series-swatch" style={{ background: `var(${chartSeries.colorVar})` }} />
+              {chartSeries.label}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {detail.distribution && (
+        <section className="mt-4">
+          <h3 className="text-[15px] font-semibold">Latency distribution</h3>
+          <p className="mt-0.5 mb-2 text-[12px] font-medium text-muted-foreground">
+            over the selected window
+          </p>
+          <LatencyHistogram samples={windowed} series={detail.series} />
+        </section>
+      )}
+
+      {detail.secondaryChart && (
+        <section className="mt-4">
+          <h3 className="text-[15px] font-semibold">{detail.secondaryChart.title}</h3>
+          <p className="mt-0.5 mb-2 text-[12px] font-medium text-muted-foreground">
+            {detail.secondaryChart.note}
+          </p>
+          {hasSecondaryData ? (
+            <>
+              <FigureRow className="mt-0 mb-3" size="sm" figures={secondaryFigures} />
+              <TelemetryChart
+                samples={windowed}
+                series={detail.secondaryChart.series}
+                windowMinutes={windowMinutes}
+                formatValue={detail.formatValue}
+                formatTick={detail.formatTick}
+                outageEvents={detail.outageEvents}
+                maxValue={detail.maxValue}
+                height={220}
+              />
+            </>
+          ) : (
+            <EmptyState className="py-6">{detail.secondaryChart.emptyNote}</EmptyState>
+          )}
+        </section>
+      )}
 
       {detail.showWindowEnergy && (
         <div className="mt-3.5 rounded-lg bg-[color-mix(in_srgb,var(--ink)_5%,var(--surface))] px-[15px] py-[13px]">

@@ -126,6 +126,8 @@ export async function fetchPersistedClientHistory(): Promise<SeededClientHistory
         downlinkBps: row.downMbps * 1_000_000,
         uplinkBps: row.upMbps * 1_000_000,
         powerW: 0,
+        routerLatencyMs: null,
+        routerPingSuccessPercent: null,
       });
       history.set(row.macAddress, series);
     }
@@ -139,6 +141,8 @@ export async function fetchPersistedClientHistory(): Promise<SeededClientHistory
         downlinkBps: sample.downMbps * 1_000_000,
         uplinkBps: sample.upMbps * 1_000_000,
         powerW: 0,
+        routerLatencyMs: null,
+        routerPingSuccessPercent: null,
       });
       history.set(sample.macAddress, series);
       if (sample.atMs > newestSampleMs) newestSampleMs = sample.atMs;
@@ -184,6 +188,8 @@ export function appendClientSamples(
       downlinkBps: sample.downMbps * 1_000_000,
       uplinkBps: sample.upMbps * 1_000_000,
       powerW: 0,
+      routerLatencyMs: null,
+      routerPingSuccessPercent: null,
     });
     history.set(sample.macAddress, series);
     if (sample.atMs > newestMs) newestMs = sample.atMs;

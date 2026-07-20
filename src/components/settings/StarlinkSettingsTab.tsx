@@ -1,6 +1,7 @@
 // Dish configuration and maintenance — the Starlink half of the settings sheet.
 
 import { useState } from "react";
+import { Callout } from "@/components/ui/callout";
 import { Loading } from "@/components/ui/loading";
 import { Switch } from "@/components/ui/switch";
 import { actionButton } from "@/components/ui/action-button";
@@ -22,6 +23,7 @@ import {
   triggerClass,
 } from "./settingsChrome";
 import { localTimeToUtcMinutes, utcMinutesToLocalTime } from "./sleepSchedule";
+import { UPDATE_WINDOWS, updateWindowFor } from "./updateWindow";
 
 const SNOW_MELT_LABEL: Record<SnowMeltMode, string> = {
   AUTO: "Automatic",
@@ -49,6 +51,7 @@ export function StarlinkSettingsTab({
   const sleepEnabled = Boolean(config?.powerSaveMode);
   const sleepStart = utcMinutesToLocalTime(config?.powerSaveStartMinutes ?? 0);
   const sleepDurationH = Math.round((config?.powerSaveDurationMinutes ?? 360) / 60);
+  const updateWindow = updateWindowFor(config?.swupdateRebootHour);
 
   // Every write is fire-and-forget with the failure swallowed: the hook already
   // surfaces `settings.error`, and a rejected promise here would be unhandled.
@@ -57,9 +60,9 @@ export function StarlinkSettingsTab({
   return (
     <>
       {settings.loading && <Loading message='Reading dish configuration…' />}
-      {settings.error && (
-        <div className='py-2 text-[12.5px] leading-[1.5] text-destructive'>{settings.error}</div>
-      )}
+      {/* Same Callout the Router tab uses for its failures — the two tabs are
+          siblings and their errors must not read as two different apps. */}
+      {settings.error && <Callout tone='error'>{settings.error}</Callout>}
       {config && (
         <>
           <SettingRow
@@ -141,22 +144,29 @@ export function StarlinkSettingsTab({
             </div>
           )}
 
+          {/* Four windows, not 24 hours: the dish reboots somewhere inside a
+              six-hour band, which is why the official app offers exactly these
+              and words them "around 3 AM · Between 12 AM and 6 AM". */}
           <SettingRow
-            title='Update reboot hour'
-            caption='Firmware-update reboots only happen at this local hour'
+            title='Software updates'
+            caption={`Update reboots happen ${updateWindow.range.toLowerCase()}`}
           >
             <Select
-              value={String(config.swupdateRebootHour ?? 3)}
+              value={String(updateWindow.hour)}
               disabled={settings.saving}
               onValueChange={(hour) => save({ swupdateRebootHour: Number(hour) })}
             >
-              <SelectTrigger className={triggerClass} style={{ width: 84 }}>
+              <SelectTrigger className={triggerClass} style={{ width: 168 }}>
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className={`${selectContentClass} max-h-56`}>
-                {Array.from({ length: 24 }, (_, hour) => (
-                  <SelectItem key={hour} value={String(hour)} className={selectItemClass}>
-                    {String(hour).padStart(2, "0")}:00
+              <SelectContent className={selectContentClass}>
+                {UPDATE_WINDOWS.map((window) => (
+                  <SelectItem
+                    key={window.hour}
+                    value={String(window.hour)}
+                    className={selectItemClass}
+                  >
+                    {window.label}
                   </SelectItem>
                 ))}
               </SelectContent>

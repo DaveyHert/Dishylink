@@ -20,6 +20,8 @@ function minuteOfSamples(): TelemetrySample[] {
     downlinkBps: 0,
     uplinkBps: 0,
     powerW: 30,
+    routerLatencyMs: null,
+    routerPingSuccessPercent: null,
   }));
 }
 
