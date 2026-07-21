@@ -126,7 +126,7 @@ describe("ClientWindow snapshot", () => {
     expect(reopened.samples(MAC).map((sample) => sample.downMbps)).toEqual([2, 3]);
   });
 
-  it("discards a snapshot whose samples have aged out while the collector was down", () => {
+  it("discards a snapshot whose samples have aged out while the historian was down", () => {
     const stale: ClientSample[] = [
       { macAddress: MAC, atMs: Date.now() - 45 * MINUTE_MS, downMbps: 8, upMbps: 1 },
     ];

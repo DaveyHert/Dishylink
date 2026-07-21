@@ -4,12 +4,12 @@
 // get_status, and the Starlink app reads them straight off each device. So does
 // this: dish alerts come from the telemetry poll already running (2s); router
 // alerts from a light get_status poll this hook runs itself (5s). Neither goes
-// through the collector — the thing whose job is to warn you must not depend on
+// through the historian — the thing whose job is to warn you must not depend on
 // a background process that can die. Notifications fire from this live diff too,
 // which is why this replaces useThermalNotifications (a superset: all notifiable
 // alerts on both devices, not just the three thermal ones).
 //
-// The collector is only a historian. It records episodes so an alert that came
+// The historian is only a historian. It records episodes so an alert that came
 // and went while no browser was open still shows up under History — and its own
 // health is surfaced as an alert (a dead-man's switch), never as a dependency.
 
@@ -31,7 +31,7 @@ import { playAlertSound } from "../lib/alertSound";
 
 const HISTORY_POLL_MS = 30_000;
 
-/** An episode as the collector serves it on /api/alerts. */
+/** An episode as the historian serves it on /api/alerts. */
 interface AlertEpisodeJson {
   source: AlertSource;
   key: string;
@@ -68,16 +68,16 @@ function useFirstSeen(active: AlertState[]): Map<string, number> {
 }
 
 export interface DeviceAlerts {
-  /** Everything firing right now, worst first — includes a synthetic collector-down alert. */
+  /** Everything firing right now, worst first — includes a synthetic historian-down alert. */
   active: AlertState[];
   /** Every check on both devices, clear and firing, in catalogue order — the Status list. */
   statusList: AlertState[];
-  /** Past episodes from the collector, newest first. Empty when the collector is down. */
+  /** Past episodes from the historian, newest first. Empty when the historian is down. */
   history: AlertHistoryEntry[];
   /** null while first probing; false when the router get_status poll is failing. */
   routerReachable: boolean | null;
-  /** null while first probing; false when the collector (history) is unreachable. */
-  collectorUp: boolean | null;
+  /** null while first probing; false when the historian (history) is unreachable. */
+  historianUp: boolean | null;
   /** False when the dish isn't answering: its checks below are the last known
    *  values, not live, and must not be read as "all clear". */
   dishReachable: boolean;
@@ -111,7 +111,7 @@ const ROUTER_UNREACHABLE: AlertState = {
   active: true,
 };
 
-/** Conditions the collector records about a device rather than off it. Their
+/** Conditions the historian records about a device rather than off it. Their
  *  wording has to live here too, or history shows a raw key. */
 const SYSTEM_ALERTS: AlertSpec[] = [
   {
@@ -131,7 +131,7 @@ const SYSTEM_ALERTS: AlertSpec[] = [
   },
   // Recorded by the recorder about itself: a boot that finds its heartbeat
   // stale logs the gap, so History can say "not recorded" instead of implying
-  // "nothing happened". Never fires live — COLLECTOR_DOWN covers the present.
+  // "nothing happened". Never fires live — HISTORIAN_DOWN covers the present.
   {
     key: "recorderOff",
     ok: "Recording ran continuously",
@@ -146,9 +146,9 @@ const SPEC_BY_SOURCE_KEY = new Map<string, AlertSpec>([
   ...SYSTEM_ALERTS.map((spec) => [`system:${spec.key}`, spec] as const),
 ]);
 
-/** The collector being down is itself an alert: recording has silently stopped. */
-const COLLECTOR_DOWN: AlertState = {
-  key: "collectorDown",
+/** The historian being down is itself an alert: recording has silently stopped. */
+const HISTORIAN_DOWN: AlertState = {
+  key: "historianDown",
   source: "system",
   ok: "History recorder running",
   firing: "History recorder is down — live alerts still work, but nothing is being recorded",
@@ -179,7 +179,7 @@ export function useDeviceAlerts(
   const [routerAlerts, setRouterAlerts] = useState<Record<string, boolean> | null>(null);
   const [routerReachable, setRouterReachable] = useState<boolean | null>(null);
   const [episodes, setEpisodes] = useState<AlertEpisodeJson[]>([]);
-  const [collectorUp, setCollectorUp] = useState<boolean | null>(null);
+  const [historianUp, setHistorianUp] = useState<boolean | null>(null);
 
   // Live router alerts, off the app's one shared router get_status poll. On
   // failure the last known alerts stand rather than reporting everything clear;
@@ -191,7 +191,7 @@ export function useDeviceAlerts(
     });
   }, []);
 
-  // History + collector health: both come from the collector, and its silence is
+  // History + historian health: both come from the historian, and its silence is
   // an alert, not a failure to surface.
   useEffect(() => {
     let disposed = false;
@@ -202,10 +202,10 @@ export function useDeviceAlerts(
         const body = (await response.json()) as { episodes?: AlertEpisodeJson[] };
         if (disposed) return;
         setEpisodes(body.episodes ?? []);
-        setCollectorUp(true);
+        setHistorianUp(true);
       } catch {
         // Only a failure to connect at all means it is down.
-        if (!disposed) setCollectorUp(false);
+        if (!disposed) setHistorianUp(false);
       }
     };
     void load();
@@ -217,7 +217,7 @@ export function useDeviceAlerts(
   }, []);
 
   // Every check on both devices, clear and firing, in catalogue order — the
-  // Status list. `active` is just the firing subset, plus the collector-down
+  // Status list. `active` is just the firing subset, plus the historian-down
   // synthetic, sorted worst-first for the notifications view.
   const statusList = useMemo<AlertState[]>(() => {
     // The dish latches noEthernetLink long after a flap ends: probed live
@@ -248,10 +248,10 @@ export function useDeviceAlerts(
     const system = [
       ...(dishReachable ? [] : [DISH_UNREACHABLE]),
       ...(routerReachable === false ? [ROUTER_UNREACHABLE] : []),
-      ...(collectorUp === false ? [COLLECTOR_DOWN] : []),
+      ...(historianUp === false ? [HISTORIAN_DOWN] : []),
     ];
     return sortBySeverity([...firing, ...system]);
-  }, [statusList, dishReachable, routerReachable, collectorUp]);
+  }, [statusList, dishReachable, routerReachable, historianUp]);
 
   // Fire a notification when an alert opens or clears. Seeded lazily so an alert
   // already firing when the app opens still gets announced once.
@@ -299,7 +299,7 @@ export function useDeviceAlerts(
 
   const firstSeen = useFirstSeen(active);
 
-  return { active, statusList, history, routerReachable, collectorUp, dishReachable, firstSeen };
+  return { active, statusList, history, routerReachable, historianUp, dishReachable, firstSeen };
 }
 
 function alertTitle(source: AlertSource, cleared: boolean): string {

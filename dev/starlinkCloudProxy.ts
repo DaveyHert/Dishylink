@@ -13,7 +13,7 @@
 // handler directly with a mock fetch (the logged-out live path exercises only the
 // early-exit branch, so the retry/decode paths need a mock to be covered).
 //
-// This is NOT the collector — cloud data needs only internet + cookie and must
+// This is NOT the historian — cloud data needs only internet + cookie and must
 // not depend on the dish poller's health. Keep it separate.
 
 import { readFileSync, writeFileSync, rmSync } from "node:fs";

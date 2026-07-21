@@ -14,8 +14,8 @@ import { subscribeRouterStatus } from "../lib/routerStatusFeed";
 import { TelemetryAccumulator, decodeOutageEvents, readRouterLatencyMs, readRouterPingSuccessPercent, type TelemetrySample, type OutageEvent, type RouterReadings } from "../lib/telemetry";
 
 /**
- * Backfill from the always-on collector so a page reload never resets the
- * charts. Best-effort: if the collector is down we just start from the dish's
+ * Backfill from the always-on historian so a page reload never resets the
+ * charts. Best-effort: if the historian is down we just start from the dish's
  * own ~15-minute ring buffer like before.
  */
 async function fetchPersistedSamples(): Promise<TelemetrySample[]> {
@@ -81,7 +81,7 @@ export function useDishTelemetry(): DishTelemetry {
     // the proxy's TCP connect hanging for the OS timeout (~75s); unbounded polls
     // stack up behind it every interval until they exhaust the browser's
     // ~6-connections-per-origin budget, and then the router poll and the
-    // collector fetches can't get a socket either — the app reports a router and
+    // historian fetches can't get a socket either — the app reports a router and
     // recorder outage that isn't happening. Same rule the router poll in
     // useDeviceAlerts already follows.
     let statusInFlight = false;
@@ -102,7 +102,7 @@ export function useDishTelemetry(): DishTelemetry {
     };
 
     // The router's second opinion on latency and ping success, stamped onto the
-    // samples each history poll appends. The collector is what makes these real
+    // samples each history poll appends. The historian is what makes these real
     // series — it samples and persists the same readings, so the 1H and 6H
     // windows have something to draw; these cover only the live edge, the
     // stretch since the page opened that no seed can reach.

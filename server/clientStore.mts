@@ -7,7 +7,7 @@
 // last night is exactly the one you want to look up this morning.
 //
 // This records the same rates the panel polls, but from the always-on
-// collector, so the series exists whether or not anyone is looking. Keyed by MAC.
+// historian, so the series exists whether or not anyone is looking. Keyed by MAC.
 //
 // Byte counters ride along for per-device totals. They are cumulative *within an
 // association only* — the router restarts them when a device reconnects — so a

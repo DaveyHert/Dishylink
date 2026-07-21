@@ -51,12 +51,12 @@ describe("Callout preserves the .skydome-note design", () => {
   });
 
   test("carries the ⓘ, hidden from screen readers, and renders its message", async () => {
-    render(<Callout>Data usage needs the collector running.</Callout>);
+    render(<Callout>Data usage needs the historian running.</Callout>);
     const callout = await waitFor(() => document.querySelector("[data-slot='callout']"), "callout");
     const icon = callout.querySelector("[aria-hidden='true']");
     expect(icon?.textContent).toBe("ⓘ");
     // The icon is decoration; the message must not be swallowed by it.
-    expect(callout.textContent).toContain("Data usage needs the collector running.");
+    expect(callout.textContent).toContain("Data usage needs the historian running.");
   });
 
   test("caller controls spacing", async () => {

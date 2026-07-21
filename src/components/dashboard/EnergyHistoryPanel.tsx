@@ -1,6 +1,6 @@
 // Persistent energy totals for the Power detail: day / week / month totals with
 // honest coverage and a simple bar chart. A distinct feed from the live window
-// energy above it — fetched from the collector, not the in-memory samples.
+// energy above it — fetched from the historian, not the in-memory samples.
 
 import { useState } from "react";
 import { useEnergyHistory, type EnergyRange, type EnergyBucket } from "../../hooks/useEnergyHistory";
@@ -8,7 +8,7 @@ import { RANGE_TABS, RangeBars, bucketLabel, type RangeBarColumn } from "../shar
 import { SegmentedControl } from "../ui/segmented-control";
 import { Callout } from "../ui/callout";
 
-/** Slot the collector only caught part of: its total is real but understates the period. */
+/** Slot the historian only caught part of: its total is real but understates the period. */
 function isPartial(bucket: EnergyBucket): boolean {
   return (
     bucket.kWh !== null && bucket.expectedSeconds > 0 && bucket.sampledSeconds / bucket.expectedSeconds < 0.9
@@ -17,7 +17,7 @@ function isPartial(bucket: EnergyBucket): boolean {
 
 function bucketTitle(bucket: EnergyBucket, range: EnergyRange): string {
   const when = bucketLabel(bucket.t, range);
-  if (bucket.kWh === null) return `${when} · no data — the collector wasn't running`;
+  if (bucket.kWh === null) return `${when} · no data — the historian wasn't running`;
   const total = `${when} · ${bucket.kWh.toFixed(3)} kWh`;
   if (!isPartial(bucket)) return total;
   const sampled = Math.round(bucket.sampledSeconds / 60);
@@ -69,7 +69,7 @@ export function EnergyHistoryPanel({ active }: { active: boolean }) {
 
       {unavailable ? (
         <Callout className="mt-2.5">
-          Long-term energy needs the history recorder running. Start it with <code>npm run collector</code>
+          Long-term energy needs the history recorder running. Start it with <code>npm run historian</code>
           and it will build up day / week / month history from now on.
         </Callout>
       ) : (

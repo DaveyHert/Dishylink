@@ -94,7 +94,7 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/celestrak/, ""),
       },
-      // Long-term energy totals from the local collector service (server/).
+      // Long-term energy totals from the local historian service (server/).
       // xfwd adds x-forwarded-for so /api/whoami sees the browser's LAN IP, not
       // this proxy's loopback address.
       "/api": {

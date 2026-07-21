@@ -19,7 +19,7 @@ const T0 = 1_784_400_000_000;
 const MB = 1_000_000;
 /** Measured on Gen 3 firmware: 23 consecutive intervals of 1001-1011 ms. */
 const REFRESH_MS = 1_005;
-/** Five polls per step, as the collector runs. */
+/** Five polls per step, as the historian runs. */
 const POLL_MS = 200;
 
 /** 12.5 MB in one refresh interval ≈ 99.5 Mbps. */
@@ -27,7 +27,7 @@ const STEP_BYTES = 12.5 * MB;
 const STEP_MBPS = (STEP_BYTES * 8) / 1_000_000 / (REFRESH_MS / 1000);
 
 /**
- * Drive the tracker the way the collector does: a counter that steps on the
+ * Drive the tracker the way the historian does: a counter that steps on the
  * router's cadence, polled on ours, with the two deliberately unsynchronised.
  * Returns every rate observed after the first step, which is where the old
  * design produced its dropouts.
@@ -127,7 +127,7 @@ describe("ThroughputTracker.rates", () => {
   it("spreads a delta across the steps our own polling missed", () => {
     const tracker = new ThroughputTracker();
     tracker.rates(MAC, { rxBytes: 0, txBytes: 0 }, T0, FALLBACK);
-    // The collector stalled for five refresh intervals. The bytes are real and
+    // The historian stalled for five refresh intervals. The bytes are real and
     // did arrive, but over five steps, not one.
     const rates = tracker.rates(MAC, { rxBytes: 5 * STEP_BYTES, txBytes: 0 }, T0 + 5 * REFRESH_MS, FALLBACK);
 

@@ -3,7 +3,7 @@
 // The UI only ever talks to /cloud/* (served by the host's cloud binding — the
 // Vite dev proxy today, Electron main / the extension background worker later,
 // see CLOUD-ACCOUNT.md). It never touches starlink.com directly. Transport is
-// deliberately separate from the collector: this needs internet + the account
+// deliberately separate from the historian: this needs internet + the account
 // session, nothing about the local dish.
 
 // ---- response shapes (only the fields the UI reads) ----

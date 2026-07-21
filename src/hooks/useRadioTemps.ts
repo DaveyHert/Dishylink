@@ -1,4 +1,4 @@
-// Router Wi-Fi radio temperatures from the collector's /api/radio. These are
+// Router Wi-Fi radio temperatures from the historian's /api/radio. These are
 // the only real temperatures anything on the network reports — the dish gives
 // thermal state as bare booleans and no number. Polled only while a panel that
 // shows them is open, as useRouterNetwork does for the client list.

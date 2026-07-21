@@ -1,16 +1,16 @@
-// Always-on energy collector + HTTP API.
+// Always-on energy historian + HTTP API.
 //
 // Polls the dish's history ring buffer directly (reusing the frontend's
 // grpc-web transport and decoder so the two never drift), folds new per-second
 // power readings into per-minute energy buckets, and persists completed minutes
 // to an NDJSON log. Serves day/week/month energy totals over /api/energy.
 //
-// Energy is integrated ONLY over minutes actually sampled — collector downtime
+// Energy is integrated ONLY over minutes actually sampled — historian downtime
 // (sleep, restart, Wi-Fi drop) shows up as reduced coverage, never as invented
 // kWh. Short gaps (≤15 min) are backfilled losslessly from the ring buffer on
 // the next poll.
 //
-// Run: npm run collector   (foreground; see server/README for always-on setup)
+// Run: npm run historian   (foreground; see server/README for always-on setup)
 
 import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
@@ -50,7 +50,7 @@ const CLIENTS_FILE = resolve("server/data/clients.ndjson");
 const CLIENT_SAMPLES_FILE = resolve("server/data/client-samples.json");
 const CLIENT_TOTALS_FILE = resolve("server/data/client-totals.json");
 const ALERTS_FILE = resolve("server/data/alerts.ndjson");
-const PORT = Number(process.env.COLLECTOR_PORT ?? 8088);
+const PORT = Number(process.env.HISTORIAN_PORT ?? 8088);
 const POLL_MS = 5_000;
 /**
  * Faster than the router's ~1005 ms stats refresh, so every counter step is
@@ -177,7 +177,7 @@ async function getRouterStatus(): Promise<{
  * use a reply already fetched this cycle. Null whenever the router failed to
  * answer, so an unreachable router leaves a gap rather than a repeated value.
  *
- * The collector has to be what records these. The router keeps no history for
+ * The historian has to be what records these. The router keeps no history for
  * either: all it gives up is a point-in-time value, so the series only exist if
  * something samples them continuously and persists them — which is the whole
  * job of this process. Read live in the browser they could never fill a 1H or
@@ -316,7 +316,7 @@ async function getClientReadings(): Promise<ClientReading[]> {
 }
 
 const store = new EnergyStore(DATA_FILE);
-// Compaction also runs on construction; repeat daily for a collector that stays
+// Compaction also runs on construction; repeat daily for a historian that stays
 // up for months at a stretch.
 const COMPACT_EVERY_MS = 24 * 3_600_000;
 const thermalStore = new ThermalStore(THERMAL_FILE);
@@ -331,7 +331,7 @@ let latestRadio: { readings: RadioReading[]; atMs: number } | null = null;
 const pending = new Map<number, MinuteBucket>();
 
 // Rolling full-resolution window served to the frontend so page reloads (and
-// collector restarts, via the snapshot file) never reset the charts.
+// historian restarts, via the snapshot file) never reset the charts.
 const sampleWindow = new TelemetryAccumulator(SAMPLE_WINDOW_SECONDS);
 
 function loadSampleSnapshot(): void {
@@ -340,9 +340,9 @@ function loadSampleSnapshot(): void {
     const persisted = JSON.parse(readFileSync(SAMPLES_SNAPSHOT_FILE, "utf8")) as TelemetrySample[];
     const cutoffMs = Date.now() - SAMPLE_WINDOW_SECONDS * 1000;
     latestSamples = sampleWindow.seed(persisted.filter((sample) => sample.timestampMs >= cutoffMs));
-    console.log(`[collector] restored ${latestSamples.length} samples from snapshot`);
+    console.log(`[historian] restored ${latestSamples.length} samples from snapshot`);
   } catch (error) {
-    console.warn(`[collector] snapshot unreadable, starting fresh: ${(error as Error).message}`);
+    console.warn(`[historian] snapshot unreadable, starting fresh: ${(error as Error).message}`);
   }
 }
 
@@ -394,7 +394,7 @@ function writeSampleSnapshot(): void {
     writeFileSync(tempPath, JSON.stringify(latestSamples.map(compactSample)));
     renameSync(tempPath, SAMPLES_SNAPSHOT_FILE);
   } catch (error) {
-    console.warn(`[collector] snapshot write failed: ${(error as Error).message}`);
+    console.warn(`[historian] snapshot write failed: ${(error as Error).message}`);
   }
 }
 
@@ -416,11 +416,11 @@ async function pollAlerts(): Promise<void> {
       const wasActive = thermalStore.isOpen(alertKey);
       if (isActive && !wasActive) {
         thermalStore.open(alertKey, now);
-        console.log(`[collector] thermal alert ON: ${alertKey}`);
+        console.log(`[historian] thermal alert ON: ${alertKey}`);
       }
       if (!isActive && wasActive) {
         thermalStore.close(alertKey, now);
-        console.log(`[collector] thermal alert cleared: ${alertKey}`);
+        console.log(`[historian] thermal alert cleared: ${alertKey}`);
       }
     }
     alertStore.ingest("dish", dishAlerts, now);
@@ -521,7 +521,7 @@ function recordClients(): void {
 
 /**
  * Backfill each device's opening monthly total from the per-minute history the
- * collector already holds on disk, so a first-ever run does not start everyone
+ * historian already holds on disk, so a first-ever run does not start everyone
  * at zero. Integrates the recorded mean rates into bytes, clamped to this month
  * so last month's traffic never counts into it. No-op per device once a total
  * exists — a restart reloads the accumulated figure rather than re-seeding.
@@ -551,7 +551,7 @@ function seedClientTotals(nowMs: number): void {
     clientTotals.seed(mac, Math.round(agg.rx), Math.round(agg.tx), agg.lastMs, agg.name);
     seeded++;
   }
-  if (seeded > 0) console.log(`[collector] seeded ${seeded} device total(s) from recorded history`);
+  if (seeded > 0) console.log(`[historian] seeded ${seeded} device total(s) from recorded history`);
 }
 
 async function poll(): Promise<void> {
@@ -562,14 +562,14 @@ async function poll(): Promise<void> {
   try {
     history = await getHistory();
   } catch (error) {
-    console.warn(`[collector] dish unreachable: ${(error as Error).message}`);
+    console.warn(`[historian] dish unreachable: ${(error as Error).message}`);
     return;
   }
 
   // The dish's event list rolls and resets on reboot; fold each poll's view
   // into the durable log while we still have it.
   const newEvents = eventStore.upsert(decodeOutageEvents(history));
-  if (newEvents > 0) console.log(`[collector] recorded ${newEvents} event(s) from the dish log`);
+  if (newEvents > 0) console.log(`[historian] recorded ${newEvents} event(s) from the dish log`);
 
   // The router keeps its own event log (power cycles, band-switching, updates …)
   // in wifi_get_history — same rolling/reset behaviour, so persist it the same way.
@@ -577,9 +577,9 @@ async function poll(): Promise<void> {
     const wifiHistory = await getWifiHistory();
     const newRouterEvents = eventStore.upsert(decodeWifiHistoryEvents(wifiHistory));
     if (newRouterEvents > 0)
-      console.log(`[collector] recorded ${newRouterEvents} event(s) from the router log`);
+      console.log(`[historian] recorded ${newRouterEvents} event(s) from the router log`);
   } catch (error) {
-    console.warn(`[collector] router history unreachable: ${(error as Error).message}`);
+    console.warn(`[historian] router history unreachable: ${(error as Error).message}`);
   }
 
   // Stamped onto the samples this poll appends, from the status pollAlerts read
@@ -608,7 +608,7 @@ async function poll(): Promise<void> {
   }
   if (completed.length > 0) {
     const newest = new Date(store.lastWrittenMinute * 1000).toLocaleTimeString();
-    console.log(`[collector] persisted ${completed.length} minute(s); newest ${newest}`);
+    console.log(`[historian] persisted ${completed.length} minute(s); newest ${newest}`);
   }
 }
 
@@ -683,7 +683,7 @@ function groupKeyOf(minuteSec: number, spec: RangeSpec): number {
 /**
  * Every bar slot in the range, including ones nothing was recorded for.
  * Emitting only the slots that have data lets the survivors close ranks, so an
- * hour the collector missed vanishes and the bars either side sit shoulder to
+ * hour the historian missed vanishes and the bars either side sit shoulder to
  * shoulder as though no time passed between them.
  */
 function groupKeysInRange(startSec: number, endSec: number, spec: RangeSpec): number[] {
@@ -950,7 +950,7 @@ const server = createServer((request, response) => {
   //   • A remote viewer (phone on the LAN) — the x-forwarded-for first hop (Vite
   //     sets it with xfwd), else the raw socket; that IP is the device.
   //   • A loopback request — the viewer IS this host (dashboard opened on the
-  //     machine running the collector, incl. the desktop/Electron case). The
+  //     machine running the historian, incl. the desktop/Electron case). The
   //     socket IP is useless (::1), so identify by this host's own interfaces,
   //     which also yields the MAC for a stronger match.
   // IPv4-mapped v6 (::ffff:1.2.3.4) is unwrapped to the bare v4 the router lists.
@@ -989,8 +989,8 @@ const server = createServer((request, response) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`[collector] API on http://localhost:${PORT}  (dish: ${DISH_URL})`);
-  console.log(`[collector] persisting to ${DATA_FILE}`);
+  console.log(`[historian] API on http://localhost:${PORT}  (dish: ${DISH_URL})`);
+  console.log(`[historian] persisting to ${DATA_FILE}`);
 });
 
 loadSampleSnapshot();
@@ -1014,21 +1014,21 @@ setInterval(() => clientTotals.snapshot(), SNAPSHOT_EVERY_MS);
 setInterval(() => {
   const folded = store.compact();
   if (folded > 0)
-    console.log(`[collector] folded ${folded} minute(s) from past years into monthly summaries`);
+    console.log(`[historian] folded ${folded} minute(s) from past years into monthly summaries`);
   const radioDropped = radioStore.compact();
   if (radioDropped > 0)
-    console.log(`[collector] compacted radio log, dropped ${radioDropped} old row(s)`);
+    console.log(`[historian] compacted radio log, dropped ${radioDropped} old row(s)`);
 }, COMPACT_EVERY_MS);
 // The per-device log keeps only six hours, so it cannot wait for the daily sweep.
 setInterval(() => {
   const dropped = clientStore.compact();
-  if (dropped > 0) console.log(`[collector] compacted client log, dropped ${dropped} old row(s)`);
+  if (dropped > 0) console.log(`[historian] compacted client log, dropped ${dropped} old row(s)`);
   // Drop usage records for devices unseen since before last month, on the same
   // hourly sweep, then persist so the trim survives a restart.
   const totalsDropped = clientTotals.compact(Date.now());
   if (totalsDropped > 0) {
     clientTotals.snapshot();
-    console.log(`[collector] dropped ${totalsDropped} stale device total(s)`);
+    console.log(`[historian] dropped ${totalsDropped} stale device total(s)`);
   }
 }, 3_600_000);
 process.on("SIGTERM", () => {

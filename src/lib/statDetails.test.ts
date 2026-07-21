@@ -22,7 +22,7 @@ describe("averageOf", () => {
   });
 
   it("ignores fields a legacy seed left undefined, not just null", () => {
-    // A collector that predates the router series serves samples without the
+    // A historian that predates the router series serves samples without the
     // field at all; the seed casts them straight to TelemetrySample, so at
     // runtime getValue returns undefined. One such sample mixed with real
     // readings must not poison the average into NaN.

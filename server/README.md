@@ -1,4 +1,4 @@
-# Energy collector
+# Energy historian
 
 A small always-on Node service that records the dish's power draw over time so
 the dashboard can show **day / week / month** energy totals — data neither the
@@ -16,7 +16,7 @@ dish (≈15 min ring buffer) nor the browser tab (≤6 h, wiped on reload) retai
 
 ## Honesty about gaps
 
-Energy is integrated **only over minutes actually sampled**. If the collector is
+Energy is integrated **only over minutes actually sampled**. If the historian is
 down (sleep, restart, Wi‑Fi drop) those minutes simply have no data — the total
 never invents "last known watts" across a gap. Every response includes a
 `coverage` fraction, and the UI shows e.g. *"collected 82% of this period"*.
@@ -29,20 +29,20 @@ own ring buffer; longer gaps show as reduced coverage.
 Foreground (dies on terminal close / sleep):
 
 ```
-npm run collector
+npm run historian
 ```
 
 Always-on (survives logout, relaunches after sleep/crash) via launchd:
 
 ```
-cp server/com.dishboard.collector.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.dishboard.collector.plist
+cp server/com.dishboard.historian.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.dishboard.historian.plist
 ```
 
 Stop / uninstall:
 
 ```
-launchctl unload ~/Library/LaunchAgents/com.dishboard.collector.plist
+launchctl unload ~/Library/LaunchAgents/com.dishboard.historian.plist
 ```
 
 The plist paths are absolute for this machine — update them if the repo moves or

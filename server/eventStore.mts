@@ -2,7 +2,7 @@
 //
 // The dish keeps these in a bounded list that rolls, and clears it outright on
 // reboot — so an outage from last week is gone whether or not anyone saw it.
-// The collector already polls the history this list rides on, so recording it
+// The historian already polls the history this list rides on, so recording it
 // costs nothing extra and is the only way the event log reaches past whatever
 // the dish still happens to remember.
 //

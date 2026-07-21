@@ -8,7 +8,7 @@
 // be watching, and left the rest coarse.
 //
 // This keeps the samples unaggregated for a short window instead, exactly as the
-// collector already does for dish telemetry (SAMPLE_WINDOW_SECONDS + the
+// historian already does for dish telemetry (SAMPLE_WINDOW_SECONDS + the
 // samples.json snapshot). Two tiers, same as the dish: full resolution recently,
 // per-minute further back.
 //
@@ -105,7 +105,7 @@ export class ClientWindow {
     return series.filter((sample) => sample.atMs > cutoffMs);
   }
 
-  /** Persist so a collector restart does not blank the chart. */
+  /** Persist so a historian restart does not blank the chart. */
   snapshot(): void {
     const all = this.samples();
     if (all.length === 0) return;

@@ -1,7 +1,7 @@
-// Fetches persisted long-term energy totals from the local collector service
-// (/api/energy, proxied to the collector). This is a *separate* data feed from
+// Fetches persisted long-term energy totals from the local historian service
+// (/api/energy, proxied to the historian). This is a *separate* data feed from
 // the in-memory telemetry samples — it survives reloads and reaches back days,
-// but only exists while `npm run collector` has been running.
+// but only exists while `npm run historian` has been running.
 
 import { useEffect, useState } from "react";
 
@@ -26,7 +26,7 @@ export interface EnergySummary {
 export interface EnergyHistoryState {
   data: EnergySummary | null;
   loading: boolean;
-  /** True when the collector service isn't reachable. */
+  /** True when the historian service isn't reachable. */
   unavailable: boolean;
 }
 

@@ -1,6 +1,6 @@
 // Read-only account + usage from the user's own starlink.com session, via the
 // host's /cloud/* binding. On-demand (fetched when a cloud surface opens), not a
-// poll loop — this data changes slowly and must not depend on the collector.
+// poll loop — this data changes slowly and must not depend on the historian.
 
 import { useCallback, useEffect, useState } from "react";
 import {

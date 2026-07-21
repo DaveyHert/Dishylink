@@ -28,7 +28,7 @@ export function buildDeviceFacts({
   vendor?: string;
   /** Resolved name of the node this client is attached to. */
   upstreamName?: string;
-  /** This device's monthly usage from the collector's odometer, if it has one. */
+  /** This device's monthly usage from the historian's odometer, if it has one. */
   total?: ClientUsageTotal;
 }): DeviceFact[] {
   // noDataIdleS is the router's own "seconds since this device last passed
@@ -99,7 +99,7 @@ export function buildDeviceFacts({
     });
   }
   if (total && (total.rxBytes > 0 || total.txBytes > 0)) {
-    // The collector's odometer: a real monthly total that survives the reconnects
+    // The historian's odometer: a real monthly total that survives the reconnects
     // the router's own counter resets on. Preferred whenever it exists.
     facts.push({
       key: "dataUsage",
@@ -107,7 +107,7 @@ export function buildDeviceFacts({
       value: `${formatBytes(total.rxBytes)} ↓ / ${formatBytes(total.txBytes)} ↑`,
     });
   } else if (rxBytes > 0 || txBytes > 0) {
-    // No odometer yet (collector off, or a device just seen): the router's raw
+    // No odometer yet (historian off, or a device just seen): the router's raw
     // counter, which resets on every reconnect — labelled so it never reads as a
     // lifetime or monthly total.
     facts.push({

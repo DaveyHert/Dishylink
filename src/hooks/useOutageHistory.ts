@@ -1,9 +1,9 @@
-// Outage/event history from the collector's durable log.
+// Outage/event history from the historian's durable log.
 //
 // The dish's own event list is short and rolls, and it resets on reboot, so the
 // live decode in useDishTelemetry only ever shows what the dish still happens to
-// remember. The collector records each poll's view, so this reaches back weeks —
-// but only over the time the collector has been running.
+// remember. The historian records each poll's view, so this reaches back weeks —
+// but only over the time the historian has been running.
 
 import { useEffect, useMemo, useState } from "react";
 import { canonicalCause, type OutageEvent } from "../lib/telemetry";
@@ -43,7 +43,7 @@ export function useOutageHistory(): OutageEvent[] {
         const body = (await response.json()) as { events?: OutageEvent[] };
         if (!disposed) setEvents(body.events ?? []);
       } catch {
-        // collector down: the dish's own list still populates the log
+        // historian down: the dish's own list still populates the log
       }
     };
     load();

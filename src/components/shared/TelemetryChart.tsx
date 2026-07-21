@@ -49,7 +49,7 @@ const PLOT_MARGIN = { top: 8, right: 12, bottom: 22, left: 46 };
 /**
  * Shortest stretch without samples that counts as a hole rather than a hiccup.
  * The default suits the dish series, which arrive at 1 Hz: anything approaching
- * a minute is real absence — the collector's machine asleep, a restart, the dish
+ * a minute is real absence — the historian's machine asleep, a restart, the dish
  * unplugged — while a dropped second or two is not worth fracturing the line
  * over. Series recorded at a coarser cadence must raise this (see the
  * `minGapMs` prop), or their normal spacing reads as absence.

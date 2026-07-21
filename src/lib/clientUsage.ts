@@ -1,5 +1,5 @@
-// One device's monthly data-usage total, as served by the collector's odometer
-// (/api/clients `totals`, /api/clients/totals). The collector accumulates the
+// One device's monthly data-usage total, as served by the historian's odometer
+// (/api/clients `totals`, /api/clients/totals). The historian accumulates the
 // router's per-client byte counters across the reconnects that reset them, so
 // unlike the router's own figure this survives a roaming or sleeping device.
 

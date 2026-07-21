@@ -1,7 +1,7 @@
 // Starlink's own billing meter (the authoritative usage the portal shows),
 // read from the account session via /cloud/usage. Monthly cycles + daily bars,
 // laid out like the portal's Total Data Usage card. Distinct from the local
-// "Local Session" tab, which is collector-recorded and honest about gaps.
+// "Local Session" tab, which is historian-recorded and honest about gaps.
 
 import { useMemo, useState } from "react";
 import { useCloudUsage } from "../../hooks/useCloudAccount";

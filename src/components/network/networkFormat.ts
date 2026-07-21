@@ -16,7 +16,7 @@ export const IDLE_AFTER_S = 30;
 export const PER_DEVICE_GAP_MS = 150_000;
 
 /** Windows for the per-device throughput charts. The hook retains 6h, so every
- *  option is already in memory; older points are the collector's per-minute
+ *  option is already in memory; older points are the historian's per-minute
  *  seed, recent ones the per-second live tail. */
 export const WINDOW_OPTIONS = [
   { label: "15M", value: "15" },

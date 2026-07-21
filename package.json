@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "collector": "tsx server/collector.mts",
+    "historian": "tsx server/historian.mts",
     "typecheck": "tsc -b"
   },
   "dependencies": {

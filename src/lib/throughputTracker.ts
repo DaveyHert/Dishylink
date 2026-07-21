@@ -63,7 +63,7 @@ const IDLE_AFTER_MS = 2 * REFRESH_PERIOD_MS;
 
 /**
  * Longest gap in *our own polling* still treated as measurable. Beyond this — a
- * slept laptop, a restarted collector — the delta spans a stretch we did not
+ * slept laptop, a restarted historian — the delta spans a stretch we did not
  * observe, and presenting it as a moment's throughput would invent a plateau
  * that never happened.
  */

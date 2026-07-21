@@ -95,7 +95,7 @@ export default function App() {
   // a superset of the old thermal-only notifications, off live device status.
   const deviceAlerts = useDeviceAlerts(telemetry.status, telemetry.connectionState);
   const thermalEvents = useThermalEvents();
-  // The dish's own event list is short and resets on reboot; the collector's log
+  // The dish's own event list is short and resets on reboot; the historian's log
   // reaches further back, so the two are folded together.
   const persistedOutages = useOutageHistory();
   const outageEvents = useMemo(
@@ -130,7 +130,7 @@ export default function App() {
   const openDetail = openDetailId ? statDetails[openDetailId] : null;
 
   // The hero is for a genuinely empty first run only. A refresh mid-outage also
-  // starts with a null status, but the collector's backfilled samples mean there
+  // starts with a null status, but the historian's backfilled samples mean there
   // is a dashboard worth showing — and an outage is exactly when it's needed.
   const showSearchingHero =
     telemetry.connectionState === "unreachable" && status === null && samples.length === 0;

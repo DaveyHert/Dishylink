@@ -86,7 +86,7 @@ describe("ClientTotalsStore seed / remove / clear / compact / persistence", () =
     expect(total.name).toBe("MacBook");
   });
 
-  // The collector seeds from recorded history, most of which belongs to devices
+  // The historian seeds from recorded history, most of which belongs to devices
   // that are offline by the time it runs, so the instant it passes is the one the
   // list reports as last-seen. Stamping "now" would show them all as active.
   it("seeds last-seen at the instant given, not the current time", () => {

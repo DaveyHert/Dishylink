@@ -15,7 +15,7 @@ export interface TelemetrySample {
    *  The router keeps no ring buffer for it (its history RPC is
    *  permission-denied), so unlike every other field here this one is not
    *  decoded from a replayable buffer: it is sampled and stamped on, by the
-   *  collector for persisted history and by the browser for the live edge.
+   *  historian for persisted history and by the browser for the live edge.
    *  Null wherever nothing was sampling — never a stale value carried forward. */
   routerLatencyMs: number | null;
   /** Router → PoP ping success (0–100), from get_status's popPingDropRate5m —
@@ -263,7 +263,7 @@ export function decodeOutageEvents(history: DishHistoryJson): OutageEvent[] {
 
 /** Router informational events from wifi_get_history's event log (Router powered
  *  on, device band-switching, reboots, software updates, …). Takes the loosely
- *  typed decoded JSON the collector hands over. */
+ *  typed decoded JSON the historian hands over. */
 export function decodeWifiHistoryEvents(wifiHistory: {
   eventLog?: { events?: unknown[] };
 }): OutageEvent[] {
@@ -279,7 +279,7 @@ export interface RouterReadings {
 /**
  * A latency reading only if it is one. proto3 omits a zero and toJson renders
  * NaN as the string "NaN"; neither is a measurement. One guard shared by every
- * consumer of `popPingLatencyMs` — the collector and the browser must agree on
+ * consumer of `popPingLatencyMs` — the historian and the browser must agree on
  * what counts as a reading, or the persisted series and the live edge diverge.
  */
 export function readRouterLatencyMs(value: number | undefined): number | null {
@@ -311,7 +311,7 @@ export class TelemetryAccumulator {
   constructor(private readonly maxSamples: number) {}
 
   /**
-   * Backfill with previously persisted samples (from the collector service or
+   * Backfill with previously persisted samples (from the historian service or
    * a snapshot file) before live polling starts. No-op once live data exists.
    */
   seed(persistedSamples: TelemetrySample[]): TelemetrySample[] {

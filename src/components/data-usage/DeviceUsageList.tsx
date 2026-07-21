@@ -1,4 +1,4 @@
-// Per-device usage for the current billing month, from the collector's odometer
+// Per-device usage for the current billing month, from the historian's odometer
 // (/api/clients/totals). Complementary to the aggregate on the Data Usage sheet,
 // not a breakdown of it: the sheet's bars integrate the dish's WAN telemetry,
 // while this reads the router's per-client counters, so the two measure different
@@ -35,7 +35,7 @@ export function DeviceUsageList() {
     void ensureOuiLoaded().then(() => setOuiReady(true));
   }, []);
 
-  // Nothing to say yet on the very first load. A collector that has gone away is
+  // Nothing to say yet on the very first load. A historian that has gone away is
   // a different thing and says so below, rather than vanishing as if empty.
   if (!totals && !unavailable) return null;
   if (totals && totals.length === 0 && !unavailable) return null;
@@ -89,7 +89,7 @@ export function DeviceUsageList() {
         <div className='mb-1 text-[11.5px] font-medium text-muted-foreground'>{monthLabel}</div>
         {unavailable && (
           <div className='py-2.5 text-[12.5px] text-muted-foreground'>
-            Usage unavailable — collector not reachable.
+            Usage unavailable — historian not reachable.
           </div>
         )}
         {writeError && <div className='py-2.5 text-[12.5px] text-destructive'>{writeError}</div>}
@@ -123,12 +123,12 @@ function DeviceUsageRow({
 }) {
   const vendor = vendorForMac(total.macAddress);
   const name = total.name || vendor || total.macAddress;
-  // The collector touches lastSeen every poll (~5/s) while a device is connected,
+  // The historian touches lastSeen every poll (~5/s) while a device is connected,
   // so anything seen this recently is here now; "Active now" reads clearer than a
   // last-seen of a few seconds. Older stamps mean the device has actually gone.
   const isActive = Date.now() - total.lastSeenMs < 120_000;
   const seenLabel = isActive ? "Active now" : formatRelativeTime(total.lastSeenMs);
-  // A device the collector has not seen this month still holds last month's
+  // A device the historian has not seen this month still holds last month's
   // bucket, so name the month on the row — otherwise it reads as this month's
   // usage under the heading above.
   const staleMonth =

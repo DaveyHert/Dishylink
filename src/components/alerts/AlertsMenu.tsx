@@ -1,5 +1,5 @@
 // The alerts menu in the topbar: a bell with a live count, opening a popover
-// with three tabs — Active (firing now), History (the collector's log), and
+// with three tabs — Active (firing now), History (the historian's log), and
 // Status (every check on both devices, green when clear, like the dish's own
 // Debug > Status list).
 //
@@ -109,7 +109,7 @@ export function AlertsMenu({
       playAlertSound("advisory");
     }
   };
-  const { active, statusList, history, routerReachable, collectorUp, dishReachable, firstSeen } =
+  const { active, statusList, history, routerReachable, historianUp, dishReachable, firstSeen } =
     alerts;
   const activeCount = active.length;
   const badgeColor = activeCount > 0 ? SEVERITY_COLOR[active[0].severity] : "var(--ink-muted)";
@@ -175,7 +175,7 @@ export function AlertsMenu({
 
         <div className='thin-scroll max-h-[60vh] overflow-y-auto'>
           {tab === "active" && <ActiveTab active={active} history={history} firstSeen={firstSeen} />}
-          {tab === "history" && <HistoryTab history={history} collectorUp={collectorUp} />}
+          {tab === "history" && <HistoryTab history={history} historianUp={historianUp} />}
           {tab === "status" && (
             <StatusTab
               statusList={statusList}

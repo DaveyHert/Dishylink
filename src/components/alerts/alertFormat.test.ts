@@ -38,7 +38,7 @@ describe("relativeTime", () => {
   });
 
   it("never reports a future timestamp as negative", () => {
-    // Clock skew between the collector and the browser can hand us an onset
+    // Clock skew between the historian and the browser can hand us an onset
     // slightly in the future; it must not render as "-1m ago".
     expect(relativeTime(now + 5_000, now)).toBe("just now");
   });
@@ -48,7 +48,7 @@ describe("deviceLabel", () => {
   it("names both devices, and calls anything else System", () => {
     expect(deviceLabel("dish")).toBe("Dish");
     expect(deviceLabel("router")).toBe("Router");
-    // Alerts the dashboard raises itself (collector down, say) rather than
+    // Alerts the dashboard raises itself (historian down, say) rather than
     // either device reporting them.
     expect(deviceLabel("system")).toBe("System");
   });

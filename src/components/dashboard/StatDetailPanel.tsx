@@ -18,11 +18,11 @@ import { Explainer } from "../ui/explainer";
 import { EmptyState } from "../ui/empty-state";
 import { FigureRow } from "../ui/figure-row";
 
-// Window minutes → the collector's matching range, so the live-window energy
+// Window minutes → the historian's matching range, so the live-window energy
 // readout can show the SAME persisted total as the "Total energy used" panel
-// below it (only the collector's 1h/6h ranges line up with the picker; 15M has
-// no collector range and stays a live-sample integral).
-const COLLECTOR_RANGE_FOR_WINDOW: Record<number, EnergyRange> = { 60: "1h", 360: "6h" };
+// below it (only the historian's 1h/6h ranges line up with the picker; 15M has
+// no historian range and stays a live-sample integral).
+const HISTORIAN_RANGE_FOR_WINDOW: Record<number, EnergyRange> = { 60: "1h", 360: "6h" };
 
 export interface StatDetail {
   label: string;
@@ -94,17 +94,17 @@ export function StatDetailPanel({ detail, samples }: StatDetailPanelProps) {
     [detail.showWindowEnergy, windowed],
   );
 
-  // Prefer the persistent collector total for this window (matches the panel
+  // Prefer the persistent historian total for this window (matches the panel
   // below), falling back to the live-sample integral for 15M or when the
-  // collector isn't running.
-  const collectorRange = COLLECTOR_RANGE_FOR_WINDOW[windowMinutes];
+  // historian isn't running.
+  const historianRange = HISTORIAN_RANGE_FOR_WINDOW[windowMinutes];
   const energyHistory = useEnergyHistory(
-    collectorRange ?? "6h",
-    Boolean(detail.showWindowEnergy && collectorRange),
+    historianRange ?? "6h",
+    Boolean(detail.showWindowEnergy && historianRange),
   );
-  const useCollectorEnergy = Boolean(collectorRange && !energyHistory.unavailable && energyHistory.data);
-  const displayEnergyKWh = useCollectorEnergy ? energyHistory.data!.totalKWh : windowEnergy;
-  const energyNote = useCollectorEnergy
+  const useHistorianEnergy = Boolean(historianRange && !energyHistory.unavailable && energyHistory.data);
+  const displayEnergyKWh = useHistorianEnergy ? energyHistory.data!.totalKWh : windowEnergy;
+  const energyNote = useHistorianEnergy
     ? energyHistory.data!.coverage.fraction >= 0.95
       ? "over the selected window"
       : `recorded ${Math.round(energyHistory.data!.coverage.fraction * 100)}% of this window`

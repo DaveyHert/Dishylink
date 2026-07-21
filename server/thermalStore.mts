@@ -2,7 +2,7 @@
 //
 // The dish reports thermal state as live booleans on get_status → alerts and
 // keeps no history of its own: once a flag clears, the episode is gone. The
-// collector watches the false→true edges and records them here, so an episode
+// historian watches the false→true edges and records them here, so an episode
 // that happened overnight is still there in the morning — with no browser open.
 //
 // Episodes are few and small (a healthy dish produces none for weeks), and an

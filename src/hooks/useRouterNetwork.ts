@@ -12,14 +12,14 @@ import type { ClientUsageTotal } from "../lib/clientUsage";
 // Roster only — names, signal, addresses, link rates. These change on the order
 // of minutes, so there is nothing to gain from asking faster.
 //
-// Throughput deliberately does NOT come from here. The collector already polls
+// Throughput deliberately does NOT come from here. The historian already polls
 // this same RPC at 1 Hz and owns the byte-counter tracker; duplicating that in
 // the browser meant two pollers hitting the router every second and two
 // independent trackers, each able to land on the router's stats-refresh boundary
 // differently. One recorder, read by every tab, is both cheaper and consistent.
 const CLIENTS_POLL_MS = 5_000;
 
-/** Tail of the collector's 1 Hz window — small, incremental, purely local. */
+/** Tail of the historian's 1 Hz window — small, incremental, purely local. */
 const SAMPLES_POLL_MS = 1_000;
 
 /** How many 1 Hz tails between asks for the monthly totals. They are a list of
@@ -27,7 +27,7 @@ const SAMPLES_POLL_MS = 1_000;
  *  second, so riding every fifth tick keeps them at the 5s roster cadence. */
 const TOTALS_EVERY_TICKS = 5;
 // Per-device throughput history. The router returns only a point-in-time rate,
-// so the series is accumulated — but by the always-on collector, not here. This
+// so the series is accumulated — but by the always-on historian, not here. This
 // hook seeds from it (/api/clients) and then appends what it polls itself, so a
 // reload or a closed panel no longer costs the user their history.
 const HISTORY_WINDOW_MS = 6 * 3_600_000;
@@ -59,7 +59,7 @@ interface ClientMinuteJson {
   upMbps: number;
 }
 
-/** One raw sample from the collector's 1 Hz window. */
+/** One raw sample from the historian's 1 Hz window. */
 interface ClientSampleJson {
   macAddress: string;
   atMs: number;
@@ -73,7 +73,7 @@ export interface SeededClientHistory {
   /**
    * Newest raw sample the seed already holds, or 0 if it holds none.
    *
-   * The tail passes this as `since=`, and the collector filters strictly newer,
+   * The tail passes this as `since=`, and the historian filters strictly newer,
    * so the first tail returns only what the seed missed. Without it the tail
    * starts from zero, refetches the whole window it was just handed, and
    * appends a second copy of every point — invisible on the chart, since the
@@ -83,10 +83,10 @@ export interface SeededClientHistory {
 }
 
 /**
- * Backfill per-device series from the collector. Best-effort: without it we
+ * Backfill per-device series from the historian. Best-effort: without it we
  * simply start from this session's own polls, as before.
  *
- * Takes the collector's raw 1 Hz window (`samples`) rather than its per-minute
+ * Takes the historian's raw 1 Hz window (`samples`) rather than its per-minute
  * rows, so the seed arrives at the same cadence this hook then appends at. The
  * per-minute rows would draw ~15 points across the 15-minute chart and leave a
  * visible seam where the coarse seed met the live tail.
@@ -105,7 +105,7 @@ export async function fetchPersistedClientHistory(): Promise<SeededClientHistory
     };
     const samples = payload.samples ?? [];
     // Where the raw window reaches, use it. Further back — only reachable in the
-    // first stretch after a collector restart, since the window is twice the
+    // first stretch after a historian restart, since the window is twice the
     // chart's span — fall back to the per-minute rows. Coarse beats a "no data"
     // band over time that was in fact recorded.
     const oldestRawByMac = new Map<string, number>();
@@ -150,7 +150,7 @@ export async function fetchPersistedClientHistory(): Promise<SeededClientHistory
     // The two tiers were appended in separate passes; the chart assumes order.
     for (const series of history.values()) series.sort((a, b) => a.timestampMs - b.timestampMs);
   } catch {
-    // collector down — fall through with whatever we can poll ourselves
+    // historian down — fall through with whatever we can poll ourselves
   }
   return { history, newestSampleMs };
 }
@@ -205,10 +205,10 @@ export interface RouterNetwork {
   renameClient: (macAddress: string, givenName: string) => Promise<void>;
   /** Rolling per-MAC throughput samples (down/up in bps) built from each poll. */
   throughputHistory: Map<string, TelemetrySample[]>;
-  /** Live per-MAC rate — the newest sample from the collector's window, which
+  /** Live per-MAC rate — the newest sample from the historian's window, which
    *  computes it from byte-counter deltas rather than the router's averages. */
   rates: Map<string, ThroughputRates>;
-  /** Per-MAC monthly usage total from the collector's odometer — survives the
+  /** Per-MAC monthly usage total from the historian's odometer — survives the
    *  reconnects that reset the router's own per-client counter. */
   totals: Map<string, ClientUsageTotal>;
 }
@@ -237,7 +237,7 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
       try {
         clientRef.current ??= DishClient.load("router");
         const routerClient = await clientRef.current;
-        // Seed once from the collector before the first poll appends to it.
+        // Seed once from the historian before the first poll appends to it.
         if (historyRef.current.size === 0) {
           const { history: persisted, newestSampleMs } = await fetchPersistedClientHistory();
           if (disposed) return;
@@ -271,8 +271,8 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
           .getWifiConfig(AbortSignal.timeout(4_000))
           .then((config) => !disposed && setWifiConfig(config))
           .catch(() => {});
-        // Tail the collector's window: append what is new, drop what has aged
-        // out. The collector is the only thing computing rates, so every tab
+        // Tail the historian's window: append what is new, drop what has aged
+        // out. The historian is the only thing computing rates, so every tab
         // shows the same series and the router sees one poller, not one per tab.
         // Totals move slowly and are a per-device list; asking for them on every
         // 1 Hz tick would resend the whole set 5x more often than it can change
@@ -324,7 +324,7 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
             setRates(nextRates);
             setThroughputHistory(new Map(history));
           } catch {
-            // Collector down: the roster still renders, just without a series.
+            // Historian down: the roster still renders, just without a series.
           } finally {
             tailInFlight = false;
           }

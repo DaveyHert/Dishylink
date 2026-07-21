@@ -30,7 +30,7 @@ export function DeviceDetail({
   /** Live per-MAC rates from the hook's byte-delta tracker. */
   rates: Map<string, ThroughputRates>;
   history: TelemetrySample[];
-  /** This device's monthly usage from the collector's odometer, if it has one. */
+  /** This device's monthly usage from the historian's odometer, if it has one. */
   total?: ClientUsageTotal;
   /** Resolved name of the node this client is attached to (via upstreamMacAddress). */
   upstreamName?: string;

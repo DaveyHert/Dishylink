@@ -8,7 +8,7 @@
 // API isn't present:
 //   • Electron  — a preload bridge exposes os.networkInterfaces()  (ip + mac)
 //   • Extension — chrome.system.network.getNetworkInterfaces()     (ip only)
-//   • Web       — the collector echoes the caller's IP at /api/whoami (ip only)
+//   • Web       — the historian echoes the caller's IP at /api/whoami (ip only)
 // Only the web path runs today; the other two light up automatically once those
 // targets exist, with no change here.
 
@@ -29,7 +29,7 @@ function normalizeIp(ip: string): string {
 }
 
 /** Loopback never appears in the router's client list, so drop it — a dashboard
- *  opened on the same host as the collector resolves to loopback and simply
+ *  opened on the same host as the historian resolves to loopback and simply
  *  matches nothing, rather than mis-flagging a row. */
 function isRoutable(ip: string): boolean {
   return ip !== "" && ip !== "127.0.0.1" && ip !== "::1";
@@ -78,7 +78,7 @@ async function fromWhoami(signal?: AbortSignal): Promise<SelfIdentity | null> {
     const response = await fetch("/api/whoami", { signal });
     if (!response.ok) return null;
     // Remote viewer → { ips: [callerIp] }. Same-host viewer → this host's own
-    // interface ips + macs (see the collector's /api/whoami).
+    // interface ips + macs (see the historian's /api/whoami).
     const { ips, macs } = (await response.json()) as { ips?: string[]; macs?: string[] };
     const cleaned = clean(ips ?? []);
     const macList = (macs ?? []).map((mac) => mac.toLowerCase());

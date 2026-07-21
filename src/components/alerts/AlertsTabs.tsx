@@ -24,7 +24,7 @@ export function ActiveTab({
   firstSeen: Map<string, number>;
 }) {
   // Live alerts are bare booleans — the device sends no timestamp. The real
-  // onset lives in the collector's still-open episode ("started 2h ago"); with
+  // onset lives in the historian's still-open episode ("started 2h ago"); with
   // no episode (recorder down, or a client-raised alert) fall back to when this
   // tab first saw it, worded "seen" so it never overstates what we know.
   const openedAt = new Map(
@@ -61,16 +61,16 @@ export function ActiveTab({
 
 export function HistoryTab({
   history,
-  collectorUp,
+  historianUp,
 }: {
   history: AlertHistoryEntry[];
-  collectorUp: boolean | null;
+  historianUp: boolean | null;
 }) {
   // History is what is over. An episode that is still open is the live state —
   // it belongs in Active, and showing it here too would list the same alert
   // twice at once. Only cleared episodes are history, newest first.
   const past = history.filter((e) => e.endMs !== null);
-  if (collectorUp === false)
+  if (historianUp === false)
     return (
       <EmptyState className='px-4 py-8'>
         History unavailable — the recorder isn’t running. Live alerts are unaffected.
@@ -162,5 +162,5 @@ export const ALERTS_TABS: { key: AlertsTab; label: string }[] = [
 /** Props the menu threads straight through to whichever pane is open. */
 export type AlertsTabData = Pick<
   DeviceAlerts,
-  "active" | "history" | "statusList" | "firstSeen" | "collectorUp" | "dishReachable" | "routerReachable"
+  "active" | "history" | "statusList" | "firstSeen" | "historianUp" | "dishReachable" | "routerReachable"
 >;

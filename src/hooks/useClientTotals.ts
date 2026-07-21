@@ -1,4 +1,4 @@
-// Per-device monthly usage from the collector's odometer (/api/clients/totals),
+// Per-device monthly usage from the historian's odometer (/api/clients/totals),
 // with the delete/clear actions the usage list exposes. Kept separate from the
 // live network hook: this drives the Data Usage sheet, which is open on its own
 // and wants the whole list (including devices currently offline), not just the
@@ -22,8 +22,8 @@ export function useClientTotals(active: boolean) {
       response.ok
         ? null
         : response.status === 403
-          ? "The collector refused the change — open the dashboard from this machine or your local network."
-          : `The collector rejected the change (HTTP ${response.status}).`,
+          ? "The historian refused the change — open the dashboard from this machine or your local network."
+          : `The historian rejected the change (HTTP ${response.status}).`,
     );
   }, []);
 
@@ -53,7 +53,7 @@ export function useClientTotals(active: boolean) {
     };
   }, [active, load]);
 
-  // Optimistic: drop the row immediately, then confirm against the collector.
+  // Optimistic: drop the row immediately, then confirm against the historian.
   const remove = useCallback(
     async (macAddress: string) => {
       setTotals(

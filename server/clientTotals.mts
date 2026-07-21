@@ -22,7 +22,7 @@
 // so the record stays for at least a month but the list cannot grow forever.
 //
 // What it cannot do: recover traffic from before it started watching, or across
-// a collector outage. The collector seeds the opening value once from the
+// a historian outage. The historian seeds the opening value once from the
 // per-minute history it already holds, so day one is not zero; anything older
 // than that history is genuinely gone.
 
@@ -88,7 +88,7 @@ export class ClientTotalsStore {
     this.restore();
   }
 
-  /** Whether a device already has an entry — the collector checks this before
+  /** Whether a device already has an entry — the historian checks this before
    *  seeding, so a restart never re-seeds over an accumulated total. */
   has(macAddress: string): boolean {
     return this.states.has(macAddress);
@@ -96,7 +96,7 @@ export class ClientTotalsStore {
 
   /**
    * Establish a device's opening total for the current month from history the
-   * collector already holds, before the first live counter is observed. No-op if
+   * historian already holds, before the first live counter is observed. No-op if
    * it already has state, so it can be called unconditionally at startup without
    * ever double-counting.
    */
@@ -180,7 +180,7 @@ export class ClientTotalsStore {
   }
 
   /** Delete one device's record entirely — not a counter reset. The device drops
-   *  off the list; if it is still active the collector re-creates a fresh entry on
+   *  off the list; if it is still active the historian re-creates a fresh entry on
    *  the next poll, but an offline device stays gone. Returns whether anything was
    *  removed. */
   remove(macAddress: string): boolean {

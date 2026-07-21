@@ -8,7 +8,7 @@
 //
 // So what is asserted here is the handoff value, not the fetch: `newestSampleMs`
 // must be the newest sample the seed actually holds. Paired with the
-// `ClientWindow.samples since` tests on the collector side — which prove the
+// `ClientWindow.samples since` tests on the historian side — which prove the
 // boundary sample is excluded rather than resent — that closes the loop.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -17,7 +17,7 @@ import type { TelemetrySample } from "../lib/telemetry";
 
 const MAC = "aa:bb:cc:dd:ee:ff";
 
-function stubCollector(payload: unknown, ok = true): void {
+function stubHistorian(payload: unknown, ok = true): void {
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => ({ ok, json: async () => payload })),
@@ -30,7 +30,7 @@ afterEach(() => {
 
 describe("fetchPersistedClientHistory", () => {
   it("reports the newest sample it holds, so the first tail resumes past it", async () => {
-    stubCollector({
+    stubHistorian({
       samples: [
         { macAddress: MAC, atMs: 1_000, downMbps: 1, upMbps: 0.1 },
         { macAddress: MAC, atMs: 3_000, downMbps: 3, upMbps: 0.3 },
@@ -48,7 +48,7 @@ describe("fetchPersistedClientHistory", () => {
   });
 
   it("takes the newest across devices, since one `since` covers the whole tail", async () => {
-    stubCollector({
+    stubHistorian({
       samples: [
         { macAddress: "aa:aa:aa:aa:aa:aa", atMs: 5_000, downMbps: 1, upMbps: 0 },
         { macAddress: "bb:bb:bb:bb:bb:bb", atMs: 9_000, downMbps: 2, upMbps: 0 },
@@ -58,11 +58,11 @@ describe("fetchPersistedClientHistory", () => {
     expect((await fetchPersistedClientHistory()).newestSampleMs).toBe(9_000);
   });
 
-  it("reports zero when the collector has no raw samples, so the tail asks for the window", async () => {
-    // Per-minute rows only — the state just after a collector restart. Those are
+  it("reports zero when the historian has no raw samples, so the tail asks for the window", async () => {
+    // Per-minute rows only — the state just after a historian restart. Those are
     // not tail-able, so the tail must start from the full window, not from a
     // minute boundary that would skip the raw samples recorded since.
-    stubCollector({ history: [{ minute: 60, macAddress: MAC, downMbps: 4, upMbps: 1 }], samples: [] });
+    stubHistorian({ history: [{ minute: 60, macAddress: MAC, downMbps: 4, upMbps: 1 }], samples: [] });
 
     const { history, newestSampleMs } = await fetchPersistedClientHistory();
 
@@ -70,7 +70,7 @@ describe("fetchPersistedClientHistory", () => {
     expect(history.get(MAC)).toHaveLength(1);
   });
 
-  it("reports zero when the collector is down, rather than skipping the tail forward", async () => {
+  it("reports zero when the historian is down, rather than skipping the tail forward", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => {
@@ -85,7 +85,7 @@ describe("fetchPersistedClientHistory", () => {
   });
 
   it("reports zero on a non-ok response", async () => {
-    stubCollector({}, false);
+    stubHistorian({}, false);
 
     expect((await fetchPersistedClientHistory()).newestSampleMs).toBe(0);
   });

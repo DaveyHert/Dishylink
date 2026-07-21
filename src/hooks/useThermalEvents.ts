@@ -2,7 +2,7 @@
 //
 // The dish reports thermal state as live booleans on get_status → alerts and
 // keeps no history of its own: once a flag clears, the episode is gone. The
-// collector watches for the edges and writes them to a durable log, so the
+// historian watches for the edges and writes them to a durable log, so the
 // event list survives a reload and covers the hours no browser was open — this
 // hook just reads that log back. Notifications come off the live status
 // instead, since those only mean anything while a tab is actually open.
@@ -68,11 +68,11 @@ interface ThermalEpisodeJson {
 // were folded into useDeviceAlerts, which notifies on every notifiable alert on
 // both devices off the same live status — a superset. This file now only reads
 // the durable thermal log back for the event list. THERMAL_ALERTS stays: it maps
-// the collector's stored keys to the wording the event log shows.
+// the historian's stored keys to the wording the event log shows.
 
 /**
- * Thermal episodes from the collector's durable log, shaped as OutageEvents for
- * the events log. Empty when the collector isn't running.
+ * Thermal episodes from the historian's durable log, shaped as OutageEvents for
+ * the events log. Empty when the historian isn't running.
  */
 export function useThermalEvents(): OutageEvent[] {
   const [episodes, setEpisodes] = useState<ThermalEpisodeJson[]>([]);
@@ -86,7 +86,7 @@ export function useThermalEvents(): OutageEvent[] {
         const body = (await response.json()) as { episodes?: ThermalEpisodeJson[] };
         if (!disposed) setEpisodes(body.episodes ?? []);
       } catch {
-        // collector down: the dish's own events still populate the log
+        // historian down: the dish's own events still populate the log
       }
     };
     load();

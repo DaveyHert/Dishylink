@@ -2,7 +2,7 @@
 //
 // Both devices report alerts as live booleans and keep no history: once a flag
 // clears, the episode is gone. Water detected at 3am that dried by breakfast
-// left no trace anywhere. The collector watches the false→true and true→false
+// left no trace anywhere. The historian watches the false→true and true→false
 // edges on every key and records them here, so the notification panel can show
 // what happened while nobody was looking.
 //
@@ -18,7 +18,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-/** The two devices, plus "system" for conditions the collector observes about
+/** The two devices, plus "system" for conditions the historian observes about
  *  them rather than reads off them — chiefly a device not answering at all,
  *  which by definition can never appear in that device's own alert payload. */
 export type AlertSource = "dish" | "router" | "system";

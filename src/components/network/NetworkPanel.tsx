@@ -37,7 +37,7 @@ export function NetworkPanel({
   useEffect(() => {
     void ensureOuiLoaded().then(() => setOuiReady(true));
   }, []);
-  // Radio temps come from the collector, not the router directly. Poll only
+  // Radio temps come from the historian, not the router directly. Poll only
   // while the panel is mounted (i.e. the Network sheet is open).
   const radio = useRadioTemps(true);
   // The viewer's own address(es), to flag "This device" in the list.

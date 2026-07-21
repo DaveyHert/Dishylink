@@ -23,7 +23,7 @@ export function NodeDetail({
 }: {
   node: NodeEntry;
   wifiConfig: WifiNetworkConfigJson | null;
-  /** Live radio temps from the collector — router node only. */
+  /** Live radio temps from the historian — router node only. */
   radios: RadioReading[];
   self: SelfIdentity;
   /** Drill from a node straight into one of its clients, as the app does. */

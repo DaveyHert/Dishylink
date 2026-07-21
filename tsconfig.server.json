@@ -2,7 +2,7 @@
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.server.tsbuildinfo",
     "target": "ES2023",
-    // DOM is here for fetch/Response types only — the collector shares
+    // DOM is here for fetch/Response types only — the historian shares
     // src/lib/grpcWeb.ts with the browser. Bundler resolution matches how tsx
     // and the app resolve those same imports.
     "lib": ["ES2023", "DOM"],

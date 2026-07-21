@@ -27,10 +27,12 @@ is on the Starlink network itself — changes are verified against real hardware
 
 ## Process facts
 
-- The recorder is a launchd service, `com.dishboard.collector` (rename to "historian" pending).
-  Edits under `server/` need `launchctl kickstart -k gui/$UID/com.dishboard.collector` to take
-  effect; `tsc` and `vitest` pass without it.
-- "Collector" is internal vocabulary only — user-facing copy says "history recorder" or
-  "recording".
+- The historian (`server/historian.mts`) is the always-on recording service, run by launchd as
+  `com.dishboard.historian` (renamed from "collector" 2026-07-21). Edits under `server/` need
+  `launchctl kickstart -k gui/$UID/com.dishboard.historian` to take effect; `tsc` and `vitest`
+  pass without it.
+- "Historian" is the component's name in code, service, and docs. User-facing copy stays plain
+  English — "history recorder" or "recording" — because UI readers aren't assumed to know the
+  industrial term.
 - The user's pasted starlink.com session lives in `.starlink-cookie` at the repo root (written
   by `dev/starlinkCloudProxy.ts`). It is a live credential: never print it, never commit it.
