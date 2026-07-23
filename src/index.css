@@ -81,7 +81,12 @@
   color-scheme: light;
 }
 
-:root[data-theme="dark"] {
+/* Any element, not just :root. The sky surfaces are night scenes whatever theme
+   the app is in, and they say so by carrying data-theme="dark" themselves —
+   which a :root-scoped block silently ignored, leaving them asking for dark
+   tokens and rendering with light ones. Custom properties inherit, so matching
+   the attribute wherever it appears re-themes that subtree and nothing else. */
+[data-theme="dark"] {
   --page: #000000;
   --surface: #0c0c0c;
   --surface-raised: #1e1e1e;
@@ -522,11 +527,11 @@ body {
   display: none;
 }
 
-:root[data-theme="dark"] .beam-glow-layer {
+[data-theme="dark"] .beam-glow-layer {
   filter: url(#beam-glow);
 }
 
-:root[data-theme="dark"] .beam-sat-halo {
+[data-theme="dark"] .beam-sat-halo {
   display: block;
 }
 
