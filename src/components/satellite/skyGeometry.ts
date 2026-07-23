@@ -9,6 +9,7 @@
 // are xyz+size.
 
 import { type DishModelMesh } from "./dishModels/types";
+import type { DishModel } from "../../lib/dishMesh";
 
 export interface SkySurvey {
   gridSize: number;
@@ -17,6 +18,10 @@ export interface SkySurvey {
   kinds: Uint8Array;
   boresightAzimuthDeg: number;
   boresightElevationDeg: number;
+  /** Which kit to draw at the centre. Rides the survey because it comes from the
+   *  same status reply as the boresight, and lands just as late — so the rebuild
+   *  that follows a status poll picks the model up without a second channel. */
+  dishModel: DishModel;
 }
 
 /**
@@ -333,9 +338,13 @@ export function buildCompassLabels() {
  * The dish, aimed at the live boresight and resting on the ground the way the
  * deployed kit does — the panel's low edge and the kickstand's feet are the
  * contact points, so the lowest vertex is dropped to y = 0.
+ *
+ * `scale` exaggerates it above true size. The dish is genuinely tiny against a
+ * sky dome, which reads fine at full size but disappears on a dashboard card —
+ * so the small surface draws it larger on purpose, as the old 2D dome did.
  */
-export function buildDish(model: DishModelMesh, survey: SkySurvey) {
-  const mm = 0.5 / model.longAxisMm;
+export function buildDish(model: DishModelMesh, survey: SkySurvey, scale = 1) {
+  const mm = (0.5 * scale) / model.longAxisMm;
   const az = (survey.boresightAzimuthDeg * Math.PI) / 180;
   const el = (survey.boresightElevationDeg * Math.PI) / 180;
   const sa = Math.sin(az),

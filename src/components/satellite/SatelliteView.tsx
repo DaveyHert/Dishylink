@@ -10,19 +10,16 @@ import { Pause, Play } from "lucide-react";
 import type { DishObstructionMapJson, DishObstructionStatsJson, DishStatusJson } from "../../lib/dishClient";
 import type { SatelliteFeed } from "../../hooks/useSatellites";
 import type { ObserverLocation } from "../../lib/satellites";
-import { unpackCells, type ObstructionSnapshot } from "../../lib/obstructionSnapshots";
 import { useObstructionSnapshots } from "../../hooks/useObstructionSnapshots";
-import { liveKindAtCell, snapshotKindAtCell } from "../skydome/domeGeometry";
-import { ObstructionTimeLapse } from "../skydome/ObstructionTimeLapse";
-import { SkyLegend, SkyStats } from "../skydome/SkyLegend";
+import { liveSurvey, snapshotSurvey } from "./skySurvey";
+import { ObstructionTimeLapse } from "../obstruction/ObstructionTimeLapse";
+import { ObstructionKey, ObstructionStats } from "../obstruction/ObstructionKey";
 import { Loading } from "../ui/loading";
 import { Callout } from "../ui/callout";
-import { LocationSetup } from "../skydome/LocationSetup";
-import { SatelliteCallout, type SelectedSatellite } from "../skydome/SatelliteCallout";
+import { LocationSetup } from "./LocationSetup";
+import { SatelliteCallout, type SelectedSatellite } from "./SatelliteCallout";
 import { buildSatellite } from "./satelliteGeometry";
-import { createSkyScene, type ScreenPoint, type SkyScene, type SkySurvey } from "./skyScene";
-
-const KIND_CODE = { unmapped: 0, clear: 1, partial: 2, obstructed: 3 } as const;
+import { createSkyScene, type ScreenPoint, type SkyScene } from "./skyScene";
 
 /** Matching round controls, sized like the modal close button elsewhere. */
 const roundControl =
@@ -47,49 +44,6 @@ interface SatelliteViewProps {
   onLocationSaved: (location: ObserverLocation) => void;
   onClearLocation: () => void;
   onClose: () => void;
-}
-
-/** The live grid, flattened to the one byte per cell the scene wants. */
-function liveSurvey(
-  map: DishObstructionMapJson | null, status: DishStatusJson | null,
-): SkySurvey | null {
-  const gridSize = map?.numRows ?? 0;
-  if (!map?.snr || !gridSize || map.numCols !== gridSize) return null;
-  const kindAt = liveKindAtCell(map.snr, gridSize);
-  const kinds = new Uint8Array(gridSize * gridSize);
-  for (let row = 0; row < gridSize; row++) {
-    for (let col = 0; col < gridSize; col++) {
-      kinds[row * gridSize + col] = KIND_CODE[kindAt(row, col)];
-    }
-  }
-  return {
-    gridSize,
-    maxThetaDeg: map.maxThetaDeg ?? 80,
-    kinds,
-    boresightAzimuthDeg: status?.boresightAzimuthDeg ?? 0,
-    boresightElevationDeg: status?.boresightElevationDeg ?? 90,
-  };
-}
-
-/** A stored snapshot, which already holds bucketed kinds rather than fractions. */
-function snapshotSurvey(
-  snapshot: ObstructionSnapshot, fallbackMaxTheta: number, status: DishStatusJson | null,
-): SkySurvey {
-  const gridSize = snapshot.gridSize;
-  const kindAt = snapshotKindAtCell(unpackCells(snapshot), gridSize);
-  const kinds = new Uint8Array(gridSize * gridSize);
-  for (let row = 0; row < gridSize; row++) {
-    for (let col = 0; col < gridSize; col++) {
-      kinds[row * gridSize + col] = KIND_CODE[kindAt(row, col)];
-    }
-  }
-  return {
-    gridSize,
-    maxThetaDeg: snapshot.maxThetaDeg ?? fallbackMaxTheta,
-    kinds,
-    boresightAzimuthDeg: status?.boresightAzimuthDeg ?? 0,
-    boresightElevationDeg: status?.boresightElevationDeg ?? 90,
-  };
 }
 
 export function SatelliteView({
@@ -146,7 +100,9 @@ export function SatelliteView({
     const canvas = canvasRef.current;
     const first = surveyRef.current;
     if (!canvas || !first) return;
-    const built = createSkyScene(canvas, first, () => buildSatellite("distant"));
+    const built = createSkyScene(canvas, first, {
+      buildSatelliteMesh: () => buildSatellite("distant"),
+    });
     if (!built) { setUnsupported(true); return; }
     setScene(built);
     setRotating(built.isRotating());
@@ -325,7 +281,7 @@ export function SatelliteView({
             )}
           </AnimatePresence>
 
-          <SkyStats obstructionStats={obstructionStats} satellites={satellites} />
+          <ObstructionStats obstructionStats={obstructionStats} satellites={satellites} />
 
           {/* The first open sits empty for 10–20s while the ephemerides download
               and propagate. Say so rather than showing an unexplained empty sky. */}
@@ -421,7 +377,7 @@ export function SatelliteView({
       )}
 
       <div className="pointer-events-none absolute bottom-[22px] left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-card px-[18px] py-1.5 [&>div]:flex-nowrap [&>div]:pt-0">
-        <SkyLegend withServing />
+        <ObstructionKey withServing />
       </div>
 
       <p className="pointer-events-none absolute bottom-[74px] left-1/2 m-0 -translate-x-1/2 text-[11px] text-[#8b97a8] opacity-80">

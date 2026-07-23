@@ -1,4 +1,4 @@
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 
 /**
  * SpinLoader — three spinner treatments behind one `variant` prop.
@@ -7,8 +7,17 @@ import { motion, useReducedMotion } from "motion/react";
  *   "activity" — twelve fading spokes rotating around a center (Apple style).
  *   "segment"  — a solid track with one bright arc. The universal workhorse.
  *
- * Everything paints in the inherited text color, and holds a static frame under
- * `prefers-reduced-motion`.
+ * Everything paints in the inherited text color.
+ *
+ * These do NOT stop under `prefers-reduced-motion`, and that is deliberate. The
+ * preference is for motion that decorates — parallax, sliding, zoom, anything
+ * sweeping across the viewport — because that is what triggers vestibular
+ * symptoms. Here the rotation IS the message: it is the only thing separating
+ * "still working" from "stalled". They once held a static frame, and the result
+ * was a spinner that looked broken while it worked, telling the users who asked
+ * for less motion strictly less than everyone else. At 16px inline there is no
+ * vestibular case to answer; a full-viewport spinner would be a different
+ * question, and the answer there would be to slow it, not to freeze it.
  */
 
 const INK = "currentColor";
@@ -27,8 +36,7 @@ interface SpinLoaderProps {
 }
 
 export function SpinLoader({ size = 48, variant = "conic", label = "Loading" }: SpinLoaderProps) {
-  const reduce = useReducedMotion() ?? false;
-  const shared = { size, reduce, label };
+  const shared = { size, label };
 
   switch (variant) {
     case "activity":
@@ -42,13 +50,12 @@ export function SpinLoader({ size = 48, variant = "conic", label = "Loading" }: 
 
 interface VariantProps {
   size: number;
-  reduce: boolean;
   label: string;
 }
 
 // ── conic ──────────────────────────────────────────────────────────────────
 // A conic gradient masked into a ring, rotating.
-function ConicSpinner({ size, reduce, label }: VariantProps) {
+function ConicSpinner({ size, label }: VariantProps) {
   const thickness = Math.max(4, Math.round(size * 0.1));
   const ringMask = `radial-gradient(farthest-side, transparent calc(100% - ${thickness}px), #000 calc(100% - ${thickness - 1}px))`;
 
@@ -65,15 +72,15 @@ function ConicSpinner({ size, reduce, label }: VariantProps) {
         WebkitMask: ringMask,
         mask: ringMask,
       }}
-      animate={reduce ? undefined : { rotate: 360 }}
-      transition={reduce ? undefined : SPIN}
+      animate={{ rotate: 360 }}
+      transition={SPIN}
     />
   );
 }
 
 // ── segment ────────────────────────────────────────────────────────────────
 // A solid faint track with one accent arc, rotating.
-function SegmentSpinner({ size, reduce, label }: VariantProps) {
+function SegmentSpinner({ size, label }: VariantProps) {
   const width = Math.max(4, Math.round(size * 0.1));
   return (
     <motion.div
@@ -87,15 +94,15 @@ function SegmentSpinner({ size, reduce, label }: VariantProps) {
         border: `${width}px solid ${TRACK}`,
         borderTopColor: INK,
       }}
-      animate={reduce ? undefined : { rotate: 360 }}
-      transition={reduce ? undefined : { ...SPIN, duration: 0.8 }}
+      animate={{ rotate: 360 }}
+      transition={{ ...SPIN, duration: 0.8 }}
     />
   );
 }
 
 // ── activity ───────────────────────────────────────────────────────────────
 // Twelve spokes around a center, each fading in turn so the bright point travels.
-function ActivitySpinner({ size, reduce, label }: VariantProps) {
+function ActivitySpinner({ size, label }: VariantProps) {
   const pivot = size * 0.3636; // distance from center to each spoke's rotation origin
   const spokeWidth = Math.max(2, size * 0.068);
   const spokeHeight = size * 0.2727;
@@ -119,8 +126,8 @@ function ActivitySpinner({ size, reduce, label }: VariantProps) {
             transformOrigin: `${spokeWidth / 2}px ${pivot}px`,
             transform: `rotate(${spoke * 30}deg)`,
           }}
-          animate={reduce ? undefined : { opacity: [1, 0.15] }}
-          transition={reduce ? undefined : { duration: 1, repeat: Infinity, ease: "linear", delay: -((11 - spoke) / 12) }}
+          animate={{ opacity: [1, 0.15] }}
+          transition={{ duration: 1, repeat: Infinity, ease: "linear", delay: -((11 - spoke) / 12) }}
         />
       ))}
     </div>

@@ -10,11 +10,23 @@
 // answers the question it can: was that press a tap, or the start of an orbit
 // drag? It reports taps and lets the scene resolve them.
 
-import { AUTO_ROTATE_RAD_PER_SEC, RESUME_AFTER_DRAG_MS } from "../skydome/domeGeometry";
+/** One turn every two minutes: present when you look at it, never the thing
+ *  moving in the corner of your eye. Both domes drift at this rate. */
+const AUTO_ROTATE_RAD_PER_SEC = (2 * Math.PI) / 120;
+/** Rotation yields after a drag, so it isn't fighting the angle you just set —
+ *  just long enough to feel like letting go, not like the view stalling. */
+const RESUME_AFTER_DRAG_MS = 1_000;
 
 export interface SkyCameraOptions {
-  /** A press that did not turn into an orbit drag, in client coordinates. */
-  onTap: (clientX: number, clientY: number) => void;
+  /** A press that did not turn into an orbit drag, in client coordinates.
+   *  Omitted where there is nothing to pick, as on the dashboard card. */
+  onTap?: (clientX: number, clientY: number) => void;
+  /** Where the viewer starts. The card frames the dome at a fixed distance;
+   *  the full view opens here and lets you zoom from it. */
+  distance?: number;
+  /** Whether the wheel zooms. False on the card, which holds one framing — the
+   *  listener is then never attached, so the page scrolls over it normally. */
+  zoomable?: boolean;
 }
 
 export interface SkyCameraView {
@@ -52,8 +64,12 @@ const TARGET_Y_FAR = 0.42,
 /** Movement beyond this many pixels is an orbit, not a tap. */
 const TAP_SLOP = 4;
 
-export function createSkyCamera(canvas: HTMLCanvasElement, { onTap }: SkyCameraOptions): SkyCamera {
-  let { yaw, pitch, distance } = INITIAL;
+export function createSkyCamera(
+  canvas: HTMLCanvasElement,
+  { onTap, distance: initialDistance, zoomable = true }: SkyCameraOptions,
+): SkyCamera {
+  let { yaw, pitch } = INITIAL;
+  let distance = initialDistance ?? INITIAL.distance;
   // On from the moment the view opens, as on the dashboard dome: the sky drifts
   // until you take hold of it, and picks the drift back up once you let go.
   // Anyone who asked the OS for less motion starts still and can opt in.
@@ -96,7 +112,7 @@ export function createSkyCamera(canvas: HTMLCanvasElement, { onTap }: SkyCameraO
     const moved = Math.hypot(e.clientX - pressAt.x, e.clientY - pressAt.y);
     pressAt = null;
     if (moved > TAP_SLOP) return;
-    onTap(e.clientX, e.clientY);
+    onTap?.(e.clientX, e.clientY);
   };
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
@@ -110,7 +126,9 @@ export function createSkyCamera(canvas: HTMLCanvasElement, { onTap }: SkyCameraO
   // On window, not the canvas: a drag that ends outside the canvas still has to
   // stop the orbit, or the camera keeps following the pointer.
   addEventListener("pointerup", onPointerUp);
-  canvas.addEventListener("wheel", onWheel, { passive: false });
+  // Only bound when zooming is offered: this handler calls preventDefault, so
+  // attaching it to a fixed-framing canvas would swallow the page's scroll.
+  if (zoomable) canvas.addEventListener("wheel", onWheel, { passive: false });
 
   return {
     view(now, dt) {
@@ -157,7 +175,7 @@ export function createSkyCamera(canvas: HTMLCanvasElement, { onTap }: SkyCameraO
       canvas.removeEventListener("pointerup", onCanvasPointerUp);
       canvas.removeEventListener("pointermove", onPointerMove);
       removeEventListener("pointerup", onPointerUp);
-      canvas.removeEventListener("wheel", onWheel);
+      if (zoomable) canvas.removeEventListener("wheel", onWheel);
     },
   };
 }

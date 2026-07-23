@@ -43,7 +43,7 @@ export function ObstructionTimeLapse({
                     ? "bg-[var(--status-good)]"
                     : isActive
                       ? "bg-[var(--ink)]"
-                      : "bg-[var(--baseline)]"
+                      : "bg-[var(--ink-muted)]"
                 }`}
               />
             );
@@ -63,16 +63,33 @@ export function ObstructionTimeLapse({
           aria-label='Obstruction time-lapse'
         />
       </div>
+      {/* Fixed width, not min: the label swaps between "LIVE" and a timestamp,
+          and a min-width lets the wider one grow the label and squeeze the
+          flex-1 track — the track visibly jumps as you scrub off LIVE. Sized
+          for the widest form the locale can produce (e.g. "09:49 AM"), and
+          left-aligned so both forms start at the same edge rather than the
+          shorter "LIVE" drifting off to the right. */}
       <span
-        className='text-[11.5px] font-medium text-muted-foreground'
-        style={{ whiteSpace: "nowrap", minWidth: 44, textAlign: "right" }}
+        className='flex items-center gap-1.5 text-[11.5px] font-medium'
+        style={{ whiteSpace: "nowrap", width: 64, flex: "0 0 auto" }}
       >
-        {isViewingHistory
-          ? new Date(snapshots[scrubIndex].takenAtMs).toLocaleTimeString([], {
+        {isViewingHistory ? (
+          <span className='tabular-nums text-muted-foreground'>
+            {new Date(snapshots[scrubIndex].takenAtMs).toLocaleTimeString([], {
               hour: "2-digit",
               minute: "2-digit",
-            })
-          : "LIVE"}
+            })}
+          </span>
+        ) : (
+          <>
+            <span className='font-semibold tracking-wide text-[var(--status-good)]'>LIVE</span>
+            {/* The one moving thing in the row — a live pulse, not just a word. */}
+            <span
+              className='size-1.5 animate-pulse rounded-full bg-[var(--status-good)]'
+              aria-hidden='true'
+            />
+          </>
+        )}
       </span>
     </div>
   );

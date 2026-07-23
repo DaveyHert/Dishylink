@@ -8,7 +8,7 @@
 
 import { advanceLookAngles, type SatelliteSky } from "../../lib/satellites";
 
-import { standard4Dish } from "./dishModels/standard4";
+import { meshForModel } from "./dishModels";
 import { lookAt, multiply, perspective } from "./skyMath";
 import {
   LIGHT,
@@ -115,15 +115,37 @@ function surveyPalette(canvas: HTMLCanvasElement) {
   };
 }
 
+export interface SatelliteMesh {
+  positions: Float32Array;
+  normals: Float32Array;
+  colors: Float32Array;
+  triangleCount: number;
+}
+
+export interface SkySceneOptions {
+  /** Builds the craft model. Omitted, the scene carries no satellite machinery
+   *  at all — no mesh, no instance buffers, no trail or beam passes — which is
+   *  what the dashboard card wants: the same dome, none of the constellation. */
+  buildSatelliteMesh?: () => SatelliteMesh;
+  /** The starfield behind the dome. */
+  stars?: boolean;
+  /** Fixed framing, and whether the wheel may change it. */
+  distance?: number;
+  zoomable?: boolean;
+  /** Draws the dish above true size — see buildDish. */
+  dishScale?: number;
+}
+
 export function createSkyScene(
   canvas: HTMLCanvasElement,
   initialSurvey: SkySurvey,
-  buildSatelliteMesh: () => {
-    positions: Float32Array;
-    normals: Float32Array;
-    colors: Float32Array;
-    triangleCount: number;
-  },
+  {
+    buildSatelliteMesh,
+    stars = true,
+    distance,
+    zoomable = true,
+    dishScale = 1,
+  }: SkySceneOptions = {},
 ): SkyScene | null {
   const context = canvas.getContext("webgl", { antialias: true }) as WebGLRenderingContext | null;
   if (!context) return null;
@@ -151,32 +173,42 @@ export function createSkyScene(
   const palette = surveyPalette(canvas);
   let survey = initialSurvey;
   let domeData = buildDomePoints(survey);
-  let dish = buildDish(standard4Dish, survey);
+  let dish = buildDish(meshForModel(survey.dishModel), survey, dishScale);
   let dishData = dish.data;
-  const starData = buildStars();
+  const starData = stars ? buildStars() : null;
   const terrainData = buildTerrain();
   const compassData = buildCompass();
   const labelData = buildCompassLabels();
 
   const domeBuffer = buffer(domeData, gl.DYNAMIC_DRAW);
-  const starBuffer = buffer(starData);
+  const starBuffer = starData ? buffer(starData) : null;
   const terrainBuffer = buffer(terrainData);
   const compassBuffer = buffer(compassData);
   const labelBuffer = buffer(labelData);
   const dishBuffer = buffer(dishData, gl.DYNAMIC_DRAW);
 
-  const satMesh = buildSatelliteMesh();
-  const satPos = buffer(satMesh.positions);
-  const satNormal = buffer(satMesh.normals);
-  const satColor = buffer(satMesh.colors);
+  // Built only where satellites are drawn. A scene without them holds no craft
+  // mesh and no per-instance buffers, rather than uploading both to never use
+  // them — `satellites` being null is what every satellite pass checks.
+  const satellites = buildSatelliteMesh
+    ? (() => {
+        const mesh = buildSatelliteMesh();
+        return {
+          mesh,
+          pos: buffer(mesh.positions),
+          normal: buffer(mesh.normals),
+          color: buffer(mesh.colors),
+          offset: buffer(new Float32Array(MAX_SATELLITES * 3), gl.DYNAMIC_DRAW),
+          right: buffer(new Float32Array(MAX_SATELLITES * 3), gl.DYNAMIC_DRAW),
+          up: buffer(new Float32Array(MAX_SATELLITES * 3), gl.DYNAMIC_DRAW),
+          forward: buffer(new Float32Array(MAX_SATELLITES * 3), gl.DYNAMIC_DRAW),
+        };
+      })()
+    : null;
   const offsets = new Float32Array(MAX_SATELLITES * 3);
   const rights = new Float32Array(MAX_SATELLITES * 3);
   const ups = new Float32Array(MAX_SATELLITES * 3);
   const forwards = new Float32Array(MAX_SATELLITES * 3);
-  const offsetBuffer = buffer(offsets, gl.DYNAMIC_DRAW);
-  const rightBuffer = buffer(rights, gl.DYNAMIC_DRAW);
-  const upBuffer = buffer(ups, gl.DYNAMIC_DRAW);
-  const forwardBuffer = buffer(forwards, gl.DYNAMIC_DRAW);
   let satelliteCount = 0;
   /** Who to draw the beam to. Its position is re-read every frame, not stored. */
   let servingName: string | null = null;
@@ -333,7 +365,7 @@ export function createSkyScene(
   }
 
   function refreshSatellites() {
-    if (!sampleSatellites) {
+    if (!satellites || !sampleSatellites) {
       satelliteCount = 0;
       beamTarget = null;
       trails.clear(); // scrubbed into history — start the paths fresh on return
@@ -421,10 +453,10 @@ export function createSkyScene(
     }
     satelliteCount = n;
     for (const [b, data] of [
-      [offsetBuffer, offsets],
-      [rightBuffer, rights],
-      [upBuffer, ups],
-      [forwardBuffer, forwards],
+      [satellites.offset, offsets],
+      [satellites.right, rights],
+      [satellites.up, ups],
+      [satellites.forward, forwards],
     ] as Array<[WebGLBuffer, Float32Array]>) {
       gl.bindBuffer(gl.ARRAY_BUFFER, b);
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, data);
@@ -536,9 +568,15 @@ export function createSkyScene(
   // needs this frame's sky and matrix, which live here, so it reports the tap
   // and we answer it.
   const camera = createSkyCamera(canvas, {
-    onTap: (clientX, clientY) => {
-      if (onPick) onPick(pickAt(clientX, clientY));
-    },
+    distance,
+    zoomable,
+    // Nothing to resolve a tap into where there are no satellites, so the card
+    // does not listen for one.
+    onTap: satellites
+      ? (clientX, clientY) => {
+          if (onPick) onPick(pickAt(clientX, clientY));
+        }
+      : undefined,
   });
 
   const resize = () => {
@@ -564,7 +602,7 @@ export function createSkyScene(
   };
 
   function drawSatellites(mvp: Float32Array) {
-    if (!instancing || satelliteCount === 0) return;
+    if (!satellites || !instancing || satelliteCount === 0) return;
     gl.useProgram(satProgram);
     gl.uniformMatrix4fv(gl.getUniformLocation(satProgram, "uMvp"), false, mvp);
     gl.uniform1f(gl.getUniformLocation(satProgram, "uScale"), SATELLITE_SIZE);
@@ -579,15 +617,20 @@ export function createSkyScene(
       return loc;
     };
     const locs = [
-      bind("aPos", satPos, 0),
-      bind("aNormal", satNormal, 0),
-      bind("aColor", satColor, 0),
-      bind("iOffset", offsetBuffer, 1),
-      bind("iRight", rightBuffer, 1),
-      bind("iUp", upBuffer, 1),
-      bind("iForward", forwardBuffer, 1),
+      bind("aPos", satellites.pos, 0),
+      bind("aNormal", satellites.normal, 0),
+      bind("aColor", satellites.color, 0),
+      bind("iOffset", satellites.offset, 1),
+      bind("iRight", satellites.right, 1),
+      bind("iUp", satellites.up, 1),
+      bind("iForward", satellites.forward, 1),
     ];
-    instancing.drawArraysInstancedANGLE(gl.TRIANGLES, 0, satMesh.triangleCount * 3, satelliteCount);
+    instancing.drawArraysInstancedANGLE(
+      gl.TRIANGLES,
+      0,
+      satellites.mesh.triangleCount * 3,
+      satelliteCount,
+    );
     // Leave the divisors clean or the next pass inherits them.
     for (const loc of locs) instancing.vertexAttribDivisorANGLE(loc, 0);
   }
@@ -611,15 +654,17 @@ export function createSkyScene(
       lookAt(eye, target, [0, 1, 0]),
     );
 
-    gl.depthMask(false);
-    gl.useProgram(starProgram);
-    gl.uniformMatrix4fv(gl.getUniformLocation(starProgram, "uMvp"), false, mvp);
-    gl.bindBuffer(gl.ARRAY_BUFFER, starBuffer);
-    const aStar = gl.getAttribLocation(starProgram, "aStar");
-    gl.enableVertexAttribArray(aStar);
-    gl.vertexAttribPointer(aStar, 4, gl.FLOAT, false, 16, 0);
-    gl.drawArrays(gl.POINTS, 0, starData.length / 4);
-    gl.depthMask(true);
+    if (starBuffer && starData) {
+      gl.depthMask(false);
+      gl.useProgram(starProgram);
+      gl.uniformMatrix4fv(gl.getUniformLocation(starProgram, "uMvp"), false, mvp);
+      gl.bindBuffer(gl.ARRAY_BUFFER, starBuffer);
+      const aStar = gl.getAttribLocation(starProgram, "aStar");
+      gl.enableVertexAttribArray(aStar);
+      gl.vertexAttribPointer(aStar, 4, gl.FLOAT, false, 16, 0);
+      gl.drawArrays(gl.POINTS, 0, starData.length / 4);
+      gl.depthMask(true);
+    }
 
     gl.useProgram(meshProgram);
     gl.uniformMatrix4fv(gl.getUniformLocation(meshProgram, "uMvp"), false, mvp);
@@ -669,7 +714,7 @@ export function createSkyScene(
     setSurvey(next) {
       survey = next;
       domeData = buildDomePoints(next);
-      dish = buildDish(standard4Dish, next);
+      dish = buildDish(meshForModel(next.dishModel), next, dishScale);
       dishData = dish.data;
       gl.bindBuffer(gl.ARRAY_BUFFER, domeBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, domeData, gl.DYNAMIC_DRAW);

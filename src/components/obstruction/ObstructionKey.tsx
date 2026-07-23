@@ -22,10 +22,18 @@ function LegendEntry({ color, label }: { color: string; label: string }) {
 
 /** The obstruction-map key. `withServing` adds the amber entry, which only the
  *  satellite view has anything to key — its craft are recognisable models, so
- *  the only colour worth naming is the one that marks the serving one. */
-export function SkyLegend({ withServing = false }: { withServing?: boolean }) {
+ *  the only colour worth naming is the one that marks the serving one.
+ *  `centred` is for chrome floating over a scene, where a centred row reads as
+ *  part of the composition rather than as text stuck to the left edge. */
+export function ObstructionKey({
+  withServing = false,
+  centred = false,
+}: {
+  withServing?: boolean;
+  centred?: boolean;
+}) {
   return (
-    <div className={skyLegendClass}>
+    <div className={`${skyLegendClass}${centred ? " justify-center" : ""}`}>
       <span className={legendItem}>
         <span className={legendCell} style={{ background: "var(--sky-unmapped)", opacity: 0.45 }} />
         Unmapped
@@ -43,14 +51,19 @@ function Stat({
   value,
   tip,
   fullWidth,
+  centred,
 }: {
   label: string;
   value: string;
   tip?: string;
   fullWidth?: boolean;
+  centred?: boolean;
 }) {
   return (
-    <div className='skydome-stat' style={fullWidth ? { gridColumn: "1 / -1" } : undefined}>
+    <div
+      className={centred ? "text-center" : undefined}
+      style={fullWidth ? { gridColumn: "1 / -1" } : undefined}
+    >
       {tip ? (
         <StatLabel className='block' tip={tip}>
           {label}
@@ -64,13 +77,16 @@ function Stat({
 }
 
 /** Obstruction figures, plus the satellite feed's own once it is live. */
-export function SkyStats({
+export function ObstructionStats({
   obstructionStats,
   satellites,
+  centred = false,
 }: {
   obstructionStats?: DishObstructionStatsJson;
   /** Omitted on the standard card, which shows obstruction figures only. */
   satellites?: SatelliteFeed;
+  /** Centres each figure in its column, for chrome floating over a scene. */
+  centred?: boolean;
 }) {
   const fractionObstructed = obstructionStats?.fractionObstructed ?? 0;
   const validHours = (obstructionStats?.validS ?? 0) / 3600;
@@ -79,8 +95,12 @@ export function SkyStats({
 
   return (
     <div className={skyStatsClass}>
-      <Stat label='Sky obstructed' value={`${(fractionObstructed * 100).toFixed(2)}%`} />
-      <Stat label='Observed for' value={`${validHours.toFixed(1)} h`} />
+      <Stat
+        centred={centred}
+        label='Sky obstructed'
+        value={`${(fractionObstructed * 100).toFixed(2)}%`}
+      />
+      <Stat centred={centred} label='Observed for' value={`${validHours.toFixed(1)} h`} />
       {showFeed && (
         <>
           <Stat

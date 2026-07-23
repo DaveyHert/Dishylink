@@ -13,7 +13,7 @@ import { armAlertSoundOnFirstGesture } from "./lib/alertSound";
 import { TopBar } from "./components/dashboard/TopBar";
 import { StatTile } from "./components/dashboard/StatTile";
 import { TelemetryChart, windowTail } from "./components/shared/TelemetryChart";
-import { SkyDome } from "./components/skydome/SkyDome";
+import { ObstructionCard } from "./components/obstruction/ObstructionCard";
 import { SatelliteView } from "./components/satellite/SatelliteView";
 import { OutageLog } from "./components/alerts/OutageLog";
 import { SearchingHero } from "./components/dashboard/SearchingHero";
@@ -285,11 +285,10 @@ export default function App() {
                   </div>
                 </SectionCard>
 
-                <SkyDome
+                <ObstructionCard
                   obstructionMap={telemetry.obstructionMap}
                   obstructionStats={status?.obstructionStats}
                   status={status}
-                  theme={theme}
                   onOpenSatelliteView={() => setSkyViewOpen(true)}
                 />
 
