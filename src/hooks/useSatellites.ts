@@ -11,7 +11,9 @@ import type { DishObstructionMapJson } from "../lib/dishClient";
 import {
   loadStarlinkTles,
   StarlinkTracker,
+  EphemerisError,
   SERVING_ELEVATION_FLOOR_DEG,
+  type EphemerisFailure,
   type ObserverLocation,
   type SatelliteSky,
 } from "../lib/satellites";
@@ -19,6 +21,10 @@ import { sendNotification } from "../lib/notifications";
 
 const COARSE_PASS_MS = 60_000;
 const STATS_UPDATE_MS = 1_000;
+/** Backoff between startup attempts, holding at the last value from then on.
+ *  The source is a single 1.8 MB file from a small public service — worth
+ *  waiting out rather than hammering. */
+const RETRY_DELAYS_MS = [5_000, 15_000, 60_000, 300_000];
 
 export type SatelliteFeedState = "location-needed" | "loading" | "active" | "error";
 
@@ -32,6 +38,9 @@ export interface SatelliteStats {
 
 export interface SatelliteFeed {
   feedState: SatelliteFeedState;
+  /** Set while `feedState` is "error": which side failed, so the UI can say so
+   *  rather than blaming the user's connection for every fault. */
+  errorReason: EphemerisFailure | null;
   stats: SatelliteStats;
   /** Imperative sampler for the dome's animation loop; null until active. */
   sampleSky: (() => SatelliteSky[]) | null;
@@ -83,6 +92,7 @@ export function useSatellites(
   obstructionMap: DishObstructionMapJson | null,
 ): SatelliteFeed {
   const [feedState, setFeedState] = useState<SatelliteFeedState>("location-needed");
+  const [errorReason, setErrorReason] = useState<EphemerisFailure | null>(null);
   const [stats, setStats] = useState<SatelliteStats>(EMPTY_STATS);
   const trackerRef = useRef<StarlinkTracker | null>(null);
   const obstructionMapRef = useRef(obstructionMap);
@@ -100,9 +110,11 @@ export function useSatellites(
     }
     let disposed = false;
     const timerIds: number[] = [];
+    const retryIds: number[] = [];
     setFeedState("loading");
+    setErrorReason(null);
 
-    (async () => {
+    const start = async (attempt: number) => {
       try {
         const tleRecords = await loadStarlinkTles();
         if (disposed) return;
@@ -115,6 +127,7 @@ export function useSatellites(
         if (disposed) return;
         trackerRef.current = tracker;
         setFeedState("active");
+        setErrorReason(null);
 
         const updateStats = () => {
           const inView = tracker.finePass();
@@ -155,14 +168,27 @@ export function useSatellites(
             void tracker.coarsePass().then(updateForecast);
           }, COARSE_PASS_MS),
         );
-      } catch {
-        if (!disposed) setFeedState("error");
+      } catch (error) {
+        if (disposed) return;
+        setFeedState("error");
+        setErrorReason(error instanceof EphemerisError ? error.reason : "source");
+        // Keep trying rather than parking here until the user reloads: the
+        // usual cause is the source being briefly slow or unreachable, which
+        // resolves on its own.
+        const delay = RETRY_DELAYS_MS[Math.min(attempt, RETRY_DELAYS_MS.length - 1)];
+        retryIds.push(window.setTimeout(() => void start(attempt + 1), delay));
       }
-    })();
+    };
+
+    void start(0);
 
     return () => {
       disposed = true;
+      // Holds both the repeating passes and any pending retry. The two share an
+      // id space in the browser, but clearing each by its own kind keeps this
+      // honest about what it is cancelling.
       timerIds.forEach((timerId) => window.clearInterval(timerId));
+      retryIds.forEach((retryId) => window.clearTimeout(retryId));
       trackerRef.current = null;
     };
   }, [latitude, longitude, altitude]);
@@ -171,6 +197,7 @@ export function useSatellites(
 
   return {
     feedState,
+    errorReason,
     stats,
     sampleSky: feedState === "active" ? sampleSky : null,
     servingCandidateName: stats.servingCandidate?.name ?? null,

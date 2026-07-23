@@ -22,24 +22,15 @@ export interface DomePoint {
   kind: DomePointKind;
 }
 
-export interface TrailPoint {
-  azimuthDeg: number;
-  elevationDeg: number;
-  atMs: number;
-}
-
 export const STANDARD_CANVAS_SIZE = 330;
-export const IMMERSIVE_CANVAS_SIZE = 540;
-export const GRID_STRIDE = 2;
 export const INITIAL_YAW = 0.6;
 export const INITIAL_ELEVATION = 0.62;
-export const TRAIL_POINT_INTERVAL_MS = 1_000;
-export const TRAIL_MAX_POINTS = 24;
 /** One turn every two minutes: present when you look at it, never the thing
- *  moving in the corner of your eye. Dashboard dome only — the immersive view is
- *  the one you aim and inspect with, so it stays where you put it. */
+ *  moving in the corner of your eye. Shared with the full-page sky view, which
+ *  has to drift at the dashboard dome's beat rather than a beat of its own. */
 export const AUTO_ROTATE_RAD_PER_SEC = (2 * Math.PI) / 120;
-/** Rotation yields after a drag, so it isn't fighting the angle you just set. */
+/** Rotation yields after a drag, so it isn't fighting the angle you just set.
+ *  Shared with the sky view for the same reason as the rate above. */
 export const RESUME_AFTER_DRAG_MS = 4_000;
 /** ~25fps: enough for a motion this slow, a quarter of the frames of 60. */
 export const AUTO_ROTATE_FRAME_MS = 40;
@@ -76,8 +67,11 @@ export function buildDomePoints(
   const maxThetaRad = (maxThetaDeg * Math.PI) / 180;
   const gridCenter = (gridSize - 1) / 2;
   const points: DomePoint[] = [];
-  for (let rowIndex = 0; rowIndex < gridSize; rowIndex += GRID_STRIDE) {
-    for (let columnIndex = 0; columnIndex < gridSize; columnIndex += GRID_STRIDE) {
+  // Every cell renders — the survey is the product, and thinning it once cost
+  // 38 of 47 obstructed dots (2026-07-21). Full resolution measures ~1.5 ms a
+  // frame, a fraction of the rotation loop's 40 ms budget.
+  for (let rowIndex = 0; rowIndex < gridSize; rowIndex++) {
+    for (let columnIndex = 0; columnIndex < gridSize; columnIndex++) {
       const eastOffset = (columnIndex - gridCenter) / gridCenter;
       const northOffset = (gridCenter - rowIndex) / gridCenter;
       const radialFraction = Math.hypot(eastOffset, northOffset);

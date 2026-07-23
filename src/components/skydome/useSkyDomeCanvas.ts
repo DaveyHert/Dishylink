@@ -1,63 +1,46 @@
-// All of the dome's canvas state: the projection, the frame, the animation
-// loops and the drag/tap handling.
+// All of the dome's canvas state: the projection, the frame, the drift loop and
+// the drag handling.
 //
-// `drawDome` is deliberately ONE routine. Its steps look separable — ring, dots,
-// dish mesh, satellites, callout leader — but they share the `project` closure,
-// a running `globalAlpha`, a strict back-to-front draw order, and two refs the
-// satellite pass mutates (trails and hit positions). Splitting it would buy line
-// count and cost correctness in ways a screenshot cannot catch, so it stays
-// whole; what is extracted instead is everything around it, which is why the two
-// variants can now be two small components rather than one long body.
+// `drawDome` is deliberately ONE routine. Its steps look separable — ring,
+// compass, dots, dish mesh — but they share the `project` closure, a running
+// `globalAlpha` and a strict back-to-front draw order. Splitting it would buy
+// line count and cost correctness in ways a screenshot cannot catch, so it stays
+// whole; what is extracted instead is everything around it.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type {
   DishObstructionMapJson,
   DishStatusJson,
 } from "../../lib/dishClient";
 import { specForHardware, buildDishMesh, type MeshTriangle } from "../../lib/dishMesh";
-import type { SatelliteFeed } from "../../hooks/useSatellites";
-import type { SatelliteSky } from "../../lib/satellites";
-import {
-  listSnapshots,
-  saveSnapshotIfDue,
-  unpackCells,
-  type ObstructionSnapshot,
-} from "../../lib/obstructionSnapshots";
-import type { SelectedSatellite } from "./SatelliteCallout";
 import {
   AUTO_ROTATE_FRAME_MS,
   AUTO_ROTATE_RAD_PER_SEC,
   INITIAL_ELEVATION,
   INITIAL_YAW,
   RESUME_AFTER_DRAG_MS,
-  TRAIL_MAX_POINTS,
-  TRAIL_POINT_INTERVAL_MS,
   buildDomePoints,
   cssVar,
   liveKindAtCell,
-  skyToWorld,
-  snapshotKindAtCell,
   type DomePoint,
-  type TrailPoint,
 } from "./domeGeometry";
 
 export function useSkyDomeCanvas({
   obstructionMap,
   status,
   theme,
-  satellites,
-  isImmersive,
   canvasSize,
 }: {
   obstructionMap: DishObstructionMapJson | null;
   status: DishStatusJson | null;
   theme: "light" | "dark";
-  satellites: SatelliteFeed;
-  isImmersive: boolean;
   canvasSize: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const pointsRef = useRef<DomePoint[]>([]);
+  // The survey's grid size sets dot spacing, which sets dot radius — without it
+  // full-resolution dots overlap into a solid surface at small canvas sizes.
+  const gridSizeRef = useRef(123);
   const yawRef = useRef(INITIAL_YAW);
   const elevationRef = useRef(INITIAL_ELEVATION);
   const dragStateRef = useRef<{
@@ -67,23 +50,8 @@ export function useSkyDomeCanvas({
     startX: number;
     startY: number;
   } | null>(null);
-  const trailsRef = useRef(new Map<string, TrailPoint[]>());
   /** When the user last touched the dome; auto-rotation waits this out. */
   const lastInteractionRef = useRef(0);
-  // Satellite click-to-inspect: hit positions collected each frame, the
-  // selected name, and the anchored callout element (moved imperatively per
-  // frame so it tracks the satellite without React re-renders).
-  const satelliteHitsRef = useRef<Array<{ sky: SatelliteSky; screenX: number; screenY: number }>>(
-    [],
-  );
-  const selectedNameRef = useRef<string | null>(null);
-  const calloutRef = useRef<HTMLDivElement | null>(null);
-  const pixelRatioRef = useRef(1);
-  const [selectedSatellite, setSelectedSatellite] = useState<SelectedSatellite | null>(null);
-  const [snapshots, setSnapshots] = useState<ObstructionSnapshot[]>(listSnapshots);
-  const [scrubIndex, setScrubIndex] = useState<number | null>(null); // null = live
-
-  const isViewingHistory = scrubIndex !== null && scrubIndex < snapshots.length;
 
   // Parametric mesh for THIS user's hardware, tilted to the live boresight
   // elevation; rebuilt only when model or elevation meaningfully changes.
@@ -112,11 +80,15 @@ export function useSkyDomeCanvas({
     }
 
     const inkColor = cssVar("--chart-ink") || "#fff";
-    const warmColor = cssVar("--chart-warm") || "#f09048";
-    const criticalColor = cssVar("--status-critical") || "#f43f5e";
     const mutedColor = cssVar("--ink-muted") || "#7c7c7c";
     const baselineColor = cssVar("--baseline") || "#3a3a3a";
-    const satelliteAccent = cssVar("--satellite") || "#e0a422";
+    // The survey's own palette — see --sky-* in index.css. The dots used to
+    // borrow --status-critical and --chart-ink, which is why the WebGL sky and
+    // the legend each ended up with a different red.
+    const clearColor = cssVar("--sky-clear") || inkColor;
+    const partialColor = cssVar("--sky-partial") || "#6e0f0f";
+    const obstructedColor = cssVar("--sky-obstructed") || "#f51e1e";
+    const unmappedColor = cssVar("--sky-unmapped") || mutedColor;
 
     const yaw = yawRef.current;
     const cameraElevation = elevationRef.current;
@@ -186,23 +158,28 @@ export function useSkyDomeCanvas({
     projectedDots.sort((first, second) => second.depth - first.depth);
     for (const dot of projectedDots) {
       const nearness = 1 - (dot.depth + 1) / 2;
-      // Partial sits between clear and obstructed on both size and weight, so
-      // a thin branch reads as lighter than a roofline instead of identical.
-      const kindRadius = dot.kind === "obstructed" ? 2.4 : dot.kind === "partial" ? 2.05 : 1.7;
-      const dotRadius = kindRadius * pixelRatio * (0.72 + 0.5 * nearness);
+      // Dot radius follows cell spacing so the full-resolution survey renders
+      // as distinct dots, not a fused sheet: a clear dot never exceeds half the
+      // distance to its neighbour at any canvas size. Partial sits between
+      // clear and obstructed on both size and weight, so a thin branch reads
+      // as lighter than a roofline instead of identical.
+      const cellSpacing = (2 * radius) / gridSizeRef.current;
+      const kindScale = dot.kind === "obstructed" ? 1.35 : dot.kind === "partial" ? 1.18 : 1;
+      const dotRadius = cellSpacing * kindScale * (0.3 + 0.12 * nearness);
       if (dot.kind === "unmapped") {
-        context.fillStyle = mutedColor;
+        context.fillStyle = unmappedColor;
         context.globalAlpha = 0.16 + 0.12 * nearness;
       } else if (dot.kind === "obstructed") {
-        context.fillStyle = criticalColor;
+        context.fillStyle = obstructedColor;
         context.globalAlpha = 0.85 + 0.15 * nearness;
       } else if (dot.kind === "partial") {
-        // Same hue as a full obstruction, carried lighter — warm is spoken for
-        // by the serving satellite, and partial belongs in the obstruction family.
-        context.fillStyle = criticalColor;
-        context.globalAlpha = 0.4 + 0.2 * nearness;
+        // The partial token already carries the obstruction colour at half
+        // weight, so this alpha is only the depth cue the other kinds get —
+        // not the second place the "lighter" was being decided.
+        context.fillStyle = partialColor;
+        context.globalAlpha = 0.8 + 0.2 * nearness;
       } else {
-        context.fillStyle = inkColor;
+        context.fillStyle = clearColor;
         context.globalAlpha = 0.5 + 0.5 * nearness;
       }
       context.beginPath();
@@ -214,8 +191,7 @@ export function useSkyDomeCanvas({
     // The user's actual dish model at the center: parametric mesh in meters,
     // yawed to the live boresight azimuth, painter's-algorithm shaded.
     // Display scale exaggerates the ~0.6 m panel against the unit-sphere sky.
-    const dishPoint = project(0, 0, 0.02);
-    const meshScale = isImmersive ? 0.55 : 0.68;
+    const meshScale = 0.68;
     const boresightYaw = boresightAzimuthRef.current;
     const sinBoresight = Math.sin(boresightYaw);
     const cosBoresight = Math.cos(boresightYaw);
@@ -267,197 +243,13 @@ export function useSkyDomeCanvas({
       context.fill();
       context.stroke(); // paint over hairline antialiasing seams between triangles
     }
+  }, [canvasSize]);
 
-    // satellites: immersive live view only (historical sky had different satellites)
-    satelliteHitsRef.current = [];
-    pixelRatioRef.current = pixelRatio;
-    if (isImmersive && !isViewingHistory && satellites.sampleSky) {
-      const inViewSatellites = satellites.sampleSky();
-      const nowMs = Date.now();
-
-      // maintain per-satellite trails
-      const trails = trailsRef.current;
-      const inViewNames = new Set<string>();
-      for (const sky of inViewSatellites) {
-        inViewNames.add(sky.name);
-        const trail = trails.get(sky.name) ?? [];
-        const newestTrailPoint = trail[trail.length - 1];
-        if (!newestTrailPoint || nowMs - newestTrailPoint.atMs >= TRAIL_POINT_INTERVAL_MS) {
-          trail.push({ azimuthDeg: sky.azimuthDeg, elevationDeg: sky.elevationDeg, atMs: nowMs });
-          if (trail.length > TRAIL_MAX_POINTS) trail.shift();
-          trails.set(sky.name, trail);
-        }
-      }
-      for (const trailName of trails.keys()) {
-        if (!inViewNames.has(trailName)) trails.delete(trailName);
-      }
-
-      for (const sky of inViewSatellites) {
-        const world = skyToWorld(sky.azimuthDeg, sky.elevationDeg);
-        const satellitePoint = project(world.x, world.y, world.z);
-        const isServing = sky.name === satellites.servingCandidateName;
-
-        // trail
-        const trail = trails.get(sky.name) ?? [];
-        if (trail.length > 1) {
-          context.lineWidth = 1.15 * pixelRatio;
-          for (let trailIndex = 1; trailIndex < trail.length; trailIndex++) {
-            const fromWorld = skyToWorld(
-              trail[trailIndex - 1].azimuthDeg,
-              trail[trailIndex - 1].elevationDeg,
-            );
-            const toWorld = skyToWorld(trail[trailIndex].azimuthDeg, trail[trailIndex].elevationDeg);
-            const fromPoint = project(fromWorld.x, fromWorld.y, fromWorld.z);
-            const toPoint = project(toWorld.x, toWorld.y, toWorld.z);
-            context.strokeStyle = isServing ? warmColor : satelliteAccent;
-            context.globalAlpha = 0.35 * (trailIndex / trail.length);
-            context.beginPath();
-            context.moveTo(fromPoint.screenX, fromPoint.screenY);
-            context.lineTo(toPoint.screenX, toPoint.screenY);
-            context.stroke();
-          }
-          context.globalAlpha = 1;
-        }
-
-        // beam from the dish to the likely serving satellite
-        if (isServing) {
-          context.strokeStyle = warmColor;
-          context.lineWidth = 3.5 * pixelRatio;
-          context.globalAlpha = 0.18;
-          context.beginPath();
-          context.moveTo(dishPoint.screenX, dishPoint.screenY);
-          context.lineTo(satellitePoint.screenX, satellitePoint.screenY);
-          context.stroke();
-          context.lineWidth = 1.2 * pixelRatio;
-          context.globalAlpha = 0.9;
-          context.beginPath();
-          context.moveTo(dishPoint.screenX, dishPoint.screenY);
-          context.lineTo(satellitePoint.screenX, satellitePoint.screenY);
-          context.stroke();
-          context.globalAlpha = 1;
-        }
-
-        // The satellite reads as a distinct object against the dot grid: a
-        // colored core with a crisp ring (a little reticle). Non-serving
-        // satellites are cool blue; the serving one is warm + gets a real glow
-        // so it stands out among the crowd. The ring grows slightly with
-        // elevation so overhead/closer satellites feel nearer.
-        const satelliteColor = isServing ? warmColor : satelliteAccent;
-        const coreRadius = (isServing ? 3 : 2) * pixelRatio;
-        const ringRadius = coreRadius + (1.6 + (sky.elevationDeg / 90) * 1.6) * pixelRatio;
-
-        // glow: only the serving satellite (a field of hundreds can't all glow)
-        if (isServing) {
-          context.fillStyle = satelliteColor;
-          context.globalAlpha = 0.16;
-          context.beginPath();
-          context.arc(
-            satellitePoint.screenX,
-            satellitePoint.screenY,
-            ringRadius * 2.2,
-            0,
-            Math.PI * 2,
-          );
-          context.fill();
-        }
-
-        // core
-        context.fillStyle = satelliteColor;
-        context.globalAlpha = 1;
-        context.beginPath();
-        context.arc(satellitePoint.screenX, satellitePoint.screenY, coreRadius, 0, Math.PI * 2);
-        context.fill();
-
-        // crisp ring
-        context.strokeStyle = satelliteColor;
-        context.lineWidth = 1 * pixelRatio;
-        context.globalAlpha = isServing ? 0.95 : 0.55;
-        context.beginPath();
-        context.arc(satellitePoint.screenX, satellitePoint.screenY, ringRadius, 0, Math.PI * 2);
-        context.stroke();
-        context.globalAlpha = 1;
-
-        satelliteHitsRef.current.push({
-          sky,
-          screenX: satellitePoint.screenX,
-          screenY: satellitePoint.screenY,
-        });
-        if (sky.name === selectedNameRef.current) {
-          // selection: a second, wider ring
-          context.strokeStyle = inkColor;
-          context.lineWidth = 1.4 * pixelRatio;
-          context.globalAlpha = 0.9;
-          context.beginPath();
-          context.arc(
-            satellitePoint.screenX,
-            satellitePoint.screenY,
-            ringRadius + 4 * pixelRatio,
-            0,
-            Math.PI * 2,
-          );
-          context.stroke();
-          context.globalAlpha = 1;
-        }
-
-        if (isServing) {
-          context.font = `500 ${9 * pixelRatio}px ${cssVar("--font-mono") || "monospace"}`;
-          context.textAlign = "left";
-          context.fillStyle = inkColor;
-          context.fillText(
-            sky.name,
-            satellitePoint.screenX + 8 * pixelRatio,
-            satellitePoint.screenY - 6 * pixelRatio,
-          );
-        }
-      }
-    }
-
-    // anchored callout: track the selected satellite every frame, leader line included
-    const callout = calloutRef.current;
-    if (callout) {
-      const selectedHit = selectedNameRef.current
-        ? satelliteHitsRef.current.find((hit) => hit.sky.name === selectedNameRef.current)
-        : undefined;
-      if (selectedHit) {
-        // canvas-relative → offsetParent-relative (canvas may be centered in the wrap)
-        const cssX = selectedHit.screenX / pixelRatio + canvas.offsetLeft;
-        const cssY = selectedHit.screenY / pixelRatio + canvas.offsetTop;
-        const flipLeft = cssX > canvasSize - 230;
-        const anchorOffset = 18;
-        callout.style.display = "block";
-        callout.style.left = `${flipLeft ? cssX - anchorOffset : cssX + anchorOffset}px`;
-        callout.style.top = `${Math.min(Math.max(cssY - 30, 6), canvasSize - 150)}px`;
-        callout.style.transform = flipLeft ? "translateX(-100%)" : "none";
-        context.strokeStyle = inkColor;
-        context.globalAlpha = 0.5;
-        context.lineWidth = 1 * pixelRatio;
-        context.beginPath();
-        context.moveTo(selectedHit.screenX, selectedHit.screenY);
-        context.lineTo(
-          selectedHit.screenX + (flipLeft ? -anchorOffset : anchorOffset) * pixelRatio * 0.85,
-          selectedHit.screenY,
-        );
-        context.stroke();
-        context.globalAlpha = 1;
-      } else {
-        callout.style.display = "none";
-      }
-    }
-  }, [satellites, isViewingHistory, isImmersive, canvasSize]);
-
-  // rebuild dome points when the data source (live map or scrubbed snapshot) changes
+  // rebuild dome points when the live obstruction map changes
   useEffect(() => {
-    if (isViewingHistory) {
-      const snapshot = snapshots[scrubIndex];
-      pointsRef.current = buildDomePoints(
-        snapshot.gridSize,
-        // The angle this grid was captured at. Snapshots taken before that was
-        // recorded fall back to the live map, which is the best guess available.
-        snapshot.maxThetaDeg ?? obstructionMap?.maxThetaDeg ?? 80,
-        snapshotKindAtCell(unpackCells(snapshot), snapshot.gridSize),
-      );
-    } else if (obstructionMap?.snr) {
+    if (obstructionMap?.snr) {
       const gridSize = obstructionMap.numRows ?? Math.round(Math.sqrt(obstructionMap.snr.length));
+      gridSizeRef.current = gridSize;
       pointsRef.current = buildDomePoints(
         gridSize,
         obstructionMap.maxThetaDeg ?? 80,
@@ -468,12 +260,7 @@ export function useSkyDomeCanvas({
     // `theme` is not read by drawDome directly — it resolves colors through
     // cssVar() at draw time — so it must stay a dependency here or a theme
     // switch leaves the last frame's colors on screen.
-  }, [obstructionMap, theme, drawDome, isViewingHistory, scrubIndex, snapshots]);
-
-  // persist hourly snapshots as new maps arrive
-  useEffect(() => {
-    if (obstructionMap?.snr) setSnapshots(saveSnapshotIfDue(obstructionMap));
-  }, [obstructionMap]);
+  }, [obstructionMap, theme, drawDome]);
 
   // redraw when the dish mesh changes (model detected / boresight moved) —
   // matters in the standard view, which has no animation loop
@@ -481,26 +268,9 @@ export function useSkyDomeCanvas({
     drawDome();
   }, [dishMesh, drawDome]);
 
-  // animation loop while satellites are live (immersive only)
-  useEffect(() => {
-    if (!isImmersive || !satellites.sampleSky || isViewingHistory) return;
-    let animationFrameId = 0;
-    let lastFrameAt = 0;
-    const animate = (frameTime: number) => {
-      if (frameTime - lastFrameAt > 40) {
-        lastFrameAt = frameTime;
-        drawDome();
-      }
-      animationFrameId = requestAnimationFrame(animate);
-    };
-    animationFrameId = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [isImmersive, satellites.sampleSky, isViewingHistory, drawDome]);
-
   // Slow drift for the dashboard dome, as the Starlink app does it. Skipped for
   // anyone who asked the OS to reduce motion — this one never stops on its own.
   useEffect(() => {
-    if (isImmersive) return;
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     let animationFrameId = 0;
     let lastFrameAt = 0;
@@ -518,7 +288,7 @@ export function useSkyDomeCanvas({
     };
     animationFrameId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animationFrameId);
-  }, [isImmersive, drawDome]);
+  }, [drawDome]);
 
   const handlePointerDown = (downEvent: React.PointerEvent<HTMLCanvasElement>) => {
     lastInteractionRef.current = performance.now();
@@ -546,81 +316,18 @@ export function useSkyDomeCanvas({
     requestAnimationFrame(drawDome);
   };
 
-  const handlePointerUp = (upEvent: React.PointerEvent<HTMLCanvasElement>) => {
-    const dragState = dragStateRef.current;
+  const handlePointerUp = () => {
     dragStateRef.current = null;
     lastInteractionRef.current = performance.now();
-    if (!dragState || !isImmersive || isViewingHistory) return;
-    // a real click, not the tail of an orbit drag
-    const movedPx = Math.hypot(
-      upEvent.clientX - dragState.startX,
-      upEvent.clientY - dragState.startY,
-    );
-    if (movedPx > 6) return;
-    const canvasRect = upEvent.currentTarget.getBoundingClientRect();
-    const clickX = upEvent.clientX - canvasRect.left;
-    const clickY = upEvent.clientY - canvasRect.top;
-    const pixelRatio = pixelRatioRef.current;
-    let nearest: { sky: SatelliteSky; distancePx: number } | null = null;
-    for (const hit of satelliteHitsRef.current) {
-      const distancePx = Math.hypot(
-        hit.screenX / pixelRatio - clickX,
-        hit.screenY / pixelRatio - clickY,
-      );
-      if (distancePx < 14 && (!nearest || distancePx < nearest.distancePx)) {
-        nearest = { sky: hit.sky, distancePx };
-      }
-    }
-    selectedNameRef.current = nearest?.sky.name ?? null;
-    setSelectedSatellite(
-      nearest
-        ? { sky: nearest.sky, isServing: nearest.sky.name === satellites.servingCandidateName }
-        : null,
-    );
-    requestAnimationFrame(drawDome);
   };
-
-  // keep the callout's numbers live while one is open; close it when the
-  // satellite drops below the horizon
-  useEffect(() => {
-    if (!selectedSatellite) return;
-    const timerId = window.setInterval(() => {
-      const hit = satelliteHitsRef.current.find(
-        (candidate) => candidate.sky.name === selectedNameRef.current,
-      );
-      if (hit) {
-        setSelectedSatellite({
-          sky: hit.sky,
-          isServing: hit.sky.name === satellites.servingCandidateName,
-        });
-      } else {
-        selectedNameRef.current = null;
-        setSelectedSatellite(null);
-      }
-    }, 1000);
-    return () => window.clearInterval(timerId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSatellite !== null, satellites.servingCandidateName]);
-
-  const clearSelection = useCallback(() => {
-    selectedNameRef.current = null;
-    setSelectedSatellite(null);
-  }, []);
 
   return {
     canvasRef,
-    calloutRef,
     canvasHandlers: {
       onPointerDown: handlePointerDown,
       onPointerMove: handlePointerMove,
       onPointerUp: handlePointerUp,
       onPointerCancel: handlePointerUp,
     },
-    selectedSatellite,
-    clearSelection,
-    snapshots,
-    scrubIndex,
-    setScrubIndex,
-    isViewingHistory,
   };
 }

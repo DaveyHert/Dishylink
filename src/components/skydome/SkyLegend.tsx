@@ -20,27 +20,20 @@ function LegendEntry({ color, label }: { color: string; label: string }) {
   );
 }
 
-/** The obstruction-map key, shared by both variants. `withSatellites` adds the
- *  two entries that only mean anything in the live immersive view. */
-export function SkyLegend({ withSatellites = false }: { withSatellites?: boolean }) {
+/** The obstruction-map key. `withServing` adds the amber entry, which only the
+ *  satellite view has anything to key — its craft are recognisable models, so
+ *  the only colour worth naming is the one that marks the serving one. */
+export function SkyLegend({ withServing = false }: { withServing?: boolean }) {
   return (
     <div className={skyLegendClass}>
       <span className={legendItem}>
-        <span className={legendCell} style={{ background: "var(--ink-muted)", opacity: 0.45 }} />
+        <span className={legendCell} style={{ background: "var(--sky-unmapped)", opacity: 0.45 }} />
         Unmapped
       </span>
-      <LegendEntry color='var(--chart-ink)' label='Clear view' />
-      <LegendEntry
-        color='color-mix(in srgb, var(--status-critical) 45%, transparent)'
-        label='Partial'
-      />
-      <LegendEntry color='var(--status-critical)' label='Obstructions' />
-      {withSatellites && (
-        <>
-          <LegendEntry color='var(--satellite)' label='Satellite' />
-          <LegendEntry color='var(--chart-warm)' label='Serving satellite' />
-        </>
-      )}
+      <LegendEntry color='var(--sky-clear)' label='Clear view' />
+      <LegendEntry color='var(--sky-partial)' label='Partial' />
+      <LegendEntry color='var(--sky-obstructed)' label='Obstructions' />
+      {withServing && <LegendEntry color='var(--chart-warm)' label='Serving satellite' />}
     </div>
   );
 }

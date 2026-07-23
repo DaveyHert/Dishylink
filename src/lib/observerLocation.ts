@@ -9,6 +9,7 @@
 import type { ObserverLocation } from "./satellites";
 
 const LOCATION_STORAGE_KEY = "dishboard-observer-location";
+const LOCATION_CLEARED_KEY = "dishboard-observer-cleared";
 
 export function loadSavedLocation(): ObserverLocation | null {
   try {
@@ -22,12 +23,31 @@ export function loadSavedLocation(): ObserverLocation | null {
   }
 }
 
+/**
+ * Whether the user explicitly cleared their location, as opposed to never having
+ * set one. The two are different intents and must stay distinguishable: an
+ * automatic source may fill in for someone who has never chosen, but must never
+ * undo a deliberate clear — "clear" means unset, not "revert to a guess".
+ */
+export function loadLocationCleared(): boolean {
+  try {
+    return localStorage.getItem(LOCATION_CLEARED_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+// The cleared flag is maintained by the two writers below rather than by their
+// callers, so the pair can never drift out of step.
+
 export function saveLocation(location: ObserverLocation): void {
   localStorage.setItem(LOCATION_STORAGE_KEY, JSON.stringify(location));
+  localStorage.removeItem(LOCATION_CLEARED_KEY); // choosing a location un-clears
 }
 
 export function clearSavedLocation(): void {
   localStorage.removeItem(LOCATION_STORAGE_KEY);
+  localStorage.setItem(LOCATION_CLEARED_KEY, "true");
 }
 
 /**

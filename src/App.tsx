@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDishTelemetry } from "./hooks/useDishTelemetry";
+import { AnimatePresence, motion } from "motion/react";
 import { useSatellites } from "./hooks/useSatellites";
+import { useAccountLocation } from "./hooks/useAccountLocation";
+import { useHashRoute } from "./hooks/useHashRoute";
 import { useOutageNotifications } from "./hooks/useOutageNotifications";
 import { useThermalEvents } from "./hooks/useThermalEvents";
 import { useDeviceAlerts } from "./hooks/useDeviceAlerts";
@@ -11,6 +14,7 @@ import { TopBar } from "./components/dashboard/TopBar";
 import { StatTile } from "./components/dashboard/StatTile";
 import { TelemetryChart, windowTail } from "./components/shared/TelemetryChart";
 import { SkyDome } from "./components/skydome/SkyDome";
+import { SatelliteView } from "./components/satellite/SatelliteView";
 import { OutageLog } from "./components/alerts/OutageLog";
 import { SearchingHero } from "./components/dashboard/SearchingHero";
 import { DishTerminalCard } from "./components/dashboard/DishTerminalCard";
@@ -27,7 +31,12 @@ import { SettingsModal } from "./components/settings/SettingsModal";
 import { useRouterNetwork } from "./hooks/useRouterNetwork";
 import { THROUGHPUT_SERIES, LATENCY_SERIES, POWER_SERIES, buildStatDetails } from "./lib/statDetails";
 import { formatThroughput, formatThroughputLabel, formatThroughputTick } from "./lib/format";
-import { loadSavedLocation, saveLocation, clearSavedLocation } from "./lib/observerLocation";
+import {
+  loadSavedLocation,
+  loadLocationCleared,
+  saveLocation,
+  clearSavedLocation,
+} from "./lib/observerLocation";
 import type { ObserverLocation } from "./lib/satellites";
 import type { TelemetrySample } from "./lib/telemetry";
 
@@ -35,7 +44,6 @@ type ThemeName = "light" | "dark";
 type SheetName =
   | "speedtest"
   | "alignment"
-  | "skyview"
   | "datausage"
   | "network"
   | "account"
@@ -75,20 +83,36 @@ export default function App() {
   const [notificationsOn, setNotificationsOn] = useState(notificationsEnabled);
   const [openDetailId, setOpenDetailId] = useState<string | null>(null);
   const [openSheet, setOpenSheet] = useState<SheetName | null>(null);
+  // Full-viewport surface: the dashboard behind it is unmounted, not just covered,
+  // so its dome canvas and per-frame draw loop stop while it cannot be seen.
+  // Carried in the URL fragment rather than in `openSheet` — it is a place you
+  // can be, so the back button should leave it and a reload should return to it.
+  const [skyViewOpen, setSkyViewOpen] = useHashRoute("satellite");
   // Which device/node the Network sheet is drilled into — owned here so the
   // sheet header can carry the back chevron beside its title.
-  const [networkSelectedMac, setNetworkSelectedMac] = useState<string | null>(null);
+  const [networkSelectedKey, setNetworkSelectedKey] = useState<string | null>(null);
   const [savedObserver, setSavedObserver] = useState<ObserverLocation | null>(loadSavedLocation);
+  // Tracked apart from `savedObserver === null`, which cannot tell "never set
+  // one" from "cleared it on purpose". Only the former may be filled in
+  // automatically.
+  const [locationCleared, setLocationCleared] = useState(loadLocationCleared);
   const telemetry = useDishTelemetry();
-  // The dish's own GPS still wins where the plan allows it (Priority); consumer
-  // plans fall back to the saved/browser location.
+  // Where the dish is, best source first: its own GPS where the plan allows it
+  // (Priority), then whatever the user set by hand, then the address their
+  // Starlink account is registered to. The account is asked only when nothing
+  // above has answered AND the user has not cleared their location — so a
+  // located app makes no cloud request, and a deliberate clear stays cleared.
+  const dishLla = telemetry.dishLocation?.lla;
+  const hasDishGps = dishLla?.lat !== undefined && dishLla?.lon !== undefined;
+  const accountObserver = useAccountLocation(
+    !hasDishGps && savedObserver === null && !locationCleared,
+  );
   const observerLocation = useMemo<ObserverLocation | null>(() => {
-    const dishLla = telemetry.dishLocation?.lla;
     if (dishLla?.lat !== undefined && dishLla?.lon !== undefined) {
       return { latitudeDeg: dishLla.lat, longitudeDeg: dishLla.lon, altitudeM: dishLla.alt ?? 0 };
     }
-    return savedObserver;
-  }, [telemetry.dishLocation, savedObserver]);
+    return savedObserver ?? accountObserver;
+  }, [dishLla, savedObserver, accountObserver]);
   const satellites = useSatellites(observerLocation, telemetry.obstructionMap);
   useOutageNotifications(telemetry);
   // Live alerts for both devices, and the notifications that go with them —
@@ -137,188 +161,197 @@ export default function App() {
 
   return (
     <>
-      <TopBar
-        connectionState={telemetry.connectionState}
-        status={status}
-        theme={theme}
-        onToggleTheme={() => setTheme(theme === "light" ? "dark" : "light")}
-        deviceAlerts={deviceAlerts}
-        notificationsOn={notificationsOn}
-        onToggleNotifications={() => {
-          toggleNotifications().then(setNotificationsOn);
-        }}
-        onOpenSpeedTest={() => setOpenSheet("speedtest")}
-        onOpenAlignment={() => setOpenSheet("alignment")}
-        onOpenDataUsage={() => setOpenSheet("datausage")}
-        onOpenNetwork={() => setOpenSheet("network")}
-        onOpenAccount={() => setOpenSheet("account")}
-        onOpenSettings={() => setOpenSheet("settings")}
-      />
-      {showSearchingHero ? (
-        <SearchingHero />
-      ) : (
-        <main className="dashboard">
-          <section className="tiles-row">
-            <StatTile
-              label="Download"
-              value={liveDownlink.value}
-              unit={liveDownlink.unit}
-              caption="current traffic"
-              sparkValues={sparklineFrom(samples, (sample) => sample.downlinkBps)}
-              sparkColorVar="--series-down"
-              onOpenDetail={() => setOpenDetailId("download")}
-            />
-            <StatTile
-              label="Upload"
-              value={liveUplink.value}
-              unit={liveUplink.unit}
-              caption="current traffic"
-              sparkValues={sparklineFrom(samples, (sample) => sample.uplinkBps)}
-              sparkColorVar="--series-up"
-              onOpenDetail={() => setOpenDetailId("upload")}
-            />
-            <StatTile
-              label="Latency"
-              value={status?.popPingLatencyMs?.toFixed(0) ?? "—"}
-              unit="ms"
-              caption="pop ping, live"
-              sparkValues={sparklineFrom(samples, (sample) => sample.latencyMs)}
-              onOpenDetail={() => setOpenDetailId("latency")}
-            />
-            <StatTile
-              label="Power draw"
-              value={livePowerW > 0 ? livePowerW.toFixed(0) : "—"}
-              unit="W"
-              caption="average, last minute"
-              sparkValues={sparklineFrom(samples, (sample) => sample.powerW)}
-              onOpenDetail={() => setOpenDetailId("power")}
-            />
-            <StatTile
-              label="Ping success"
-              value={(100 - recentDropRate * 100).toFixed(1)}
-              unit="%"
-              caption="last minute"
-              sparkValues={sparklineFrom(samples, (sample) => (1 - sample.dropRate) * 100)}
-              onOpenDetail={() => setOpenDetailId("pingSuccess")}
-            />
-            <StatTile
-              label="Sky obstructed"
-              value={((status?.obstructionStats?.fractionObstructed ?? 0) * 100).toFixed(2)}
-              unit="%"
-              caption={
-                status?.obstructionStats?.patchesValid
-                  ? `${status.obstructionStats.patchesValid.toLocaleString()} patches mapped`
-                  : "all-time view"
-              }
-            />
-          </section>
-
-          <section className="charts-grid">
-            <SectionCard
-              title="Throughput"
-              className="col-span-8"
-              headerAction={
-                <SegmentedControl
-                  options={WINDOW_OPTIONS}
-                  value={String(windowMinutes)}
-                  onChange={(minutes) => setWindowMinutes(Number(minutes))}
-                  label="Chart time window"
+      <AnimatePresence initial={false} mode="wait">
+        {!skyViewOpen && (
+          <motion.div
+            key="dashboard"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+          >
+          <TopBar
+            connectionState={telemetry.connectionState}
+            status={status}
+            theme={theme}
+            onToggleTheme={() => setTheme(theme === "light" ? "dark" : "light")}
+            deviceAlerts={deviceAlerts}
+            notificationsOn={notificationsOn}
+            onToggleNotifications={() => {
+              toggleNotifications().then(setNotificationsOn);
+            }}
+            onOpenSpeedTest={() => setOpenSheet("speedtest")}
+            onOpenAlignment={() => setOpenSheet("alignment")}
+            onOpenDataUsage={() => setOpenSheet("datausage")}
+            onOpenNetwork={() => setOpenSheet("network")}
+            onOpenAccount={() => setOpenSheet("account")}
+            onOpenSettings={() => setOpenSheet("settings")}
+            onOpenSatellite={() => {
+              setOpenSheet(null);
+              setSkyViewOpen(true);
+            }}
+          />
+          {showSearchingHero ? (
+            <SearchingHero />
+          ) : (
+            <main className="mx-auto flex max-w-[1400px] flex-col gap-3.5 px-6 pt-3.5 pb-12 animate-[rise_400ms_ease_both]">
+              <section className="grid grid-cols-6 gap-3.5 max-[1080px]:grid-cols-3">
+                <StatTile
+                  label="Download"
+                  value={liveDownlink.value}
+                  unit={liveDownlink.unit}
+                  caption="current traffic"
+                  sparkValues={sparklineFrom(samples, (sample) => sample.downlinkBps)}
+                  sparkColorVar="--series-down"
+                  onOpenDetail={() => setOpenDetailId("download")}
                 />
-              }
-            >
-              <TelemetryChart
-                samples={chartSamples}
-                series={THROUGHPUT_SERIES}
-                windowMinutes={windowMinutes}
-                formatValue={formatThroughputLabel}
-                formatTick={formatThroughputTick}
-                outageEvents={outageEvents}
-              />
-              <div className="mt-2 flex items-center justify-center gap-3.5">
-                <span className={legendItem}>
-                  <span className="series-swatch" style={{ background: "var(--series-down)" }} /> Download
-                </span>
-                <span className={legendItem}>
-                  <span className="series-swatch" style={{ background: "var(--series-up)" }} /> Upload
-                </span>
-              </div>
-            </SectionCard>
+                <StatTile
+                  label="Upload"
+                  value={liveUplink.value}
+                  unit={liveUplink.unit}
+                  caption="current traffic"
+                  sparkValues={sparklineFrom(samples, (sample) => sample.uplinkBps)}
+                  sparkColorVar="--series-up"
+                  onOpenDetail={() => setOpenDetailId("upload")}
+                />
+                <StatTile
+                  label="Latency"
+                  value={status?.popPingLatencyMs?.toFixed(0) ?? "—"}
+                  unit="ms"
+                  caption="pop ping, live"
+                  sparkValues={sparklineFrom(samples, (sample) => sample.latencyMs)}
+                  onOpenDetail={() => setOpenDetailId("latency")}
+                />
+                <StatTile
+                  label="Power draw"
+                  value={livePowerW > 0 ? livePowerW.toFixed(0) : "—"}
+                  unit="W"
+                  caption="average, last minute"
+                  sparkValues={sparklineFrom(samples, (sample) => sample.powerW)}
+                  onOpenDetail={() => setOpenDetailId("power")}
+                />
+                <StatTile
+                  label="Ping success"
+                  value={(100 - recentDropRate * 100).toFixed(1)}
+                  unit="%"
+                  caption="last minute"
+                  sparkValues={sparklineFrom(samples, (sample) => (1 - sample.dropRate) * 100)}
+                  onOpenDetail={() => setOpenDetailId("pingSuccess")}
+                />
+                <StatTile
+                  label="Sky obstructed"
+                  value={((status?.obstructionStats?.fractionObstructed ?? 0) * 100).toFixed(2)}
+                  unit="%"
+                  caption={
+                    status?.obstructionStats?.patchesValid
+                      ? `${status.obstructionStats.patchesValid.toLocaleString()} patches mapped`
+                      : "all-time view"
+                  }
+                />
+              </section>
 
-            <SkyDome
-              obstructionMap={telemetry.obstructionMap}
-              obstructionStats={status?.obstructionStats}
-              status={status}
-              theme={theme}
-              satellites={satellites}
-              observerLocation={observerLocation}
-              onLocationSaved={(location) => {
-                saveLocation(location);
-                setSavedObserver(location);
-              }}
-              onClearLocation={() => {
-                clearSavedLocation();
-                setSavedObserver(null);
-              }}
-              variant="standard"
-              onOpenImmersive={() => setOpenSheet("skyview")}
-            />
+              {/* 12-col on desktop. At ≤1080px it switches to a flex column so the
+                  children's col-span-* turns inert and every card stacks full width —
+                  a plain grid-cols-1 wouldn't, since a col-span-8 child spawns
+                  implicit columns rather than clamping to the lone column. */}
+              <section className="grid grid-cols-12 gap-3.5 max-[1080px]:flex max-[1080px]:flex-col">
+                <SectionCard
+                  title="Throughput"
+                  className="col-span-8"
+                  headerAction={
+                    <SegmentedControl
+                      options={WINDOW_OPTIONS}
+                      value={String(windowMinutes)}
+                      onChange={(minutes) => setWindowMinutes(Number(minutes))}
+                      label="Chart time window"
+                    />
+                  }
+                >
+                  <TelemetryChart
+                    samples={chartSamples}
+                    series={THROUGHPUT_SERIES}
+                    windowMinutes={windowMinutes}
+                    formatValue={formatThroughputLabel}
+                    formatTick={formatThroughputTick}
+                    outageEvents={outageEvents}
+                  />
+                  <div className="mt-2 flex items-center justify-center gap-3.5">
+                    <span className={legendItem}>
+                      <span className="series-swatch" style={{ background: "var(--series-down)" }} /> Download
+                    </span>
+                    <span className={legendItem}>
+                      <span className="series-swatch" style={{ background: "var(--series-up)" }} /> Upload
+                    </span>
+                  </div>
+                </SectionCard>
 
-            <SectionCard
-              title="Latency"
-              className="col-span-8"
-              meta="pop ping · spikes preserved · red bands = outages"
-            >
-              <TelemetryChart
-                samples={chartSamples}
-                series={LATENCY_SERIES}
-                windowMinutes={windowMinutes}
-                formatValue={(value) => `${value.toFixed(0)} ms`}
-                outageEvents={outageEvents}
-                height={160}
-              />
-            </SectionCard>
+                <SkyDome
+                  obstructionMap={telemetry.obstructionMap}
+                  obstructionStats={status?.obstructionStats}
+                  status={status}
+                  theme={theme}
+                  onOpenSatelliteView={() => setSkyViewOpen(true)}
+                />
 
-            <SectionCard
-              title="Power draw"
-              className="col-span-8"
-              meta={`≈ ${((livePowerW * 24) / 1000).toFixed(2)} kWh/day at current draw`}
-            >
-              <TelemetryChart
-                samples={chartSamples}
-                series={POWER_SERIES}
-                windowMinutes={windowMinutes}
-                formatValue={(value) => `${value.toFixed(0)} W`}
-                height={160}
-              />
-            </SectionCard>
+                <SectionCard
+                  title="Latency"
+                  className="col-span-8"
+                  meta="pop ping · spikes preserved · red bands = outages"
+                >
+                  <TelemetryChart
+                    samples={chartSamples}
+                    series={LATENCY_SERIES}
+                    windowMinutes={windowMinutes}
+                    formatValue={(value) => `${value.toFixed(0)} ms`}
+                    outageEvents={outageEvents}
+                    height={160}
+                  />
+                </SectionCard>
 
-            {/* Thermal episodes join the event list, but not the charts above:
-                those shade outage bands, and a throttle is not an outage. */}
-            <OutageLog outageEvents={[...outageEvents, ...thermalEvents]} />
+                <SectionCard
+                  title="Power draw"
+                  className="col-span-8"
+                  meta={`≈ ${((livePowerW * 24) / 1000).toFixed(2)} kWh/day at current draw`}
+                >
+                  <TelemetryChart
+                    samples={chartSamples}
+                    series={POWER_SERIES}
+                    windowMinutes={windowMinutes}
+                    formatValue={(value) => `${value.toFixed(0)} W`}
+                    height={160}
+                  />
+                </SectionCard>
 
-            {/* The card never unmounts on an outage: last-known facts with a
-                stale caveat beat a silently missing card. Only a session that
-                has never heard from the dish has nothing to render. */}
-            {status ? (
-              <DishTerminalCard
-                status={status}
-                stale={telemetry.connectionState !== "online"}
-                onExpand={() => setOpenSheet("terminal")}
-              />
-            ) : (
-              <SectionCard
-                title="Starlink Dish Terminal"
-                className="col-span-12"
-                meta={
-                  telemetry.connectionState === "unreachable"
-                    ? "dish isn’t answering — no status received yet"
-                    : "waiting for the dish’s first reply…"
-                }
-              />
-            )}
-          </section>
-        </main>
-      )}
+                {/* Thermal episodes join the event list, but not the charts above:
+                    those shade outage bands, and a throttle is not an outage. */}
+                <OutageLog outageEvents={[...outageEvents, ...thermalEvents]} />
+
+                {/* The card never unmounts on an outage: last-known facts with a
+                    stale caveat beat a silently missing card. Only a session that
+                    has never heard from the dish has nothing to render. */}
+                {status ? (
+                  <DishTerminalCard
+                    status={status}
+                    stale={telemetry.connectionState !== "online"}
+                    onExpand={() => setOpenSheet("terminal")}
+                  />
+                ) : (
+                  <SectionCard
+                    title="Starlink Dish Terminal"
+                    className="col-span-12"
+                    meta={
+                      telemetry.connectionState === "unreachable"
+                        ? "dish isn’t answering — no status received yet"
+                        : "waiting for the dish’s first reply…"
+                    }
+                  />
+                )}
+              </section>
+            </main>
+          )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {openDetail && (
         <DetailsModal title={openDetail.modalTitle ?? openDetail.label} onClose={() => setOpenDetailId(null)}>
@@ -337,7 +370,7 @@ export default function App() {
       )}
       {openSheet === "alignment" && status && (
         <DetailsModal title="Alignment" onClose={() => setOpenSheet(null)} size="wide">
-          <AlignmentPanel status={status} onOpenSkyView={() => setOpenSheet("skyview")} />
+          <AlignmentPanel status={status} onOpenSkyView={() => setSkyViewOpen(true)} />
         </DetailsModal>
       )}
       {openSheet === "datausage" && (
@@ -353,17 +386,17 @@ export default function App() {
       {openSheet === "network" && (
         <DetailsModal
           title="Network"
-          onBack={networkSelectedMac ? () => setNetworkSelectedMac(null) : undefined}
+          onBack={networkSelectedKey ? () => setNetworkSelectedKey(null) : undefined}
           onClose={() => {
             setOpenSheet(null);
-            setNetworkSelectedMac(null);
+            setNetworkSelectedKey(null);
           }}
           size="wide"
         >
           <NetworkPanel
             network={routerNetwork}
-            selectedMac={networkSelectedMac}
-            onSelect={setNetworkSelectedMac}
+            selectedKey={networkSelectedKey}
+            onSelect={setNetworkSelectedKey}
           />
         </DetailsModal>
       )}
@@ -375,28 +408,36 @@ export default function App() {
         wifiConfig={routerNetwork.wifiConfig}
         routerReachable={routerNetwork.routerReachable}
       />
-      {openSheet === "skyview" && (
-        <DetailsModal title="Satellite view" onClose={() => setOpenSheet(null)} size="xl">
-          <SkyDome
-            caption="Satellites shown are propagated live from SpaceX's published ephemerides."
-            status={status}
-            obstructionMap={telemetry.obstructionMap}
-            obstructionStats={status?.obstructionStats}
-            theme={theme}
-            satellites={satellites}
-            observerLocation={observerLocation}
-            onLocationSaved={(location) => {
-              saveLocation(location);
-              setSavedObserver(location);
-            }}
-            onClearLocation={() => {
-              clearSavedLocation();
-              setSavedObserver(null);
-            }}
-            variant="immersive"
-          />
-        </DetailsModal>
-      )}
+      <AnimatePresence>
+        {skyViewOpen && (
+          <motion.div
+            key="skyview"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+          >
+            <SatelliteView
+              obstructionMap={telemetry.obstructionMap}
+              obstructionStats={status?.obstructionStats}
+              status={status}
+              satellites={satellites}
+              observerLocation={observerLocation}
+              onLocationSaved={(location) => {
+                saveLocation(location);
+                setSavedObserver(location);
+                setLocationCleared(false);
+              }}
+              onClearLocation={() => {
+                clearSavedLocation();
+                setSavedObserver(null);
+                setLocationCleared(true);
+              }}
+              onClose={() => setSkyViewOpen(false)}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }

@@ -45,6 +45,18 @@ export interface SatelliteAttitude {
   crossTrack: EnuDirection;
 }
 
+/**
+ * Where the satellite is relative to the observer, and how fast that is
+ * changing, both in the local ENU frame (km, km/s). The frame is fixed to the
+ * ground, so a straight `position + velocity × dt` is a valid first-order step
+ * — which is what lets look angles be refreshed every frame while SGP4 only
+ * runs ten times a second.
+ */
+export interface TopocentricState {
+  position: EnuDirection;
+  velocity: EnuDirection;
+}
+
 export interface SatelliteSky {
   name: string;
   /** Height above Earth's surface and orbital speed, from the propagated state. */
@@ -55,6 +67,38 @@ export interface SatelliteSky {
   rangeKm: number;
   /** Present on the fine pass only — the coarse sweep does not need it. */
   attitude?: SatelliteAttitude;
+  /** The sample these look angles came from, kept so they can be advanced. */
+  topocentric?: TopocentricState;
+  /** Date.now() when this sample was propagated, for advanceLookAngles. */
+  sampledAtMs?: number;
+}
+
+/** Earth's rotation rate, for the velocity transport term. */
+const EARTH_ROTATION_RAD_S = 7.2921159e-5;
+
+/**
+ * Advance look angles from the sample they were taken at by `dtSeconds`, using
+ * the topocentric velocity. SGP4 is throttled to ~10 Hz; a renderer calls this
+ * every frame so satellites move smoothly between samples instead of stepping.
+ * First-order and exact over the ~100 ms gap it covers, and it only re-derives
+ * az/el/range — the attitude turns far too slowly to need it.
+ */
+export function advanceLookAngles(
+  topocentric: TopocentricState,
+  dtSeconds: number,
+): { azimuthDeg: number; elevationDeg: number; rangeKm: number } {
+  const { position, velocity } = topocentric;
+  const e = position[0] + velocity[0] * dtSeconds;
+  const n = position[1] + velocity[1] * dtSeconds;
+  const u = position[2] + velocity[2] * dtSeconds;
+  const range = Math.hypot(e, n, u) || 1;
+  let azimuth = Math.atan2(e, n);
+  if (azimuth < 0) azimuth += Math.PI * 2;
+  return {
+    azimuthDeg: (azimuth * 180) / Math.PI,
+    elevationDeg: (Math.asin(u / range) * 180) / Math.PI,
+    rangeKm: range,
+  };
 }
 
 type Vec3 = [number, number, number];
@@ -74,26 +118,69 @@ interface TleRecord {
   line2: string;
 }
 
-export async function loadStarlinkTles(): Promise<TleRecord[]> {
-  let tleText: string | null = null;
+/**
+ * Which side of the fetch failed, because the two want different words in front
+ * of the user: "offline" means the browser could not complete the request at
+ * all, "source" means it reached CelesTrak and got back something unusable.
+ * Guessing between them is how you end up telling someone with working internet
+ * to check their internet.
+ */
+export type EphemerisFailure = "offline" | "source";
+
+export class EphemerisError extends Error {
+  constructor(
+    readonly reason: EphemerisFailure,
+    message: string,
+  ) {
+    super(message);
+    this.name = "EphemerisError";
+  }
+}
+
+/** The cached copy and its age, whether or not it is still fresh. */
+function readCachedTles(): { text: string; fetchedAtMs: number } | null {
   try {
     const cached = localStorage.getItem(TLE_CACHE_KEY);
-    if (cached) {
-      const parsedCache = JSON.parse(cached) as { fetchedAtMs: number; text: string };
-      if (Date.now() - parsedCache.fetchedAtMs < TLE_MAX_AGE_MS) tleText = parsedCache.text;
-    }
+    if (!cached) return null;
+    const parsed = JSON.parse(cached) as { fetchedAtMs: number; text: string };
+    return typeof parsed.text === "string" ? parsed : null;
   } catch {
-    // corrupt cache — refetch
+    return null; // corrupt cache — refetch
   }
+}
+
+export async function loadStarlinkTles(): Promise<TleRecord[]> {
+  const cached = readCachedTles();
+  let tleText = cached && Date.now() - cached.fetchedAtMs < TLE_MAX_AGE_MS ? cached.text : null;
+
   if (!tleText) {
-    const tleResponse = await fetch(TLE_URL);
-    if (!tleResponse.ok) throw new Error(`TLE fetch failed: HTTP ${tleResponse.status}`);
-    tleText = await tleResponse.text();
-    if (!tleText.includes("\n1 ")) throw new Error("TLE fetch returned unexpected content");
     try {
-      localStorage.setItem(TLE_CACHE_KEY, JSON.stringify({ fetchedAtMs: Date.now(), text: tleText }));
-    } catch {
-      // storage full — run uncached
+      const tleResponse = await fetch(TLE_URL);
+      if (!tleResponse.ok) {
+        throw new EphemerisError("source", `TLE fetch failed: HTTP ${tleResponse.status}`);
+      }
+      const fetched = await tleResponse.text();
+      if (!fetched.includes("\n1 ")) {
+        throw new EphemerisError("source", "TLE fetch returned unexpected content");
+      }
+      tleText = fetched;
+      try {
+        localStorage.setItem(TLE_CACHE_KEY, JSON.stringify({ fetchedAtMs: Date.now(), text: fetched }));
+      } catch {
+        // storage full — run uncached
+      }
+    } catch (error) {
+      // Orbits drift slowly enough that a stale set still beats an empty sky:
+      // yesterday's elements put a satellite a little off, no elements put it
+      // nowhere. Only report failure when there is nothing to fall back on.
+      if (cached) {
+        tleText = cached.text;
+      } else if (error instanceof EphemerisError) {
+        throw error;
+      } else {
+        // fetch() itself rejected — DNS, offline, blocked, connection dropped.
+        throw new EphemerisError("offline", `TLE fetch could not be made: ${String(error)}`);
+      }
     }
   }
 
@@ -119,6 +206,8 @@ export class StarlinkTracker {
   private readonly east: Vec3;
   private readonly north: Vec3;
   private readonly zenith: Vec3;
+  /** The observer's own ECEF position, for the relative (topocentric) state. */
+  private readonly observerEcf: Vec3;
   private nearSkyIndices: number[] = [];
   private lastFinePass: { atMs: number; inView: SatelliteSky[] } = { atMs: 0, inView: [] };
   private forecastMinServiceable: number | null = null;
@@ -140,17 +229,23 @@ export class StarlinkTracker {
     this.east = [-sinLon, cosLon, 0];
     this.north = [-sinLat * cosLon, -sinLat * sinLon, cosLat];
     this.zenith = [cosLat * cosLon, cosLat * sinLon, sinLat];
+    const ecf = satelliteJs.geodeticToEcf(this.observerGd);
+    this.observerEcf = [ecf.x, ecf.y, ecf.z];
+  }
+
+  /** An ECEF vector's components along the observer's local east/north/up axes. */
+  private projectEnu(ecef: Vec3): EnuDirection {
+    return [
+      ecef[0] * this.east[0] + ecef[1] * this.east[1] + ecef[2] * this.east[2],
+      ecef[0] * this.north[0] + ecef[1] * this.north[1] + ecef[2] * this.north[2],
+      ecef[0] * this.zenith[0] + ecef[1] * this.zenith[1] + ecef[2] * this.zenith[2],
+    ];
   }
 
   /** An inertial (TEME) direction expressed in the observer's ENU frame. */
   private toEnu(direction: Vec3, gmst: number): EnuDirection {
     const ecf = satelliteJs.eciToEcf({ x: direction[0], y: direction[1], z: direction[2] }, gmst);
-    const inEcf: Vec3 = [ecf.x, ecf.y, ecf.z];
-    return [
-      inEcf[0] * this.east[0] + inEcf[1] * this.east[1] + inEcf[2] * this.east[2],
-      inEcf[0] * this.north[0] + inEcf[1] * this.north[1] + inEcf[2] * this.north[2],
-      inEcf[0] * this.zenith[0] + inEcf[1] * this.zenith[1] + inEcf[2] * this.zenith[2],
-    ];
+    return this.projectEnu([ecf.x, ecf.y, ecf.z]);
   }
 
   get constellationSize(): number {
@@ -177,7 +272,7 @@ export class StarlinkTracker {
       rangeKm: look.rangeSat,
       altitudeKm: Math.hypot(position.x, position.y, position.z) - EARTH_RADIUS_KM,
       speedKmS: velocity ? Math.hypot(velocity.x, velocity.y, velocity.z) : undefined,
-      // Only the fine pass asks for this: the coarse sweep runs seven
+      // Only the fine pass asks for these: the coarse sweep runs seven
       // propagations across the whole constellation and never renders anything.
       attitude:
         withAttitude && velocity
@@ -187,7 +282,40 @@ export class StarlinkTracker {
               gmst,
             )
           : undefined,
+      topocentric:
+        withAttitude && velocity
+          ? this.topocentricState([velocity.x, velocity.y, velocity.z], positionEcf, gmst)
+          : undefined,
     };
+  }
+
+  /**
+   * The satellite's position and velocity relative to the observer, in ENU.
+   * Position is straightforward; velocity is the one that needs care — the
+   * Earth-fixed velocity is the inertial velocity rotated into ECEF *minus* the
+   * transport term ω × r, without which the heading is a few degrees off and
+   * the extrapolation would drift sideways.
+   */
+  private topocentricState(
+    velocity: Vec3,
+    positionEcf: { x: number; y: number; z: number },
+    gmst: number,
+  ): TopocentricState {
+    const posEcf: Vec3 = [positionEcf.x, positionEcf.y, positionEcf.z];
+    const velEcfRotated = satelliteJs.eciToEcf({ x: velocity[0], y: velocity[1], z: velocity[2] }, gmst);
+    // ω = (0, 0, ω_e), so ω × r = (−ω_e·r_y, ω_e·r_x, 0); subtract it.
+    const velEcf: Vec3 = [
+      velEcfRotated.x + EARTH_ROTATION_RAD_S * posEcf[1],
+      velEcfRotated.y - EARTH_ROTATION_RAD_S * posEcf[0],
+      velEcfRotated.z,
+    ];
+    const relative: Vec3 = [
+      posEcf[0] - this.observerEcf[0],
+      posEcf[1] - this.observerEcf[1],
+      posEcf[2] - this.observerEcf[2],
+    ];
+    // The observer is fixed in ECEF, so the relative velocity is the satellite's.
+    return { position: this.projectEnu(relative), velocity: this.projectEnu(velEcf) };
   }
 
   /** The LVLH triad from an inertial state vector, expressed in observer ENU. */
@@ -256,6 +384,7 @@ export class StarlinkTracker {
       const sky = this.lookAngles(entry.satrec, atDate, gmst, true);
       if (sky && sky.elevationDeg > FINE_ELEVATION_FLOOR_DEG) {
         sky.name = entry.name;
+        sky.sampledAtMs = nowMs;
         inView.push(sky);
       }
     }

@@ -21,25 +21,24 @@ export const SatelliteCallout = forwardRef<
   return (
     <div
       ref={ref}
-      className='pointer-events-auto absolute z-[6] min-w-[176px] rounded-md border border-border bg-[color-mix(in_srgb,var(--surface-raised)_92%,transparent)] px-3 pt-[9px] pb-2.5 shadow-[0_6px_24px_rgba(0,0,0,0.25)] backdrop-blur-[6px]'
+      // Same glass as the panels over the sky, so a tapped satellite's card
+      // belongs to the scene rather than sitting on it.
+      className='pointer-events-auto absolute z-[6] min-w-[176px] rounded-md border border-[#28282896] bg-[#00000094] px-3 pt-[9px] pb-2.5 shadow-[0_6px_24px_rgba(0,0,0,0.25)]'
       style={{ display: "none" }}
     >
       {selected && (
         <>
           <div className='mb-[7px] flex items-center gap-[7px]'>
+            {/* Amber is the view's word for "serving", so the name's own colour
+                says which this is — no separate tag needed. */}
             <span
               className='font-mono text-[11.5px] font-semibold tracking-[0.04em] tabular-nums'
-              style={{ color: selected.isServing ? "var(--chart-warm)" : "var(--satellite)" }}
+              style={{ color: selected.isServing ? "var(--chart-warm)" : "var(--ink)" }}
             >
               {selected.sky.name.replace(/\s*\[DTC\]\s*/, "")}
             </span>
             {/\[DTC\]/.test(selected.sky.name) && (
               <Badge variant='tag'>DTC</Badge>
-            )}
-            {selected.isServing && (
-              <Badge variant='tag' tone='warm'>
-                serving
-              </Badge>
             )}
             <button
               className='ml-auto cursor-pointer border-0 bg-transparent pl-1 text-[15px] leading-none text-muted-foreground hover:text-foreground'
