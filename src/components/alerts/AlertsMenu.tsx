@@ -65,7 +65,7 @@ const AlertsBellTrigger = forwardRef<
   return (
     <button
       ref={ref}
-      className='theme-toggle relative'
+      className='relative inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border-0 bg-card text-[var(--ink-secondary)] transition-colors duration-[120ms] hover:text-[var(--ink)]'
       aria-label='Alerts and notifications'
       title={
         (count > 0 ? `${count} active alert${count === 1 ? "" : "s"}` : "Alerts — all healthy") +

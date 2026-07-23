@@ -75,6 +75,20 @@
   --status-good: #16a34a;
   --status-critical: #e11d48;
 
+  /* The obstruction survey's own four colours. They read as status once and
+     were drawn from --status-critical and --chart-ink for a while, which left
+     three renderers — the dashboard dome, the WebGL sky and the legend — each
+     re-deriving "partial" with its own alpha, and the sky view quietly holding
+     a hardcoded orange-red that matched none of them. A survey cell is not an
+     alert: these are what the map is made of, so they get their own names, and
+     obstructed is a true red rather than the rose --status-critical uses.
+     --sky-partial is --sky-obstructed carried at ~45% weight over --page,
+     resolved to a flat colour here so every renderer takes the same value. */
+  --sky-clear: #111110;
+  --sky-partial: #efa09b;
+  --sky-obstructed: #d81b1b;
+  --sky-unmapped: #8a8880;
+
   --font-ui: "Barlow", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 
@@ -113,6 +127,16 @@
 
   --status-good: #4db450;
   --status-critical: #f43f5e;
+
+  /* Survey colours on black — see the light block for why these are their own
+     tokens. Obstructed is the Starlink app's own blood red (a pure, saturated
+     red, not the rose --status-critical carries for alerts) — decoupling these
+     from status is exactly what lets the map read redder than the chips.
+     Partial is that red at ~45% weight over --page (#000). */
+  --sky-clear: #ffffff;
+  --sky-partial: #6e0f0f;
+  --sky-obstructed: #f51e1e;
+  --sky-unmapped: #7c7c7c;
 
   color-scheme: dark;
 }
@@ -188,35 +212,9 @@ body {
   }
 }
 
-.theme-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 999px;
-  border: none;
-  background: var(--surface);
-  color: var(--ink-secondary);
-  cursor: pointer;
-  transition: color 120ms ease;
-}
-
-.theme-toggle:hover {
-  color: var(--ink);
-}
-
-/* ---------- layout ---------- */
-
-.dashboard {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 14px 24px 48px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  animation: rise 400ms ease both;
-}
+/* ---------- layout ----------
+   The dashboard shell and its two grids (tiles / charts) are Tailwind utilities
+   in App.tsx now; only the entrance keyframe they reference lives here. */
 
 @keyframes rise {
   from {
@@ -228,47 +226,6 @@ body {
     transform: none;
   }
 }
-
-.tiles-row {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 14px;
-}
-
-.charts-grid {
-  display: grid;
-  grid-template-columns: repeat(12, 1fr);
-  gap: 14px;
-}
-
-.span-8 {
-  grid-column: span 8;
-}
-.span-4 {
-  grid-column: span 4;
-}
-.span-12 {
-  grid-column: span 12;
-}
-.row-span-2 {
-  grid-row: span 2;
-}
-
-@media (max-width: 1080px) {
-  .tiles-row {
-    grid-template-columns: repeat(3, 1fr);
-  }
-  .span-8,
-  .span-4,
-  .span-12 {
-    grid-column: span 12;
-  }
-  .row-span-2 {
-    grid-row: auto;
-  }
-}
-
-/* ---------- stat tiles ---------- */
 
 /* ---------- charts ---------- */
 
@@ -312,144 +269,13 @@ body {
   border-top: none;
 }
 
-/* ---------- data usage bars ---------- */
+/* The energy/data-usage bar chart (RangeBarChart) and the energy-history panel
+   are Tailwind utilities in their components now. */
 
-/* ---------- energy history (inside the Power detail) ---------- */
-
-.energy-history {
-  margin-top: 16px;
-  padding-top: 13px;
-  border-top: 1px solid var(--hairline);
-}
-
-.energy-history-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.energy-history-title {
-  font-size: 14.5px;
-  font-weight: 650;
-}
-
-.energy-history-total {
-  font-size: 27px;
-  font-weight: 700;
-  margin-top: 10px;
-}
-
-.energy-bars {
-  display: flex;
-  align-items: flex-end;
-  gap: 3px;
-  height: 96px;
-  margin-top: 12px;
-}
-
-.energy-bar-col {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  position: relative;
-}
-
-.energy-bars-axis {
-  display: flex;
-  gap: 8px;
-}
-
-.energy-yaxis {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  height: 96px;
-  flex: none;
-}
-
-.energy-yaxis-ticks {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  align-items: flex-end;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  color: var(--ink-muted);
-}
-
-/* Hover chip: the day/hour's value, shown on column hover — a real tooltip
-   rather than the browser's native title delay. */
-.energy-bar-tip {
-  position: absolute;
-  bottom: calc(100% - 12px);
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: var(--ink);
-  color: var(--surface);
-  font-size: 11px;
-  font-weight: 500;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.1s ease;
-  z-index: 6;
-}
-
-.energy-bar-col:hover .energy-bar-tip {
-  opacity: 1;
-}
-
-.energy-bar-plot {
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  display: flex;
-  align-items: flex-end;
-}
-
-.energy-bar {
-  width: 100%;
-  min-height: 2px;
-  border-radius: 3px 3px 0 0;
-  background: var(--chart-warm);
-}
-
-.energy-bar-label {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  color: var(--ink-muted);
-  margin-top: 4px;
-  white-space: nowrap;
-  /* A label is allowed to spill past its own column: labelStride() only keeps
-     every Nth one precisely so it can use the blank columns either side.
-     Clamping to the column instead truncated the text the stride just made
-     room for ("12:00 AM" rendering as "12:00 A"). */
-}
-
-/* ---------- speed test ---------- */
-
-.speed-gauge {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.speed-gauge-svg {
-  width: 100%;
-  max-width: 300px;
-  height: auto;
-}
+/* ---------- speed test ----------
+   Only SVG-presentation rules (stroke/fill on the gauge and beam elements) live
+   here; the HTML wrappers and readout text are Tailwind utilities in the speed
+   components. */
 
 .gauge-track {
   stroke: var(--hairline);
@@ -489,27 +315,7 @@ body {
   font-weight: 500;
 }
 
-.speed-gauge-caption {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ink-muted);
-  margin-top: -6px;
-}
-
 /* Starlink beam view */
-.speed-beam {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.speed-beam-svg {
-  width: 100%;
-  max-width: 300px;
-  height: auto;
-}
-
 .beam-ring {
   stroke: var(--hairline);
   stroke-width: 1;
@@ -546,30 +352,6 @@ body {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.22em;
-}
-
-.speed-beam-readout {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  margin-top: 2px;
-}
-
-.speed-beam-value {
-  font-size: 38px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-}
-
-.speed-beam-value.pending {
-  color: var(--ink-muted);
-}
-
-.speed-beam-unit {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ink-muted);
 }
 
 /* Spin keyframe for the run button's loader (applied via an animate-[…] utility

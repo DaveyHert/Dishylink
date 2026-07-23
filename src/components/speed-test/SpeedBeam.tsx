@@ -42,8 +42,8 @@ export function SpeedBeam({ value, mode, caption, running = false }: SpeedBeamPr
   const to = mode === "upload" ? SAT : DISH;
 
   return (
-    <div className="speed-beam">
-      <svg viewBox="0 0 260 200" className="speed-beam-svg" role="img" aria-label={`${caption} ${value?.toFixed(1) ?? "—"} Mbps`}>
+    <div className="flex w-full flex-col items-center">
+      <svg viewBox="0 0 260 200" className="h-auto w-full max-w-[300px]" role="img" aria-label={`${caption} ${value?.toFixed(1) ?? "—"} Mbps`}>
         <defs>
           {/* bloom around the beam and satellite, as in the Starlink app */}
           <filter id="beam-glow" x="-60%" y="-60%" width="220%" height="220%">
@@ -126,12 +126,16 @@ export function SpeedBeam({ value, mode, caption, running = false }: SpeedBeamPr
         </text>
       </svg>
 
-      <div className="speed-beam-readout">
+      <div className="mt-0.5 flex items-baseline gap-1.5">
         {/* One decimal at every magnitude, so this agrees with the headline figure
             above it — dropping it past 100 made a 118.5 Mbps run read as two
             different numbers on the same screen. */}
-        <span className={`speed-beam-value${pending ? " pending" : ""}`}>{pending ? "0" : eased.toFixed(1)}</span>
-        <span className="speed-beam-unit">Mbps</span>
+        <span
+          className={`text-[38px] font-bold tracking-[-0.02em] ${pending ? "text-[var(--ink-muted)]" : "text-[var(--ink)]"}`}
+        >
+          {pending ? "0" : eased.toFixed(1)}
+        </span>
+        <span className="text-[13px] font-medium text-[var(--ink-muted)]">Mbps</span>
       </div>
       <SpeedCaption mode={mode} caption={caption} />
     </div>

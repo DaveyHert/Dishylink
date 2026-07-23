@@ -77,15 +77,17 @@ function YAxis({ yAxis, heightPx }: { yAxis: RangeBarYAxis; heightPx: number }) 
   const count = Math.max(yAxis.ticks ?? 3, 2);
   const values = Array.from({ length: count }, (_, i) => (yAxis.max * (count - 1 - i)) / (count - 1));
   return (
-    <div className="energy-yaxis" style={{ height: heightPx }}>
-      <div className="energy-yaxis-ticks">
+    <div className="flex flex-none flex-col items-end" style={{ height: heightPx }}>
+      <div className="flex min-h-0 flex-1 flex-col items-end justify-between font-mono text-[9px] text-[var(--ink-muted)]">
         {values.map((value, i) => (
           <span key={i}>{yAxis.format(value)}</span>
         ))}
       </div>
       {/* Invisible label matching the x-axis row height, so the 0 tick lines up
           with the bar baseline rather than the bottom of the label. */}
-      <span className="energy-bar-label" style={{ visibility: "hidden" }}>0</span>
+      <span className="mt-1 font-mono text-[9px] whitespace-nowrap text-[var(--ink-muted)]" style={{ visibility: "hidden" }}>
+        0
+      </span>
     </div>
   );
 }
@@ -96,17 +98,21 @@ export function RangeBars({ columns, range, labelWidthPx, heightPx = 96, yAxis }
   const labelEvery = labelStride(barsWidth, columns.length, labelWidthPx ?? labelWidthFor(range));
   if (columns.length === 0) return null;
   const bars = (
-    <div className="energy-bars" ref={barsRef} style={{ height: heightPx }}>
+    <div className="mt-3 flex items-end gap-[3px]" ref={barsRef} style={{ height: heightPx }}>
       {columns.map((column, index) => (
-        // No native title — it duplicates the hover chip below.
-        <div key={column.key} className="energy-bar-col">
-          <div className="energy-bar-plot">{column.bar}</div>
-          <div className="energy-bar-tip" role="tooltip">
+        // No native title — it duplicates the hover chip below. `group` so the
+        // tip reveals on column hover (was `.energy-bar-col:hover .energy-bar-tip`).
+        <div key={column.key} className="group relative flex h-full min-w-0 flex-1 flex-col items-center justify-end">
+          <div className="flex min-h-0 w-full flex-1 items-end">{column.bar}</div>
+          <div
+            className="pointer-events-none absolute bottom-[calc(100%-12px)] left-1/2 z-[6] -translate-x-1/2 rounded-[6px] bg-[var(--ink)] px-2 py-1 text-[11px] font-medium whitespace-nowrap text-[var(--surface)] opacity-0 transition-opacity duration-100 group-hover:opacity-100"
+            role="tooltip"
+          >
             {column.title}
           </div>
           {/* Skipped labels keep their box so the label row stays one height. */}
           <span
-            className="energy-bar-label"
+            className="mt-1 font-mono text-[9px] whitespace-nowrap text-[var(--ink-muted)]"
             style={{ visibility: index % labelEvery === 0 ? undefined : "hidden" }}
           >
             {column.label}
@@ -117,7 +123,7 @@ export function RangeBars({ columns, range, labelWidthPx, heightPx = 96, yAxis }
   );
   if (!yAxis) return bars;
   return (
-    <div className="energy-bars-axis">
+    <div className="flex gap-2">
       <YAxis yAxis={yAxis} heightPx={heightPx} />
       <div className="min-w-0 flex-1">{bars}</div>
     </div>

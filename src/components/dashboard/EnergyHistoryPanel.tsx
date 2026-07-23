@@ -36,12 +36,12 @@ function EnergyBars({ buckets, range }: { buckets: EnergyBucket[]; range: Energy
         // An empty slot, not a zero one: a faint full-height wash marks the
         // hole without claiming no energy was used.
         <div
-          className="energy-bar"
+          className="w-full min-h-[2px] rounded-t-[3px]"
           style={{ height: "100%", background: "var(--ink-muted)", opacity: 0.06 }}
         />
       ) : (
         <div
-          className="energy-bar"
+          className="w-full min-h-[2px] rounded-t-[3px] bg-[var(--chart-warm)]"
           style={{
             height: `${(bucket.kWh / maxKWh) * 100}%`,
             // Part-sampled slots are real but short by construction; fade one
@@ -61,9 +61,9 @@ export function EnergyHistoryPanel({ active }: { active: boolean }) {
   const coveragePct = data ? Math.round(data.coverage.fraction * 100) : 0;
 
   return (
-    <div className="energy-history">
-      <div className="energy-history-header">
-        <span className="energy-history-title">Total energy used</span>
+    <div className="mt-4 border-t border-[var(--hairline)] pt-[13px]">
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
+        <span className="text-[14.5px] font-[650]">Total energy used</span>
         <SegmentedControl options={RANGE_TABS} value={range} onChange={setRange} label="Energy range" />
       </div>
 
@@ -74,11 +74,11 @@ export function EnergyHistoryPanel({ active }: { active: boolean }) {
         </Callout>
       ) : (
         <>
-          <div className="energy-history-total">
+          <div className="mt-2.5 text-[27px] font-bold">
             {data ? `${data.totalKWh.toFixed(data.totalKWh < 1 ? 3 : 2)} kWh` : loading ? "…" : "—"}
           </div>
           {data && (
-            <div className="energy-history-coverage">
+            <div className="mt-1 text-[12px] font-medium text-muted-foreground">
               collected {coveragePct}% of this period
               {coveragePct < 95 && " — total covers only the time the recorder was running"}
             </div>

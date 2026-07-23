@@ -53,8 +53,8 @@ export function SpeedGauge({ value, mode, caption }: SpeedGaugeProps) {
   const fillColor = mode === "upload" ? "var(--chart-warm)" : "var(--chart-ink)";
 
   return (
-    <div className="speed-gauge">
-      <svg viewBox="0 0 260 240" className="speed-gauge-svg" role="img" aria-label={`${caption} ${value?.toFixed(1) ?? "—"} Mbps`}>
+    <div className="flex w-full flex-col items-center">
+      <svg viewBox="0 0 260 240" className="h-auto w-full max-w-[300px]" role="img" aria-label={`${caption} ${value?.toFixed(1) ?? "—"} Mbps`}>
         {/* track */}
         <path d={arcPath(RADIUS, 0, 1)} className="gauge-track" fill="none" strokeLinecap="round" />
         {/* fill up to the needle */}
