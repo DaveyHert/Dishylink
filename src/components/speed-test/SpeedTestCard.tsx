@@ -26,6 +26,7 @@ const PHASE_LABEL: Record<SpeedTestProgress["phase"], string> = {
   idle: "Measures download, upload, and latency through your Starlink link.",
   download: "Measuring download…",
   upload: "Measuring upload…",
+  resting: "Done.",
   done: "Done.",
   error: "Test failed — check the connection and try again.",
 };
@@ -144,9 +145,15 @@ export function SpeedTestPanel({ samples }: { samples: TelemetrySample[] }) {
         ? { value: progress.downloadMbps, mode: "download" as const, caption: "Download" }
         : phase === "done"
           ? { value: progress.downloadMbps, mode: "download" as const, caption: "Download" }
-          : failed
-            ? { value: null, mode: "idle" as const, caption: "Failed" }
-            : { value: null, mode: "idle" as const, caption: "Ready" };
+          : // The rest between upload and the download reading: the needle drains to 0
+            // under the download caption the reading returns in, so it settles up from
+            // zero. Kept in download mode (not idle) so the beam stays lit through the
+            // handoff, mirroring how the download→upload rest holds the upload look.
+            phase === "resting"
+            ? { value: null, mode: "download" as const, caption: "Download" }
+            : failed
+              ? { value: null, mode: "idle" as const, caption: "Failed" }
+              : { value: null, mode: "idle" as const, caption: "Ready" };
 
   return (
     <div className="flex flex-col items-center gap-1">
@@ -215,12 +222,12 @@ export function SpeedTestPanel({ samples }: { samples: TelemetrySample[] }) {
             ? "bg-[color-mix(in_srgb,var(--ink)_86%,transparent)] text-[var(--page)] enabled:hover:bg-[var(--ink)]"
             : "bg-[color-mix(in_srgb,var(--ink)_12%,transparent)] text-foreground enabled:hover:bg-[color-mix(in_srgb,var(--ink)_18%,transparent)] disabled:bg-[color-mix(in_srgb,var(--ink)_8%,transparent)] disabled:text-muted-foreground"
         }`}
-        disabled={isRunning}
+        disabled={isRunning || phase === "resting"}
         onClick={() => {
           void runSpeedTest(setProgress);
         }}
       >
-        {isRunning ? (
+        {isRunning || phase === "resting" ? (
           <LoaderIcon
             className="animate-[speedtest-spin_1s_steps(12,end)_infinite] motion-reduce:animate-none"
             size={20}
