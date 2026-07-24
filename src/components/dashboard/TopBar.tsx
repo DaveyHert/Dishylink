@@ -1,11 +1,22 @@
 // Sticky instrument header: wordmark, live connection state, dish identity,
-// theme toggle.
+// theme toggle. Below 1080px (the app's one mobile breakpoint) the five nav
+// links fold into a hamburger Popover, the tagline and secondary status
+// readouts hide, and only the connection dot and the icon controls stay inline —
+// so nothing spills off-screen the way the single non-wrapping row used to.
 
+import { useState } from "react";
+import { cn } from "@/lib/utils";
+import { SpeedometerIcon } from "../icons/SpeedometerIcon";
+import { CrosshairIcon } from "../icons/CrosshairIcon";
+import { ChartLineIcon } from "../icons/ChartLineIcon";
+import { NetworkIcon } from "../icons/NetworkIcon";
+import { UserIcon } from "../icons/UserIcon";
 import type { DishConnectionState } from "../../hooks/useDishTelemetry";
 import type { DishStatusJson } from "../../lib/dishClient";
 import { formatUptime } from "../../lib/format";
 import { AlertsMenu } from "../alerts/AlertsMenu";
 import { AppLogo } from "../icons/AppLogo";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import type { DeviceAlerts } from "../../hooks/useDeviceAlerts";
 
 interface TopBarProps {
@@ -22,6 +33,7 @@ interface TopBarProps {
   onOpenNetwork: () => void;
   onOpenAccount: () => void;
   onOpenSettings: () => void;
+  onOpenSatellite: () => void;
 }
 
 const CONNECTION_LABEL: Record<DishConnectionState, string> = {
@@ -54,46 +66,85 @@ export function TopBar({
   onOpenNetwork,
   onOpenAccount,
   onOpenSettings,
+  onOpenSatellite,
 }: TopBarProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  // One source for the nav destinations, rendered inline on desktop and inside
+  // the hamburger Popover on mobile so the two can't drift apart.
+  const navItems = [
+    { label: "Speed test", Icon: SpeedometerIcon, onClick: onOpenSpeedTest },
+    { label: "Alignment", Icon: CrosshairIcon, onClick: onOpenAlignment },
+    { label: "Data usage", Icon: ChartLineIcon, onClick: onOpenDataUsage },
+    { label: "Network", Icon: NetworkIcon, onClick: onOpenNetwork },
+    { label: "Account", Icon: UserIcon, onClick: onOpenAccount },
+    // Temporary entry while the sky view is being built out.
+    { label: "Satellite", Icon: CrosshairIcon, onClick: onOpenSatellite },
+  ];
+
   return (
     <header className="sticky top-0 z-20 flex items-center justify-between gap-4 bg-[color-mix(in_srgb,var(--page)_86%,transparent)] px-6 py-3.5 backdrop-blur-[10px]">
-      <div className="flex items-center gap-[11px]">
+      <div className="flex min-w-0 flex-1 items-center gap-[11px]">
         <AppLogo size={28} className="flex-none" />
         <span className="text-[17px] font-bold tracking-[0.16em]">DISHYLINK</span>
-        <span className="ml-0.5 border-l border-[var(--baseline)] pl-2.5 font-mono text-[9.5px] tracking-[0.14em] text-muted-foreground">
-          LIVE STARLINK TELEMETRY
-        </span>
+        <nav className="ml-6 flex items-center gap-[22px] max-[1080px]:hidden">
+          {navItems.map((item) => (
+            <button key={item.label} className={navLink} onClick={item.onClick}>
+              {item.label}
+            </button>
+          ))}
+        </nav>
       </div>
-      <nav className="mr-auto ml-3.5 flex items-center gap-[22px]">
-        <button className={navLink} onClick={onOpenSpeedTest}>
-          Speed test
-        </button>
-        <button className={navLink} onClick={onOpenAlignment}>
-          Alignment
-        </button>
-        <button className={navLink} onClick={onOpenDataUsage}>
-          Data usage
-        </button>
-        <button className={navLink} onClick={onOpenNetwork}>
-          Network
-        </button>
-        <button className={navLink} onClick={onOpenAccount}>
-          Account
-        </button>
-      </nav>
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
         <div className="flex items-center gap-2.5">
           <span className={statusItem}>
             <span className={`status-dot ${connectionState}`} />
             {CONNECTION_LABEL[connectionState]}
           </span>
           {status?.deviceInfo?.countryCode && (
-            <span className={`${statusItem} ${statusDivider}`}>{status.deviceInfo.countryCode}</span>
+            <span className={`${statusItem} ${statusDivider} max-[1080px]:hidden`}>{status.deviceInfo.countryCode}</span>
           )}
           {status?.deviceState?.uptimeS && (
-            <span className={`${statusItem} ${statusDivider}`}>up {formatUptime(Number(status.deviceState.uptimeS))}</span>
+            <span className={`${statusItem} ${statusDivider} max-[1080px]:hidden`}>up {formatUptime(Number(status.deviceState.uptimeS))}</span>
           )}
         </div>
+
+        {/* Mobile only: the inline nav folds into this menu below 1080px. */}
+        <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+          <PopoverTrigger asChild>
+            <button
+              className={cn(iconButton, "hidden max-[1080px]:inline-flex")}
+              aria-label="Open navigation menu"
+              title="Menu"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+          </PopoverTrigger>
+          {/* Same surface language as the bell popover: --surface, rounded-xl,
+              hairline border (not the stock white one), soft shadow. */}
+          <PopoverContent
+            align="end"
+            sideOffset={10}
+            className="w-56 rounded-xl border border-solid border-[var(--hairline)] bg-[var(--surface)] p-1.5 text-[var(--ink)] shadow-[0_12px_40px_rgba(0,0,0,0.45)]"
+          >
+            <nav className="flex flex-col">
+              {navItems.map((item) => (
+                <button
+                  key={item.label}
+                  className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[14px] font-semibold text-[var(--ink-secondary)] transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] hover:text-[var(--ink)]"
+                  onClick={() => {
+                    item.onClick();
+                    setMenuOpen(false);
+                  }}
+                >
+                  <item.Icon size={16} className="flex-none" />
+                  {item.label}
+                </button>
+              ))}
+            </nav>
+          </PopoverContent>
+        </Popover>
         <AlertsMenu
           alerts={deviceAlerts}
           notificationsOn={notificationsOn}
