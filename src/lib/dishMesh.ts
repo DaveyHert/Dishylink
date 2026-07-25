@@ -22,17 +22,21 @@ export type DishModel = "v2" | "v3" | "v4" | "v5" | "hp" | "flatHp" | "hpV4" | "
  * substring match does the same thing, which is why this is prefix-based rather
  * than a list of regexes.
  *
- * This assumes every High Performance kit reports a string starting `hp`, which
- * is what their resolver assumes. An earlier version of this table also matched
- * `high_perf` and `flat_hp` anywhere in the string; no dish has been observed
- * reporting either, and a dish that did would resolve to `v4` here exactly as it
- * would in their app.
+ * Some families spell the revision with a redundant `rev_` before the real token
+ * — `rev_hp1_proto0` (Performance Gen 1 and 2), `rev_rev1_proto3` (a V1
+ * prototype). Stripping it lets the one prefix table below cover both spellings;
+ * without it those strings match nothing and fall through to `v4`, drawing a
+ * mast-mounted High Performance kit as a Standard on a kickstand.
+ *
+ * An earlier version of this table also matched `high_perf` and `flat_hp`
+ * anywhere in the string; no dish has been observed reporting either, and a dish
+ * that did would resolve to `v4` here exactly as it would in their app.
  */
 export function resolveDishModel(
   hardwareVersion: string | undefined,
   motorised: boolean,
 ): DishModel {
-  const hardware = hardwareVersion?.toLowerCase() ?? "";
+  const hardware = (hardwareVersion?.toLowerCase() ?? "").replace(/^rev_/, "");
   if (hardware === "") return "v4";
   if (hardware.startsWith("hp")) return motorised ? "hp" : "flatHp";
   if (hardware.startsWith("rev3") || hardware.startsWith("dishy")) return "v3";
