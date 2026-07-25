@@ -73,6 +73,66 @@ describe("ClientTotalsStore.observe", () => {
   });
 });
 
+// Two devices sharing a cloned MAC (both Govee lights, found 2026-07-21) reach
+// the store as two roster entries with the same MAC. Deltas must be computed
+// per entry — the interleaved counters of two real devices are not one counter,
+// and treating them as one invented gigabytes (a 758 GB "upload" from an LED
+// strip) by reading every flip between them as a reset.
+describe("ClientTotalsStore.observe with shared-MAC roster entries", () => {
+  it("attributes deltas per entry, so interleaved counters never read as resets", () => {
+    const store = tempStore();
+    store.observe(MAC, 1_000, 0, T0, undefined, "govee-a"); // baseline A
+    store.observe(MAC, 200, 0, T0 + 100, undefined, "govee-b"); // baseline B
+    store.observe(MAC, 1_500, 0, T0 + 1_000, undefined, "govee-a"); // A +500
+    store.observe(MAC, 260, 0, T0 + 1_100, undefined, "govee-b"); // B +60
+    const [total] = store.totals(MAC);
+    // One MAC-keyed total holds both devices' real deltas — and only those.
+    // Deltaing the interleaved stream instead would have read 200 and 260 as
+    // post-reset values and added them whole on top of a bogus 1300 "delta".
+    expect(total.rxBytes).toBe(560);
+  });
+
+  it("adds nothing when one entry leaves the roster and the other keeps counting", () => {
+    const store = tempStore();
+    store.observe(MAC, 1_000, 0, T0, undefined, "govee-a");
+    store.observe(MAC, 5_000_000, 0, T0 + 100, undefined, "govee-b");
+    store.observe(MAC, 1_400, 0, T0 + 1_000, undefined, "govee-a"); // A +400
+    // B drops off the roster; A continues alone. Under summed counters this
+    // moment looked like a reset and re-added A's whole cumulative value.
+    store.observe(MAC, 1_900, 0, T0 + 2_000, undefined, "govee-a"); // A +500
+    expect(store.totals(MAC)[0].rxBytes).toBe(900);
+  });
+
+  it("still counts one entry's own counter reset whole, independent of its sibling", () => {
+    const store = tempStore();
+    store.observe(MAC, 9_000, 0, T0, undefined, "govee-a");
+    store.observe(MAC, 4_000, 0, T0 + 100, undefined, "govee-b");
+    // B reconnected: its counter restarted low. The 250 is B's fresh traffic;
+    // A's higher counter must not bleed into the comparison.
+    store.observe(MAC, 250, 0, T0 + 1_000, undefined, "govee-b");
+    store.observe(MAC, 9_100, 0, T0 + 1_100, undefined, "govee-a"); // A +100
+    expect(store.totals(MAC)[0].rxBytes).toBe(350);
+  });
+
+  it("re-baselines every entry at the month boundary, not just the first observed", () => {
+    const store = tempStore();
+    store.observe(MAC, 1_000, 0, T0, undefined, "govee-a");
+    store.observe(MAC, 500, 0, T0 + 100, undefined, "govee-b");
+    store.observe(MAC, 2_000, 0, T0 + 1_000, undefined, "govee-a"); // A +1000
+    store.observe(MAC, 800, 0, T0 + 1_100, undefined, "govee-b"); // B +300
+    expect(store.totals(MAC)[0].rxBytes).toBe(1_300);
+
+    const aug = new Date(2026, 7, 1, 0, 0, 5).getTime(); // 1 Aug 2026
+    store.observe(MAC, 2_100, 0, aug, undefined, "govee-a"); // rolls the bucket, drops its delta
+    // B's first August reading must also only re-baseline — its July→August
+    // delta straddles the boundary just like A's did.
+    store.observe(MAC, 900, 0, aug + 100, undefined, "govee-b");
+    expect(store.totals(MAC)[0].rxBytes).toBe(0);
+    store.observe(MAC, 950, 0, aug + 1_100, undefined, "govee-b"); // B +50
+    expect(store.totals(MAC)[0].rxBytes).toBe(50);
+  });
+});
+
 describe("ClientTotalsStore seed / remove / clear / compact / persistence", () => {
   it("seeds an opening total but does not double-count the first live reading", () => {
     const store = tempStore();
@@ -156,5 +216,19 @@ describe("ClientTotalsStore seed / remove / clear / compact / persistence", () =
     const reopened = new ClientTotalsStore(path);
     expect(reopened.totals(MAC)[0].rxBytes).toBe(3_000);
     expect(reopened.totals(MAC)[0].txBytes).toBe(400);
+  });
+
+  it("carries per-entry counters across a restart, so a fast one loses no delta", () => {
+    const path = join(tmpdir(), `client-totals-${Math.random().toString(36).slice(2)}.json`);
+    paths.push(path);
+    const first = new ClientTotalsStore(path);
+    first.observe(MAC, 1_000, 0, T0, undefined, "govee-a");
+    first.observe(MAC, 500, 0, T0 + 100, undefined, "govee-b");
+    first.snapshot();
+    const reopened = new ClientTotalsStore(path);
+    // Within the measurable gap, the reloaded baselines still count — per entry.
+    reopened.observe(MAC, 1_200, 0, T0 + 2_000, undefined, "govee-a"); // A +200
+    reopened.observe(MAC, 530, 0, T0 + 2_100, undefined, "govee-b"); // B +30
+    expect(reopened.totals(MAC)[0].rxBytes).toBe(230);
   });
 });

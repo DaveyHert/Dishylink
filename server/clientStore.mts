@@ -9,10 +9,12 @@
 // This records the same rates the panel polls, but from the always-on
 // historian, so the series exists whether or not anyone is looking. Keyed by MAC.
 //
-// Byte counters ride along for per-device totals. They are cumulative *within an
-// association only* — the router restarts them when a device reconnects — so a
-// later row's rxBytes may be lower than an earlier one. Any consumer computing
-// deltas has to treat a decrease as a reconnect, not as negative traffic.
+// Byte counters ride along for reference. They are cumulative *within an
+// association only* — the router restarts them when a device reconnects — and
+// for a cloned MAC they are the sum across that MAC's roster entries, so a
+// decrease can mean a reconnect or an entry leaving the roster. Nothing may
+// compute deltas from these rows: real totals come from the odometer, which
+// deltas per entry before it accumulates.
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -23,7 +25,9 @@ export interface ClientReading {
   name?: string;
   downMbps: number;
   upMbps: number;
-  /** Cumulative since *this* association — resets when the device reconnects. */
+  /** Cumulative since *this* association — resets when the device reconnects,
+   *  and summed across roster entries when devices share a cloned MAC. Reference
+   *  only; see the file comment. */
   rxBytes: number;
   txBytes: number;
 }

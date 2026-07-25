@@ -13,6 +13,13 @@
 // bytes — not an integral of sampled rates — and, persisted to disk, it survives
 // reconnects and restarts.
 //
+// Deltas are computed per roster *entry*, totals per MAC. The distinction only
+// matters when they differ: two devices sharing a cloned MAC (both Govee
+// lights, found 2026-07-21) appear as two roster entries, and deltaing across
+// their interleaved counters read every flip as a reset — phantom gigabytes.
+// Each entry deltas against itself; the MAC's total is the sum of its entries'
+// deltas, so usage stays keyed by MAC exactly as before.
+//
 // Totals are a per-device *monthly* figure, the way a data-capped user thinks
 // about usage and the way Starlink bills. The month clears lazily: a device is
 // re-baselined to zero the first time it is seen in a new calendar month, not on
@@ -44,11 +51,34 @@ export interface ClientTotal {
 interface TotalState extends ClientTotal {
   /** Which month the totals belong to, as `year * 12 + month` (local). */
   periodMonth: number;
+}
+
+/**
+ * The last counter reading from ONE router roster entry — the unit a delta is
+ * coherent within. A MAC is not that unit: two devices can share a cloned MAC
+ * (two Govee lights, observed 2026-07-21) and the router lists both, so their
+ * counters must never be deltaed against each other. Deltas are computed here,
+ * per entry, and only the resulting deltas accumulate into the per-MAC total.
+ */
+interface EntryCounter {
   /** Last counter value observed, to delta against the next one. */
   prevRx: number;
   prevTx: number;
-  /** When we last observed it, to tell a live gap from a resumed one. 0 until the
-   *  first real reading, so a seeded-but-unseen device is not deltaed from zero. */
+  /** When we last observed it, to tell a live gap from a resumed one. 0 forces
+   *  the next reading to re-baseline instead of measuring across it. */
+  lastPollMs: number;
+}
+
+/** On-disk shape. The legacy format was a bare TotalState[] with the counter
+ *  fields inlined per MAC; restore() still reads it. */
+interface SnapshotV2 {
+  totals: TotalState[];
+  counters: Array<[string, Array<[string, EntryCounter]>]>;
+}
+
+interface LegacyTotalState extends TotalState {
+  prevRx: number;
+  prevTx: number;
   lastPollMs: number;
 }
 
@@ -58,6 +88,10 @@ interface TotalState extends ClientTotal {
  * re-baseline instead of counting it. Matches the throughput tracker's ceiling.
  */
 const MAX_GAP_MS = 15_000;
+
+/** When a per-entry counter is old enough to sweep on compact(): far beyond any
+ *  measurable gap, so dropping it can never lose a delta that would have counted. */
+const STALE_COUNTER_MS = 3_600_000;
 
 /** Local `year * 12 + month` — the bucket a timestamp's usage belongs to. */
 function monthOf(atMs: number): number {
@@ -82,6 +116,10 @@ function previousMonthStartMs(atMs: number): number {
 
 export class ClientTotalsStore {
   private states = new Map<string, TotalState>();
+  /** mac → entryId → last reading. Split from `states` so two roster entries
+   *  sharing a cloned MAC each delta against their own counter stream while
+   *  still accumulating into the one per-MAC total. */
+  private counters = new Map<string, Map<string, EntryCounter>>();
 
   constructor(private readonly filePath: string) {
     mkdirSync(dirname(filePath), { recursive: true });
@@ -110,9 +148,6 @@ export class ClientTotalsStore {
       sinceMs: monthStartMs(atMs),
       lastSeenMs: atMs,
       periodMonth: monthOf(atMs),
-      prevRx: 0,
-      prevTx: 0,
-      lastPollMs: 0,
     });
   }
 
@@ -124,11 +159,24 @@ export class ClientTotalsStore {
    * since the reset, so it is added whole. A first sighting, a gap too wide to
    * measure across, or the first reading of a new month only re-baselines `prev`
    * and adds nothing.
+   *
+   * `entryId` names the roster entry the reading came from — the router's
+   * clientId. Two devices sharing a cloned MAC arrive as two entries, and each
+   * deltas only against itself; both deltas land in the same per-MAC total.
+   * Readings without a distinguishing id fall back to the MAC, which is the
+   * previous behaviour exactly.
    */
-  observe(macAddress: string, rxBytes: number, txBytes: number, atMs: number, name?: string): void {
-    const state = this.states.get(macAddress);
+  observe(
+    macAddress: string,
+    rxBytes: number,
+    txBytes: number,
+    atMs: number,
+    name?: string,
+    entryId: string = macAddress,
+  ): void {
+    let state = this.states.get(macAddress);
     if (!state) {
-      this.states.set(macAddress, {
+      state = {
         macAddress,
         name,
         rxBytes: 0,
@@ -136,32 +184,34 @@ export class ClientTotalsStore {
         sinceMs: monthStartMs(atMs),
         lastSeenMs: atMs,
         periodMonth: monthOf(atMs),
-        prevRx: rxBytes,
-        prevTx: txBytes,
-        lastPollMs: atMs,
-      });
-      return;
+      };
+      this.states.set(macAddress, state);
     }
+    const entries = this.counters.get(macAddress) ?? new Map<string, EntryCounter>();
+    this.counters.set(macAddress, entries);
 
     const month = monthOf(atMs);
-    const rolledOver = month !== state.periodMonth;
-    if (rolledOver) {
+    if (month !== state.periodMonth) {
       // First sighting in a new month: start its bucket fresh. The delta that
       // straddles the boundary is dropped rather than split — one interval.
+      // Every entry re-baselines, not just this one, so a sibling entry
+      // observed later in the same batch cannot leak its straddling delta
+      // into the new bucket either.
       state.rxBytes = 0;
       state.txBytes = 0;
       state.periodMonth = month;
       state.sinceMs = monthStartMs(atMs);
+      for (const entry of entries.values()) entry.lastPollMs = 0;
     } else {
-      const measurable = state.lastPollMs !== 0 && atMs - state.lastPollMs <= MAX_GAP_MS;
+      const entry = entries.get(entryId);
+      const measurable =
+        entry !== undefined && entry.lastPollMs !== 0 && atMs - entry.lastPollMs <= MAX_GAP_MS;
       if (measurable) {
-        state.rxBytes += rxBytes >= state.prevRx ? rxBytes - state.prevRx : rxBytes;
-        state.txBytes += txBytes >= state.prevTx ? txBytes - state.prevTx : txBytes;
+        state.rxBytes += rxBytes >= entry.prevRx ? rxBytes - entry.prevRx : rxBytes;
+        state.txBytes += txBytes >= entry.prevTx ? txBytes - entry.prevTx : txBytes;
       }
     }
-    state.prevRx = rxBytes;
-    state.prevTx = txBytes;
-    state.lastPollMs = atMs;
+    entries.set(entryId, { prevRx: rxBytes, prevTx: txBytes, lastPollMs: atMs });
     state.lastSeenMs = atMs;
     if (name) state.name = name;
   }
@@ -184,12 +234,14 @@ export class ClientTotalsStore {
    *  the next poll, but an offline device stays gone. Returns whether anything was
    *  removed. */
   remove(macAddress: string): boolean {
+    this.counters.delete(macAddress);
     return this.states.delete(macAddress);
   }
 
   /** Delete every record. */
   clear(): void {
     this.states.clear();
+    this.counters.clear();
   }
 
   /** Drop devices unseen since before last month so the list cannot grow forever.
@@ -202,8 +254,18 @@ export class ClientTotalsStore {
     for (const [mac, state] of this.states) {
       if (state.lastSeenMs < cutoff) {
         this.states.delete(mac);
+        this.counters.delete(mac);
         dropped++;
       }
+    }
+    // A counter is only measurable within MAX_GAP_MS of its last reading, so a
+    // stale one is a dead entry id (a re-associated client). Sweeping them
+    // keeps a device that churns ids from growing its map forever.
+    for (const [mac, entries] of this.counters) {
+      for (const [entryId, entry] of entries) {
+        if (nowMs - entry.lastPollMs > STALE_COUNTER_MS) entries.delete(entryId);
+      }
+      if (entries.size === 0) this.counters.delete(mac);
     }
     return dropped;
   }
@@ -229,8 +291,27 @@ export class ClientTotalsStore {
   private restore(): void {
     if (!existsSync(this.filePath)) return;
     try {
-      const persisted = JSON.parse(readFileSync(this.filePath, "utf8")) as TotalState[];
-      for (const state of persisted) this.states.set(state.macAddress, state);
+      const persisted = JSON.parse(readFileSync(this.filePath, "utf8")) as
+        | SnapshotV2
+        | LegacyTotalState[];
+      if (Array.isArray(persisted)) {
+        // Legacy snapshot: the counter was inlined per MAC. Carry it over as
+        // that MAC's single entry so a fast restart still measures across.
+        for (const row of persisted) {
+          const { prevRx, prevTx, lastPollMs, ...state } = row;
+          this.states.set(state.macAddress, state);
+          if (lastPollMs) {
+            this.counters.set(
+              state.macAddress,
+              new Map([[state.macAddress, { prevRx, prevTx, lastPollMs }]]),
+            );
+          }
+        }
+        return;
+      }
+      for (const state of persisted.totals ?? []) this.states.set(state.macAddress, state);
+      for (const [mac, entries] of persisted.counters ?? [])
+        this.counters.set(mac, new Map(entries));
     } catch {
       // unreadable snapshot: start fresh rather than refuse to boot
     }
@@ -239,8 +320,12 @@ export class ClientTotalsStore {
   /** Persist so a restart resumes the running totals rather than seeding anew. */
   snapshot(): void {
     try {
+      const persisted: SnapshotV2 = {
+        totals: [...this.states.values()],
+        counters: [...this.counters].map(([mac, entries]) => [mac, [...entries]]),
+      };
       const tempPath = `${this.filePath}.tmp`;
-      writeFileSync(tempPath, JSON.stringify([...this.states.values()]));
+      writeFileSync(tempPath, JSON.stringify(persisted));
       renameSync(tempPath, this.filePath);
     } catch {
       // a failed snapshot costs at most the interval's accumulation on a restart

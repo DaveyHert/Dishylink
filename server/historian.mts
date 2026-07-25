@@ -12,7 +12,7 @@
 //
 // Run: npm run historian   (foreground; see server/README for always-on setup)
 
-import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { networkInterfaces } from "node:os";
 import { resolve } from "node:path";
@@ -37,6 +37,7 @@ import { ClientWindow } from "./clientWindow.mts";
 import { ClientTotalsStore } from "./clientTotals.mts";
 import { ThroughputTracker } from "../src/lib/throughputTracker.ts";
 import { AlertStore } from "./alertStore.mts";
+import { ObstructionStore, packCells } from "./obstructionStore.mts";
 
 const DISH_URL =
   process.env.DISH_URL ?? "http://192.168.100.1:9201/SpaceX.API.Device.Device/Handle";
@@ -50,6 +51,8 @@ const CLIENTS_FILE = resolve("server/data/clients.ndjson");
 const CLIENT_SAMPLES_FILE = resolve("server/data/client-samples.json");
 const CLIENT_TOTALS_FILE = resolve("server/data/client-totals.json");
 const ALERTS_FILE = resolve("server/data/alerts.ndjson");
+const OBSTRUCTION_FILE = resolve("server/data/obstruction.ndjson");
+const MAC_COLLISIONS_FILE = resolve("server/data/mac-collisions.ndjson");
 const PORT = Number(process.env.HISTORIAN_PORT ?? 8088);
 const POLL_MS = 5_000;
 /**
@@ -72,6 +75,7 @@ const CLIENTS_RECORD_MS = 1_000;
 const GET_HISTORY_FIELD = 1007;
 const GET_STATUS_FIELD = 1004;
 const GET_RADIO_STATS_FIELD = 1036;
+const GET_OBSTRUCTION_MAP_FIELD = 2008;
 const WIFI_GET_CLIENTS_FIELD = 3002;
 
 /**
@@ -250,25 +254,46 @@ function finiteMbps(value: number | "NaN" | undefined): number | null {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
+interface WireClient {
+  macAddress?: string;
+  name?: string;
+  givenName?: string;
+  role?: string;
+  /** The router's stable per-device id — what its own name store is keyed by,
+   *  and the only thing telling apart two devices sharing a cloned MAC. */
+  clientId?: number;
+  ipAddress?: string;
+  rxStats?: WireStats;
+  txStats?: WireStats;
+}
+
+/** The roster entry a counter reading belongs to. Falls back through IP to the
+ *  MAC itself, which for a normal (unshared) MAC is the previous behaviour. */
+function entryIdOf(client: WireClient): string {
+  if (client.clientId !== undefined) return String(client.clientId);
+  return client.ipAddress ?? client.macAddress ?? "";
+}
+
 async function getClientReadings(): Promise<ClientReading[]> {
   const bytes = await grpcWebUnaryCall(ROUTER_URL, requestBytes(WIFI_GET_CLIENTS_FIELD));
   const json = toJson(responseSchema, fromBinary(responseSchema, bytes), { registry }) as {
-    wifiGetClients?: {
-      clients?: Array<{
-        macAddress?: string;
-        name?: string;
-        givenName?: string;
-        role?: string;
-        rxStats?: WireStats;
-        txStats?: WireStats;
-      }>;
-    };
+    wifiGetClients?: { clients?: WireClient[] };
   };
-  const readings: ClientReading[] = [];
+  // One reading per MAC even when the roster lists a MAC more than once — two
+  // devices sharing a cloned MAC each get their own entry. Rates and ride-along
+  // counters are summed across a MAC's entries, but only after each entry's
+  // delta is computed against its own stream (keyed mac|entryId below):
+  // deltaing across two interleaved counters reads their difference as resets
+  // and invented traffic.
+  const byMac = new Map<string, ClientReading>();
+  const liveEntryKeys: string[] = [];
   const nowMs = Date.now();
   for (const client of json.wifiGetClients?.clients ?? []) {
     // The router itself reports empty stats — it is the network, not a client of it.
     if (!client.macAddress || (client.role && client.role !== "CLIENT")) continue;
+    const entryId = entryIdOf(client);
+    const entryKey = `${client.macAddress}|${entryId}`;
+    liveEntryKeys.push(entryKey);
 
     const rxBytes = client.rxStats?.bytes;
     const txBytes = client.txStats?.bytes;
@@ -291,28 +316,97 @@ async function getClientReadings(): Promise<ClientReading[]> {
         counters.txBytes,
         nowMs,
         client.givenName ?? client.name,
+        entryId,
       );
     }
 
     // 15s, not 1m: the shorter window is closer to the truth whenever a delta is
     // unavailable, and txStats has no 1m field at all — preferring it would leave
     // download smoothed over 60s and upload over 15s on the same chart.
-    const rates = clientThroughput.rates(client.macAddress, counters, nowMs, {
+    const rates = clientThroughput.rates(entryKey, counters, nowMs, {
       downMbps: finiteMbps(client.rxStats?.throughputMbpsLast15sAvg) ?? 0,
       upMbps: finiteMbps(client.txStats?.throughputMbpsLast15sAvg) ?? 0,
     });
 
-    readings.push({
-      macAddress: client.macAddress,
-      name: client.givenName ?? client.name,
-      downMbps: rates.downMbps,
-      upMbps: rates.upMbps,
-      rxBytes: counters?.rxBytes ?? 0,
-      txBytes: counters?.txBytes ?? 0,
-    });
+    const held = byMac.get(client.macAddress);
+    if (held) {
+      held.downMbps += rates.downMbps;
+      held.upMbps += rates.upMbps;
+      held.rxBytes += counters?.rxBytes ?? 0;
+      held.txBytes += counters?.txBytes ?? 0;
+      held.name ??= client.givenName ?? client.name;
+    } else {
+      byMac.set(client.macAddress, {
+        macAddress: client.macAddress,
+        name: client.givenName ?? client.name,
+        downMbps: rates.downMbps,
+        upMbps: rates.upMbps,
+        rxBytes: counters?.rxBytes ?? 0,
+        txBytes: counters?.txBytes ?? 0,
+      });
+    }
   }
-  clientThroughput.retain(readings.map((reading) => reading.macAddress));
-  return readings;
+  clientThroughput.retain(liveEntryKeys);
+  recordMacCollisions(json.wifiGetClients?.clients ?? [], nowMs);
+  return [...byMac.values()];
+}
+
+/**
+ * Instrumentation for shared MACs: whenever the set of MACs listed more than
+ * once — or the entry ids behind one — changes, append a line describing it.
+ * Change-triggered rather than per-poll, so a stable collision writes one line,
+ * not five a second. This log is what will say whether clientId stays stable
+ * across re-associations, the prerequisite for ever splitting a shared MAC's
+ * usage per device instead of totalling it jointly.
+ */
+let lastCollisionSignature = "";
+function recordMacCollisions(clients: WireClient[], atMs: number): void {
+  const byMac = new Map<string, WireClient[]>();
+  for (const client of clients) {
+    if (!client.macAddress || (client.role && client.role !== "CLIENT")) continue;
+    byMac.set(client.macAddress, [...(byMac.get(client.macAddress) ?? []), client]);
+  }
+  const collisions = [...byMac]
+    .filter(([, entries]) => entries.length > 1)
+    .map(([macAddress, entries]) => ({
+      macAddress,
+      entries: entries
+        .map((entry) => ({
+          clientId: entry.clientId,
+          ipAddress: entry.ipAddress,
+          name: entry.givenName ?? entry.name,
+        }))
+        .sort((a, b) => (a.clientId ?? 0) - (b.clientId ?? 0)),
+    }))
+    .sort((a, b) => a.macAddress.localeCompare(b.macAddress));
+  const signature = collisions
+    .map((c) => `${c.macAddress}=${c.entries.map((e) => e.clientId ?? e.ipAddress ?? "?").join("+")}`)
+    .join(";");
+  if (signature === lastCollisionSignature) return;
+  lastCollisionSignature = signature;
+  try {
+    // An empty `collisions` line records a collision clearing.
+    appendFileSync(MAC_COLLISIONS_FILE, JSON.stringify({ atMs, collisions }) + "\n");
+  } catch {
+    // instrumentation must never take down recording
+  }
+}
+
+/** The collision log is change-triggered, but a flapping entry id could still
+ *  make "change" frequent — trim to the newest lines on boot and the daily
+ *  sweep, the same rewrite-through-temp pattern as the client store. */
+const COLLISION_LOG_MAX_LINES = 1_000;
+function trimCollisionLog(): void {
+  if (!existsSync(MAC_COLLISIONS_FILE)) return;
+  try {
+    const lines = readFileSync(MAC_COLLISIONS_FILE, "utf8").split("\n").filter(Boolean);
+    if (lines.length <= COLLISION_LOG_MAX_LINES) return;
+    const tempPath = `${MAC_COLLISIONS_FILE}.tmp`;
+    writeFileSync(tempPath, lines.slice(-COLLISION_LOG_MAX_LINES).join("\n") + "\n");
+    renameSync(tempPath, MAC_COLLISIONS_FILE);
+  } catch {
+    // a long log is not worth failing over
+  }
 }
 
 const store = new EnergyStore(DATA_FILE);
@@ -322,6 +416,7 @@ const COMPACT_EVERY_MS = 24 * 3_600_000;
 const thermalStore = new ThermalStore(THERMAL_FILE);
 const eventStore = new EventStore(EVENTS_FILE);
 const radioStore = new RadioStore(RADIO_FILE);
+const obstructionStore = new ObstructionStore(OBSTRUCTION_FILE);
 const clientStore = new ClientStore(CLIENTS_FILE);
 const clientWindow = new ClientWindow(CLIENT_SAMPLES_FILE);
 const alertStore = new AlertStore(ALERTS_FILE);
@@ -407,6 +502,38 @@ function writeSampleSnapshot(): void {
  * three thermal keys, kept for the event log) and alertStore (every key). The
  * duplication for thermal keys is deliberate — the event log reads thermalStore.
  */
+/**
+ * Hourly obstruction snapshot for the time-lapse.
+ *
+ * This is a NEW dish call, but a rare one: the map only changes as the dish
+ * accumulates sky coverage, and one reading an hour is the cadence the browser
+ * already used. `isDue` is checked first, so a historian restart does not take a
+ * fresh reading if the last one is still recent.
+ */
+async function pollObstruction(): Promise<void> {
+  const now = Date.now();
+  if (!obstructionStore.isDue(now)) return;
+  try {
+    const bytes = await grpcWebUnaryCall(DISH_URL, requestBytes(GET_OBSTRUCTION_MAP_FIELD));
+    const json = toJson(responseSchema, fromBinary(responseSchema, bytes), { registry }) as {
+      dishGetObstructionMap?: {
+        numRows?: number; numCols?: number; snr?: number[]; maxThetaDeg?: number;
+      };
+    };
+    const map = json.dishGetObstructionMap;
+    if (!map?.snr?.length || !map.numRows || map.numRows !== map.numCols) return;
+    const snapshots = obstructionStore.record({
+      takenAtMs: now,
+      gridSize: map.numRows,
+      packedCells: packCells(map.snr),
+      maxThetaDeg: map.maxThetaDeg,
+    });
+    console.log(`[historian] obstruction snapshot recorded (${snapshots.length} kept)`);
+  } catch (error) {
+    console.warn(`[historian] obstruction snapshot failed: ${(error as Error).message}`);
+  }
+}
+
 async function pollAlerts(): Promise<void> {
   const now = Date.now();
   try {
@@ -934,6 +1061,11 @@ const server = createServer((request, response) => {
     response.end(JSON.stringify({ events: eventStore.all() }));
     return;
   }
+  if (url.pathname === "/api/obstruction/snapshots") {
+    response.setHeader("Content-Type", "application/json");
+    response.end(JSON.stringify({ snapshots: obstructionStore.list() }));
+    return;
+  }
   if (url.pathname === "/api/thermal") {
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify({ episodes: thermalStore.all() }));
@@ -995,6 +1127,7 @@ server.listen(PORT, () => {
 
 loadSampleSnapshot();
 recordRecorderGap();
+trimCollisionLog();
 // Seed device totals from history already on disk before the first poll, so a
 // fresh install opens with real figures instead of zero. No-op after a restart,
 // which reloads the accumulated totals from their own snapshot instead.
@@ -1008,6 +1141,9 @@ setInterval(writeSampleSnapshot, SNAPSHOT_EVERY_MS);
 // call covers every client.
 void pollClients();
 setInterval(() => void pollClients(), CLIENTS_POLL_MS);
+// Checked every 5 minutes; the store's isDue() keeps the actual dish call hourly.
+void pollObstruction();
+setInterval(() => void pollObstruction(), 300_000);
 setInterval(recordClients, CLIENTS_RECORD_MS);
 setInterval(() => clientWindow.snapshot(), SNAPSHOT_EVERY_MS);
 setInterval(() => clientTotals.snapshot(), SNAPSHOT_EVERY_MS);
@@ -1018,6 +1154,7 @@ setInterval(() => {
   const radioDropped = radioStore.compact();
   if (radioDropped > 0)
     console.log(`[historian] compacted radio log, dropped ${radioDropped} old row(s)`);
+  trimCollisionLog();
 }, COMPACT_EVERY_MS);
 // The per-device log keeps only six hours, so it cannot wait for the daily sweep.
 setInterval(() => {
