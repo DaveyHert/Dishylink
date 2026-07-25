@@ -7,8 +7,7 @@
 
 import type { DishModel } from "../../../lib/dishMesh";
 import type { DishModelMesh } from "./types";
-import { enterpriseDish } from "./enterprise";
-import { flatHpDish } from "./flatHp";
+import { performanceGen3Dish } from "./performanceGen3";
 import { hpDish } from "./hp";
 import { miniDish } from "./mini";
 import { roundDish } from "./round";
@@ -19,11 +18,13 @@ import { v5Dish } from "./v5";
 const MESHES: Record<DishModel, DishModelMesh> = {
   v2: roundDish, // the original circular kit on its mast
   v3: standardActuatedDish, // rectangular panel on a motorised arm
-  v4: standard4Dish, // Standard, kickstand, no motor
+  v4: standard4Dish, // Standard, kickstand, no motor — and Enterprise, the same terminal
   v5: v5Dish,
   hp: hpDish, // High Performance, motorised
-  flatHp: flatHpDish, // High Performance, flat mount
-  hpV4: enterpriseDish, // Enterprise
+  // Both ids reached by an HP-family string land on the same panel: `flatHp` from
+  // hp*/rev_hp1_* without actuators, `hpV4` from rev4_hp_prod*, which IS Gen 3.
+  flatHp: performanceGen3Dish,
+  hpV4: performanceGen3Dish,
   mini: miniDish,
 };
 

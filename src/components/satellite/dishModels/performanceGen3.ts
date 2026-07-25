@@ -1,5 +1,5 @@
-// Starlink Flat Performance dish — the flat High Performance / "Performance
-// (Gen 3)" kit, the table's `flatHp` row. Converted from the manufacturer's
+// Starlink Performance Gen 3 — the mount-less flat panel, reported as
+// rev4_hp_prod*. Converted from the manufacturer's
 // reference export Starlink_Performance_Gen3_Dish.obj — a 398.2 x 610.1 mm flat
 // panel, 39.8 mm deep, with no separate mount. The source axes already match the
 // renderer's panel frame (x across the face, y along it, z along the boresight)
@@ -13,7 +13,7 @@
 // band around the panel edge.
 import type { DishModelMesh } from "./types";
 
-export const flatHpDish: DishModelMesh = {
+export const performanceGen3Dish: DishModelMesh = {
   scale: 100,
   longAxisMm: 610.1,
   parts: [[0, 2074, 1], [2074, 1526, 0.14]],
