@@ -84,6 +84,10 @@ const MAX_SATELLITES = 400;
  *  with enough points along it that the ribbon stays smooth. */
 const TRAIL_MAX_POINTS = 12;
 const TRAIL_INTERVAL_MS = 550;
+/** A gap larger than this is the render loop having stalled — a hidden tab pauses
+ *  rAF — not a normal frame. The craft has jumped far since the last point, so the
+ *  path restarts from where it is now rather than bridging the jump with a streak. */
+const TRAIL_STALE_MS = 2000;
 
 /** Matches the dashboard's dark --page (#000000) so the canvas and the chrome agree. */
 const FOG: [number, number, number] = [0, 0, 0];
@@ -186,6 +190,7 @@ export function createSkyScene(
   let trimUnmapped = initialTrim;
   let domeData = buildDomePoints(survey, trimUnmapped);
   let domeVisible = true;
+  // let dish = buildDish(meshForModel(survey.dishModel), survey, dishScale);
   let dish = buildDish(meshForModel(survey.dishModel), survey, dishScale);
   let dishData = dish.data;
   const starData = stars ? buildStars() : null;
@@ -406,7 +411,10 @@ export function createSkyScene(
         trails.set(sat.name, [{ pos: at, atMs: nowMs }]);
       } else {
         const newest = trail[trail.length - 1];
-        if (nowMs - newest.atMs >= TRAIL_INTERVAL_MS) {
+        const gap = nowMs - newest.atMs;
+        if (gap >= TRAIL_STALE_MS) {
+          trails.set(sat.name, [{ pos: at, atMs: nowMs }]);
+        } else if (gap >= TRAIL_INTERVAL_MS) {
           trail.push({ pos: at, atMs: nowMs });
           if (trail.length > TRAIL_MAX_POINTS) trail.shift();
         }
