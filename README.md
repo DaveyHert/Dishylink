@@ -12,7 +12,7 @@ Starlink network, `npm run dev` and you have instruments.
   60s ping-drop rate, sky-obstruction fraction, each with a 90s sparkline.
 - **Throughput chart** — down + up, 15m/1h/6h windows (the dish only keeps
   15 minutes; DishyLink accumulates up to 6 hours while the tab is open).
-- **Latency chart** — bucketed *max* so spikes survive downsampling; outages
+- **Latency chart** — bucketed _max_ so spikes survive downsampling; outages
   drawn as red bands.
 - **Power chart** — the dish's actual draw over time with a kWh/day estimate.
 - **Sky obstruction map** — the dish's 123×123 SNR grid rendered as a polar
@@ -26,9 +26,9 @@ Crosshair tooltips on every chart. Light (default) and dark instrument themes.
 
 The dish serves its API at `192.168.100.1` on two ports:
 
-| Port | Protocol | Notes |
-|------|----------|-------|
-| 9200 | native gRPC (HTTP/2) | used by `grpcurl`, has reflection |
+| Port | Protocol                | Notes                               |
+| ---- | ----------------------- | ----------------------------------- |
+| 9200 | native gRPC (HTTP/2)    | used by `grpcurl`, has reflection   |
 | 9201 | **grpc-web** (HTTP/1.1) | what this app uses from the browser |
 
 Two quirks discovered while building (both handled by the Vite proxy):
