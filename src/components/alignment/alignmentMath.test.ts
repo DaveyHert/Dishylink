@@ -189,18 +189,18 @@ describe("resolveDishModel", () => {
   it("reads an HP Gen 4 as its own model, not as a standard Gen 3", () => {
     // Every HP Gen 4 string also starts with "rev4"; testing "rev4" first — or
     // matching it as a substring — swallows this case.
-    expect(resolveDishModel("rev4_hp_prod1", false)).toBe("hpV4");
-    expect(resolveDishModel("rev4_panda_prod2", false)).toBe("v4");
+    expect(resolveDishModel("rev4_hp_prod1", false)).toBe("performanceGen3");
+    expect(resolveDishModel("rev4_panda_prod2", false)).toBe("rev4Standard");
   });
 
   it("splits the HP line on whether it actually has motors", () => {
-    expect(resolveDishModel("hp1_prod0", true)).toBe("hp");
-    expect(resolveDishModel("hp1_prod0", false)).toBe("flatHp");
+    expect(resolveDishModel("hp1_prod0", true)).toBe("performanceGen1");
+    expect(resolveDishModel("hp1_prod0", false)).toBe("performanceGen2");
   });
 
   it("falls back to a standard Gen 3 for an unknown or absent string", () => {
-    expect(resolveDishModel(undefined, false)).toBe("v4");
-    expect(resolveDishModel("something_new", false)).toBe("v4");
+    expect(resolveDishModel(undefined, false)).toBe("rev4Standard");
+    expect(resolveDishModel("something_new", false)).toBe("rev4Standard");
   });
 });
 
@@ -215,9 +215,9 @@ describe("computeAlignment band ceiling", () => {
   });
 
   it("lets a flat kit aim to the zenith", () => {
-    const flatHp = kitAimedAt(85, { hardwareVersion: "hp1_prod0", hasActuators: "HAS_ACTUATORS_NO" });
-    expect(computeAlignment(flatHp).isAligned).toBe(true);
-    expect(computeAlignment(flatHp).upperElevationLimitDeg).toBe(90);
+    const flatPerformance = kitAimedAt(85, { hardwareVersion: "hp1_prod0", hasActuators: "HAS_ACTUATORS_NO" });
+    expect(computeAlignment(flatPerformance).isAligned).toBe(true);
+    expect(computeAlignment(flatPerformance).upperElevationLimitDeg).toBe(90);
     expect(computeAlignment(kitAimedAt(85, { hardwareVersion: "rev4_hp_prod1" })).isAligned).toBe(true);
   });
 

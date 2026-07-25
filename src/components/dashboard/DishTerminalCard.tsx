@@ -1,6 +1,7 @@
 // Hardware, alignment, GPS, and network facts from the live status message.
 
 import type { DishStatusJson, DishReadyStatesJson } from "../../lib/dishClient";
+import { dishModelFor, specForModel } from "../../lib/dishMesh";
 import { formatAttitudeState, formatRelativeTime, formatUptime } from "../../lib/format";
 import { FactGrid, FactRow } from "../ui/fact-row";
 import { DishIcon } from "../../assets/icons/DishIcon";
@@ -99,6 +100,7 @@ export function DishTerminalCard({
   const positionState = formatAttitudeState(status.gpsStats?.pntFilterConvergenceState);
 
   const facts: DeviceFact[] = [
+    { label: "Model", value: specForModel(dishModelFor(status)).displayName },
     signalCondition(status),
     { label: "Hardware", value: status.deviceInfo?.hardwareVersion ?? "—" },
     { label: "Firmware", value: status.deviceInfo?.softwareVersion ?? "—" },

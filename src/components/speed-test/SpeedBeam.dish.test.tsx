@@ -9,7 +9,17 @@ import { render } from "vitest-browser-react";
 import type { DishModel } from "../../lib/dishMesh";
 import { SpeedBeam } from "./SpeedBeam";
 
-const MODELS: DishModel[] = ["v2", "v3", "v4", "v5", "hp", "flatHp", "hpV4", "mini1", "mini2"];
+const MODELS: DishModel[] = [
+  "rev2Circular",
+  "rev3Rectangular",
+  "rev4Standard",
+  "rev5Standard",
+  "performanceGen1",
+  "performanceGen2",
+  "performanceGen3",
+  "mini1",
+  "mini2",
+];
 
 /** Where the beam meets the dish, as the scene lays it out. */
 function beamFoot(container: HTMLElement): [number, number] {

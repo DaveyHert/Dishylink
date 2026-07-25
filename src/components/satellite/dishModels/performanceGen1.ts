@@ -1,5 +1,6 @@
-// v3 Standard Actuated, converted from Rectangular Starlink.obj + its Base.obj —
-// a 513 mm panel on a vertical arm, 405 mm from panel face to foot.
+// Performance (Gen 1), converted from Rectangular Starlink.obj + its Base.obj —
+// a 513 mm panel on a vertical arm, 405 mm from panel face to foot. Same body as
+// the v3 Standard Actuated.
 //
 // It ships as two files that do NOT share a pose, and unlike the round dish it will
 // not seat by sliding: the arm is raked 30.12 deg off the panel normal. What gets
@@ -27,7 +28,7 @@
 // coincident weld, then quadric edge collapse, run on each solid alone so the panel
 // keeps its budget.
 import type { DishModelMesh } from "./types";
-export const standardActuatedDish: DishModelMesh = {
+export const performanceGen1Dish: DishModelMesh = {
   scale: 50,
   longAxisMm: 562,
   // panel face, its dark edge ribbon — then the arm, its lower fitting and the

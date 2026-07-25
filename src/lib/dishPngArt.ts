@@ -12,14 +12,15 @@
 // the size the art is drawn at.
 
 import type { DishModel } from "./dishMesh";
-import v2 from "../assets/dishes/v2.png";
-import v3 from "../assets/dishes/v3.png";
-import v4 from "../assets/dishes/v4.png";
-import v5 from "../assets/dishes/v5.png";
-import hp from "../assets/dishes/hp.png";
-import flatHp from "../assets/dishes/flatHp.png";
-import hpV4 from "../assets/dishes/hpV4.png";
-import mini from "../assets/dishes/mini.png";
+import rev2Circular from "../assets/dishes/rev2Circular.png";
+import rev3Rectangular from "../assets/dishes/rev3Rectangular.png";
+import rev4Standard from "../assets/dishes/rev4Standard.png";
+import rev5Standard from "../assets/dishes/rev5Standard.png";
+import performanceGen1 from "../assets/dishes/performanceGen1.png";
+import performanceGen2 from "../assets/dishes/performanceGen2.png";
+import performanceGen3 from "../assets/dishes/performanceGen3.png";
+import mini1 from "../assets/dishes/mini1.png";
+import mini2 from "../assets/dishes/mini2.png";
 
 export interface DishPngArt {
   /** The render's bundled URL. */
@@ -34,17 +35,15 @@ export interface DishPngArt {
 }
 
 const PNG_ART: Record<DishModel, DishPngArt> = {
-  v2: { pngSrc: v2, groundAnchor: [0.5, 0.7793], beamExitAnchor: [0.5305, 0.3242] },
-  v3: { pngSrc: v3, groundAnchor: [0.5, 0.7614], beamExitAnchor: [0.5251, 0.3327] },
-  v4: { pngSrc: v4, groundAnchor: [0.5, 0.6571], beamExitAnchor: [0.5075, 0.4863] },
-  v5: { pngSrc: v5, groundAnchor: [0.5, 0.6558], beamExitAnchor: [0.5158, 0.4766] },
-  hp: { pngSrc: hp, groundAnchor: [0.5, 0.6602], beamExitAnchor: [0.5075, 0.4819] },
-  flatHp: { pngSrc: flatHp, groundAnchor: [0.5, 0.6563], beamExitAnchor: [0.4991, 0.5017] },
-  hpV4: { pngSrc: hpV4, groundAnchor: [0.5, 0.6572], beamExitAnchor: [0.5077, 0.486] },
-  // One render serves both Minis: the side band that separates them in the 3D
-  // dome is not resolvable at the 46-unit size the speed test draws this at.
-  mini1: { pngSrc: mini, groundAnchor: [0.5, 0.6618], beamExitAnchor: [0.5165, 0.4699] },
-  mini2: { pngSrc: mini, groundAnchor: [0.5, 0.6618], beamExitAnchor: [0.5165, 0.4699] },
+  rev2Circular: { pngSrc: rev2Circular, groundAnchor: [0.5, 0.7793], beamExitAnchor: [0.5305, 0.3242] },
+  rev3Rectangular: { pngSrc: rev3Rectangular, groundAnchor: [0.5, 0.7614], beamExitAnchor: [0.5251, 0.3327] },
+  rev4Standard: { pngSrc: rev4Standard, groundAnchor: [0.5, 0.6571], beamExitAnchor: [0.5075, 0.4863] },
+  rev5Standard: { pngSrc: rev5Standard, groundAnchor: [0.5, 0.6558], beamExitAnchor: [0.5158, 0.4766] },
+  performanceGen1: { pngSrc: performanceGen1, groundAnchor: [0.5, 0.7614], beamExitAnchor: [0.5251, 0.3327] },
+  performanceGen2: { pngSrc: performanceGen2, groundAnchor: [0.5, 0.6602], beamExitAnchor: [0.5075, 0.4819] },
+  performanceGen3: { pngSrc: performanceGen3, groundAnchor: [0.5, 0.6563], beamExitAnchor: [0.4991, 0.5017] },
+  mini1: { pngSrc: mini1, groundAnchor: [0.5, 0.6618], beamExitAnchor: [0.5165, 0.4699] },
+  mini2: { pngSrc: mini2, groundAnchor: [0.5, 0.6618], beamExitAnchor: [0.5165, 0.4699] },
 };
 
 /** Named to match `dishModelFor(status)` in dishMesh, the resolver that produces

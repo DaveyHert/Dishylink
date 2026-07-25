@@ -12,7 +12,7 @@
 // Two parts: the white panel faces, and the dark band around the panel edge.
 import type { DishModelMesh } from "./types";
 
-export const standard4Dish: DishModelMesh = {
+export const rev4StandardDish: DishModelMesh = {
   scale: 100,
   longAxisMm: 594.0,
   parts: [[0, 3413, 1.0], [3413, 187, 0.44]],

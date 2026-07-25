@@ -4,7 +4,7 @@
 // scaled to ~105mm wide (nearer the spec/v4 stand than the tsx default) and
 // seated on the +y thick edge with a 15-deg depth lean so its base meets the ground.
 import type { DishModelMesh } from "./types";
-export const v5Dish: DishModelMesh = {
+export const rev5StandardDish: DishModelMesh = {
   scale: 100,
   longAxisMm: 384.4,
   parts: [[0, 2356, 0.44], [2356, 284, 1.0], [2640, 656, 0.44]],

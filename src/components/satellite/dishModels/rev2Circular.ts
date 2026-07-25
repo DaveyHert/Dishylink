@@ -17,7 +17,7 @@
 // so the visible reflector keeps its budget. Stored as int16 SIXTY-FOURTHS of a
 // millimetre (the ~450 mm mast overflows hundredths).
 import type { DishModelMesh } from "./types";
-export const roundDish: DishModelMesh = {
+export const rev2CircularDish: DishModelMesh = {
   scale: 64,
   longAxisMm: 590,
   // reflector face, its dark edge ribbon, the neck barrel — then the mast and

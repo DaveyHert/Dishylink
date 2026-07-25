@@ -23,7 +23,7 @@
 // Three parts: white panel faces, the dark panel edge band, then the whole mount.
 import type { DishModelMesh } from "./types";
 
-export const hpDish: DishModelMesh = {
+export const performanceGen2Dish: DishModelMesh = {
   scale: 50,
   longAxisMm: 575,
   parts: [[0, 1165, 1], [1165, 1035, 0.14], [2200, 1400, 0.4]],

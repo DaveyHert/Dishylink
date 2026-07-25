@@ -12,13 +12,13 @@ import type { DishStatusJson } from "./dishClient";
  *  model, resolved once, so geometry and alignment can't disagree about which
  *  dish this is. */
 export type DishModel =
-  | "v2"
-  | "v3"
-  | "v4"
-  | "v5"
-  | "hp"
-  | "flatHp"
-  | "hpV4"
+  | "rev2Circular"
+  | "rev3Rectangular"
+  | "rev4Standard"
+  | "rev5Standard"
+  | "performanceGen1"
+  | "performanceGen2"
+  | "performanceGen3"
   | "mini1"
   | "mini2";
 
@@ -45,17 +45,17 @@ export function resolveDishModel(
   motorised: boolean,
 ): DishModel {
   const hardware = (hardwareVersion?.toLowerCase() ?? "").replace(/^rev_/, "");
-  if (hardware === "") return "v4";
-  if (hardware.startsWith("hp")) return motorised ? "hp" : "flatHp";
-  if (hardware.startsWith("rev3") || hardware.startsWith("dishy")) return "v3";
-  if (hardware.startsWith("rev1") || hardware.startsWith("rev2")) return "v2";
-  if (hardware.startsWith("rev4_hp")) return "hpV4";
-  if (hardware.startsWith("rev4")) return "v4";
-  if (hardware.startsWith("rev5")) return "v5";
+  if (hardware === "") return "rev4Standard";
+  if (hardware.startsWith("hp")) return motorised ? "performanceGen1" : "performanceGen2";
+  if (hardware.startsWith("rev3") || hardware.startsWith("dishy")) return "rev3Rectangular";
+  if (hardware.startsWith("rev1") || hardware.startsWith("rev2")) return "rev2Circular";
+  if (hardware.startsWith("rev4_hp")) return "performanceGen3";
+  if (hardware.startsWith("rev4")) return "rev4Standard";
+  if (hardware.startsWith("rev5")) return "rev5Standard";
   // Mini 1 (including Rugged) is the unit with the dark side band; Mini 2 is white.
   if (hardware.startsWith("mini1")) return "mini1";
   if (hardware.startsWith("mini2")) return "mini2";
-  return "v4";
+  return "rev4Standard";
 }
 
 /** The kit to draw, straight from a status reply. Every surface that renders
@@ -81,15 +81,17 @@ export interface DishModelSpec {
 // used to sit here to grow the mesh procedurally; each baked model in dishModels
 // now carries its own, measured off the export it was converted from.
 const MODEL_SPECS: Record<DishModel, DishModelSpec> = {
-  v4: { displayName: "Standard (Gen 3)", mount: "kickstand", defaultTiltDeg: 20 },
-  v5: { displayName: "Standard (Gen 4)", mount: "kickstand", defaultTiltDeg: 13 },
-  v3: { displayName: "Standard Actuated (Gen 2)", mount: "mast", defaultTiltDeg: 25 },
-  v2: { displayName: "Original (round)", mount: "mast", defaultTiltDeg: 25 },
-  mini1: { displayName: "Mini 1", mount: "kickstand", defaultTiltDeg: 20 },
+  rev4Standard: { displayName: "Standard 4", mount: "kickstand", defaultTiltDeg: 20 },
+  rev5Standard: { displayName: "Starlink V5", mount: "kickstand", defaultTiltDeg: 13 },
+  rev3Rectangular: { displayName: "Actuated", mount: "mast", defaultTiltDeg: 25 },
+  rev2Circular: { displayName: "Standard Circular", mount: "mast", defaultTiltDeg: 25 },
+  mini1: { displayName: "Mini", mount: "kickstand", defaultTiltDeg: 20 },
   mini2: { displayName: "Mini 2", mount: "kickstand", defaultTiltDeg: 20 },
-  hp: { displayName: "High Performance", mount: "mast", defaultTiltDeg: 25 },
-  flatHp: { displayName: "Flat High Performance", mount: "flat", defaultTiltDeg: 0 },
-  hpV4: { displayName: "High Performance (Gen 4)", mount: "flat", defaultTiltDeg: 0 },
+  // The app names Performance kits by physical generation: the mast kit is Gen 1,
+  // the flat rev_hp1 kit is Gen 2, the flat rev4_hp kit is Gen 3.
+  performanceGen1: { displayName: "Performance (Gen 1)", mount: "mast", defaultTiltDeg: 25 },
+  performanceGen2: { displayName: "Performance (Gen 2)", mount: "flat", defaultTiltDeg: 0 },
+  performanceGen3: { displayName: "Performance (Gen 3)", mount: "flat", defaultTiltDeg: 0 },
 };
 
 export function specForModel(model: DishModel): DishModelSpec {
