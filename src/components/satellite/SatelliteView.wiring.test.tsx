@@ -50,6 +50,9 @@ vi.mock("./skyScene", () => ({
       },
       toggleRotation: () => true,
       isRotating: () => true,
+      toggleDome: () => true,
+      isDomeVisible: () => true,
+      resetView: () => calls.push("resetView"),
       dispose: () => calls.push("dispose"),
     };
   },

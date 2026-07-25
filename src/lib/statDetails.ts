@@ -177,9 +177,8 @@ export function buildStatDetails({
       formatBig: (value) => ({ value: value.toFixed(0), unit: "ms" }),
       series: LATENCY_DETAIL_SERIES,
       formatValue: (value) => `${value.toFixed(0)} ms`,
-      explainer: `Starlink and the Starlink router both send test pings to the internet many times per minute. Latency measures how long, in milliseconds, a request takes to go to the internet and back. 
-        
-        High latency may impact your experience with online gaming, video calls, and web browsing. It may be caused by extreme weather or periods of high network usage. Latency is the round-trip ping time from your dish to Starlink's point of presence.`,
+      explainer:
+        "The Starlink dish and router both send test pings to the internet many times per minute. Latency measures how long, in milliseconds, a request takes to go to the internet and back. High latency may impact your experience with online gaming, video calls, and web browsing. It may be caused by extreme weather or periods of high network usage.",
       outageEvents,
       distribution: true,
     },

@@ -71,7 +71,7 @@ function Stat({
       ) : (
         <span className='block text-[11.5px] font-medium text-muted-foreground'>{label}</span>
       )}
-      <span className='font-mono text-[16px] font-semibold tabular-nums'>{value}</span>
+      <span className='font-mono text-[14px] font-semibold tabular-nums'>{value}</span>
     </div>
   );
 }

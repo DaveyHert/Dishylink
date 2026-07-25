@@ -7,9 +7,13 @@
 
 import { useState } from "react";
 import type { ObserverLocation } from "../../lib/satellites";
-import { requestBrowserLocation, requestIpLocation, parseCoordinateText } from "../../lib/observerLocation";
-import { GpsIcon } from "../icons/GpsIcon";
-import { MapPinIcon } from "../icons/MapPinIcon";
+import {
+  requestBrowserLocation,
+  requestIpLocation,
+  parseCoordinateText,
+} from "../../lib/observerLocation";
+import { GpsIcon } from "../../assets/icons/GpsIcon";
+import { MapPinIcon } from "../../assets/icons/MapPinIcon";
 
 /** The primary action: the ink fill the rest of the app gives its action buttons. */
 const saveButton =
@@ -22,7 +26,11 @@ const sourceButton =
   "text-[12.5px] font-semibold text-[var(--ink-secondary)] transition-colors duration-[120ms] " +
   "enabled:hover:text-foreground disabled:cursor-default disabled:opacity-50";
 
-export function LocationSetup({ onLocationSaved }: { onLocationSaved: (location: ObserverLocation) => void }) {
+export function LocationSetup({
+  onLocationSaved,
+}: {
+  onLocationSaved: (location: ObserverLocation) => void;
+}) {
   const [coordinateText, setCoordinateText] = useState("");
   const [errorText, setErrorText] = useState<string | null>(null);
   const [busySource, setBusySource] = useState<"device" | "ip" | null>(null);
@@ -62,30 +70,35 @@ export function LocationSetup({ onLocationSaved }: { onLocationSaved: (location:
     // Sunk a shade darker than the panel it sits in, and the one surface here
     // that blurs: it carries an input and its instructions, so the sky moving
     // behind it has to be pushed out of focus rather than read through.
-    <div className="mt-3 flex flex-col gap-2.5 rounded-lg border border-[#8b97a824] bg-[#00000073] px-[13px] py-3 backdrop-blur-xl">
-      <p className="text-[12.5px] leading-[1.5] text-[var(--ink-secondary)]">
-        To show the satellites passing over you, we need to know where your dish is. Tip: long-press your
-        home in Google Maps, or open the iPhone <strong>Compass</strong> app, and paste what it shows.
+    <div className='mt-3 flex flex-col gap-2.5 rounded-lg border border-[#8b97a824] bg-[#00000073] px-[13px] py-3 backdrop-blur-xl'>
+      <p className='text-[12.5px] leading-[1.5] text-[var(--ink-secondary)]'>
+        To show the satellites passing over you, we need to know where your dish is. Tip: long-press
+        your home in Google Maps, or open the iPhone <strong>Compass</strong> app, and paste what it
+        shows.
       </p>
-      <div className="flex gap-2">
+      <div className='flex gap-2'>
         <input
-          type="text"
-          inputMode="text"
-          placeholder="6.5244, 3.3792"
+          type='text'
+          inputMode='text'
+          placeholder='6.5244, 3.3792'
           value={coordinateText}
           onChange={(changeEvent) => setCoordinateText(changeEvent.target.value)}
           onKeyDown={(keyEvent) => {
             if (keyEvent.key === "Enter") submitPasted();
           }}
-          aria-label="Latitude, longitude"
-          className="min-w-0 flex-1 rounded-full border border-[color-mix(in_srgb,var(--ink)_18%,transparent)] bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] px-3.5 py-[7px] font-mono text-[12px] text-foreground placeholder:text-[var(--ink-secondary)] focus:border-[color-mix(in_srgb,var(--ink)_40%,transparent)] focus:outline-none"
+          aria-label='Latitude, longitude'
+          className='min-w-0 flex-1 rounded-full border border-[color-mix(in_srgb,var(--ink)_18%,transparent)] bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] px-3.5 py-[7px] font-mono text-[12px] text-foreground placeholder:text-[var(--ink-secondary)] focus:border-[color-mix(in_srgb,var(--ink)_40%,transparent)] focus:outline-none'
         />
         <button onClick={submitPasted} className={saveButton}>
           Save
         </button>
       </div>
-      <div className="flex flex-wrap gap-x-5 gap-y-2">
-        <button onClick={useBrowserLocation} disabled={busySource !== null} className={sourceButton}>
+      <div className='flex flex-wrap gap-x-5 gap-y-2'>
+        <button
+          onClick={useBrowserLocation}
+          disabled={busySource !== null}
+          className={sourceButton}
+        >
           <GpsIcon />
           {busySource === "device" ? "Locating…" : "Use this device location"}
         </button>
@@ -94,7 +107,7 @@ export function LocationSetup({ onLocationSaved }: { onLocationSaved: (location:
           {busySource === "ip" ? "Looking up…" : "Approximate from IP"}
         </button>
       </div>
-      {errorText && <div className="text-[12px] text-[var(--status-critical)]">{errorText}</div>}
+      {errorText && <div className='text-[12px] text-[var(--status-critical)]'>{errorText}</div>}
     </div>
   );
 }

@@ -185,7 +185,7 @@ export function StatDetailPanel({ detail, samples }: StatDetailPanelProps) {
               key={chartSeries.id}
               className="inline-flex items-center gap-1.5 text-[12px] font-semibold"
             >
-              <span className="series-swatch" style={{ background: `var(${chartSeries.colorVar})` }} />
+              <span className="size-[9px] flex-none rounded-full" style={{ background: `var(${chartSeries.colorVar})` }} />
               {chartSeries.label}
             </span>
           ))}

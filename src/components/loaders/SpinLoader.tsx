@@ -9,15 +9,12 @@ import { motion } from "motion/react";
  *
  * Everything paints in the inherited text color.
  *
- * These do NOT stop under `prefers-reduced-motion`, and that is deliberate. The
- * preference is for motion that decorates — parallax, sliding, zoom, anything
- * sweeping across the viewport — because that is what triggers vestibular
- * symptoms. Here the rotation IS the message: it is the only thing separating
- * "still working" from "stalled". They once held a static frame, and the result
- * was a spinner that looked broken while it worked, telling the users who asked
- * for less motion strictly less than everyone else. At 16px inline there is no
- * vestibular case to answer; a full-viewport spinner would be a different
- * question, and the answer there would be to slow it, not to freeze it.
+ * The rotation IS the message: it is the only thing separating "still working"
+ * from "stalled". Nothing in this app dims its motion for
+ * `prefers-reduced-motion` — the animations here are the live readings, not
+ * decoration, and freezing them tells the reader strictly less. Where holding
+ * still is genuinely wanted, it is offered as a control instead: see the
+ * obstruction dome's pause.
  */
 
 const INK = "currentColor";

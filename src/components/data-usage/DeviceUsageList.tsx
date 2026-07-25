@@ -16,7 +16,9 @@ import type { ClientUsageTotal } from "../../lib/clientUsage";
 import { classifyDevice } from "../../lib/deviceKind";
 import { formatBytes, formatRelativeTime } from "../../lib/format";
 import { vendorForMac, ensureOuiLoaded } from "../../lib/macVendor";
-import { DeviceTypeIcon } from "../icons/DeviceTypeIcon";
+import { DeviceTypeIcon } from "../../assets/icons/DeviceTypeIcon";
+import { ResetIcon } from "../../assets/icons/ResetIcon";
+import { CloseIcon } from "../../assets/icons/CloseIcon";
 import { InfoDot } from "../shared/InfoDot";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
@@ -164,21 +166,10 @@ function DeviceUsageRow({
       {/* Actions live at the end of the row, always visible next to the usage. */}
       <span className='flex flex-none items-center gap-0.5'>
         <RowAction label={`Reset this month's usage for ${name}`} onClick={onReset}>
-          <path
-            d='M4 12a8 8 0 1 1 2.3 5.6M4 20v-4h4'
-            stroke='currentColor'
-            strokeWidth='1.8'
-            strokeLinecap='round'
-            strokeLinejoin='round'
-          />
+          <ResetIcon />
         </RowAction>
         <RowAction label={`Delete usage record for ${name}`} destructive onClick={onRemove}>
-          <path
-            d='M6 6l12 12M18 6L6 18'
-            stroke='currentColor'
-            strokeWidth='2'
-            strokeLinecap='round'
-          />
+          <CloseIcon />
         </RowAction>
       </span>
     </div>
@@ -204,9 +195,7 @@ function RowAction({
           aria-label={label}
           onClick={onClick}
         >
-          <svg width='15' height='15' viewBox='0 0 24 24' fill='none' aria-hidden='true'>
-            {children}
-          </svg>
+          {children}
         </button>
       </TooltipTrigger>
       <TooltipContent side='top'>{label}</TooltipContent>

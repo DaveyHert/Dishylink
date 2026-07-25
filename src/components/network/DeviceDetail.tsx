@@ -8,10 +8,10 @@ import type { TelemetrySample } from "../../lib/telemetry";
 import type { ThroughputRates } from "../../lib/throughputTracker";
 import { classifyDevice } from "../../lib/deviceKind";
 import { vendorForMac } from "../../lib/macVendor";
-import { DeviceTypeIcon } from "../icons/DeviceTypeIcon";
+import { DeviceTypeIcon } from "../../assets/icons/DeviceTypeIcon";
 import { DeviceFactsList } from "./DeviceFactsList";
 import { DeviceNameEditor, RenameButton } from "./DeviceNameEditor";
-import { DeviceSignalIcon } from "./DeviceSignalIcon";
+import { DeviceSignalIcon } from "../../assets/icons/DeviceSignalIcon";
 import { DeviceThroughput } from "./DeviceThroughput";
 import { buildDeviceFacts } from "./deviceFacts";
 import { deviceRowSubtitle } from "./NetworkRow";
@@ -58,26 +58,41 @@ export function DeviceDetail({
 
   return (
     <div>
-      <div className='mb-3.5 flex items-center gap-2.5'>
+      <div className='relative mb-3.5 flex items-center gap-2.5'>
         <DeviceTypeIcon
           kind={classifyDevice(name)}
           size={24}
           className='flex-none text-[var(--ink-secondary)]'
         />
+        {/* Signal glyph centred on the header row itself — not pinned to either
+            edge — so it reads as the device's headline state, the way the app
+            centres it. Absolute rather than a flex child because the row's true
+            midpoint must not move with the length of the name. */}
+        <span className='absolute left-1/2 top-0 flex -translate-x-1/2 flex-col items-center'>
+          <span className='flex h-6 items-center'>
+            <DeviceSignalIcon client={client} quality={quality} />
+          </span>
+          {/* The router's own id for this client, sat under the glyph. Opaque and
+              uint32 — not a serial, and not derived from the MAC (crc32/FNV/djb2
+              over six spellings all miss) — but stable across re-associations,
+              so it identifies the device the way the app uses it. */}
+          {client.clientId !== undefined && (
+            <span className='font-mono text-[11px] tabular-nums text-muted-foreground/70'>
+              {client.clientId}
+            </span>
+          )}
+        </span>
         <div className='min-w-0 flex-1'>
-          <div className='flex items-center gap-2'>
-            <span className='text-[18px] font-bold text-foreground'>{name}</span>
+          {/* Capped short of the centred glyph so a long name truncates instead
+              of running underneath it. */}
+          <div className='flex max-w-[calc(50%-36px)] items-center gap-2'>
+            <span className='truncate text-[18px] font-bold text-foreground'>{name}</span>
             {!editing && <RenameButton onClick={() => setEditing(true)} />}
           </div>
           <div className='text-[11.5px] font-medium text-muted-foreground'>
             {deviceRowSubtitle(client, isThisDevice)}
           </div>
         </div>
-        {/* Signal glyph pushed to the extreme right, so the leading icon can show
-            device type. */}
-        <span className='flex-none self-start'>
-          <DeviceSignalIcon client={client} quality={quality} />
-        </span>
       </div>
 
       {editing && (

@@ -16,6 +16,7 @@ import type { ReactNode } from "react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
+import { ChevronLeftIcon } from "../../assets/icons/ChevronLeftIcon";
 
 const panel = cva(
   // [box-shadow:] rather than shadow-[]: the shadow utility composes with ring vars.
@@ -50,7 +51,7 @@ export function DetailsModal({ title, onClose, children, size, onBack }: Details
             backdrop stays the scroll container. */}
         <DialogPrimitive.Overlay
           data-slot='details-modal-overlay'
-          className='fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[rgba(0,0,0,0.55)] pt-[6vh] pr-5 pb-10 pl-5 backdrop-blur-[5px]'
+          className='thin-scroll fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[rgba(0,0,0,0.55)] pt-[6vh] pr-5 pb-10 pl-5 backdrop-blur-[5px]'
         >
           <DialogPrimitive.Content
             data-slot='details-modal'
@@ -60,20 +61,12 @@ export function DetailsModal({ title, onClose, children, size, onBack }: Details
             <div className='mb-1.5 flex items-center gap-2'>
               {onBack && (
                 <button
-                  className="-mr-0.5 inline-flex h-7 w-7 flex-none cursor-pointer items-center justify-center rounded-[999px] border-0 bg-none p-0 text-[var(--ink-secondary)] [transition:background_120ms_ease,color_120ms_ease] hover:bg-[color-mix(in_srgb,var(--ink)_8%,var(--surface))] hover:text-[var(--ink)]"
+                  className='-mr-0.5 inline-flex h-7 w-7 flex-none cursor-pointer items-center justify-center rounded-[999px] border-0 bg-none p-0 text-[var(--ink-secondary)] [transition:background_120ms_ease,color_120ms_ease] hover:bg-[color-mix(in_srgb,var(--ink)_8%,var(--surface))] hover:text-[var(--ink)]'
                   onClick={onBack}
-                  aria-label="Back"
-                  type="button"
+                  aria-label='Back'
+                  type='button'
                 >
-                  <svg width='18' height='18' viewBox='0 0 24 24' fill='none' aria-hidden='true'>
-                    <path
-                      d='M15 5l-7 7 7 7'
-                      stroke='currentColor'
-                      strokeWidth='2'
-                      strokeLinecap='round'
-                      strokeLinejoin='round'
-                    />
-                  </svg>
+                  <ChevronLeftIcon />
                 </button>
               )}
               <DialogPrimitive.Title

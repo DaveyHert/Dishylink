@@ -6,28 +6,15 @@
 //    elevation band, dish plate + orange needle at the ACTUAL elevation
 // Their needle orange is #ffac30. Size ratios are verbatim from their code.
 
-import { DEG_TO_RAD, type AlignmentReading } from "./alignmentMath";
+import { type AlignmentReading } from "./alignmentMath";
+import {
+  CompassLabels,
+  DialDots,
+  DishPointer,
+  ToleranceWedge,
+} from "../../assets/icons/AlignmentDial";
 
-const NEEDLE_ORANGE = "#ffac30";
 const SIZE = 250;
-
-/** Filled sector (pie slice), angles in SVG degrees from the +x axis. Their `Id`. */
-function sectorPath(
-  centerX: number,
-  centerY: number,
-  radius: number,
-  thetaCenterDeg: number,
-  thetaDeg: number,
-): string {
-  const startRad = (thetaCenterDeg - thetaDeg / 2) * DEG_TO_RAD;
-  const endRad = (thetaCenterDeg + thetaDeg / 2) * DEG_TO_RAD;
-  const largeArc = thetaDeg > 180 ? 1 : 0;
-  const startX = centerX + radius * Math.cos(startRad);
-  const startY = centerY + radius * Math.sin(startRad);
-  const endX = centerX + radius * Math.cos(endRad);
-  const endY = centerY + radius * Math.sin(endRad);
-  return `M${centerX},${centerY} L${startX.toFixed(2)},${startY.toFixed(2)} A${radius},${radius} 0 ${largeArc} 1 ${endX.toFixed(2)},${endY.toFixed(2)} Z`;
-}
 
 /** Instrument title with its health berry. */
 function InstrumentHead({ label, berry }: { label: string; berry: "good" | "bad" | "unknown" }) {
@@ -42,7 +29,7 @@ function InstrumentHead({ label, berry }: { label: string; berry: "good" | "bad"
       <span className='font-mono text-[10.5px] font-medium tracking-[0.09em] text-muted-foreground uppercase'>
         {label}
       </span>
-      <span className='status-dot' style={{ background: berryColor }} />
+      <span className='size-[7px] flex-none rounded-full' style={{ background: berryColor }} />
     </div>
   );
 }
@@ -80,91 +67,41 @@ export function RotationInstrument({ reading }: { reading: AlignmentReading }) {
   const dishHeight = SIZE / 6;
   const needleAzimuth = reading.isValid ? reading.boresightAzimuthDeg : 0;
 
-  // their tick loop: 72 five-degree dots, skipping three around each cardinal
+  // their tick loop: 72 five-degree dots, skipping three around each cardinal.
+  // Compass north is up, so the whole ring sits a quarter turn back from the
+  // +x axis the marks are drawn against.
   const ringDots: number[] = [];
   for (let dotIndex = 0; dotIndex < 72; dotIndex++) {
     const positionInQuadrant = dotIndex % 18;
     if (positionInQuadrant !== 0 && positionInQuadrant !== 1 && positionInQuadrant !== 17) {
-      ringDots.push(dotIndex * 5);
+      ringDots.push(dotIndex * 5 - 90);
     }
   }
-  const compassLabels = [
-    { label: "N", angleDeg: 0 },
-    { label: "E", angleDeg: 90 },
-    { label: "S", angleDeg: 180 },
-    { label: "W", angleDeg: 270 },
-  ];
 
   return (
     <InstrumentFrame label='Rotation' berry={berryFor(reading.isAligned, reading.isValid)}>
-      {ringDots.map((angleDeg) => {
-        const angleRad = (angleDeg - 90) * DEG_TO_RAD;
-        return (
-          <circle
-            key={angleDeg}
-            cx={center + ringRadius * Math.cos(angleRad)}
-            cy={center + ringRadius * Math.sin(angleRad)}
-            r={1.2}
-            fill='var(--ink-secondary)'
-          />
-        );
-      })}
-      {compassLabels.map((mark) => {
-        const angleRad = (mark.angleDeg - 90) * DEG_TO_RAD;
-        return (
-          <text
-            key={mark.label}
-            x={center + ringRadius * Math.cos(angleRad)}
-            y={center + ringRadius * Math.sin(angleRad)}
-            dy='0.35em'
-            textAnchor='middle'
-            fontSize={SIZE / 20}
-            fontWeight={600}
-            fill='var(--ink-secondary)'
-            fontFamily='var(--font-ui)'
-          >
-            {mark.label}
-          </text>
-        );
-      })}
+      <DialDots cx={center} cy={center} radius={ringRadius} anglesDeg={ringDots} />
+      <CompassLabels cx={center} cy={center} radius={ringRadius} fontSize={SIZE / 20} />
       {/* wedge: desired azimuth ± tolerance (their thetaCenter = desired − 90) */}
       {reading.isValid && (
-        <path
-          d={sectorPath(
-            center,
-            center,
-            0.98 * ringRadius,
-            reading.desiredAzimuthDeg - 90,
-            2 * reading.azimuthToleranceDeg,
-          )}
-          fill='var(--ink-muted)'
-          opacity={reading.isAligned ? 0.32 : 0.16}
+        <ToleranceWedge
+          cx={center}
+          cy={center}
+          radius={0.98 * ringRadius}
+          centerDeg={reading.desiredAzimuthDeg - 90}
+          spanDeg={2 * reading.azimuthToleranceDeg}
+          inSpec={reading.isAligned}
         />
       )}
       {/* dish rect + orange needle, both at the ACTUAL azimuth */}
-      <g transform={`rotate(${needleAzimuth} ${center} ${center})`}>
-        <rect
-          x={center - dishWidth / 2}
-          y={center - dishHeight / 2}
-          width={dishWidth}
-          height={dishHeight}
-          rx={1}
-          fill='var(--dish-body)'
-          stroke='var(--dish-edge)'
-          strokeWidth={0.75}
-        />
-        {reading.isValid && (
-          <line
-            x1={center}
-            y1={center}
-            x2={center}
-            y2={center - 0.94 * ringRadius}
-            stroke={NEEDLE_ORANGE}
-            strokeWidth={1.5}
-            strokeLinecap='round'
-          />
-        )}
-      </g>
+      <DishPointer
+        cx={center}
+        cy={center}
+        rotateDeg={needleAzimuth}
+        width={dishWidth}
+        height={dishHeight}
+        needleY2={reading.isValid ? center - 0.94 * ringRadius : undefined}
+      />
     </InstrumentFrame>
   );
 }
@@ -183,56 +120,27 @@ export function TiltInstrument({ reading }: { reading: AlignmentReading }) {
     <InstrumentFrame label='Tilt' berry={berryFor(reading.isElevationValid, reading.isValid)}>
       {/* their y-up coordinate system: translate(0, size) scale(1, -1) */}
       <g transform={`translate(0, ${SIZE}) scale(1, -1)`}>
-        {arcDots.map((angleDeg) => {
-          const angleRad = angleDeg * DEG_TO_RAD;
-          return (
-            <circle
-              key={angleDeg}
-              cx={pivot + arcRadius * Math.cos(angleRad)}
-              cy={pivot + arcRadius * Math.sin(angleRad)}
-              r={1.2}
-              fill='var(--ink-secondary)'
-            />
-          );
-        })}
+        <DialDots cx={pivot} cy={pivot} radius={arcRadius} anglesDeg={arcDots} />
         {/* wedge spanning the valid elevation band */}
         {reading.isValid && (
-          <path
-            d={sectorPath(
-              pivot,
-              pivot,
-              0.98 * arcRadius,
-              (reading.upperElevationLimitDeg + reading.lowerElevationLimitDeg) / 2,
-              reading.upperElevationLimitDeg - reading.lowerElevationLimitDeg,
-            )}
-            fill='var(--ink-muted)'
-            opacity={reading.isElevationValid ? 0.32 : 0.16}
+          <ToleranceWedge
+            cx={pivot}
+            cy={pivot}
+            radius={0.98 * arcRadius}
+            centerDeg={(reading.upperElevationLimitDeg + reading.lowerElevationLimitDeg) / 2}
+            spanDeg={reading.upperElevationLimitDeg - reading.lowerElevationLimitDeg}
+            inSpec={reading.isElevationValid}
           />
         )}
         {/* dish plate + orange needle at the ACTUAL elevation */}
-        <g transform={`rotate(${needleElevation - 90} ${pivot} ${pivot})`}>
-          <rect
-            x={pivot - dishLength / 2}
-            y={pivot - dishThickness / 2}
-            width={dishLength}
-            height={dishThickness}
-            rx={1}
-            fill='var(--dish-body)'
-            stroke='var(--dish-edge)'
-            strokeWidth={0.75}
-          />
-          {reading.isValid && (
-            <line
-              x1={pivot}
-              y1={pivot}
-              x2={pivot}
-              y2={pivot + 0.96 * arcRadius}
-              stroke={NEEDLE_ORANGE}
-              strokeWidth={1.5}
-              strokeLinecap='round'
-            />
-          )}
-        </g>
+        <DishPointer
+          cx={pivot}
+          cy={pivot}
+          rotateDeg={needleElevation - 90}
+          width={dishLength}
+          height={dishThickness}
+          needleY2={reading.isValid ? pivot + 0.96 * arcRadius : undefined}
+        />
       </g>
     </InstrumentFrame>
   );

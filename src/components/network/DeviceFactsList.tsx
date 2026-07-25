@@ -5,7 +5,7 @@
 // cap and spreads every row out. A short list needs neither and renders plain.
 
 import { useState } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import { DataRow } from "./DataRow";
 import type { DeviceFact } from "./deviceFacts";
 
@@ -15,7 +15,6 @@ const COLLAPSED_PX = 280;
 
 export function DeviceFactsList({ facts }: { facts: DeviceFact[] }) {
   const [expanded, setExpanded] = useState(false);
-  const reduceMotion = useReducedMotion();
 
   const rows = facts.map((fact) => (
     <DataRow key={fact.key} label={fact.label} value={fact.value} />
@@ -30,7 +29,7 @@ export function DeviceFactsList({ facts }: { facts: DeviceFact[] }) {
       <motion.div
         initial={false}
         animate={{ height: expanded ? "auto" : COLLAPSED_PX }}
-        transition={reduceMotion ? { duration: 0 } : { duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
+        transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
         className={`flex flex-col ${expanded ? "overflow-hidden" : "thin-scroll overflow-y-auto"}`}
       >
         {rows}

@@ -1,17 +1,15 @@
-// Ookla-style circular speed gauge: a 270° arc with a sweeping needle, a
-// non-linear (sqrt) scale so low speeds still move the needle, and the live
-// value in the center. The needle/fill/number ease toward the target value each
-// frame (rAF) so the gauge glides like a real speedometer instead of snapping —
-// SVG geometry attributes (d, x2/y2) can't be CSS-transitioned, so we animate
-// the value itself. Theme-aware via CSS variables.
+// Ookla-style circular speed gauge. The dial itself is GaugeDial; what lives
+// here is the scale — a sqrt mapping from Mbps onto the dial's sweep, so low
+// speeds still move the needle — and the easing.
+//
+// The needle/fill/number ease toward the target value each frame (rAF) so the
+// gauge glides like a real speedometer instead of snapping: SVG geometry
+// attributes can't be CSS-transitioned, so we animate the value itself.
 
+import { GaugeDial, type GaugeTick } from "../../assets/icons/GaugeDial";
 import { useEasedValue } from "../../hooks/useEasedValue";
 import { SpeedCaption } from "./SpeedCaption";
 
-const CENTER = 130;
-const RADIUS = 100;
-const START_DEG = 135; // bottom-left
-const SWEEP_DEG = 270; // clockwise to bottom-right
 const MAX_MBPS = 500;
 const TICKS = [0, 10, 25, 50, 100, 200, 350, 500];
 
@@ -21,19 +19,10 @@ function fractionFor(mbps: number): number {
   return Math.sqrt(clamped) / Math.sqrt(MAX_MBPS);
 }
 
-function pointOnArc(radius: number, deg: number): [number, number] {
-  const rad = (deg * Math.PI) / 180;
-  return [CENTER + radius * Math.cos(rad), CENTER + radius * Math.sin(rad)];
-}
-
-function arcPath(radius: number, fromFraction: number, toFraction: number): string {
-  const fromDeg = START_DEG + fromFraction * SWEEP_DEG;
-  const toDeg = START_DEG + toFraction * SWEEP_DEG;
-  const [x0, y0] = pointOnArc(radius, fromDeg);
-  const [x1, y1] = pointOnArc(radius, toDeg);
-  const largeArc = toDeg - fromDeg > 180 ? 1 : 0;
-  return `M${x0.toFixed(2)},${y0.toFixed(2)} A${radius},${radius} 0 ${largeArc} 1 ${x1.toFixed(2)},${y1.toFixed(2)}`;
-}
+const DIAL_TICKS: GaugeTick[] = TICKS.map((tick) => ({
+  label: String(tick),
+  fraction: fractionFor(tick),
+}));
 
 interface SpeedGaugeProps {
   /** Current value the needle points to, in Mbps. */
@@ -46,54 +35,22 @@ interface SpeedGaugeProps {
 
 export function SpeedGauge({ value, mode, caption }: SpeedGaugeProps) {
   const eased = useEasedValue(value ?? 0);
-  const fraction = fractionFor(eased);
-  const needleDeg = START_DEG + fraction * SWEEP_DEG;
-  const [needleX, needleY] = pointOnArc(RADIUS - 12, needleDeg);
   const pending = value === null && eased < 0.1;
-  const fillColor = mode === "upload" ? "var(--chart-warm)" : "var(--chart-ink)";
 
   return (
-    <div className="flex w-full flex-col items-center">
-      <svg viewBox="0 0 260 240" className="h-auto w-full max-w-[300px]" role="img" aria-label={`${caption} ${value?.toFixed(1) ?? "—"} Mbps`}>
-        {/* track */}
-        <path d={arcPath(RADIUS, 0, 1)} className="gauge-track" fill="none" strokeLinecap="round" />
-        {/* fill up to the needle */}
-        {fraction > 0 && (
-          <path
-            d={arcPath(RADIUS, 0, fraction)}
-            fill="none"
-            stroke={fillColor}
-            strokeWidth={10}
-            strokeLinecap="round"
-          />
-        )}
-        {/* ticks + labels */}
-        {TICKS.map((tick) => {
-          const deg = START_DEG + fractionFor(tick) * SWEEP_DEG;
-          const [ix, iy] = pointOnArc(RADIUS - 18, deg);
-          const [ox, oy] = pointOnArc(RADIUS - 8, deg);
-          const [lx, ly] = pointOnArc(RADIUS - 32, deg);
-          return (
-            <g key={tick}>
-              <line x1={ix} y1={iy} x2={ox} y2={oy} className="gauge-tick" />
-              <text x={lx} y={ly} className="gauge-tick-label" textAnchor="middle" dominantBaseline="middle">
-                {tick}
-              </text>
-            </g>
-          );
-        })}
-        {/* needle */}
-        <line x1={CENTER} y1={CENTER} x2={needleX} y2={needleY} stroke={fillColor} className="gauge-needle" />
-        <circle cx={CENTER} cy={CENTER} r={7} fill={fillColor} />
-        {/* center readout — eases with the needle; a muted 0 only when idle at rest */}
-        <text x={CENTER} y={CENTER + 52} className={`gauge-value${pending ? " pending" : ""}`} textAnchor="middle">
-          {/* one decimal at every magnitude — see the same readout in SpeedBeam */}
-          {pending ? "0" : eased.toFixed(1)}
-        </text>
-        <text x={CENTER} y={CENTER + 72} className="gauge-unit" textAnchor="middle">
-          Mbps
-        </text>
-      </svg>
+    <div className='flex w-full flex-col items-center'>
+      <GaugeDial
+        fraction={fractionFor(eased)}
+        ticks={DIAL_TICKS}
+        color={mode === "upload" ? "var(--chart-warm)" : "var(--chart-ink)"}
+        // one decimal at every magnitude — see the same readout in SpeedBeam
+        value={pending ? "0" : eased.toFixed(1)}
+        unit='Mbps'
+        muted={pending}
+        className='h-auto w-full max-w-[300px]'
+        role='img'
+        aria-label={`${caption} ${value?.toFixed(1) ?? "—"} Mbps`}
+      />
       <SpeedCaption mode={mode} caption={caption} />
     </div>
   );

@@ -5,8 +5,8 @@
 // a place rather than a dialog. The dashboard is unmounted while it is open.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Pause, Play } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { Minimize2, Pause, Play } from "lucide-react";
 import type {
   DishObstructionMapJson,
   DishObstructionStatsJson,
@@ -24,47 +24,11 @@ import { LocationSetup } from "./LocationSetup";
 import { SatelliteCallout, type SelectedSatellite } from "./SatelliteCallout";
 import { buildSatellite } from "./satelliteGeometry";
 import { createSkyScene, type ScreenPoint, type SkyScene } from "./skyScene";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
-import { DomeIcon } from "../icons/DomeIcon";
+import { SkyControl } from "./SkyControl";
+import { DomeIcon } from "../../assets/icons/DomeIcon";
+import { DomeCanopyIcon } from "../../assets/icons/DomeCanopyIcon";
 import { useDomeTrim } from "../../hooks/useDomeTrim";
 import { domeTrimEnabled, setDomeTrimEnabled } from "../../lib/domeTrim";
-
-/** Matching round controls, sized like the modal close button elsewhere. */
-const roundControl =
-  "inline-flex h-[30px] w-[30px] cursor-pointer items-center justify-center rounded-full " +
-  "border border-[#8b97a82e] bg-[#0a0e16b8] text-[13px] text-[#8b97a8] backdrop-blur-sm hover:text-[#c7d0dc]";
-
-/** One of the round controls over the sky. The label is both the tooltip and the
- *  accessible name, so the two can never drift apart; `pressed` marks the ones
- *  that are a state rather than an action. */
-function SkyControl({
-  label,
-  pressed,
-  onClick,
-  children,
-}: {
-  label: string;
-  pressed?: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type='button'
-          aria-label={label}
-          aria-pressed={pressed}
-          className={roundControl}
-          onClick={onClick}
-        >
-          {children}
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side='bottom'>{label}</TooltipContent>
-    </Tooltip>
-  );
-}
 
 /** Panels float over the sky rather than covering it: dark enough to hold text,
  *  sheer enough that satellites keep crossing behind them. No blur — the sky
@@ -112,10 +76,10 @@ export function SatelliteView({
   // Seeded from the scene as it is built, so the button reports the camera's
   // state rather than a copy of its default that can drift out of step.
   const [rotating, setRotating] = useState(false);
+  const [domeShown, setDomeShown] = useState(true);
   const trimmed = useDomeTrim();
   const [unsupported, setUnsupported] = useState(false);
   const [changingLocation, setChangingLocation] = useState(false);
-  const reduceMotion = useReducedMotion();
   const snapshots = useObstructionSnapshots();
   const [scrubIndex, setScrubIndex] = useState<number | null>(null); // null = live
 
@@ -158,6 +122,7 @@ export function SatelliteView({
     }
     setScene(built);
     setRotating(built.isRotating());
+    setDomeShown(built.isDomeVisible());
     return () => {
       built.dispose();
       setScene(null);
@@ -289,7 +254,7 @@ export function SatelliteView({
       {/* Wide enough that LocationSetup's two buttons sit on one row. */}
       <div className='pointer-events-none absolute inset-y-0 left-0 flex w-[400px] flex-col gap-4 overflow-y-auto p-6'>
         <div className='flex flex-col gap-1.5'>
-          <h1 className='m-0 text-[15px] font-semibold'>Satellite view</h1>
+          <h1 className='m-0 text-[15px] font-semibold'>Live satellite view</h1>
           <p className='m-0 text-xs leading-relaxed text-[#8b97a8]'>
             Satellites are propagated live from SpaceX's published ephemerides.
           </p>
@@ -330,7 +295,7 @@ export function SatelliteView({
                 animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
                 transition={
-                  reduceMotion ? { duration: 0 } : { duration: 0.28, ease: [0.4, 0, 0.2, 1] }
+                  { duration: 0.28, ease: [0.4, 0, 0.2, 1] }
                 }
                 // Cancels the column's gap, which would otherwise appear in full
                 // the moment this mounts and undercut the height animation. The
@@ -421,6 +386,19 @@ export function SatelliteView({
 
       <div className='absolute right-6 top-5 flex items-center gap-2'>
         <SkyControl
+          label={domeShown ? "Hide dome" : "Show dome"}
+          pressed={!domeShown}
+          onClick={() => {
+            const shown = scene?.toggleDome() ?? true;
+            setDomeShown(shown);
+            // Nothing to scrub through with the dome gone — fall back to live so
+            // no stale "time-lapse" state lingers behind a hidden scrubber.
+            if (!shown) setScrubIndex(null);
+          }}
+        >
+          <DomeCanopyIcon off={!domeShown} />
+        </SkyControl>
+        <SkyControl
           label={trimmed ? "Show unmapped sky" : "Hide unmapped sky"}
           pressed={trimmed}
           onClick={() => setDomeTrimEnabled(!trimmed)}
@@ -433,12 +411,15 @@ export function SatelliteView({
         >
           {rotating ? <Pause size={13} /> : <Play size={13} />}
         </SkyControl>
+        <SkyControl label='Reset view' onClick={() => scene?.resetView()}>
+          <Minimize2 size={13} />
+        </SkyControl>
         <SkyControl label='Close' onClick={onClose}>
           ✕
         </SkyControl>
       </div>
 
-      {snapshots.length >= 2 && (
+      {domeShown && snapshots.length >= 2 && (
         <div className='absolute bottom-[96px] left-1/2 w-[min(720px,55vw)] min-w-[320px] -translate-x-1/2'>
           {viewingHistory && scrubIndex !== null && (
             <p className='m-0 pb-1 text-center text-[11.5px] font-medium text-muted-foreground'>
@@ -454,9 +435,12 @@ export function SatelliteView({
         </div>
       )}
 
-      <div className='pointer-events-none absolute bottom-[22px] left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-card px-[18px] py-1.5 [&>div]:flex-nowrap [&>div]:pt-0'>
-        <ObstructionKey withServing />
-      </div>
+      {/* The key names the dome's colours, so it goes when the dome does. */}
+      {domeShown && (
+        <div className='pointer-events-none absolute bottom-[22px] left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-card px-[18px] py-1.5 [&>div]:flex-nowrap [&>div]:pt-0'>
+          <ObstructionKey withServing />
+        </div>
+      )}
 
       <p className='pointer-events-none absolute bottom-[74px] left-1/2 m-0 -translate-x-1/2 text-[11px] text-[#8b97a8] opacity-80'>
         {unsupported

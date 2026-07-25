@@ -7,6 +7,53 @@
 // z = up, in meters, origin at the mount pivot. The renderer tilts the panel
 // by the live boresight elevation and yaws it by the live azimuth.
 
+import type { DishStatusJson } from "./dishClient";
+
+/** The kit models SpaceX's own web app distinguishes (their `zl`). One id per
+ *  model, resolved once, so geometry and alignment can't disagree about which
+ *  dish this is. */
+export type DishModel = "v2" | "v3" | "v4" | "v5" | "hp" | "flatHp" | "hpV4" | "mini";
+
+/**
+ * Their `Vl`, ported: the model from the hardware string plus the actuator flag.
+ *
+ * Prefix tests, in their order, and the order carries meaning — every HP Gen 4
+ * reports a `rev4_hp…` string, so testing `rev4` first would swallow it. A
+ * substring match does the same thing, which is why this is prefix-based rather
+ * than a list of regexes.
+ *
+ * This assumes every High Performance kit reports a string starting `hp`, which
+ * is what their resolver assumes. An earlier version of this table also matched
+ * `high_perf` and `flat_hp` anywhere in the string; no dish has been observed
+ * reporting either, and a dish that did would resolve to `v4` here exactly as it
+ * would in their app.
+ */
+export function resolveDishModel(
+  hardwareVersion: string | undefined,
+  motorised: boolean,
+): DishModel {
+  const hardware = hardwareVersion?.toLowerCase() ?? "";
+  if (hardware === "") return "v4";
+  if (hardware.startsWith("hp")) return motorised ? "hp" : "flatHp";
+  if (hardware.startsWith("rev3") || hardware.startsWith("dishy")) return "v3";
+  if (hardware.startsWith("rev1") || hardware.startsWith("rev2")) return "v2";
+  if (hardware.startsWith("rev4_hp")) return "hpV4";
+  if (hardware.startsWith("rev4")) return "v4";
+  if (hardware.startsWith("rev5")) return "v5";
+  if (hardware.startsWith("mini1") || hardware.startsWith("mini2")) return "mini";
+  return "v4";
+}
+
+/** The kit to draw, straight from a status reply. Every surface that renders
+ *  hardware resolves through here, so the dome, the speed test and the alignment
+ *  card cannot disagree about which dish this is. */
+export function dishModelFor(status: DishStatusJson | null): DishModel {
+  return resolveDishModel(
+    status?.deviceInfo?.hardwareVersion,
+    status?.hasActuators === "HAS_ACTUATORS_YES",
+  );
+}
+
 export interface DishModelSpec {
   /** Marketing name shown in UI tooltips. */
   displayName: string;
@@ -15,47 +62,34 @@ export interface DishModelSpec {
   panelHeightM: number;
   cornerRadiusM: number;
   mount: "kickstand" | "mast" | "flat";
+  /** Default plate tilt, from their `Gl`. Kits that sit near flat (under 8°)
+   *  are allowed to aim all the way to zenith — see alignmentMath.ts. */
+  defaultTiltDeg: number;
 }
 
-// Published dimensions per model (starlink.com specs pages).
-const MODEL_SPECS: Array<{ match: RegExp; spec: DishModelSpec }> = [
-  {
-    match: /rev4/i,
-    spec: { displayName: "Standard (Gen 3)", panelWidthM: 0.594, panelHeightM: 0.383, cornerRadiusM: 0.04, mount: "kickstand" },
-  },
-  {
-    match: /rev3|dishy/i,
-    spec: { displayName: "Standard Actuated (Gen 2)", panelWidthM: 0.513, panelHeightM: 0.303, cornerRadiusM: 0.15, mount: "mast" },
-  },
-  {
-    match: /rev1|rev2/i,
-    spec: { displayName: "Original (round)", panelWidthM: 0.59, panelHeightM: 0.59, cornerRadiusM: 0.295, mount: "mast" },
-  },
-  {
-    match: /mini/i,
-    spec: { displayName: "Mini", panelWidthM: 0.298, panelHeightM: 0.259, cornerRadiusM: 0.03, mount: "kickstand" },
-  },
-  {
-    match: /hp1|high_perf|flat_hp/i,
-    spec: { displayName: "High Performance", panelWidthM: 0.575, panelHeightM: 0.511, cornerRadiusM: 0.045, mount: "flat" },
-  },
-];
-
-const FALLBACK_SPEC: DishModelSpec = {
-  displayName: "Starlink",
-  panelWidthM: 0.55,
-  panelHeightM: 0.38,
-  cornerRadiusM: 0.04,
-  mount: "kickstand",
+// Dimensions from starlink.com specs pages; defaultTiltDeg from the dish web
+// app's own model table. The Gen 4 HP and Gen 4 panels are unpublished, so those
+// two reuse the nearest published body — the tilt figures are theirs regardless.
+const MODEL_SPECS: Record<DishModel, DishModelSpec> = {
+  v4: { displayName: "Standard (Gen 3)", panelWidthM: 0.594, panelHeightM: 0.383, cornerRadiusM: 0.04, mount: "kickstand", defaultTiltDeg: 20 },
+  v5: { displayName: "Standard (Gen 4)", panelWidthM: 0.594, panelHeightM: 0.383, cornerRadiusM: 0.04, mount: "kickstand", defaultTiltDeg: 13 },
+  v3: { displayName: "Standard Actuated (Gen 2)", panelWidthM: 0.513, panelHeightM: 0.303, cornerRadiusM: 0.15, mount: "mast", defaultTiltDeg: 25 },
+  v2: { displayName: "Original (round)", panelWidthM: 0.59, panelHeightM: 0.59, cornerRadiusM: 0.295, mount: "mast", defaultTiltDeg: 25 },
+  mini: { displayName: "Mini", panelWidthM: 0.298, panelHeightM: 0.259, cornerRadiusM: 0.03, mount: "kickstand", defaultTiltDeg: 20 },
+  hp: { displayName: "High Performance", panelWidthM: 0.575, panelHeightM: 0.511, cornerRadiusM: 0.045, mount: "mast", defaultTiltDeg: 25 },
+  flatHp: { displayName: "Flat High Performance", panelWidthM: 0.575, panelHeightM: 0.511, cornerRadiusM: 0.045, mount: "flat", defaultTiltDeg: 0 },
+  hpV4: { displayName: "High Performance (Gen 4)", panelWidthM: 0.575, panelHeightM: 0.511, cornerRadiusM: 0.045, mount: "flat", defaultTiltDeg: 0 },
 };
 
-export function specForHardware(hardwareVersion: string | undefined): DishModelSpec {
-  if (hardwareVersion) {
-    for (const entry of MODEL_SPECS) {
-      if (entry.match.test(hardwareVersion)) return entry.spec;
-    }
-  }
-  return FALLBACK_SPEC;
+export function specForModel(model: DishModel): DishModelSpec {
+  return MODEL_SPECS[model];
+}
+
+export function specForHardware(
+  hardwareVersion: string | undefined,
+  motorised = false,
+): DishModelSpec {
+  return MODEL_SPECS[resolveDishModel(hardwareVersion, motorised)];
 }
 
 export interface MeshTriangle {

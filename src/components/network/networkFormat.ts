@@ -73,6 +73,21 @@ export function liveThroughputMbps(
   return throughputMbps(client.rxStats) + throughputMbps(client.txStats);
 }
 
+/**
+ * Identity of one roster entry, for row keys and selection. A bare MAC is not
+ * enough: two devices can share a cloned MAC (two Govee lights, 2026-07-21) and
+ * the router lists both — keyed by MAC alone, React sees duplicate keys, which
+ * duplicates and omits rows unpredictably on every re-sort. clientId is the
+ * router's own per-device id (its name store is keyed by it); for a normal
+ * device without one this is just the MAC.
+ */
+export function clientEntryKey(client: WifiClientJson): string | null {
+  if (!client.macAddress) return null;
+  return client.clientId !== undefined
+    ? `${client.macAddress}|${client.clientId}`
+    : client.macAddress;
+}
+
 export function displayName(client: WifiClientJson): string {
   return (
     client.givenName || client.name || client.ipAddress || client.macAddress || "Unnamed device"

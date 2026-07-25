@@ -1,7 +1,7 @@
 // Full client manager backed by the router's gRPC API. Two tabs (Devices /
 // Nodes), and a drill-in for whichever row is selected.
 //
-// This file is the router: it owns the tab, resolves `selectedMac` to a node or
+// This file is the router: it owns the tab, resolves `selectedKey` to a node or
 // a device, and hands off. The rows and both detail views live beside it.
 
 import { useEffect, useMemo, useState } from "react";
@@ -14,22 +14,24 @@ import { ensureOuiLoaded } from "../../lib/macVendor";
 import { Loading } from "../ui/loading";
 import { Callout } from "../ui/callout";
 import { SegmentedControl } from "../ui/segmented-control";
-import { RouterIcon } from "../icons/RouterIcon";
+import { RouterIcon } from "../../assets/icons/RouterIcon";
 import { DeviceDetail } from "./DeviceDetail";
 import { NodeDetail } from "./NodeDetail";
 import { DeviceRow, NetworkRow } from "./NetworkRow";
 import { buildNodeRoster } from "./nodeRoster";
-import { liveThroughputMbps } from "./networkFormat";
+import { clientEntryKey, liveThroughputMbps } from "./networkFormat";
 
 export function NetworkPanel({
   network,
-  selectedMac,
+  selectedKey,
   onSelect,
 }: {
   network: RouterNetwork;
-  /** Selection is owned by the sheet, which renders the back chevron + title. */
-  selectedMac: string | null;
-  onSelect: (macAddress: string | null) => void;
+  /** Selection is owned by the sheet, which renders the back chevron + title.
+   *  Devices select by `clientEntryKey` (MAC alone is not unique — cloned-MAC
+   *  devices share one); nodes select by their MAC. */
+  selectedKey: string | null;
+  onSelect: (entryKey: string | null) => void;
 }) {
   const [tab, setTab] = useState<"devices" | "nodes">("devices");
   // Load the OUI registry once, then bump state so vendor lookups re-render.
@@ -70,8 +72,8 @@ export function NetworkPanel({
 
   const nodes = buildNodeRoster(network.clients, network.wifiConfig);
 
-  const selectedNode = selectedMac
-    ? nodes.find((node) => node.client?.macAddress === selectedMac)
+  const selectedNode = selectedKey
+    ? nodes.find((node) => node.client?.macAddress === selectedKey)
     : null;
   if (selectedNode) {
     return (
@@ -85,8 +87,8 @@ export function NetworkPanel({
     );
   }
 
-  const selected = selectedMac
-    ? network.clients.find((client) => client.macAddress === selectedMac)
+  const selected = selectedKey
+    ? network.clients.find((client) => clientEntryKey(client) === selectedKey)
     : null;
   if (selected) {
     return (
@@ -124,7 +126,7 @@ export function NetworkPanel({
         >
           {sortedDevices.map((client, index) => (
             <DeviceRow
-              key={client.macAddress ?? index}
+              key={clientEntryKey(client) ?? index}
               client={client}
               self={self}
               onSelect={onSelect}
@@ -172,7 +174,9 @@ function ListSection({ caption, children }: { caption: string; children: React.R
       <div className='text-[11.5px] font-medium text-muted-foreground' style={{ marginBottom: 8 }}>
         {caption}
       </div>
-      <div className='flex flex-col gap-1.5 max-h-[460px] overflow-y-auto'>{children}</div>
+      <div className='thin-scroll flex max-h-[460px] flex-col gap-1.5 overflow-y-auto'>
+        {children}
+      </div>
     </>
   );
 }

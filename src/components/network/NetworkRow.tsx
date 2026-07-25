@@ -10,10 +10,16 @@ import type { WifiClientJson } from "../../lib/dishClient";
 import { matchesSelf } from "../../lib/selfIdentity";
 import type { SelfIdentity } from "../../lib/selfIdentity";
 import { classifyDevice } from "../../lib/deviceKind";
-import { DeviceTypeIcon } from "../icons/DeviceTypeIcon";
+import { DeviceTypeIcon } from "../../assets/icons/DeviceTypeIcon";
 import { Badge } from "../ui/badge";
-import { DeviceSignalIcon } from "./DeviceSignalIcon";
-import { bandLabel, deviceSubtitle, displayName, signalQuality } from "./networkFormat";
+import { DeviceSignalIcon } from "../../assets/icons/DeviceSignalIcon";
+import {
+  bandLabel,
+  clientEntryKey,
+  deviceSubtitle,
+  displayName,
+  signalQuality,
+} from "./networkFormat";
 
 export function NetworkRow({
   icon,
@@ -98,7 +104,8 @@ export function DeviceRow({
 }: {
   client: WifiClientJson;
   self: SelfIdentity;
-  onSelect: (macAddress: string | null) => void;
+  /** Receives the row's `clientEntryKey`, which NetworkPanel resolves back. */
+  onSelect: (entryKey: string | null) => void;
 }) {
   const isSelf = matchesSelf(client, self);
   const name = displayName(client);
@@ -117,7 +124,10 @@ export function DeviceRow({
       band={bandLabel(client)}
       highlight={isSelf}
       showChevron
-      onClick={() => client.macAddress && onSelect(client.macAddress)}
+      onClick={() => {
+        const key = clientEntryKey(client);
+        if (key) onSelect(key);
+      }}
     />
   );
 }

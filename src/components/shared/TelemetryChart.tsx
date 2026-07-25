@@ -4,6 +4,18 @@
 import { useMemo, useRef, useState, useEffect, useCallback, useId } from "react";
 import type { TelemetrySample, OutageEvent } from "../../lib/telemetry";
 import { formatClockTime } from "../../lib/format";
+import {
+  Crosshair,
+  NoDataBands,
+  OutageBands,
+  PlotBaseline,
+  PlotGrid,
+  PlotTimeAxis,
+  SeriesArea,
+  SeriesLine,
+  WashGradient,
+  type PlotFrame,
+} from "./chartMarks";
 
 export interface ChartSeries {
   id: string;
@@ -314,6 +326,12 @@ export function TelemetryChart({
     setHoverIndex(nearestDistance > maxSnapPx ? null : nearestIndex);
   };
 
+  const plotFrame: PlotFrame = {
+    left: PLOT_MARGIN.left,
+    top: PLOT_MARGIN.top,
+    width: plotWidth,
+    height: plotHeight,
+  };
   const hoveredBucket = hoverIndex !== null ? buckets[hoverIndex] : null;
   const tooltipOnLeft = hoveredBucket !== null && xForTime(hoveredBucket.timestampMs) > containerWidth * 0.62;
 
@@ -327,144 +345,64 @@ export function TelemetryChart({
       >
         {/* Starlink-style wash: series color fading to transparent below the line */}
         <defs>
-          <linearGradient id={washGradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={`var(${series[0].colorVar})`} stopOpacity={0.28} />
-            <stop offset="100%" stopColor={`var(${series[0].colorVar})`} stopOpacity={0} />
-          </linearGradient>
+          <WashGradient id={washGradientId} colorVar={series[0].colorVar} />
         </defs>
-        {/* hairline grid + y ticks */}
-        {yTickValues.map((tickValue) => (
-          <g key={tickValue}>
-            <line
-              x1={PLOT_MARGIN.left}
-              x2={PLOT_MARGIN.left + plotWidth}
-              y1={yForValue(tickValue)}
-              y2={yForValue(tickValue)}
-              stroke="var(--hairline)"
-              strokeWidth={1}
-            />
-            <text
-              x={PLOT_MARGIN.left - 7}
-              y={yForValue(tickValue) + 3}
-              textAnchor="end"
-              fontSize={10}
-              fontFamily="var(--font-mono)"
-              fill="var(--ink-muted)"
-            >
-              {formatTick(tickValue)}
-            </text>
-          </g>
-        ))}
-        {/* baseline */}
-        <line
-          x1={PLOT_MARGIN.left}
-          x2={PLOT_MARGIN.left + plotWidth}
-          y1={PLOT_MARGIN.top + plotHeight}
-          y2={PLOT_MARGIN.top + plotHeight}
-          stroke="var(--baseline)"
-          strokeWidth={1}
+        <PlotGrid
+          frame={plotFrame}
+          ticks={yTickValues.map((tickValue) => ({
+            label: formatTick(tickValue),
+            y: yForValue(tickValue),
+          }))}
         />
-        {/* x time ticks */}
-        {xTickTimes.map((tickTime) => (
-          <text
-            key={tickTime}
-            x={xForTime(tickTime)}
-            y={height - 6}
-            textAnchor="middle"
-            fontSize={10}
-            fontFamily="var(--font-mono)"
-            fill="var(--ink-muted)"
-          >
-            {formatClockTime(tickTime).slice(0, 5)}
-          </text>
-        ))}
-        {/* outage bands */}
-        {visibleOutages.map((outage, outageIndex) => {
-          const bandStartX = Math.max(xForTime(outage.startMs), PLOT_MARGIN.left);
-          const bandEndX = Math.min(xForTime(outage.startMs + outage.durationMs), PLOT_MARGIN.left + plotWidth);
-          return (
-            <rect
-              key={outageIndex}
-              x={bandStartX}
-              y={PLOT_MARGIN.top}
-              width={Math.max(bandEndX - bandStartX, 2)}
-              height={plotHeight}
-              fill="var(--status-critical)"
-              opacity={0.09}
-            />
-          );
-        })}
-        {/* no-data bands: name the hole, so absence reads as deliberate rather
-            than as a chart that failed to draw */}
-        {gapRegions.map((region) => {
-          const bandStartX = Math.max(xForTime(region.startMs), leftEdgeX);
-          const bandEndX = Math.min(xForTime(region.endMs), leftEdgeX + plotWidth);
-          const bandWidth = bandEndX - bandStartX;
-          if (bandWidth <= 0) return null;
-          return (
-            <g key={region.startMs}>
-              <rect
-                x={bandStartX}
-                y={PLOT_MARGIN.top}
-                width={bandWidth}
-                height={plotHeight}
-                fill="var(--ink-muted)"
-                opacity={0.06}
-              />
-              {bandWidth > 54 && (
-                <text
-                  x={bandStartX + bandWidth / 2}
-                  y={PLOT_MARGIN.top + plotHeight / 2}
-                  textAnchor="middle"
-                  fontSize={10}
-                  fontFamily="var(--font-mono)"
-                  fill="var(--ink-muted)"
-                >
-                  no data
-                </text>
-              )}
-            </g>
-          );
-        })}
-        {/* area wash for the first series */}
-        {areaPath && <path d={areaPath} fill={`url(#${washGradientId})`} />}
-        {/* series lines */}
+        <PlotBaseline frame={plotFrame} />
+        <PlotTimeAxis
+          y={height - 6}
+          ticks={xTickTimes.map((tickTime) => ({
+            label: formatClockTime(tickTime).slice(0, 5),
+            x: xForTime(tickTime),
+          }))}
+        />
+        <OutageBands
+          frame={plotFrame}
+          bands={visibleOutages.map((outage, outageIndex) => {
+            const bandStartX = Math.max(xForTime(outage.startMs), leftEdgeX);
+            const bandEndX = Math.min(xForTime(outage.startMs + outage.durationMs), leftEdgeX + plotWidth);
+            return { key: outageIndex, x: bandStartX, width: Math.max(bandEndX - bandStartX, 2) };
+          })}
+        />
+        <NoDataBands
+          frame={plotFrame}
+          bands={gapRegions.flatMap((region) => {
+            const bandStartX = Math.max(xForTime(region.startMs), leftEdgeX);
+            const bandEndX = Math.min(xForTime(region.endMs), leftEdgeX + plotWidth);
+            const bandWidth = bandEndX - bandStartX;
+            return bandWidth <= 0 ? [] : [{ key: region.startMs, x: bandStartX, width: bandWidth }];
+          })}
+        />
+        {areaPath && <SeriesArea d={areaPath} gradientId={washGradientId} />}
         {seriesPaths.map((linePath, seriesIndex) => (
-          <path
+          <SeriesLine
             key={series[seriesIndex].id}
             d={linePath}
-            fill="none"
-            stroke={`var(${series[seriesIndex].colorVar})`}
-            strokeWidth={2}
-            strokeLinejoin="round"
-            strokeLinecap="round"
+            colorVar={series[seriesIndex].colorVar}
           />
         ))}
-        {/* crosshair + markers */}
         {hoveredBucket && (
-          <g>
-            <line
-              x1={xForTime(hoveredBucket.timestampMs)}
-              x2={xForTime(hoveredBucket.timestampMs)}
-              y1={PLOT_MARGIN.top}
-              y2={PLOT_MARGIN.top + plotHeight}
-              stroke="var(--baseline)"
-              strokeWidth={1}
-            />
-            {hoveredBucket.values.map((value, seriesIndex) =>
-              value === null ? null : (
-                <circle
-                  key={series[seriesIndex].id}
-                  cx={xForTime(hoveredBucket.timestampMs)}
-                  cy={yForValue(value)}
-                  r={4.5}
-                  fill={`var(${series[seriesIndex].colorVar})`}
-                  stroke="var(--surface)"
-                  strokeWidth={2}
-                />
-              ),
+          <Crosshair
+            frame={plotFrame}
+            x={xForTime(hoveredBucket.timestampMs)}
+            points={hoveredBucket.values.flatMap((value, seriesIndex) =>
+              value === null
+                ? []
+                : [
+                    {
+                      key: series[seriesIndex].id,
+                      y: yForValue(value),
+                      colorVar: series[seriesIndex].colorVar,
+                    },
+                  ],
             )}
-          </g>
+          />
         )}
       </svg>
 
@@ -481,7 +419,7 @@ export function TelemetryChart({
           {series.map((chartSeries, seriesIndex) => (
             <div className="flex items-center justify-between gap-[7px] leading-[1.7]" key={chartSeries.id}>
               <span className="inline-flex items-center gap-1.5 text-[var(--ink-secondary)]">
-                <span className="series-swatch" style={{ background: `var(${chartSeries.colorVar})` }} />
+                <span className="size-[9px] flex-none rounded-full" style={{ background: `var(${chartSeries.colorVar})` }} />
                 {chartSeries.label}
               </span>
               <span className="font-mono tabular-nums">

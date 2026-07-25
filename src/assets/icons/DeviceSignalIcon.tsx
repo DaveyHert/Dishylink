@@ -2,7 +2,7 @@
 // Ethernet port for a wired client (which has no RSSI to show as arcs).
 
 import type { WifiClientJson } from "../../lib/dishClient";
-import type { SignalQuality } from "./networkFormat";
+import type { SignalQuality } from "../../components/network/networkFormat";
 
 /** Concentric wifi-arc glyph (like the official app): white/ink arcs, with the
  *  weaker arcs dimmed by signal quality (`bars` 1–4 → dot + up to 3 arcs). */

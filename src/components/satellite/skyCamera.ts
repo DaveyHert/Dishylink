@@ -16,6 +16,9 @@ const AUTO_ROTATE_RAD_PER_SEC = (2 * Math.PI) / 120;
 /** Rotation yields after a drag, so it isn't fighting the angle you just set —
  *  just long enough to feel like letting go, not like the view stalling. */
 const RESUME_AFTER_DRAG_MS = 1_000;
+/** A reset drifts back at a slow, cinematic pace rather than snapping — long
+ *  enough to read as a camera pulling out, not a jump cut. */
+const RESET_SECONDS = 2.4;
 
 export interface SkyCameraOptions {
   /** A press that did not turn into an orbit drag, in client coordinates.
@@ -42,6 +45,9 @@ export interface SkyCamera {
   /** Whether rotation is on, so a button can seed its icon from the truth
    *  rather than from a guess about this module's default. */
   isRotating(): boolean;
+  /** Gently ease the tilt and zoom back to the opening framing, leaving the
+   *  heading you are looking along untouched. Yields at once to a drag or wheel. */
+  resetView(): void;
   dispose(): void;
 }
 
@@ -70,10 +76,22 @@ export function createSkyCamera(
 ): SkyCamera {
   let { yaw, pitch } = INITIAL;
   let distance = initialDistance ?? INITIAL.distance;
+  // The opening framing — the tilt and distance the camera first sat at above the
+  // dome, captured so a reset can return to it whatever this scene was built with.
+  const home = { pitch, distance };
+  // While a reset glides, the tilt and zoom it is easing between; cleared the
+  // instant the viewer takes hold again, so it never fights a drag or wheel.
+  let resetTo: {
+    fromPitch: number;
+    toPitch: number;
+    fromDist: number;
+    toDist: number;
+    t: number; // 0 → 1 over RESET_SECONDS
+  } | null = null;
   // On from the moment the view opens, as on the dashboard dome: the sky drifts
   // until you take hold of it, and picks the drift back up once you let go.
-  // Anyone who asked the OS for less motion starts still and can opt in.
-  let autoRotate = !(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
+  // The pause control turns it off for anyone who would rather it held still.
+  let autoRotate = true;
   let dragging = false,
     lastX = 0,
     lastY = 0,
@@ -85,6 +103,7 @@ export function createSkyCamera(
 
   const onPointerDown = (e: PointerEvent) => {
     dragging = true;
+    resetTo = null;
     lastX = e.clientX;
     lastY = e.clientY;
     velocity = 0;
@@ -116,6 +135,7 @@ export function createSkyCamera(
   };
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
+    resetTo = null;
     distance = Math.min(DISTANCE_MAX, Math.max(DISTANCE_MIN, distance + e.deltaY * 0.0035));
     lastInteraction = performance.now();
   };
@@ -144,6 +164,17 @@ export function createSkyCamera(
           yaw -= dt * AUTO_ROTATE_RAD_PER_SEC;
         }
       }
+      if (resetTo) {
+        // Ease the tilt and zoom back to the opening framing over RESET_SECONDS —
+        // the camera's starting angle and distance above the dome, never the
+        // heading it began at. A slow cosine in-out, so it starts and stops like
+        // a camera settling; the heading drifts on above it, untouched.
+        resetTo.t = Math.min(1, resetTo.t + dt / RESET_SECONDS);
+        const e = 0.5 - 0.5 * Math.cos(Math.PI * resetTo.t);
+        pitch = resetTo.fromPitch + (resetTo.toPitch - resetTo.fromPitch) * e;
+        distance = resetTo.fromDist + (resetTo.toDist - resetTo.fromDist) * e;
+        if (resetTo.t >= 1) resetTo = null;
+      }
       const zoomedOut = Math.min(
         1,
         Math.max(0, (distance - DISTANCE_MIN) / (FOCUS_FAR - DISTANCE_MIN)),
@@ -169,6 +200,18 @@ export function createSkyCamera(
     },
     isRotating() {
       return autoRotate;
+    },
+    resetView() {
+      // Only the tilt and zoom return to where the view opened; the heading you
+      // are looking along is left exactly where it is. Captured from where the
+      // camera is now, so pressing it again mid-glide simply re-eases from here.
+      resetTo = {
+        fromPitch: pitch,
+        toPitch: home.pitch,
+        fromDist: distance,
+        toDist: home.distance,
+        t: 0,
+      };
     },
     dispose() {
       canvas.removeEventListener("pointerdown", onPointerDown);

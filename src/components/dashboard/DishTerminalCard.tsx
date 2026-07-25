@@ -3,7 +3,8 @@
 import type { DishStatusJson, DishReadyStatesJson } from "../../lib/dishClient";
 import { formatAttitudeState, formatRelativeTime, formatUptime } from "../../lib/format";
 import { FactGrid, FactRow } from "../ui/fact-row";
-import { DishIcon } from "../icons/DishIcon";
+import { DishIcon } from "../../assets/icons/DishIcon";
+import { ExpandIcon } from "../../assets/icons/ExpandIcon";
 
 /** Plan tier. The API's CONSUMER is what the Starlink app labels "Residential". */
 function formatServiceClass(classOfService?: string): string {
@@ -46,19 +47,6 @@ interface DeviceFact {
   value: string;
   /** Colors the value when the fact is a health signal (e.g. weather). */
   tone?: "good" | "warn" | "bad";
-}
-
-function ExpandIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M9 4H5a1 1 0 0 0-1 1v4M15 4h4a1 1 0 0 1 1 1v4M9 20H5a1 1 0 0 1-1-1v-4M15 20h4a1 1 0 0 0 1-1v-4"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
 }
 
 const TONE_VAR: Record<NonNullable<DeviceFact["tone"]>, string> = {
@@ -142,7 +130,10 @@ export function DishTerminalCard({
       tone: status.gpsStats?.gpsValid && positionState !== "Unconverged" ? "good" : "warn",
     },
     { label: "Ethernet link", value: status.ethSpeedMbps ? `${status.ethSpeedMbps} Mbps` : "—" },
-    { label: "NAT", value: (status.natFlag ?? "—").replace("NAT_", "").replaceAll("_", " ").toLowerCase() },
+    {
+      label: "NAT",
+      value: (status.natFlag ?? "—").replace("NAT_", "").replaceAll("_", " ").toLowerCase(),
+    },
     {
       // The dish sends router identities, not a count — keep both: the count
       // reads at a glance, the ids say which routers.
@@ -159,7 +150,10 @@ export function DishTerminalCard({
         ? `az ${alignment.boresightAzimuthDeg?.toFixed(1)}° · el ${alignment.boresightElevationDeg?.toFixed(1)}°`
         : "—",
     },
-    { label: "Tilt", value: alignment?.tiltAngleDeg !== undefined ? `${alignment.tiltAngleDeg.toFixed(1)}°` : "—" },
+    {
+      label: "Tilt",
+      value: alignment?.tiltAngleDeg !== undefined ? `${alignment.tiltAngleDeg.toFixed(1)}°` : "—",
+    },
     { label: "Software update", value: (status.softwareUpdateState ?? "—").toLowerCase() },
   ];
 
@@ -176,31 +170,32 @@ export function DishTerminalCard({
 
   return (
     <div className={expanded ? "" : "col-span-12 min-w-0 rounded-xl bg-card px-[18px] py-4"}>
-      <div className="mb-2.5 flex items-center justify-between gap-3">
+      <div className='mb-2.5 flex items-center justify-between gap-3'>
         {!expanded && (
-          <span className="flex items-center gap-2 text-[16px] font-semibold tracking-[0.005em] text-foreground">
+          <span className='flex items-center gap-2 text-[16px] font-semibold tracking-[0.005em] text-foreground'>
             <DishIcon size={26} className={stale ? "opacity-40" : undefined} />
             Starlink Dish Terminal
           </span>
         )}
-        <div className="flex items-center gap-2.5">
+        <div className='flex items-center gap-2.5'>
           {/* Same wording as the alerts panel's Status header for this state. */}
           {stale && (
-            <span className="text-[12px] font-medium" style={{ color: "var(--status-critical)" }}>
+            <span className='text-[12px] font-medium' style={{ color: "var(--status-critical)" }}>
               {/* "last known" alone left the reader unable to tell a five-second
                   gap from a five-hour one, while every figure below still looked
                   live. Say how old the snapshot actually is. */}
-              not answering · {lastStatusAtMs ? `from ${formatRelativeTime(lastStatusAtMs)}` : "last known"}
+              not answering ·{" "}
+              {lastStatusAtMs ? `from ${formatRelativeTime(lastStatusAtMs)}` : "last known"}
             </span>
           )}
-          <span className="font-mono text-[12px] font-medium text-muted-foreground tabular-nums">
+          <span className='font-mono text-[12px] font-medium text-muted-foreground tabular-nums'>
             {status.deviceInfo?.id ?? ""}
           </span>
           {onExpand && (
             <button
-              className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-muted-foreground transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_8%,var(--surface))] hover:text-foreground"
+              className='inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-muted-foreground transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_8%,var(--surface))] hover:text-foreground'
               onClick={onExpand}
-              aria-label="Open full terminal view"
+              aria-label='Open full terminal view'
             >
               <ExpandIcon />
             </button>
@@ -208,7 +203,7 @@ export function DishTerminalCard({
         </div>
       </div>
       {updateBanner && (
-        <div className="mb-3 flex items-center gap-2 rounded-md bg-[color-mix(in_srgb,var(--chart-warm)_14%,var(--surface))] px-3 py-[9px] text-[13px] font-semibold text-[color:var(--chart-warm)]">
+        <div className='mb-3 flex items-center gap-2 rounded-md bg-[color-mix(in_srgb,var(--chart-warm)_14%,var(--surface))] px-3 py-[9px] text-[13px] font-semibold text-[color:var(--chart-warm)]'>
           ↻ {updateBanner}
         </div>
       )}
@@ -216,7 +211,7 @@ export function DishTerminalCard({
         {facts.map((fact) => (
           <FactRow key={fact.label} label={fact.label}>
             <span
-              className="overflow-hidden text-right font-mono text-[12px] text-ellipsis whitespace-nowrap text-foreground tabular-nums"
+              className='overflow-hidden text-right font-mono text-[12px] text-ellipsis whitespace-nowrap text-foreground tabular-nums'
               style={fact.tone ? { color: `var(${TONE_VAR[fact.tone]})` } : undefined}
             >
               {fact.value}

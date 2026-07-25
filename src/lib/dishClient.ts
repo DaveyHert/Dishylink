@@ -141,6 +141,11 @@ export interface DishStatusJson {
   ned2dishQuaternion?: DishQuaternionJson;
   /** Motorized ("HAS_ACTUATORS_YES") vs electronically-steered ("HAS_ACTUATORS_NO"). */
   hasActuators?: string;
+  /** How the kit is licensed to move: "STATIONARY", "NOMADIC" or "MOBILE".
+   *  Absent means STATIONARY — proto3 drops the zero value — which is why a
+   *  fixed install never sends it. A MOBILE kit is allowed to aim all the way to
+   *  zenith, so the alignment band ceiling depends on this. */
+  mobilityClass?: string;
 }
 
 export interface DishOutageJson {

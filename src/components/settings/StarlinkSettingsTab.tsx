@@ -156,7 +156,7 @@ export function StarlinkSettingsTab({
               disabled={settings.saving}
               onValueChange={(hour) => save({ swupdateRebootHour: Number(hour) })}
             >
-              <SelectTrigger className={triggerClass} style={{ width: 168 }}>
+              <SelectTrigger className={triggerClass}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className={selectContentClass}>

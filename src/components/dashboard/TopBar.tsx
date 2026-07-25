@@ -6,16 +6,20 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { SpeedometerIcon } from "../icons/SpeedometerIcon";
-import { CrosshairIcon } from "../icons/CrosshairIcon";
-import { ChartLineIcon } from "../icons/ChartLineIcon";
-import { NetworkIcon } from "../icons/NetworkIcon";
-import { UserIcon } from "../icons/UserIcon";
+import { SpeedometerIcon } from "../../assets/icons/SpeedometerIcon";
+import { CrosshairIcon } from "../../assets/icons/CrosshairIcon";
+import { ChartLineIcon } from "../../assets/icons/ChartLineIcon";
+import { NetworkIcon } from "../../assets/icons/NetworkIcon";
+import { UserIcon } from "../../assets/icons/UserIcon";
+import { MenuIcon } from "../../assets/icons/MenuIcon";
+import { SettingsIcon } from "../../assets/icons/SettingsIcon";
+import { MoonIcon } from "../../assets/icons/MoonIcon";
+import { SunIcon } from "../../assets/icons/SunIcon";
 import type { DishConnectionState } from "../../hooks/useDishTelemetry";
 import type { DishStatusJson } from "../../lib/dishClient";
 import { formatUptime } from "../../lib/format";
 import { AlertsMenu } from "../alerts/AlertsMenu";
-import { AppLogo } from "../icons/AppLogo";
+import { AppLogo } from "../../assets/icons/AppLogo";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import type { DeviceAlerts } from "../../hooks/useDeviceAlerts";
 
@@ -40,6 +44,15 @@ const CONNECTION_LABEL: Record<DishConnectionState, string> = {
   connecting: "connecting",
   online: "online",
   unreachable: "dish unreachable",
+};
+
+// The status dot: a 7px disc that pulses while the link is live or being found,
+// and sits still once the dish is unreachable.
+const statusDot = "size-[7px] flex-none rounded-full";
+const CONNECTION_DOT: Record<DishConnectionState, string> = {
+  connecting: "bg-[var(--ink-muted)] animate-[status-pulse_1s_ease-in-out_infinite]",
+  online: "bg-[var(--status-good)] animate-[status-pulse_2.2s_ease-in-out_infinite]",
+  unreachable: "bg-[var(--status-critical)]",
 };
 
 // Nav text button, read-only status readouts (divider-separated, no button feel),
@@ -82,11 +95,11 @@ export function TopBar({
   ];
 
   return (
-    <header className="sticky top-0 z-20 flex items-center justify-between gap-4 bg-[color-mix(in_srgb,var(--page)_86%,transparent)] px-6 py-3.5 backdrop-blur-[10px]">
-      <div className="flex min-w-0 flex-1 items-center gap-[11px]">
-        <AppLogo size={28} className="flex-none" />
-        <span className="text-[17px] font-bold tracking-[0.16em]">DISHYLINK</span>
-        <nav className="ml-6 flex items-center gap-[22px] max-[1080px]:hidden">
+    <header className='sticky top-0 z-20 flex items-center justify-between gap-4 bg-[color-mix(in_srgb,var(--page)_86%,transparent)] px-6 py-3.5 backdrop-blur-[10px]'>
+      <div className='flex min-w-0 flex-1 items-center gap-[11px]'>
+        <AppLogo size={28} className='flex-none' />
+        <span className='text-[17px] font-bold tracking-[0.16em]'>DISHYLINK</span>
+        <nav className='ml-6 flex items-center gap-[22px] max-[1080px]:hidden'>
           {navItems.map((item) => (
             <button key={item.label} className={navLink} onClick={item.onClick}>
               {item.label}
@@ -94,17 +107,21 @@ export function TopBar({
           ))}
         </nav>
       </div>
-      <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
-        <div className="flex items-center gap-2.5">
+      <div className='flex flex-1 flex-wrap items-center justify-end gap-3'>
+        <div className='flex items-center gap-2.5'>
           <span className={statusItem}>
-            <span className={`status-dot ${connectionState}`} />
+            <span className={`${statusDot} ${CONNECTION_DOT[connectionState]}`} />
             {CONNECTION_LABEL[connectionState]}
           </span>
           {status?.deviceInfo?.countryCode && (
-            <span className={`${statusItem} ${statusDivider} max-[1080px]:hidden`}>{status.deviceInfo.countryCode}</span>
+            <span className={`${statusItem} ${statusDivider} max-[1080px]:hidden`}>
+              {status.deviceInfo.countryCode}
+            </span>
           )}
           {status?.deviceState?.uptimeS && (
-            <span className={`${statusItem} ${statusDivider} max-[1080px]:hidden`}>up {formatUptime(Number(status.deviceState.uptimeS))}</span>
+            <span className={`${statusItem} ${statusDivider} max-[1080px]:hidden`}>
+              up {formatUptime(Number(status.deviceState.uptimeS))}
+            </span>
           )}
         </div>
 
@@ -113,32 +130,30 @@ export function TopBar({
           <PopoverTrigger asChild>
             <button
               className={cn(iconButton, "hidden max-[1080px]:inline-flex")}
-              aria-label="Open navigation menu"
-              title="Menu"
+              aria-label='Open navigation menu'
+              title='Menu'
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <path d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
+              <MenuIcon />
             </button>
           </PopoverTrigger>
           {/* Same surface language as the bell popover: --surface, rounded-xl,
               hairline border (not the stock white one), soft shadow. */}
           <PopoverContent
-            align="end"
+            align='end'
             sideOffset={10}
-            className="w-56 rounded-xl border border-solid border-[var(--hairline)] bg-[var(--surface)] p-1.5 text-[var(--ink)] shadow-[0_12px_40px_rgba(0,0,0,0.45)]"
+            className='w-56 rounded-xl border border-solid border-[var(--hairline)] bg-[var(--surface)] p-1.5 text-[var(--ink)] shadow-[0_12px_40px_rgba(0,0,0,0.45)]'
           >
-            <nav className="flex flex-col">
+            <nav className='flex flex-col'>
               {navItems.map((item) => (
                 <button
                   key={item.label}
-                  className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[14px] font-semibold text-[var(--ink-secondary)] transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] hover:text-[var(--ink)]"
+                  className='flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[14px] font-semibold text-[var(--ink-secondary)] transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] hover:text-[var(--ink)]'
                   onClick={() => {
                     item.onClick();
                     setMenuOpen(false);
                   }}
                 >
-                  <item.Icon size={16} className="flex-none" />
+                  <item.Icon size={16} className='flex-none' />
                   {item.label}
                 </button>
               ))}
@@ -150,28 +165,21 @@ export function TopBar({
           notificationsOn={notificationsOn}
           onToggleNotifications={onToggleNotifications}
         />
-        <button className={iconButton} onClick={onOpenSettings} aria-label="Open settings" title="Settings">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-          </svg>
+        <button
+          className={iconButton}
+          onClick={onOpenSettings}
+          aria-label='Open settings'
+          title='Settings'
+        >
+          <SettingsIcon />
         </button>
         <button
           className={iconButton}
           onClick={onToggleTheme}
-          aria-label="Toggle color theme"
-          title="Toggle color theme"
+          aria-label='Toggle color theme'
+          title='Toggle color theme'
         >
-          {theme === "light" ? (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
-            </svg>
-          ) : (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="4" />
-              <path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4m11.4-11.4 1.4-1.4" />
-            </svg>
-          )}
+          {theme === "light" ? <MoonIcon /> : <SunIcon />}
         </button>
       </div>
     </header>

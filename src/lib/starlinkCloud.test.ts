@@ -11,7 +11,7 @@ import {
 } from "./starlinkCloud";
 
 const now = Date.now();
-const fresh: DeviceTelemetry = { kind: "router", timestampMs: now - 60_000 }; // 1m old
+const fresh: DeviceTelemetry = { kind: "router", timestampMs: now - 30_000 }; // 30s old — the cache's typical serving age
 const stale: DeviceTelemetry = { kind: "router", timestampMs: now - 6 * 60 * 60 * 1000 }; // 6h old
 
 describe("routerStatus", () => {

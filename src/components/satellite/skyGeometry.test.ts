@@ -20,7 +20,7 @@ function survey(gridSize: number, readTo: number, overrides: Partial<SkySurvey> 
     kinds,
     boresightAzimuthDeg: 0,
     boresightElevationDeg: 90,
-    dishModel: "rectangular",
+    dishModel: "v3",
     ...overrides,
   };
 }

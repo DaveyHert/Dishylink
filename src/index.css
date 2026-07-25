@@ -1,5 +1,7 @@
-/* DishyLink — Starlink app design language.
-   
+/* DishyLink — Starlink companion desktop app & browser extension design language. Theme tokens, the base reset, and
+   the handful of rules that have no Tailwind utility: keyframes, scrollbar
+   pseudo-elements, and positional selectors. Everything else is utilities in
+   the components. */
 
 /* Preflight is the base reset. It lands in @layer base, so it beats unstyled
    browser defaults but yields to both the unlayered CSS below and to utilities
@@ -67,6 +69,12 @@
   --satellite: #b7791f;
   --accent: #b7791f;
 
+  /* The speed test's beam, its packet and the satellites it links. Emitted
+     light, so it cannot simply take the ink: white is invisible on paper and
+     black does not read as a beam. Zinc carries it on the light card and white
+     on the night sky (see dark override below). */
+  --beam: var(--color-zinc-300);
+
   /* The physical dish is white/silver hardware — never a black silhouette.
      Kept theme-light in both modes (see dark override below). */
   --dish-body: #fff;
@@ -121,6 +129,9 @@
   /* warm gold reads against the black dome + white clear dots */
   --satellite: #e0a422;
   --accent: #e0a422;
+
+  /* white light against the black sky */
+  --beam: #ffffff;
 
   --dish-body: #fff;
   --dish-edge: rgba(255, 255, 255, 0.559);
@@ -179,30 +190,13 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ---------- shared primitives ---------- */
+/* ---------- shared primitives ----------
+   The status dot itself is utilities in TopBar/AlignmentInstruments; only its
+   halo keyframe lives here. Named status-pulse, not pulse: Tailwind's theme
+   ships its own @keyframes pulse, and this one only outranked it by being
+   unlayered. */
 
-.status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex: none;
-}
-
-.status-dot.online {
-  background: var(--status-good);
-  animation: pulse 2.2s ease-in-out infinite;
-}
-
-.status-dot.connecting {
-  background: var(--ink-muted);
-  animation: pulse 1s ease-in-out infinite;
-}
-
-.status-dot.unreachable {
-  background: var(--status-critical);
-}
-
-@keyframes pulse {
+@keyframes status-pulse {
   0%,
   100% {
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--status-good) 45%, transparent);
@@ -225,15 +219,6 @@ body {
     opacity: 1;
     transform: none;
   }
-}
-
-/* ---------- charts ---------- */
-
-.series-swatch {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  flex: none;
 }
 
 /* ---------- thin scrollbar (scrollbar pseudo-elements aren't Tailwind utilities) ---------- */
@@ -273,86 +258,8 @@ body {
    are Tailwind utilities in their components now. */
 
 /* ---------- speed test ----------
-   Only SVG-presentation rules (stroke/fill on the gauge and beam elements) live
-   here; the HTML wrappers and readout text are Tailwind utilities in the speed
-   components. */
-
-.gauge-track {
-  stroke: var(--hairline);
-  stroke-width: 10;
-}
-
-.gauge-tick {
-  stroke: var(--baseline);
-  stroke-width: 1.5;
-}
-
-.gauge-tick-label {
-  fill: var(--ink-muted);
-  font-family: var(--font-mono);
-  font-size: 9px;
-}
-
-.gauge-needle {
-  stroke-width: 3;
-  stroke-linecap: round;
-}
-
-.gauge-value {
-  fill: var(--ink);
-  font-size: 40px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-
-.gauge-value.pending {
-  fill: var(--ink-muted);
-}
-
-.gauge-unit {
-  fill: var(--ink-muted);
-  font-size: 13px;
-  font-weight: 500;
-}
-
-/* Starlink beam view */
-.beam-ring {
-  stroke: var(--hairline);
-  stroke-width: 1;
-}
-
-.beam-orbit {
-  stroke: var(--baseline);
-  stroke-width: 1;
-  stroke-dasharray: 3 5;
-}
-
-/* Bloom is a dark-mode effect: blurring dark ink on a light page reads as a grey
-   smudge, so light theme keeps the beam crisp and drops the satellite halo too. */
-.beam-sat-halo {
-  display: none;
-}
-
-[data-theme="dark"] .beam-glow-layer {
-  filter: url(#beam-glow);
-}
-
-[data-theme="dark"] .beam-sat-halo {
-  display: block;
-}
-
-.beam-dish line {
-  stroke: var(--ink);
-  stroke-width: 2;
-}
-
-.beam-wordmark {
-  fill: var(--ink);
-  font-family: var(--font-ui);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.22em;
-}
+   The gauge and beam shapes carry their stroke/fill as SVG presentation
+   attributes and their text as utilities; only the keyframe is left. */
 
 /* Spin keyframe for the run button's loader (applied via an animate-[…] utility
    in SpeedTestCard; keyframes can't be expressed as a utility). */

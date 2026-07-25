@@ -3,7 +3,7 @@
 // One choice shared by both surfaces that draw a dome — the dashboard card and
 // the full sky view — because they are the same dome seen at two sizes, and
 // having one trimmed while the other is not reads as a bug rather than a
-// setting. Only the sky view offers the control; the card follows.
+// setting. Either surface can set it, and both follow.
 //
 // Kept here rather than in React state for the same reason: the two live in
 // different parts of the tree and would otherwise need the flag threaded through

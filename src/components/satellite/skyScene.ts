@@ -60,6 +60,12 @@ export interface SkyScene {
   toggleRotation(): boolean;
   /** Whether the camera is rotating, so a fresh scene's button starts honest. */
   isRotating(): boolean;
+  /** Show or hide the whole dome; returns the new state. Not persisted — a fresh
+   *  scene starts with the dome shown. Only this scene's dome, never the card's. */
+  toggleDome(): boolean;
+  isDomeVisible(): boolean;
+  /** Gently ease the camera's tilt and zoom back to the opening framing. */
+  resetView(): void;
   dispose(): void;
 }
 
@@ -179,6 +185,7 @@ export function createSkyScene(
   let survey = initialSurvey;
   let trimUnmapped = initialTrim;
   let domeData = buildDomePoints(survey, trimUnmapped);
+  let domeVisible = true;
   let dish = buildDish(meshForModel(survey.dishModel), survey, dishScale);
   let dishData = dish.data;
   const starData = stars ? buildStars() : null;
@@ -710,13 +717,7 @@ export function createSkyScene(
     const aData = gl.getAttribLocation(dotProgram, "aData");
     gl.enableVertexAttribArray(aData);
     gl.vertexAttribPointer(aData, 4, gl.FLOAT, false, 16, 0);
-    // Paint, not light: the unmapped dots carry an alpha and have to let the
-    // terrain and sky behind them through. Depth still writes, so the dots
-    // occlude each other exactly as they did when the pass was opaque.
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    gl.drawArrays(gl.POINTS, 0, domeData.length / 4);
-    gl.disable(gl.BLEND);
+    if (domeVisible) gl.drawArrays(gl.POINTS, 0, domeData.length / 4);
 
     frameHandle = requestAnimationFrame(frame);
   }
@@ -773,6 +774,16 @@ export function createSkyScene(
     },
     isRotating() {
       return camera.isRotating();
+    },
+    toggleDome() {
+      domeVisible = !domeVisible;
+      return domeVisible;
+    },
+    isDomeVisible() {
+      return domeVisible;
+    },
+    resetView() {
+      camera.resetView();
     },
     dispose() {
       cancelAnimationFrame(frameHandle);

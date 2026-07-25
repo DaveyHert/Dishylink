@@ -96,7 +96,9 @@ export interface CloudAccount {
 
 export type DeviceStatus = "online" | "offline" | "inactive";
 
-const FRESH_MS = 60 * 60 * 1000; // telemetry newer than this = reporting now
+// Devices upload every ~15-45s and the cache serves snapshots ~27s old
+// (measured 2026-07-21), so one minute of silence already means missed uploads.
+const FRESH_MS = 60 * 1000;
 const INACTIVE_MS = 30 * 24 * 60 * 60 * 1000; // not connected in a month = decommissioned
 
 /** Full telemetry key for a dish/router as the feed reports it. */

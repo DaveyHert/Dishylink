@@ -8,7 +8,12 @@
 
 import { describe, expect, it } from "vitest";
 import * as satelliteJs from "satellite.js";
-import { StarlinkTracker, type SatelliteAttitude } from "./satellites";
+import {
+  StarlinkTracker,
+  advanceLookAngles,
+  type SatelliteAttitude,
+  type TopocentricState,
+} from "./satellites";
 
 type Vec3 = [number, number, number];
 
@@ -207,5 +212,71 @@ describe("attitude in the observer's ENU frame", () => {
     for (const axis of [attitude.radial, attitude.alongTrack, attitude.crossTrack]) {
       expect(norm(axis)).toBeCloseTo(1, 9);
     }
+  });
+});
+
+describe("look-angle extrapolation", () => {
+  // The frame-skip fix: advancing by velocity between SGP4 samples must land
+  // where a fresh propagation would. The tracker exposes topocentric state via
+  // finePass, but that depends on a satellite being up; here the internal path
+  // is driven so the case is deterministic. The bar is a fraction of a degree
+  // over 100 ms — the interval the renderer actually bridges.
+  type Internals = {
+    lookAngles(
+      satrec: satelliteJs.SatRec,
+      atDate: Date,
+      gmst: number,
+      withAttitude: boolean,
+    ): { azimuthDeg: number; elevationDeg: number; rangeKm: number; topocentric?: TopocentricState } | null;
+  };
+
+  const line1 = "1 25544U 98067A   24001.50000000  .00016717  00000-0  30777-3 0  9993";
+  const line2 = "2 25544  51.6416 247.4627 0006703 130.5360 325.0288 15.49815350 12345";
+
+  it("matches a fresh propagation 100 ms later", () => {
+    const satrec = satelliteJs.twoline2satrec(line1, line2);
+    const base = new Date("2024-01-01T12:00:00Z");
+    const gmst = satelliteJs.gstime(base);
+
+    // Put the observer at the sub-satellite point so the pass is guaranteed and
+    // fixed: the satellite sits near the zenith, well above the horizon.
+    const state = satelliteJs.propagate(satrec, base);
+    if (!state?.position) throw new Error("no state vector");
+    const ground = satelliteJs.eciToGeodetic(
+      state.position as { x: number; y: number; z: number },
+      gmst,
+    );
+    const tracker = new StarlinkTracker([], {
+      latitudeDeg: satelliteJs.radiansToDegrees(ground.latitude),
+      longitudeDeg: satelliteJs.radiansToDegrees(ground.longitude),
+      altitudeM: 0,
+    }) as unknown as Internals;
+
+    const sample = tracker.lookAngles(satrec, base, gmst, true)!;
+    expect(sample.topocentric).toBeDefined();
+    const later = new Date(base.getTime() + 100);
+    const truth = tracker.lookAngles(satrec, later, satelliteJs.gstime(later), true)!;
+    const advanced = advanceLookAngles(sample.topocentric!, 0.1);
+
+    // Compare as pointing directions, so an azimuth wrap near a pole can't
+    // masquerade as a large error.
+    const toVec = (azDeg: number, elDeg: number) => {
+      const az = (azDeg * Math.PI) / 180, el = (elDeg * Math.PI) / 180;
+      return [Math.cos(el) * Math.sin(az), Math.cos(el) * Math.cos(az), Math.sin(el)];
+    };
+    const a = toVec(advanced.azimuthDeg, advanced.elevationDeg);
+    const t = toVec(truth.azimuthDeg, truth.elevationDeg);
+    const cosine = Math.min(1, Math.max(-1, a[0] * t[0] + a[1] * t[1] + a[2] * t[2]));
+    const offByDeg = (Math.acos(cosine) * 180) / Math.PI;
+    expect(offByDeg).toBeLessThan(0.05);
+    expect(Math.abs(advanced.rangeKm - truth.rangeKm)).toBeLessThan(0.5);
+  });
+
+  it("returns the sample itself at dt = 0", () => {
+    const topo: TopocentricState = { position: [100, 800, 400], velocity: [-5, 2, -3] };
+    const at = advanceLookAngles(topo, 0);
+    const range = Math.hypot(100, 800, 400);
+    expect(at.rangeKm).toBeCloseTo(range, 6);
+    expect(at.elevationDeg).toBeCloseTo((Math.asin(400 / range) * 180) / Math.PI, 6);
   });
 });

@@ -22,8 +22,8 @@ import {
   unlockAlertSound,
   playAlertSound,
 } from "../../lib/alertSound";
-import { BellIcon } from "../icons/BellIcon";
-import { SpeakerIcon } from "../icons/SpeakerIcon";
+import { BellIcon } from "../../assets/icons/BellIcon";
+import { SpeakerIcon } from "../../assets/icons/SpeakerIcon";
 import { ALERTS_TABS, ActiveTab, HistoryTab, StatusTab, type AlertsTab } from "./AlertsTabs";
 import { SEVERITY_COLOR } from "./alertFormat";
 
@@ -174,7 +174,9 @@ export function AlertsMenu({
         </div>
 
         <div className='thin-scroll max-h-[60vh] overflow-y-auto'>
-          {tab === "active" && <ActiveTab active={active} history={history} firstSeen={firstSeen} />}
+          {tab === "active" && (
+            <ActiveTab active={active} history={history} firstSeen={firstSeen} />
+          )}
           {tab === "history" && <HistoryTab history={history} historianUp={historianUp} />}
           {tab === "status" && (
             <StatusTab

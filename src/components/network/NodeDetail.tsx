@@ -7,11 +7,11 @@
 import type { RadioReading } from "../../hooks/useRadioTemps";
 import type { WifiNetworkConfigJson } from "../../lib/dishClient";
 import type { SelfIdentity } from "../../lib/selfIdentity";
-import { RouterIcon } from "../icons/RouterIcon";
+import { RouterIcon } from "../../assets/icons/RouterIcon";
 import { DataRow, SectionHeading } from "./DataRow";
 import { DeviceRow } from "./NetworkRow";
 import { RadioTempsSection } from "./RadioTempsSection";
-import { bandLabel } from "./networkFormat";
+import { bandLabel, clientEntryKey } from "./networkFormat";
 import type { NodeEntry } from "./nodeRoster";
 
 export function NodeDetail({
@@ -26,8 +26,9 @@ export function NodeDetail({
   /** Live radio temps from the historian — router node only. */
   radios: RadioReading[];
   self: SelfIdentity;
-  /** Drill from a node straight into one of its clients, as the app does. */
-  onSelect: (macAddress: string | null) => void;
+  /** Drill from a node straight into one of its clients, as the app does.
+   *  Receives the client row's `clientEntryKey`. */
+  onSelect: (entryKey: string | null) => void;
 }) {
   const client = node.client;
   const meshConfig = node.key ? wifiConfig?.meshConfigs?.[node.key] : undefined;
@@ -98,7 +99,7 @@ export function NodeDetail({
             <div className='flex flex-col gap-1.5'>
               {node.devices.map((device, index) => (
                 <DeviceRow
-                  key={device.macAddress ?? index}
+                  key={clientEntryKey(device) ?? index}
                   client={device}
                   self={self}
                   onSelect={onSelect}

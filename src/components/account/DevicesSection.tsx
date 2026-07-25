@@ -11,8 +11,8 @@ import {
   type DishTelemetry,
   type RouterTelemetry,
 } from "../../lib/starlinkCloud";
-import { DishIcon } from "../icons/DishIcon";
-import { RouterIcon } from "../icons/RouterIcon";
+import { DishIcon } from "../../assets/icons/DishIcon";
+import { RouterIcon } from "../../assets/icons/RouterIcon";
 import { Field, StatusDot } from "./accountChrome";
 import { buildDeviceList, type DeviceItem } from "./deviceList";
 

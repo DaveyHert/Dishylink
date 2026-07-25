@@ -5,21 +5,12 @@
 // not drift into two answers about which cell is obstructed or which kit this is.
 
 import type { DishObstructionMapJson, DishStatusJson } from "../../lib/dishClient";
-import { resolveDishModel, type DishModel } from "../../lib/dishMesh";
+import { dishModelFor } from "../../lib/dishMesh";
 import { unpackCells, type ObstructionSnapshot } from "../../lib/obstructionSnapshots";
 import { liveKindAtCell, snapshotKindAtCell } from "../obstruction/obstructionGrid";
 import type { SkySurvey } from "./skyGeometry";
 
 const KIND_CODE = { unmapped: 0, clear: 1, partial: 2, obstructed: 3 } as const;
-
-/** The kit to draw, from the same status reply the boresight comes from. Uses
- *  the shared resolver, so this agrees with the alignment card by construction. */
-export function dishModelFor(status: DishStatusJson | null): DishModel {
-  return resolveDishModel(
-    status?.deviceInfo?.hardwareVersion,
-    status?.hasActuators === "HAS_ACTUATORS_YES",
-  );
-}
 
 /** The live grid, flattened to the one byte per cell the scene wants. */
 export function liveSurvey(

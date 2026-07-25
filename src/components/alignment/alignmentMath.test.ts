@@ -7,6 +7,7 @@ import {
   computeAlignment,
   wrapDegrees,
 } from "./alignmentMath";
+import { resolveDishModel } from "../../lib/dishMesh";
 
 describe("angularSeparationDeg", () => {
   it("is zero for a direction against itself", () => {
@@ -161,5 +162,68 @@ describe("computeAlignment", () => {
   it("falls back to a 70° target when the dish reports none", () => {
     // proto3 omits a zero, so 0 means "not sent" rather than "aim at the horizon".
     expect(computeAlignment(statusAt(0, 70, { desiredBoresightElevationDeg: 0 })).targetElevationDeg).toBe(70);
+  });
+});
+
+/** Status for a given kit, aimed near zenith — the elevation that separates a
+ *  75° band ceiling from a 90° one. */
+function kitAimedAt(
+  elevationDeg: number,
+  kit: { hardwareVersion?: string; hasActuators?: string; mobilityClass?: string },
+): DishStatusJson {
+  return {
+    boresightAzimuthDeg: 0,
+    boresightElevationDeg: elevationDeg,
+    deviceInfo: { hardwareVersion: kit.hardwareVersion },
+    hasActuators: kit.hasActuators,
+    mobilityClass: kit.mobilityClass,
+    alignmentStats: {
+      attitudeEstimationState: "FILTER_CONVERGED",
+      desiredBoresightAzimuthDeg: 0,
+      desiredBoresightElevationDeg: 70,
+    },
+  } as DishStatusJson;
+}
+
+describe("resolveDishModel", () => {
+  it("reads an HP Gen 4 as its own model, not as a standard Gen 3", () => {
+    // Every HP Gen 4 string also starts with "rev4"; testing "rev4" first — or
+    // matching it as a substring — swallows this case.
+    expect(resolveDishModel("rev4_hp_prod1", false)).toBe("hpV4");
+    expect(resolveDishModel("rev4_panda_prod2", false)).toBe("v4");
+  });
+
+  it("splits the HP line on whether it actually has motors", () => {
+    expect(resolveDishModel("hp1_prod0", true)).toBe("hp");
+    expect(resolveDishModel("hp1_prod0", false)).toBe("flatHp");
+  });
+
+  it("falls back to a standard Gen 3 for an unknown or absent string", () => {
+    expect(resolveDishModel(undefined, false)).toBe("v4");
+    expect(resolveDishModel("something_new", false)).toBe("v4");
+  });
+});
+
+describe("computeAlignment band ceiling", () => {
+  it("holds a standard kit to the 75° band", () => {
+    expect(computeAlignment(kitAimedAt(85, { hardwareVersion: "rev4_panda_prod2" })).isAligned).toBe(false);
+  });
+
+  it("holds a Mini to the 75° band too", () => {
+    // Its default tilt is 20°, not under 8° — the Mini is not a flat kit.
+    expect(computeAlignment(kitAimedAt(85, { hardwareVersion: "mini1_panda_prod1" })).isAligned).toBe(false);
+  });
+
+  it("lets a flat kit aim to the zenith", () => {
+    const flatHp = kitAimedAt(85, { hardwareVersion: "hp1_prod0", hasActuators: "HAS_ACTUATORS_NO" });
+    expect(computeAlignment(flatHp).isAligned).toBe(true);
+    expect(computeAlignment(flatHp).upperElevationLimitDeg).toBe(90);
+    expect(computeAlignment(kitAimedAt(85, { hardwareVersion: "rev4_hp_prod1" })).isAligned).toBe(true);
+  });
+
+  it("lets a MOBILE install aim to the zenith whatever the model", () => {
+    const roaming = kitAimedAt(85, { hardwareVersion: "rev4_panda_prod2", mobilityClass: "MOBILE" });
+    expect(computeAlignment(roaming).isAligned).toBe(true);
+    expect(computeAlignment(roaming).upperElevationLimitDeg).toBe(90);
   });
 });

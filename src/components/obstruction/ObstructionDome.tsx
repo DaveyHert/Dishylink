@@ -34,9 +34,13 @@ const CARD_DISH_SCALE = 1.5;
 export function ObstructionDome({
   obstructionMap,
   status,
+  onSceneChange,
 }: {
   obstructionMap: DishObstructionMapJson | null;
   status: DishStatusJson | null;
+  /** Hands the scene up so the card's chrome can drive it — the controls sit in
+   *  the card, over the canvas, but the scene is built down here. */
+  onSceneChange?: (scene: SkyScene | null) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   // State rather than a ref, for the reason spelled out in SatelliteView: the
@@ -72,11 +76,15 @@ export function ObstructionDome({
   }, [hasSurvey]);
 
   useEffect(() => {
+    onSceneChange?.(scene);
+  }, [scene, onSceneChange]);
+
+  useEffect(() => {
     if (survey) scene?.setSurvey(survey);
   }, [scene, survey]);
 
-  // The card carries no control of its own: the sky view owns the choice, and
-  // this follows so the two are never showing different domes.
+  // The choice is shared, so this follows whichever surface set it — the card's
+  // own control or the sky view's — and the two never show different domes.
   useEffect(() => {
     scene?.setTrimUnmapped(trimmed);
   }, [scene, trimmed]);

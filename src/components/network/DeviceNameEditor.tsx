@@ -6,20 +6,8 @@ import { GrpcWebError } from "../../lib/grpcWeb";
 import type { WifiClientJson } from "../../lib/dishClient";
 import { Input } from "@/components/ui/input";
 import { actionButton } from "../ui/action-button";
+import { PencilIcon } from "../../assets/icons/PencilIcon";
 import { displayName } from "./networkFormat";
-
-function PencilIcon() {
-  return (
-    <svg width='15' height='15' viewBox='0 0 24 24' fill='none' aria-hidden='true'>
-      <path
-        d='M4 20h4L18.5 9.5a2.12 2.12 0 0 0-3-3L5 17v3z'
-        stroke='currentColor'
-        strokeWidth='1.8'
-        strokeLinejoin='round'
-      />
-    </svg>
-  );
-}
 
 export function RenameButton({ onClick }: { onClick: () => void }) {
   return (
@@ -95,9 +83,7 @@ export function DeviceNameEditor({
           Cancel
         </button>
       </div>
-      {error && (
-        <div className='py-2 text-[12.5px] leading-[1.5] text-destructive'>{error}</div>
-      )}
+      {error && <div className='py-2 text-[12.5px] leading-[1.5] text-destructive'>{error}</div>}
     </>
   );
 }
