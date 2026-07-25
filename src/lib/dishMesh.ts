@@ -11,7 +11,16 @@ import type { DishStatusJson } from "./dishClient";
 /** The kit models SpaceX's own web app distinguishes (their `zl`). One id per
  *  model, resolved once, so geometry and alignment can't disagree about which
  *  dish this is. */
-export type DishModel = "v2" | "v3" | "v4" | "v5" | "hp" | "flatHp" | "hpV4" | "mini";
+export type DishModel =
+  | "v2"
+  | "v3"
+  | "v4"
+  | "v5"
+  | "hp"
+  | "flatHp"
+  | "hpV4"
+  | "mini1"
+  | "mini2";
 
 /**
  * Their `Vl`, ported: the model from the hardware string plus the actuator flag.
@@ -43,7 +52,9 @@ export function resolveDishModel(
   if (hardware.startsWith("rev4_hp")) return "hpV4";
   if (hardware.startsWith("rev4")) return "v4";
   if (hardware.startsWith("rev5")) return "v5";
-  if (hardware.startsWith("mini1") || hardware.startsWith("mini2")) return "mini";
+  // Mini 1 (including Rugged) is the unit with the dark side band; Mini 2 is white.
+  if (hardware.startsWith("mini1")) return "mini1";
+  if (hardware.startsWith("mini2")) return "mini2";
   return "v4";
 }
 
@@ -74,7 +85,8 @@ const MODEL_SPECS: Record<DishModel, DishModelSpec> = {
   v5: { displayName: "Standard (Gen 4)", mount: "kickstand", defaultTiltDeg: 13 },
   v3: { displayName: "Standard Actuated (Gen 2)", mount: "mast", defaultTiltDeg: 25 },
   v2: { displayName: "Original (round)", mount: "mast", defaultTiltDeg: 25 },
-  mini: { displayName: "Mini", mount: "kickstand", defaultTiltDeg: 20 },
+  mini1: { displayName: "Mini 1", mount: "kickstand", defaultTiltDeg: 20 },
+  mini2: { displayName: "Mini 2", mount: "kickstand", defaultTiltDeg: 20 },
   hp: { displayName: "High Performance", mount: "mast", defaultTiltDeg: 25 },
   flatHp: { displayName: "Flat High Performance", mount: "flat", defaultTiltDeg: 0 },
   hpV4: { displayName: "High Performance (Gen 4)", mount: "flat", defaultTiltDeg: 0 },

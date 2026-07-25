@@ -41,7 +41,10 @@ const PNG_ART: Record<DishModel, DishPngArt> = {
   hp: { pngSrc: hp, groundAnchor: [0.5, 0.6602], beamExitAnchor: [0.5075, 0.4819] },
   flatHp: { pngSrc: flatHp, groundAnchor: [0.5, 0.6563], beamExitAnchor: [0.4991, 0.5017] },
   hpV4: { pngSrc: hpV4, groundAnchor: [0.5, 0.6572], beamExitAnchor: [0.5077, 0.486] },
-  mini: { pngSrc: mini, groundAnchor: [0.5, 0.6618], beamExitAnchor: [0.5165, 0.4699] },
+  // One render serves both Minis: the side band that separates them in the 3D
+  // dome is not resolvable at the 46-unit size the speed test draws this at.
+  mini1: { pngSrc: mini, groundAnchor: [0.5, 0.6618], beamExitAnchor: [0.5165, 0.4699] },
+  mini2: { pngSrc: mini, groundAnchor: [0.5, 0.6618], beamExitAnchor: [0.5165, 0.4699] },
 };
 
 /** Named to match `dishModelFor(status)` in dishMesh, the resolver that produces

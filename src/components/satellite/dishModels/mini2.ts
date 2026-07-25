@@ -5,15 +5,17 @@
 // The OBJ's axes already match the renderer's panel frame: x across the face, y
 // along it, z along the boresight, with the sky-facing side at +z.
 //
+// The newer Mini: white throughout, no dark side band. See mini1 for the
+// earlier unit, which is this same export with its perimeter regrouped and tinted.
+//
 // Unlike standard4 and v5, this export arrived as ONE merged object with a single
-// grey material — no per-solid groups, so there was nothing to tint from. The
-// three parts below are recovered by normal direction instead: surfaces looking
-// along the boresight are panel faces, everything else is rim, side or stand.
+// grey material — no per-solid groups, so there was nothing to tint from. The two
+// parts are the export's own solids: the panel, and the stand below it.
 // Both faces of the real unit are white, so the back stays near-bright at 0.85
 // and only the edge goes dark — matching dishMesh.ts's treatment on the
 // dashboard. If a grouped re-export ever turns up, prefer it and drop this.
 import type { DishModelMesh } from "./types";
-export const miniDish: DishModelMesh = {
+export const mini2Dish: DishModelMesh = {
   scale: 100,
   longAxisMm: 299.0,
   parts: [[0, 3000, 1.0], [3000, 744, 1.0]],

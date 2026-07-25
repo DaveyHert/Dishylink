@@ -36,11 +36,11 @@ const TABLE: Array<[string, DishModel]> = [
   ["rev4_hp_prod2", "hpV4"],
   ["rev4_hp_aviation_prod1", "hpV4"],
 
-  ["mini1_prod1", "mini"],
-  ["mini1_panda_prod4", "mini"],
-  ["mini1_pez_proto1", "mini"],
-  ["mini1_rugged_prod1", "mini"],
-  ["mini2_prod1", "mini"],
+  ["mini1_prod1", "mini1"],
+  ["mini1_panda_prod4", "mini1"],
+  ["mini1_pez_proto1", "mini1"],
+  ["mini1_rugged_prod1", "mini1"],
+  ["mini2_prod1", "mini2"],
 
   ["rev5_pez_prod1", "v5"],
   ["rev5_pez_prod2", "v5"],

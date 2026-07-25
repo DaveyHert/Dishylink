@@ -9,7 +9,7 @@ import { render } from "vitest-browser-react";
 import type { DishModel } from "../../lib/dishMesh";
 import { SpeedBeam } from "./SpeedBeam";
 
-const MODELS: DishModel[] = ["v2", "v3", "v4", "v5", "hp", "flatHp", "hpV4", "mini"];
+const MODELS: DishModel[] = ["v2", "v3", "v4", "v5", "hp", "flatHp", "hpV4", "mini1", "mini2"];
 
 /** Where the beam meets the dish, as the scene lays it out. */
 function beamFoot(container: HTMLElement): [number, number] {
@@ -41,19 +41,31 @@ test.each(MODELS)("%s draws its own render, with the beam on its panel", async (
   expect(footY).toBeLessThan(y + 46);
 });
 
-test("every kit draws a different render, from a different beam foot", async () => {
-  // Eight entries pointing at seven files, or two kits sharing one guessed beam
-  // origin, both pass the per-model test above — each render would still land in
-  // its own box. Only distinctness catches a copy-pasted row.
-  const renders: string[] = [];
-  const feet: string[] = [];
+/** The two Minis share one render on purpose — the side band that separates them
+ *  in the 3D dome is invisible at 46 units. Every other kit gets its own. */
+const SHARED: DishModel[][] = [["mini1", "mini2"]];
+
+test("each body draws its own render, and only the Minis share one", async () => {
+  // A copy-pasted row pointing two kits at one file passes the per-model test
+  // above — the render still lands in its own box. Only distinctness catches it,
+  // so the sharing that IS intended has to be declared rather than assumed.
+  const renderFor = new Map<DishModel, string>();
+  const footFor = new Map<DishModel, string>();
   for (const model of MODELS) {
     const screen = await render(
       <SpeedBeam value={null} mode='idle' caption='Ready' dishModel={model} />,
     );
-    renders.push(screen.container.querySelector("image")!.getAttribute("href")!);
-    feet.push(String(beamFoot(screen.container)));
+    renderFor.set(model, screen.container.querySelector("image")!.getAttribute("href")!);
+    footFor.set(model, String(beamFoot(screen.container)));
   }
-  expect(new Set(renders).size).toBe(MODELS.length);
-  expect(new Set(feet).size).toBe(MODELS.length);
+
+  for (const group of SHARED) {
+    const [first, ...rest] = group;
+    for (const model of rest) expect(renderFor.get(model)).toBe(renderFor.get(first));
+  }
+
+  // One representative per shared group, then every distinct body must differ.
+  const bodies = MODELS.filter((m) => !SHARED.some((g) => g.slice(1).includes(m)));
+  expect(new Set(bodies.map((m) => renderFor.get(m))).size).toBe(bodies.length);
+  expect(new Set(bodies.map((m) => footFor.get(m))).size).toBe(bodies.length);
 });

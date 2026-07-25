@@ -9,7 +9,8 @@ import type { DishModel } from "../../../lib/dishMesh";
 import type { DishModelMesh } from "./types";
 import { performanceGen3Dish } from "./performanceGen3";
 import { hpDish } from "./hp";
-import { miniDish } from "./mini";
+import { mini1Dish } from "./mini1";
+import { mini2Dish } from "./mini2";
 import { roundDish } from "./round";
 import { standard4Dish } from "./standard4";
 import { standardActuatedDish } from "./standardActuated";
@@ -25,7 +26,8 @@ const MESHES: Record<DishModel, DishModelMesh> = {
   // hp*/rev_hp1_* without actuators, `hpV4` from rev4_hp_prod*, which IS Gen 3.
   flatHp: performanceGen3Dish,
   hpV4: performanceGen3Dish,
-  mini: miniDish,
+  mini1: mini1Dish, // dark side band
+  mini2: mini2Dish, // white throughout
 };
 
 export function meshForModel(model: DishModel): DishModelMesh {
