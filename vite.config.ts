@@ -33,9 +33,9 @@ export default defineConfig({
           include: ["src/**/*.test.ts", "server/**/*.test.mts", "dev/**/*.test.mts"],
         },
       },
-      // Component tests in real Chromium. NOT jsdom: jsdom has no CSS engine, so
-      // getComputedStyle returns nothing useful and it cannot verify design fidelity
-      // at all — which is the entire reason these tests exist.
+      // Component tests in real Chromium, not jsdom: they render canvas and WebGL
+      // (the sky view's camera and scene), diff screenshot baselines, and measure
+      // real layout — none of which jsdom can do.
       {
         extends: true,
         test: {
