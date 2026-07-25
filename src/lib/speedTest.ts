@@ -13,7 +13,7 @@
 const CLOUDFLARE = "https://speed.cloudflare.com";
 
 export interface SpeedTestProgress {
-  phase: "idle" | "download" | "upload" | "done" | "error";
+  phase: "idle" | "download" | "upload" | "resting" | "done" | "error";
   downloadMbps: number | null;
   uploadMbps: number | null;
   /** Wall-clock span of the run, so latency can be read off the dish's own
@@ -39,7 +39,19 @@ const PHASE_MS = RAMP_MS + MEASURE_MS;
 const HOLD_RESULT_MS = 900; // keep the download result on the gauge
 const REST_MS = 1_100; // let the needle ease back to 0 and rest before upload
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const delay = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason);
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        reject(signal.reason);
+      },
+      { once: true },
+    );
+  });
 
 /**
  * Runs a phase for a fixed steady-state window rather than a fixed byte budget.
@@ -63,7 +75,7 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * and are far too bursty to show. Ramp-up (connection setup + TCP slow start) is
  * excluded from both the live figure and the result, as fast.com describes.
  */
-function startPhase(getBytes: () => number, onMbps: (mbps: number) => void) {
+function startPhase(getBytes: () => number, onMbps: (mbps: number) => void, signal?: AbortSignal) {
   const startedAt = performance.now();
   let rampBytes: number | null = null;
   let rampAt = 0;
@@ -90,7 +102,9 @@ function startPhase(getBytes: () => number, onMbps: (mbps: number) => void) {
   }, SAMPLE_INTERVAL_MS);
 
   return {
-    shouldStop: () => performance.now() - startedAt >= PHASE_MS,
+    // Cancelling ends the phase exactly as its own clock running out does — the
+    // stream loops and the stop watchers all read this one predicate.
+    shouldStop: () => signal?.aborted === true || performance.now() - startedAt >= PHASE_MS,
     /** Final figure, measured over the post-ramp window only. */
     finish: (): number => {
       clearInterval(timer);
@@ -99,10 +113,16 @@ function startPhase(getBytes: () => number, onMbps: (mbps: number) => void) {
   };
 }
 
-async function measureDownload(onMbps: (mbps: number) => void): Promise<number> {
+async function measureDownload(
+  onMbps: (mbps: number) => void,
+  signal?: AbortSignal,
+): Promise<number> {
   const abortController = new AbortController();
+  // Cancelling the run cuts the in-flight bodies the same way the phase's own
+  // clock does below.
+  signal?.addEventListener("abort", () => abortController.abort(), { once: true });
   let receivedBytes = 0;
-  const phase = startPhase(() => receivedBytes, onMbps);
+  const phase = startPhase(() => receivedBytes, onMbps, signal);
   // Cut in-flight bodies the moment the phase is done, so a settled fast link
   // isn't held open pulling another 25MB it no longer needs.
   const stopWatcher = setInterval(() => {
@@ -114,10 +134,13 @@ async function measureDownload(onMbps: (mbps: number) => void): Promise<number> 
   const runStream = async () => {
     try {
       while (!phase.shouldStop()) {
-        const response = await fetch(`${CLOUDFLARE}/__down?bytes=${DOWNLOAD_CHUNK_BYTES}&r=${Math.random()}`, {
-          cache: "no-store",
-          signal: abortController.signal,
-        });
+        const response = await fetch(
+          `${CLOUDFLARE}/__down?bytes=${DOWNLOAD_CHUNK_BYTES}&r=${Math.random()}`,
+          {
+            cache: "no-store",
+            signal: abortController.signal,
+          },
+        );
         const bodyReader = response.body!.getReader();
         for (;;) {
           const chunk = await bodyReader.read();
@@ -142,18 +165,24 @@ async function measureDownload(onMbps: (mbps: number) => void): Promise<number> 
 // stream posts chunks back-to-back until the phase stops, and `event.loaded` is
 // summed across them. `loaded` is bytes drained to the socket — with buffers far
 // smaller than the payload, that tracks real upload throughput under backpressure.
-async function measureUpload(onMbps: (mbps: number) => void): Promise<number> {
+async function measureUpload(
+  onMbps: (mbps: number) => void,
+  signal?: AbortSignal,
+): Promise<number> {
   // Bytes from finished chunks, plus the in-flight chunk's progress. Kept apart
   // so a chunk's bytes are counted exactly once as it rolls over.
   const sentPerStream = new Array<number>(STREAMS).fill(0);
   const inFlightPerStream = new Array<number>(STREAMS).fill(0);
-  const totalBytes = () => sentPerStream.reduce((sum, n) => sum + n, 0) + inFlightPerStream.reduce((sum, n) => sum + n, 0);
+  const totalBytes = () =>
+    sentPerStream.reduce((sum, n) => sum + n, 0) + inFlightPerStream.reduce((sum, n) => sum + n, 0);
 
-  const phase = startPhase(totalBytes, onMbps);
+  const phase = startPhase(totalBytes, onMbps, signal);
   const inFlight = new Set<XMLHttpRequest>();
   const stopWatcher = setInterval(() => {
     if (phase.shouldStop()) inFlight.forEach((xhr) => xhr.abort());
   }, 100);
+  // Don't wait up to 100ms for the watcher: cancelling drops the sockets now.
+  signal?.addEventListener("abort", () => inFlight.forEach((xhr) => xhr.abort()), { once: true });
 
   // One buffer shared by every stream — it's only ever read.
   const payload = new Uint8Array(UPLOAD_CHUNK_BYTES);
@@ -192,7 +221,17 @@ async function measureUpload(onMbps: (mbps: number) => void): Promise<number> {
   return mbps;
 }
 
-export async function runSpeedTest(onProgress: (progress: SpeedTestProgress) => void): Promise<void> {
+/**
+ * `signal` cancels the run. Without it a test outlives whatever started it: the
+ * streams are bound only by the phase clock, so closing the panel mid-test left
+ * six streams — then a whole upload phase that began after the unmount —
+ * saturating the link for the rest of the ~26s run, invisibly, since progress
+ * updates to a gone component are silent no-ops.
+ */
+export async function runSpeedTest(
+  onProgress: (progress: SpeedTestProgress) => void,
+  signal?: AbortSignal,
+): Promise<void> {
   const progress: SpeedTestProgress = {
     phase: "download",
     downloadMbps: null,
@@ -200,31 +239,51 @@ export async function runSpeedTest(onProgress: (progress: SpeedTestProgress) => 
     startedAtMs: Date.now(),
     endedAtMs: null,
   };
-  const report = () => onProgress({ ...progress });
+  // A cancelled run stops speaking: whoever cancelled is no longer listening,
+  // and a late phase change would otherwise land on a panel that moved on.
+  const report = () => {
+    if (!signal?.aborted) onProgress({ ...progress });
+  };
   report();
   try {
     progress.downloadMbps = await measureDownload((liveMbps) => {
       progress.downloadMbps = liveMbps;
       report();
-    });
+    }, signal);
     report(); // hold the final download reading on the gauge…
-    await delay(HOLD_RESULT_MS);
+    await delay(HOLD_RESULT_MS, signal);
 
     // Switch to upload with no value yet, so the needle eases down to 0 and rests
     // before the upload sweep organically kicks in.
     progress.phase = "upload";
     progress.uploadMbps = null;
     report();
-    await delay(REST_MS);
+    await delay(REST_MS, signal);
 
     progress.uploadMbps = await measureUpload((liveMbps) => {
       progress.uploadMbps = liveMbps;
       report();
-    });
-    progress.phase = "done";
+    }, signal);
+    // Close the measurement window here, at the true end of upload — the hold and
+    // rest that follow are idle time, and letting them into the window would drag
+    // ~2s of post-test pings into the latency/jitter/loss figures.
     progress.endedAtMs = Date.now();
+    report(); // hold the final upload reading on the gauge…
+    await delay(HOLD_RESULT_MS, signal);
+
+    // Mirror the download→upload handoff: drain the needle to 0 and rest before the
+    // download reading returns, so it settles up from zero rather than gliding
+    // straight off the upload figure (which reads as upload still climbing).
+    progress.phase = "resting";
+    report();
+    await delay(REST_MS, signal);
+
+    progress.phase = "done";
     report();
   } catch {
+    // A cancelled run is not a failed one — the streams were told to stop, and
+    // there is nobody left to tell about it.
+    if (signal?.aborted) return;
     progress.phase = "error";
     report();
   }

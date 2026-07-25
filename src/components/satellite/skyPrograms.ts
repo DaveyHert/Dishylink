@@ -20,7 +20,12 @@ void main() {
 // the --sky-* tokens, shared with the dashboard dome and the legend. Baked in,
 // they drifted — this shader held an orange-red the rest of the app never used.
 // Unmapped is the one that still needs a strength: it is context, not a
-// reading, so it sinks most of the way back into the sky.
+// reading, so it sinks most of the way back into whatever it is over. It has to
+// be real transparency, not a dark colour standing in for it — the dome is drawn
+// over the terrain as much as over the sky, and a colour solved against the sky
+// turns into a black bead the moment a lit hillside is behind it.
+const UNMAPPED_ALPHA = 0.6;
+
 const DOT_FRAGMENT = `
 precision mediump float; varying float vKind;
 uniform vec3 uUnmapped; uniform vec3 uClear; uniform vec3 uPartial; uniform vec3 uObstructed;
@@ -28,11 +33,12 @@ uniform vec3 uFog;
 void main() {
   vec2 d = gl_PointCoord - 0.5;
   if (dot(d, d) > 0.25) discard;
-  vec3 col = vKind < 0.5 ? mix(uUnmapped, uFog, 0.7)
+  bool unmapped = vKind < 0.5;
+  vec3 col = unmapped ? mix(uUnmapped, uFog, 0.7)
            : vKind < 1.5 ? uClear
            : vKind < 2.5 ? uPartial
            : uObstructed;
-  gl_FragColor = vec4(col, 1.0);
+  gl_FragColor = vec4(col, unmapped ? ${UNMAPPED_ALPHA} : 1.0);
 }`;
 
 const STAR_VERTEX = `

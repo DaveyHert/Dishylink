@@ -53,10 +53,89 @@ function decode<T extends Int16Array | Uint16Array>(
  */
 const DOME_LIFT = 0.18;
 
-export function buildDomePoints(survey: SkySurvey) {
+/** The envelope's resolution: 72 spokes of 5°, widened across ±3 of them. */
+const ENVELOPE_SPOKES = 72;
+const ENVELOPE_REACH = 3;
+
+/** Which spoke a cell falls in, from its offsets in grid radius. */
+function spokeAt(east: number, north: number): number {
+  const azimuth = (Math.atan2(east, north) + 2 * Math.PI) % (2 * Math.PI);
+  return Math.floor((azimuth / (2 * Math.PI)) * ENVELOPE_SPOKES) % ENVELOPE_SPOKES;
+}
+
+/**
+ * How far out the dish's readings reach, one figure per compass direction, in
+ * grid radius (0 at the zenith, 1 at the rim).
+ *
+ * Taken as the furthest reading per direction, then widened to the furthest
+ * within ±15° and averaged with its neighbours. Raw per-direction maxima are far
+ * too jumpy to cut against: a single shallow reading drags the line inward and
+ * takes a bite out of the sky above it, and directions the dish has never
+ * pointed have no figure at all. Reaching sideways heals both — a direction is
+ * covered by its neighbours, which are looking at the same patch of sky.
+ *
+ * Null when the dish has read nothing anywhere, which is the state a new kit
+ * starts in: with no envelope to speak of, nothing should be trimmed.
+ */
+export function observedEnvelope(survey: SkySurvey): Float64Array | null {
+  const { gridSize, kinds } = survey;
+  const centre = (gridSize - 1) / 2;
+  const deepest = new Float64Array(ENVELOPE_SPOKES).fill(-1);
+  let anyReading = false;
+  for (let row = 0; row < gridSize; row++) {
+    for (let col = 0; col < gridSize; col++) {
+      if (kinds[row * gridSize + col] === 0) continue;
+      const east = (col - centre) / centre;
+      const north = (centre - row) / centre;
+      const radial = Math.hypot(east, north);
+      if (radial > 1) continue;
+      anyReading = true;
+      const spoke = spokeAt(east, north);
+      if (radial > deepest[spoke]) deepest[spoke] = radial;
+    }
+  }
+  if (!anyReading) return null;
+
+  const wrap = (k: number) => ((k % ENVELOPE_SPOKES) + ENVELOPE_SPOKES) % ENVELOPE_SPOKES;
+  const reach = new Float64Array(ENVELOPE_SPOKES);
+  for (let k = 0; k < ENVELOPE_SPOKES; k++) {
+    let furthest = -1;
+    for (let d = -ENVELOPE_REACH; d <= ENVELOPE_REACH; d++) {
+      furthest = Math.max(furthest, deepest[wrap(k + d)]);
+    }
+    reach[k] = furthest;
+  }
+  // A sector wider than the reach still has no figure. Carry one across from the
+  // nearest direction either side rather than leaving a hole — an untrimmed
+  // sector hangs its skirt below the trimmed rim, which reads as a fin.
+  for (let k = 0; k < ENVELOPE_SPOKES; k++) {
+    if (reach[k] >= 0) continue;
+    let before = k;
+    let after = k;
+    while (reach[wrap(before)] < 0) before--;
+    while (reach[wrap(after)] < 0) after++;
+    reach[k] = Math.max(reach[wrap(before)], reach[wrap(after)]);
+  }
+
+  const envelope = new Float64Array(ENVELOPE_SPOKES);
+  for (let k = 0; k < ENVELOPE_SPOKES; k++) {
+    envelope[k] = (reach[wrap(k - 1)] + reach[k] + reach[wrap(k + 1)]) / 3;
+  }
+  return envelope;
+}
+
+/**
+ * `trimUnmapped` drops never-observed sky beyond the envelope, which is the wide
+ * skirt around the dome's base — sky the dish cannot point at, drawn today as a
+ * gray shell the readings sit inside. Only unmapped cells are ever dropped, so
+ * no reading can be lost to it, and the never-observed band overhead survives
+ * because it sits well within the envelope rather than past it.
+ */
+export function buildDomePoints(survey: SkySurvey, trimUnmapped = false) {
   const { gridSize, kinds } = survey;
   const centre = (gridSize - 1) / 2;
   const maxTheta = (survey.maxThetaDeg * Math.PI) / 180;
+  const envelope = trimUnmapped ? observedEnvelope(survey) : null;
   const out: number[] = [];
   for (let row = 0; row < gridSize; row++) {
     for (let col = 0; col < gridSize; col++) {
@@ -64,14 +143,11 @@ export function buildDomePoints(survey: SkySurvey) {
       const north = (centre - row) / centre;
       const radial = Math.hypot(east, north);
       if (radial > 1) continue;
+      const kind = kinds[row * gridSize + col];
+      if (envelope && kind === 0 && radial > envelope[spokeAt(east, north)]) continue;
       const zenith = radial * maxTheta;
       const spread = radial === 0 ? 0 : Math.sin(zenith) / radial;
-      out.push(
-        east * spread,
-        Math.cos(zenith) + DOME_LIFT,
-        -north * spread,
-        kinds[row * gridSize + col],
-      );
+      out.push(east * spread, Math.cos(zenith) + DOME_LIFT, -north * spread, kind);
     }
   }
   return new Float32Array(out);

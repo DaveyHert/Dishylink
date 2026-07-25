@@ -12,6 +12,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { DishObstructionMapJson, DishStatusJson } from "../../lib/dishClient";
 import { createSkyScene, type SkyScene } from "../satellite/skyScene";
 import { liveSurvey } from "../satellite/skySurvey";
+import { useDomeTrim } from "../../hooks/useDomeTrim";
+import { domeTrimEnabled } from "../../lib/domeTrim";
 
 /**
  * Far enough back that the whole dome sits in frame with air around it, which is
@@ -37,10 +39,12 @@ export function ObstructionDome({
   status: DishStatusJson | null;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  // State rather than a ref, for the reason spelled out in SatelliteView: an
-  // effect that cannot name the scene as a dependency cannot know to push into
-  // a scene built in a later commit than its wiring.
+  // State rather than a ref, for the reason spelled out in SatelliteView: the
+  // scene is built inside an effect, so it does not exist on the first render.
+  // Effects that push into it have to re-run once it does, and only naming it as
+  // a dependency — which a ref cannot be — makes that happen.
   const [scene, setScene] = useState<SkyScene | null>(null);
+  const trimmed = useDomeTrim();
 
   const survey = useMemo(() => liveSurvey(obstructionMap, status), [obstructionMap, status]);
   // `survey` is a new object on every status poll, so building on it directly
@@ -57,6 +61,7 @@ export function ObstructionDome({
       distance: CARD_DISTANCE,
       zoomable: false,
       dishScale: CARD_DISH_SCALE,
+      trimUnmapped: domeTrimEnabled(),
     });
     if (!built) return;
     setScene(built);
@@ -69,6 +74,12 @@ export function ObstructionDome({
   useEffect(() => {
     if (survey) scene?.setSurvey(survey);
   }, [scene, survey]);
+
+  // The card carries no control of its own: the sky view owns the choice, and
+  // this follows so the two are never showing different domes.
+  useEffect(() => {
+    scene?.setTrimUnmapped(trimmed);
+  }, [scene, trimmed]);
 
   if (!hasSurvey) return null;
 

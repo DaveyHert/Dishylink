@@ -22,6 +22,7 @@ import { render } from "vitest-browser-react";
 import type { DishObstructionMapJson, DishStatusJson } from "../../lib/dishClient";
 import type { SatelliteFeed } from "../../hooks/useSatellites";
 import type { SatelliteSky } from "../../lib/satellites";
+import { TooltipProvider } from "../ui/tooltip";
 
 const calls: string[] = [];
 /** What the component last handed the scene, so a test can drive it back. */
@@ -35,6 +36,7 @@ vi.mock("./skyScene", () => ({
     calls.push("create");
     return {
       setSurvey: () => calls.push("setSurvey"),
+      setTrimUnmapped: () => calls.push("setTrimUnmapped"),
       setSampler: (sample: unknown) => calls.push(sample ? "setSampler(fn)" : "setSampler(null)"),
       setServing: () => calls.push("setServing"),
       setTrackers: (next: typeof scene.trackers) => {
@@ -90,7 +92,9 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 120));
 function Harness() {
   const [map, setMap] = useState<DishObstructionMapJson | null>(null);
   return (
-    <>
+    // The app mounts one provider at its root; a standalone mount has to supply
+    // its own or Radix throws as soon as a tooltip renders.
+    <TooltipProvider>
       <button type="button" data-testid="land-map" onClick={() => setMap(MAP)}>
         land the obstruction map
       </button>
@@ -103,7 +107,7 @@ function Harness() {
         onClearLocation={() => {}}
         onClose={() => {}}
       />
-    </>
+    </TooltipProvider>
   );
 }
 
@@ -139,27 +143,29 @@ test("the selection ring marks the satellite you tapped, not the serving one", a
   scene.pick = null;
 
   render(
-    <SatelliteView
-      obstructionMap={MAP}
-      status={STATUS}
-      satellites={{
-        feedState: "active",
-        errorReason: null,
-        stats: {
-          inViewCount: 2,
-          serviceableCount: 2,
-          servingCandidate: SERVING,
-          forecastMinServiceable30m: null,
-          constellationSize: 2,
-        },
-        sampleSky: () => [SERVING, TAPPED],
-        servingCandidateName: SERVING.name,
-      }}
-      observerLocation={{ latitudeDeg: 51.5, longitudeDeg: -0.12, altitudeM: 0 }}
-      onLocationSaved={() => {}}
-      onClearLocation={() => {}}
-      onClose={() => {}}
-    />,
+    <TooltipProvider>
+      <SatelliteView
+        obstructionMap={MAP}
+        status={STATUS}
+        satellites={{
+          feedState: "active",
+          errorReason: null,
+          stats: {
+            inViewCount: 2,
+            serviceableCount: 2,
+            servingCandidate: SERVING,
+            forecastMinServiceable30m: null,
+            constellationSize: 2,
+          },
+          sampleSky: () => [SERVING, TAPPED],
+          servingCandidateName: SERVING.name,
+        }}
+        observerLocation={{ latitudeDeg: 51.5, longitudeDeg: -0.12, altitudeM: 0 }}
+        onLocationSaved={() => {}}
+        onClearLocation={() => {}}
+        onClose={() => {}}
+      />
+    </TooltipProvider>,
   );
   await settle();
 

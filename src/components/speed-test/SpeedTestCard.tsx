@@ -4,10 +4,12 @@
 // telemetry for the window the test ran (see speedTest.ts for why timing a fetch
 // is the wrong instrument for latency).
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowDownIcon, ArrowUpIcon, ClockIcon, LoaderIcon, RotateCcwIcon } from "lucide-react";
 import { runSpeedTest, type SpeedTestProgress } from "../../lib/speedTest";
 import type { TelemetrySample } from "../../lib/telemetry";
+import type { DishStatusJson } from "../../lib/dishClient";
+import { dishModelFor } from "../../lib/dishMesh";
 import { SpeedGauge } from "./SpeedGauge";
 import { SpeedBeam } from "./SpeedBeam";
 import { SegmentedControl } from "../ui/segmented-control";
@@ -121,9 +123,21 @@ function MetricPill({ label, value, unit }: { label: string; value: string; unit
   );
 }
 
-export function SpeedTestPanel({ samples }: { samples: TelemetrySample[] }) {
+export function SpeedTestPanel({
+  samples,
+  status,
+}: {
+  samples: TelemetrySample[];
+  /** Live status, for the one thing the illustration needs: which kit to draw. */
+  status: DishStatusJson | null;
+}) {
   const [progress, setProgress] = useState<SpeedTestProgress>(IDLE_PROGRESS);
   const [view, setView] = useState<SpeedView>("beam");
+  // The sheet unmounts when it is closed, but a run is bound only by its own
+  // clock — so without this it keeps six streams (and then a whole upload phase)
+  // saturating the link after the panel is gone.
+  const run = useRef<AbortController | null>(null);
+  useEffect(() => () => run.current?.abort(), []);
   const { phase } = progress;
   const isRunning = phase === "download" || phase === "upload";
   const quality = linkQualityOver(samples, progress.startedAtMs, progress.endedAtMs);
@@ -207,7 +221,15 @@ export function SpeedTestPanel({ samples }: { samples: TelemetrySample[] }) {
       </div>
 
       {view === "beam" ? (
-        <SpeedBeam value={gauge.value} mode={gauge.mode} caption={gauge.caption} running={isRunning} />
+        <SpeedBeam
+          value={gauge.value}
+          mode={gauge.mode}
+          caption={gauge.caption}
+          // Lit through the whole test, the rest between download and upload
+          // included, so the beam holds across the handoff and drops only at the end.
+          testActive={isRunning || phase === "resting"}
+          dishModel={dishModelFor(status)}
+        />
       ) : (
         <SpeedGauge value={gauge.value} mode={gauge.mode} caption={gauge.caption} />
       )}
@@ -217,19 +239,23 @@ export function SpeedTestPanel({ samples }: { samples: TelemetrySample[] }) {
           it competing with the empty gauge. Once a reading is up the reading is the
           point, so "Run again" steps back to the quieter fill. */}
       <button
-        className={`mt-2 flex min-h-[42px] w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-0 py-[11px] font-sans text-[14px] font-semibold transition-colors duration-300 motion-reduce:transition-none disabled:cursor-default ${
+        className={`mt-2 flex min-h-[42px] w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-0 py-[11px] font-sans text-[14px] font-semibold transition-colors duration-300 disabled:cursor-default ${
           untouched
             ? "bg-[color-mix(in_srgb,var(--ink)_86%,transparent)] text-[var(--page)] enabled:hover:bg-[var(--ink)]"
             : "bg-[color-mix(in_srgb,var(--ink)_12%,transparent)] text-foreground enabled:hover:bg-[color-mix(in_srgb,var(--ink)_18%,transparent)] disabled:bg-[color-mix(in_srgb,var(--ink)_8%,transparent)] disabled:text-muted-foreground"
         }`}
         disabled={isRunning || phase === "resting"}
         onClick={() => {
-          void runSpeedTest(setProgress);
+          // Whatever was in flight loses the link first: two runs measure each
+          // other's load, and both report the result low.
+          run.current?.abort();
+          run.current = new AbortController();
+          void runSpeedTest(setProgress, run.current.signal);
         }}
       >
         {isRunning || phase === "resting" ? (
           <LoaderIcon
-            className="animate-[speedtest-spin_1s_steps(12,end)_infinite] motion-reduce:animate-none"
+            className="animate-[speedtest-spin_1s_steps(12,end)_infinite]"
             size={20}
             strokeWidth={2.5}
             aria-label="Running speed test"

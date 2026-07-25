@@ -42,6 +42,8 @@ export interface SkyTracker {
 export interface SkyScene {
   /** Swap the obstruction data or boresight without rebuilding the scene. */
   setSurvey(survey: SkySurvey): void;
+  /** Whether the never-observed skirt around the dome's base is drawn. */
+  setTrimUnmapped(trim: boolean): void;
   /** Imperative sampler from the satellite feed; null while it is not active. */
   setSampler(sample: (() => SatelliteSky[]) | null): void;
   /** The likely serving satellite, drawn with a beam from the dish. */
@@ -134,6 +136,8 @@ export interface SkySceneOptions {
   zoomable?: boolean;
   /** Draws the dish above true size — see buildDish. */
   dishScale?: number;
+  /** Drops the never-observed skirt around the dome's base — see buildDomePoints. */
+  trimUnmapped?: boolean;
 }
 
 export function createSkyScene(
@@ -145,6 +149,7 @@ export function createSkyScene(
     distance,
     zoomable = true,
     dishScale = 1,
+    trimUnmapped: initialTrim = false,
   }: SkySceneOptions = {},
 ): SkyScene | null {
   const context = canvas.getContext("webgl", { antialias: true }) as WebGLRenderingContext | null;
@@ -172,7 +177,8 @@ export function createSkyScene(
 
   const palette = surveyPalette(canvas);
   let survey = initialSurvey;
-  let domeData = buildDomePoints(survey);
+  let trimUnmapped = initialTrim;
+  let domeData = buildDomePoints(survey, trimUnmapped);
   let dish = buildDish(meshForModel(survey.dishModel), survey, dishScale);
   let dishData = dish.data;
   const starData = stars ? buildStars() : null;
@@ -704,7 +710,13 @@ export function createSkyScene(
     const aData = gl.getAttribLocation(dotProgram, "aData");
     gl.enableVertexAttribArray(aData);
     gl.vertexAttribPointer(aData, 4, gl.FLOAT, false, 16, 0);
+    // Paint, not light: the unmapped dots carry an alpha and have to let the
+    // terrain and sky behind them through. Depth still writes, so the dots
+    // occlude each other exactly as they did when the pass was opaque.
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.drawArrays(gl.POINTS, 0, domeData.length / 4);
+    gl.disable(gl.BLEND);
 
     frameHandle = requestAnimationFrame(frame);
   }
@@ -713,13 +725,22 @@ export function createSkyScene(
   return {
     setSurvey(next) {
       survey = next;
-      domeData = buildDomePoints(next);
+      domeData = buildDomePoints(next, trimUnmapped);
       dish = buildDish(meshForModel(next.dishModel), next, dishScale);
       dishData = dish.data;
       gl.bindBuffer(gl.ARRAY_BUFFER, domeBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, domeData, gl.DYNAMIC_DRAW);
       gl.bindBuffer(gl.ARRAY_BUFFER, dishBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, dishData, gl.DYNAMIC_DRAW);
+    },
+    setTrimUnmapped(trim) {
+      if (trim === trimUnmapped) return;
+      trimUnmapped = trim;
+      // The dome buffer is rebuilt on every status poll anyway, so re-cutting it
+      // here costs no more than the frame that was already coming.
+      domeData = buildDomePoints(survey, trimUnmapped);
+      gl.bindBuffer(gl.ARRAY_BUFFER, domeBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, domeData, gl.DYNAMIC_DRAW);
     },
     setSampler(sample) {
       sampleSatellites = sample;

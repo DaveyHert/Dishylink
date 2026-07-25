@@ -7,7 +7,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Pause, Play } from "lucide-react";
-import type { DishObstructionMapJson, DishObstructionStatsJson, DishStatusJson } from "../../lib/dishClient";
+import type {
+  DishObstructionMapJson,
+  DishObstructionStatsJson,
+  DishStatusJson,
+} from "../../lib/dishClient";
 import type { SatelliteFeed } from "../../hooks/useSatellites";
 import type { ObserverLocation } from "../../lib/satellites";
 import { useObstructionSnapshots } from "../../hooks/useObstructionSnapshots";
@@ -20,11 +24,47 @@ import { LocationSetup } from "./LocationSetup";
 import { SatelliteCallout, type SelectedSatellite } from "./SatelliteCallout";
 import { buildSatellite } from "./satelliteGeometry";
 import { createSkyScene, type ScreenPoint, type SkyScene } from "./skyScene";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { DomeIcon } from "../icons/DomeIcon";
+import { useDomeTrim } from "../../hooks/useDomeTrim";
+import { domeTrimEnabled, setDomeTrimEnabled } from "../../lib/domeTrim";
 
 /** Matching round controls, sized like the modal close button elsewhere. */
 const roundControl =
   "inline-flex h-[30px] w-[30px] cursor-pointer items-center justify-center rounded-full " +
   "border border-[#8b97a82e] bg-[#0a0e16b8] text-[13px] text-[#8b97a8] backdrop-blur-sm hover:text-[#c7d0dc]";
+
+/** One of the round controls over the sky. The label is both the tooltip and the
+ *  accessible name, so the two can never drift apart; `pressed` marks the ones
+ *  that are a state rather than an action. */
+function SkyControl({
+  label,
+  pressed,
+  onClick,
+  children,
+}: {
+  label: string;
+  pressed?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type='button'
+          aria-label={label}
+          aria-pressed={pressed}
+          className={roundControl}
+          onClick={onClick}
+        >
+          {children}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side='bottom'>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 /** Panels float over the sky rather than covering it: dark enough to hold text,
  *  sheer enough that satellites keep crossing behind them. No blur — the sky
@@ -47,8 +87,14 @@ interface SatelliteViewProps {
 }
 
 export function SatelliteView({
-  obstructionMap, obstructionStats, status, satellites,
-  observerLocation, onLocationSaved, onClearLocation, onClose,
+  obstructionMap,
+  obstructionStats,
+  status,
+  satellites,
+  observerLocation,
+  onLocationSaved,
+  onClearLocation,
+  onClose,
 }: SatelliteViewProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   // State, not a ref: everything below is pushed INTO the scene by an effect, and
@@ -66,6 +112,7 @@ export function SatelliteView({
   // Seeded from the scene as it is built, so the button reports the camera's
   // state rather than a copy of its default that can drift out of step.
   const [rotating, setRotating] = useState(false);
+  const trimmed = useDomeTrim();
   const [unsupported, setUnsupported] = useState(false);
   const [changingLocation, setChangingLocation] = useState(false);
   const reduceMotion = useReducedMotion();
@@ -75,9 +122,10 @@ export function SatelliteView({
   const live = useMemo(() => liveSurvey(obstructionMap, status), [obstructionMap, status]);
   const viewingHistory = scrubIndex !== null && scrubIndex < snapshots.length;
   const survey = useMemo(
-    () => (viewingHistory
-      ? snapshotSurvey(snapshots[scrubIndex], obstructionMap?.maxThetaDeg ?? 80, status)
-      : live),
+    () =>
+      viewingHistory
+        ? snapshotSurvey(snapshots[scrubIndex], obstructionMap?.maxThetaDeg ?? 80, status)
+        : live,
     [viewingHistory, scrubIndex, snapshots, obstructionMap?.maxThetaDeg, status, live],
   );
 
@@ -102,16 +150,27 @@ export function SatelliteView({
     if (!canvas || !first) return;
     const built = createSkyScene(canvas, first, {
       buildSatelliteMesh: () => buildSatellite("distant"),
+      trimUnmapped: domeTrimEnabled(),
     });
-    if (!built) { setUnsupported(true); return; }
+    if (!built) {
+      setUnsupported(true);
+      return;
+    }
     setScene(built);
     setRotating(built.isRotating());
-    return () => { built.dispose(); setScene(null); };
+    return () => {
+      built.dispose();
+      setScene(null);
+    };
   }, [hasSurvey]);
 
   useEffect(() => {
     if (survey) scene?.setSurvey(survey);
   }, [scene, survey]);
+
+  useEffect(() => {
+    scene?.setTrimUnmapped(trimmed);
+  }, [scene, trimmed]);
 
   // Live satellites belong to the live map only — while scrubbing history there
   // is no constellation to speak of, so the sampler and the beam both go quiet.
@@ -152,7 +211,10 @@ export function SatelliteView({
         report: (at: ScreenPoint | null) => {
           const node = labelRef.current;
           if (!node) return;
-          if (!at || at.behind) { node.style.opacity = "0"; return; }
+          if (!at || at.behind) {
+            node.style.opacity = "0";
+            return;
+          }
           node.style.opacity = "1";
           node.style.transform = `translate(${at.x}px, ${at.y}px)`;
         },
@@ -188,9 +250,13 @@ export function SatelliteView({
 
   useEffect(() => {
     if (!scene) return;
-    scene.setOnPick(viewingHistory ? null : (sky) => {
-      setSelected(sky ? { sky, isServing: sky.name === servingName } : null);
-    });
+    scene.setOnPick(
+      viewingHistory
+        ? null
+        : (sky) => {
+            setSelected(sky ? { sky, isServing: sky.name === servingName } : null);
+          },
+    );
     return () => scene.setOnPick(null);
   }, [scene, viewingHistory, servingName]);
 
@@ -213,35 +279,38 @@ export function SatelliteView({
     // Pinned to the dark token set regardless of the app theme: this is a night
     // sky, and the shared components below read --ink / --baseline / --muted-
     // foreground, which would otherwise render dark-on-dark in light mode.
-    <div data-theme="dark" className="fixed inset-0 z-50 bg-[var(--page)] text-foreground">
+    <div data-theme='dark' className='fixed inset-0 z-50 bg-[var(--page)] text-foreground'>
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 h-full w-full touch-none"
+        className='absolute inset-0 h-full w-full touch-none'
         style={{ cursor: "grab" }}
       />
 
       {/* Wide enough that LocationSetup's two buttons sit on one row. */}
-      <div className="pointer-events-none absolute inset-y-0 left-0 flex w-[420px] flex-col gap-4 overflow-y-auto p-6">
-        <div className="flex flex-col gap-1.5">
-          <h1 className="m-0 text-[15px] font-semibold">Satellite view</h1>
-          <p className="m-0 text-xs leading-relaxed text-[#8b97a8]">
+      <div className='pointer-events-none absolute inset-y-0 left-0 flex w-[400px] flex-col gap-4 overflow-y-auto p-6'>
+        <div className='flex flex-col gap-1.5'>
+          <h1 className='m-0 text-[15px] font-semibold'>Satellite view</h1>
+          <p className='m-0 text-xs leading-relaxed text-[#8b97a8]'>
             Satellites are propagated live from SpaceX's published ephemerides.
           </p>
         </div>
 
-        <div className={`pointer-events-auto flex flex-col gap-3.5 rounded-xl px-[18px] py-4 ${glassPanel}`}>
-          <div className="flex items-baseline justify-between gap-2 text-[11.5px] font-medium text-muted-foreground">
+        <div
+          className={`pointer-events-auto flex flex-col gap-3.5 rounded-xl px-[16px] py-4 ${glassPanel}`}
+        >
+          <div className='flex items-baseline justify-between gap-2 text-[12px] font-medium text-muted-foreground'>
             <span>{site ? `site ${site}` : "no location set"}</span>
-            <span className="flex shrink-0 items-baseline gap-2.5">
-              <button type="button" className={siteAction} onClick={() => setChangingLocation((open) => !open)}>
+            <span className='flex shrink-0 items-baseline gap-2.5'>
+              <button
+                type='button'
+                className={siteAction}
+                onClick={() => setChangingLocation((open) => !open)}
+              >
                 {site ? "change" : "set"}
               </button>
-              {/* Forgetting the site is separate from changing it: "change" opens
-                  the picker, this drops the coordinates and returns the view to
-                  its unlocated state. */}
               {site && (
                 <button
-                  type="button"
+                  type='button'
                   className={siteAction}
                   onClick={() => {
                     onClearLocation();
@@ -253,13 +322,10 @@ export function SatelliteView({
               )}
             </span>
           </div>
-          {/* The panel's height follows this block, so animating the block from
-              nothing to its natural height is what makes the card grow smoothly
-              rather than jumping open. */}
           <AnimatePresence initial={false}>
             {changingLocation && (
               <motion.div
-                key="location-setup"
+                key='location-setup'
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
@@ -269,7 +335,7 @@ export function SatelliteView({
                 // Cancels the column's gap, which would otherwise appear in full
                 // the moment this mounts and undercut the height animation. The
                 // real spacing is LocationSetup's own margin, inside the clip.
-                className="-mt-3.5 overflow-hidden"
+                className='-mt-3.5 overflow-hidden'
               >
                 <LocationSetup
                   onLocationSaved={(location) => {
@@ -293,7 +359,7 @@ export function SatelliteView({
               the usual cause is the public data source being slow. Either way
               the feed retries on its own, so neither asks for a reload. */}
           {satellites.feedState === "error" && (
-            <Callout tone="error">
+            <Callout tone='error'>
               {satellites.errorReason === "offline"
                 ? "Can't reach the satellite data source — check your internet connection. Retrying automatically."
                 : "The satellite data source isn't responding right now. Retrying automatically."}
@@ -305,7 +371,7 @@ export function SatelliteView({
             "Drag to orbit" hint below. Live view only: a scrubbed snapshot is a
             past sky, so its live obstruction reading does not describe it. */}
         {!viewingHistory && hasSurvey && (
-          <p className="m-0 text-xs leading-relaxed text-[#8b97a8]">
+          <p className='m-0 text-xs leading-relaxed text-[#8b97a8]'>
             {(obstructionStats?.fractionObstructed ?? 0) < 0.005
               ? "Your Starlink has an unobstructed view of the sky. The map sharpens as the dish collects data."
               : "Obstructed patches cause brief interruptions as satellites pass behind them."}
@@ -317,10 +383,13 @@ export function SatelliteView({
           Amber marks the serving one, matching the legend's key. */}
       <div
         ref={labelRef}
-        className="pointer-events-none absolute left-0 top-0 opacity-0"
+        className='pointer-events-none absolute left-0 top-0 opacity-0'
         style={{ willChange: "transform", color: "var(--chart-warm)" }}
       >
-        <span className="absolute whitespace-nowrap pl-2.5 font-mono text-[11px] tracking-wide" style={{ marginTop: -6 }}>
+        <span
+          className='absolute whitespace-nowrap pl-2.5 font-mono text-[11px] tracking-wide'
+          style={{ marginTop: -6 }}
+        >
           {servingName?.replace(/\s*\[DTC\]\s*/, "")}
         </span>
       </div>
@@ -333,8 +402,8 @@ export function SatelliteView({
         <span
           aria-hidden
           ref={ringRef}
-          data-slot="satellite-selection-ring"
-          className="pointer-events-none absolute left-0 top-0 block rounded-full border"
+          data-slot='satellite-selection-ring'
+          className='pointer-events-none absolute left-0 top-0 block rounded-full border'
           style={{
             display: "none",
             width: 13,
@@ -350,37 +419,46 @@ export function SatelliteView({
 
       <SatelliteCallout ref={calloutRef} selected={selected} onClose={() => setSelected(null)} />
 
-      <div className="absolute right-6 top-5 flex items-center gap-2">
-        <button
-          type="button"
-          aria-label={rotating ? "Pause rotation" : "Resume rotation"}
-          className={roundControl}
+      <div className='absolute right-6 top-5 flex items-center gap-2'>
+        <SkyControl
+          label={trimmed ? "Show unmapped sky" : "Hide unmapped sky"}
+          pressed={trimmed}
+          onClick={() => setDomeTrimEnabled(!trimmed)}
+        >
+          <DomeIcon skirted={trimmed} />
+        </SkyControl>
+        <SkyControl
+          label={rotating ? "Pause rotation" : "Resume rotation"}
           onClick={() => setRotating(scene?.toggleRotation() ?? false)}
         >
           {rotating ? <Pause size={13} /> : <Play size={13} />}
-        </button>
-        <button type="button" aria-label="Close" className={roundControl} onClick={onClose}>
+        </SkyControl>
+        <SkyControl label='Close' onClick={onClose}>
           ✕
-        </button>
+        </SkyControl>
       </div>
 
       {snapshots.length >= 2 && (
-        <div className="absolute bottom-[96px] left-1/2 w-[min(720px,55vw)] min-w-[320px] -translate-x-1/2">
+        <div className='absolute bottom-[96px] left-1/2 w-[min(720px,55vw)] min-w-[320px] -translate-x-1/2'>
           {viewingHistory && scrubIndex !== null && (
-            <p className="m-0 pb-1 text-center text-[11.5px] font-medium text-muted-foreground">
+            <p className='m-0 pb-1 text-center text-[11.5px] font-medium text-muted-foreground'>
               Viewing the obstruction map as of{" "}
               {new Date(snapshots[scrubIndex].takenAtMs).toLocaleString()}.
             </p>
           )}
-          <ObstructionTimeLapse snapshots={snapshots} scrubIndex={scrubIndex} onScrub={setScrubIndex} />
+          <ObstructionTimeLapse
+            snapshots={snapshots}
+            scrubIndex={scrubIndex}
+            onScrub={setScrubIndex}
+          />
         </div>
       )}
 
-      <div className="pointer-events-none absolute bottom-[22px] left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-card px-[18px] py-1.5 [&>div]:flex-nowrap [&>div]:pt-0">
+      <div className='pointer-events-none absolute bottom-[22px] left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-card px-[18px] py-1.5 [&>div]:flex-nowrap [&>div]:pt-0'>
         <ObstructionKey withServing />
       </div>
 
-      <p className="pointer-events-none absolute bottom-[74px] left-1/2 m-0 -translate-x-1/2 text-[11px] text-[#8b97a8] opacity-80">
+      <p className='pointer-events-none absolute bottom-[74px] left-1/2 m-0 -translate-x-1/2 text-[11px] text-[#8b97a8] opacity-80'>
         {unsupported
           ? "This browser could not open a WebGL context."
           : !hasSurvey
@@ -392,6 +470,3 @@ export function SatelliteView({
     </div>
   );
 }
-
-
-

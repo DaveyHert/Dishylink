@@ -18,7 +18,7 @@ import { formatBytes, formatRelativeTime } from "../../lib/format";
 import { vendorForMac, ensureOuiLoaded } from "../../lib/macVendor";
 import { DeviceTypeIcon } from "../icons/DeviceTypeIcon";
 import { InfoDot } from "../shared/InfoDot";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 /** Local `year * 12 + month` — which monthly bucket an instant belongs to. */
 function monthKey(atMs: number): number {
@@ -52,63 +52,61 @@ export function DeviceUsageList() {
   );
 
   return (
-    <TooltipProvider delayDuration={200}>
-      <div className='mt-6'>
-        <div className='mb-0.5 flex items-center gap-[7px]'>
-          <span className='text-[17px] font-bold tracking-[-0.01em] text-foreground'>
-            Devices Usage
-          </span>
-          <InfoDot tip='How much data each device has used this month. The total keeps adding up even if a device leaves and rejoins your network, and it starts over at the beginning of each month.' />
-          {unavailable ? null : confirmingClear ? (
-            <span className='ml-auto flex items-center gap-2'>
-              <button
-                className='cursor-pointer border-0 bg-transparent p-0 text-[12px] font-semibold text-destructive'
-                onClick={() => {
-                  void clearAll();
-                  setConfirmingClear(false);
-                }}
-              >
-                Clear all?
-              </button>
-              <button
-                className='cursor-pointer border-0 bg-transparent p-0 text-[12px] font-medium text-muted-foreground'
-                onClick={() => setConfirmingClear(false)}
-              >
-                Cancel
-              </button>
-            </span>
-          ) : (
+    <div className='mt-6'>
+      <div className='mb-0.5 flex items-center gap-[7px]'>
+        <span className='text-[17px] font-bold tracking-[-0.01em] text-foreground'>
+          Devices Usage
+        </span>
+        <InfoDot tip='How much data each device has used this month. The total keeps adding up even if a device leaves and rejoins your network, and it starts over at the beginning of each month.' />
+        {unavailable ? null : confirmingClear ? (
+          <span className='ml-auto flex items-center gap-2'>
             <button
-              className='ml-auto cursor-pointer border-0 bg-transparent p-0 text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground'
-              onClick={() => setConfirmingClear(true)}
+              className='cursor-pointer border-0 bg-transparent p-0 text-[12px] font-semibold text-destructive'
+              onClick={() => {
+                void clearAll();
+                setConfirmingClear(false);
+              }}
             >
-              Clear all
+              Clear all?
             </button>
-          )}
-        </div>
-        <div className='mb-1 text-[11.5px] font-medium text-muted-foreground'>{monthLabel}</div>
-        {unavailable && (
-          <div className='py-2.5 text-[12.5px] text-muted-foreground'>
-            Usage unavailable — historian not reachable.
-          </div>
+            <button
+              className='cursor-pointer border-0 bg-transparent p-0 text-[12px] font-medium text-muted-foreground'
+              onClick={() => setConfirmingClear(false)}
+            >
+              Cancel
+            </button>
+          </span>
+        ) : (
+          <button
+            className='ml-auto cursor-pointer border-0 bg-transparent p-0 text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground'
+            onClick={() => setConfirmingClear(true)}
+          >
+            Clear all
+          </button>
         )}
-        {writeError && <div className='py-2.5 text-[12.5px] text-destructive'>{writeError}</div>}
-        {/* Past five devices the list scrolls in place with the app's thin bar,
-            like the client detail sheet, so it never pushes the sheet too tall. */}
-        <div
-          className={`flex flex-col ${sorted.length > 5 ? "thin-scroll max-h-[300px] overflow-y-auto" : ""}`}
-        >
-          {sorted.map((total) => (
-            <DeviceUsageRow
-              key={total.macAddress}
-              total={total}
-              onReset={() => void reset(total.macAddress)}
-              onRemove={() => void remove(total.macAddress)}
-            />
-          ))}
-        </div>
       </div>
-    </TooltipProvider>
+      <div className='mb-1 text-[11.5px] font-medium text-muted-foreground'>{monthLabel}</div>
+      {unavailable && (
+        <div className='py-2.5 text-[12.5px] text-muted-foreground'>
+          Usage unavailable — historian not reachable.
+        </div>
+      )}
+      {writeError && <div className='py-2.5 text-[12.5px] text-destructive'>{writeError}</div>}
+      {/* Past five devices the list scrolls in place with the app's thin bar,
+          like the client detail sheet, so it never pushes the sheet too tall. */}
+      <div
+        className={`flex flex-col ${sorted.length > 5 ? "thin-scroll max-h-[300px] overflow-y-auto" : ""}`}
+      >
+        {sorted.map((total) => (
+          <DeviceUsageRow
+            key={total.macAddress}
+            total={total}
+            onReset={() => void reset(total.macAddress)}
+            onRemove={() => void remove(total.macAddress)}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 

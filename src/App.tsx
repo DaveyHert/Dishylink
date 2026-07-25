@@ -39,6 +39,7 @@ import {
 } from "./lib/observerLocation";
 import type { ObserverLocation } from "./lib/satellites";
 import type { TelemetrySample } from "./lib/telemetry";
+import { TooltipProvider } from "./components/ui/tooltip";
 
 type ThemeName = "light" | "dark";
 type SheetName =
@@ -160,7 +161,7 @@ export default function App() {
     telemetry.connectionState === "unreachable" && status === null && samples.length === 0;
 
   return (
-    <>
+    <TooltipProvider delayDuration={200}>
       <AnimatePresence initial={false} mode="wait">
         {!skyViewOpen && (
           <motion.div
@@ -437,6 +438,6 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
-    </>
+    </TooltipProvider>
   );
 }
