@@ -12,8 +12,9 @@ interface SpeedBeamProps {
   /** True through the whole test — download, upload, and the rest between — so
    *  the beam stays lit across the handoff and goes dark only when it ends. */
   testActive?: boolean;
-  /** Which kit to draw. Falls back to the Standard, as the resolver does. */
-  dishModel?: DishModel;
+  /** Which kit to draw. Required: every caller resolves it from the dish, and a
+   *  default here would quietly draw the wrong hardware instead of failing. */
+  dishModel: DishModel;
 }
 
 /** The dish box, at the size it was originally placed. */
@@ -97,7 +98,7 @@ export function SpeedBeam({
   mode,
   caption,
   testActive = false,
-  dishModel = "v4",
+  dishModel,
 }: SpeedBeamProps) {
   const art = dishPngArtFor(dishModel);
   const [boxX, boxY] = dishBox(art);
