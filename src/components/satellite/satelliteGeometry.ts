@@ -48,11 +48,19 @@ class Builder {
 
   /** One triangle, with the flat normal derived from its winding. */
   tri(a: Vec3, b: Vec3, c: Vec3, tint: Vec3) {
-    const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
-    const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
-    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const ux = b[0] - a[0],
+      uy = b[1] - a[1],
+      uz = b[2] - a[2];
+    const vx = c[0] - a[0],
+      vy = c[1] - a[1],
+      vz = c[2] - a[2];
+    let nx = uy * vz - uz * vy,
+      ny = uz * vx - ux * vz,
+      nz = ux * vy - uy * vx;
     const len = Math.hypot(nx, ny, nz) || 1;
-    nx /= len; ny /= len; nz /= len;
+    nx /= len;
+    ny /= len;
+    nz /= len;
     for (const p of [a, b, c]) {
       this.pos.push(p[0], p[1], p[2]);
       this.nrm.push(nx, ny, nz);
@@ -80,9 +88,16 @@ class Builder {
  * `rBack`/`rFront` their radii, so a plain cylinder just passes equal radii.
  */
 function tube(
-  b: Builder, zBack: number, zFront: number, rBack: number, rFront: number,
-  segments: number, tint: Vec3, caps: { back?: boolean; front?: boolean } = {},
-  offsetX = 0, offsetY = 0,
+  b: Builder,
+  zBack: number,
+  zFront: number,
+  rBack: number,
+  rFront: number,
+  segments: number,
+  tint: Vec3,
+  caps: { back?: boolean; front?: boolean } = {},
+  offsetX = 0,
+  offsetY = 0,
 ) {
   const at = (i: number, r: number, z: number): Vec3 => {
     const t = (i / segments) * Math.PI * 2;
@@ -90,14 +105,28 @@ function tube(
   };
   for (let i = 0; i < segments; i++) {
     const j = i + 1;
-    b.quad(at(i, rBack, zBack), at(i, rFront, zFront), at(j, rFront, zFront), at(j, rBack, zBack), tint);
-    if (caps.front) b.tri([offsetX, offsetY, zFront], at(j, rFront, zFront), at(i, rFront, zFront), tint);
+    b.quad(
+      at(i, rBack, zBack),
+      at(i, rFront, zFront),
+      at(j, rFront, zFront),
+      at(j, rBack, zBack),
+      tint,
+    );
+    if (caps.front)
+      b.tri([offsetX, offsetY, zFront], at(j, rFront, zFront), at(i, rFront, zFront), tint);
     if (caps.back) b.tri([offsetX, offsetY, zBack], at(i, rBack, zBack), at(j, rBack, zBack), tint);
   }
 }
 
 /** Nose cone: a hemisphere capping the front, opening back toward -z. */
-function hemisphere(b: Builder, z: number, radius: number, segments: number, rings: number, tint: Vec3) {
+function hemisphere(
+  b: Builder,
+  z: number,
+  radius: number,
+  segments: number,
+  rings: number,
+  tint: Vec3,
+) {
   const at = (ring: number, seg: number): Vec3 => {
     const phi = (ring / rings) * (Math.PI / 2);
     const theta = (seg / segments) * Math.PI * 2;
@@ -106,19 +135,34 @@ function hemisphere(b: Builder, z: number, radius: number, segments: number, rin
   };
   for (let ring = 0; ring < rings; ring++) {
     for (let seg = 0; seg < segments; seg++) {
-      const a = at(ring, seg), c = at(ring, seg + 1);
-      const d = at(ring + 1, seg), e = at(ring + 1, seg + 1);
-      if (ring === 0) b.tri(a, e, d, tint);          // pole fan
+      const a = at(ring, seg),
+        c = at(ring, seg + 1);
+      const d = at(ring + 1, seg),
+        e = at(ring + 1, seg + 1);
+      if (ring === 0)
+        b.tri(a, e, d, tint); // pole fan
       else b.quad(a, c, e, d, tint);
     }
   }
 }
 
 /** Axis-aligned box, used for the solar boards and their raised sections. */
-function box(b: Builder, cx: number, cy: number, cz: number, w: number, h: number, d: number, tint: Vec3) {
-  const x0 = cx - w / 2, x1 = cx + w / 2;
-  const y0 = cy - h / 2, y1 = cy + h / 2;
-  const z0 = cz - d / 2, z1 = cz + d / 2;
+function box(
+  b: Builder,
+  cx: number,
+  cy: number,
+  cz: number,
+  w: number,
+  h: number,
+  d: number,
+  tint: Vec3,
+) {
+  const x0 = cx - w / 2,
+    x1 = cx + w / 2;
+  const y0 = cy - h / 2,
+    y1 = cy + h / 2;
+  const z0 = cz - d / 2,
+    z1 = cz + d / 2;
   const v = (x: number, y: number, z: number): Vec3 => [x, y, z];
   b.quad(v(x0, y0, z1), v(x1, y0, z1), v(x1, y1, z1), v(x0, y1, z1), tint); // +z
   b.quad(v(x1, y0, z0), v(x0, y0, z0), v(x0, y1, z0), v(x1, y1, z0), tint); // -z
@@ -146,7 +190,8 @@ function strut(b: Builder, from: Vec3, to: Vec3, radius: number, segments: numbe
   ];
   const ring = (o: Vec3, i: number): Vec3 => {
     const t = (i / segments) * Math.PI * 2;
-    const c = Math.cos(t) * radius, s = Math.sin(t) * radius;
+    const c = Math.cos(t) * radius,
+      s = Math.sin(t) * radius;
     return [o[0] + u[0] * c + v[0] * s, o[1] + u[1] * c + v[1] * s, o[2] + u[2] * c + v[2] * s];
   };
   for (let i = 0; i < segments; i++) {
@@ -159,12 +204,16 @@ function solarWing(b: Builder, side: 1 | -1, z: number, seg: Segments) {
   const armEnd = side * 3;
   strut(b, [0, 0, z], [armEnd, 0, z], 0.2, seg.thin, BODY);
 
-  const width = 8, height = 2.5, thickness = 0.2;
+  const width = 8,
+    height = 2.5,
+    thickness = 0.2;
   const cx = side * (3 + width / 2);
   box(b, cx, 0, z, width, height, thickness, BODY);
 
   // four raised sections per face, matching the reference's panel detail
-  const sections = 4, sw = 1.6, sh = 2.1;
+  const sections = 4,
+    sw = 1.6,
+    sh = 2.1;
   for (let i = 0; i < sections; i++) {
     const x = cx - width / 2 + (width / sections) * (i + 0.5);
     for (const face of [1, -1]) {
@@ -183,16 +232,27 @@ export function buildSatellite(detail: SatelliteDetail = "full"): SatelliteMesh 
 
   // --- body, front to back ---
   hemisphere(b, 4, 2, seg.body, seg.rings, BODY);
-  tube(b, 2, 4, 2.5, 2, seg.body, BODY);                       // front cone
-  tube(b, 1, 2, 2.5, 2.5, seg.body, BODY);                     // front barrel
-  tube(b, 0, 1, 1.5, 1.5, seg.body, DARK, { back: true });     // recessed core
-  for (let i = 0; i < 6; i++) {                                 // struts bridging the gap
+  tube(b, 2, 4, 2.5, 2, seg.body, BODY); // front cone
+  tube(b, 1, 2, 2.5, 2.5, seg.body, BODY); // front barrel
+  tube(b, 0, 1, 1.5, 1.5, seg.body, DARK, { back: true }); // recessed core
+  for (let i = 0; i < 6; i++) {
+    // struts bridging the gap
     const t = (i / 6) * Math.PI * 2;
-    tube(b, 0, 1, 0.15, 0.15, seg.thin, BODY, { back: true, front: true },
-      Math.cos(t) * 2.1, Math.sin(t) * 2.1);
+    tube(
+      b,
+      0,
+      1,
+      0.15,
+      0.15,
+      seg.thin,
+      BODY,
+      { back: true, front: true },
+      Math.cos(t) * 2.1,
+      Math.sin(t) * 2.1,
+    );
   }
-  tube(b, -2.25, 0, 2.5, 2.5, seg.body, BODY);                 // rear barrel
-  tube(b, -3.75, -2.25, 1.5, 2.5, seg.body, BODY);             // rear taper
+  tube(b, -2.25, 0, 2.5, 2.5, seg.body, BODY); // rear barrel
+  tube(b, -3.75, -2.25, 1.5, 2.5, seg.body, BODY); // rear taper
   tube(b, -4.25, -3.75, 1.5, 1.5, seg.body, BODY, { back: true });
 
   // --- solar wings, on the rear barrel ---
@@ -200,7 +260,7 @@ export function buildSatellite(detail: SatelliteDetail = "full"): SatelliteMesh 
   solarWing(b, -1, -1, seg);
 
   // --- rear antenna: a dish opening backwards, with its feed on three struts ---
-  tube(b, -5.75, -4.25, 2.5, 0.5, seg.body, BODY);             // open cone
+  tube(b, -5.75, -4.25, 2.5, 0.5, seg.body, BODY); // open cone
   tube(b, -4.3, -4.25, 0.5, 0.5, seg.body, BODY, { back: true });
   tube(b, -6.35, -5.15, 0.2, 0.2, seg.thin, BODY, { back: true, front: true });
   for (let i = 0; i < 3; i++) {

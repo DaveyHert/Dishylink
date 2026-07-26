@@ -77,7 +77,10 @@ const SSO_COOKIE_RE = /Starlink\.Com\.Sso=/;
 
 const NOT_CONNECTED: CloudResult = {
   status: 428,
-  body: { error: "not_connected", message: "No Starlink session — sign in / add a fresh .starlink-cookie." },
+  body: {
+    error: "not_connected",
+    message: "No Starlink session — sign in / add a fresh .starlink-cookie.",
+  },
 };
 
 /** Finite number or undefined — a missing legend field yields Number(undefined)
@@ -94,8 +97,11 @@ function num(value: unknown): number | undefined {
  *  for direct testing of the missing-field / NaN-guard behaviour. */
 export function deviceTelemetryFrom(telemetry: unknown): Record<string, Record<string, unknown>> {
   const out: Record<string, Record<string, unknown>> = {};
-  const data = (telemetry as { data?: { columnNamesByDeviceType?: Record<string, string[]>; values?: unknown[][] } })
-    ?.data;
+  const data = (
+    telemetry as {
+      data?: { columnNamesByDeviceType?: Record<string, string[]>; values?: unknown[][] };
+    }
+  )?.data;
   if (!data?.values || !data.columnNamesByDeviceType) return out;
   for (const row of data.values) {
     const kind = row[0];
@@ -207,7 +213,9 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
   }
 
   async function apiGet(path: string, cookie: string): Promise<unknown> {
-    const response = await doFetch(`${API}${path}`, { headers: { cookie, accept: "application/json" } });
+    const response = await doFetch(`${API}${path}`, {
+      headers: { cookie, accept: "application/json" },
+    });
     if (response.status === 401 || response.status === 403) throw new SessionExpiredError();
     if (!response.ok) throw new Error(`GET ${path} → HTTP ${response.status}`);
     return response.json();
@@ -259,7 +267,9 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
           const [identity, serviceLine, telemetry] = await Promise.all([
             fetchIdentity(cookie).catch(() => null),
             apiGet(`/webagg/v2/accounts/service-line/${sl}`, cookie),
-            apiPost("/device-data/cache/v1/telemetry", cookie, { accountNumber: acc }).catch(() => null),
+            apiPost("/device-data/cache/v1/telemetry", cookie, { accountNumber: acc }).catch(
+              () => null,
+            ),
           ]);
           return { identity, serviceLine, deviceTelemetry: deviceTelemetryFrom(telemetry) };
         });
@@ -268,7 +278,10 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
       if (route === "/cloud/usage") {
         const body = await withFreshCookie(async (cookie) => {
           const { acc, sl } = await resolveIds(cookie);
-          return apiGet(`/telemetryagg/v1/data-usage/account/${acc}/service-line/${sl}/annotated`, cookie);
+          return apiGet(
+            `/telemetryagg/v1/data-usage/account/${acc}/service-line/${sl}/annotated`,
+            cookie,
+          );
         });
         return { status: 200, body };
       }
@@ -296,7 +309,8 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
         status: 400,
         body: {
           error: "bad_cookie",
-          message: "That doesn't look like a Starlink session — copy the whole Cookie header (it must include Starlink.Com.Sso).",
+          message:
+            "That doesn't look like a Starlink session — copy the whole Cookie header (it must include Starlink.Com.Sso).",
         },
       };
     }
@@ -311,7 +325,8 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
           status: 428,
           body: {
             error: "not_connected",
-            message: "That session didn't authenticate — sign in at starlink.com and copy a fresh Cookie header.",
+            message:
+              "That session didn't authenticate — sign in at starlink.com and copy a fresh Cookie header.",
           },
         };
       }
@@ -366,7 +381,10 @@ export function starlinkCloudProxy(): Plugin {
               const { status, body } = await handler.connect(cookie ?? "");
               return sendJson(res, status, body);
             } catch {
-              return sendJson(res, 400, { error: "bad_request", message: "Expected JSON { cookie }." });
+              return sendJson(res, 400, {
+                error: "bad_request",
+                message: "Expected JSON { cookie }.",
+              });
             }
           }
           return sendJson(res, 405, { error: "method_not_allowed" });

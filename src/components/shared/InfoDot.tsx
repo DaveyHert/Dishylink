@@ -25,12 +25,17 @@ export function InfoDot({ tip }: { tip: string }) {
     <TooltipPrimitive.Provider delayDuration={120}>
       <TooltipPrimitive.Root>
         <TooltipPrimitive.Trigger asChild>
-          <span className={infoDot} tabIndex={0} role="note" aria-label={tip}>
+          <span className={infoDot} tabIndex={0} role='note' aria-label={tip}>
             i
           </span>
         </TooltipPrimitive.Trigger>
         <TooltipPrimitive.Portal>
-          <TooltipPrimitive.Content className={infoTip} side="top" sideOffset={8} collisionPadding={12}>
+          <TooltipPrimitive.Content
+            className={infoTip}
+            side='top'
+            sideOffset={8}
+            collisionPadding={12}
+          >
             {tip}
           </TooltipPrimitive.Content>
         </TooltipPrimitive.Portal>
@@ -50,7 +55,12 @@ export function StatLabel({
   className?: string;
 }) {
   return (
-    <span className={cn("inline-flex items-center gap-[5px] text-[11.5px] font-medium text-muted-foreground", className)}>
+    <span
+      className={cn(
+        "inline-flex items-center gap-[5px] text-[11.5px] font-medium text-muted-foreground",
+        className,
+      )}
+    >
       {children}
       <InfoDot tip={tip} />
     </span>

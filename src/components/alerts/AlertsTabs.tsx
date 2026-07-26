@@ -120,7 +120,9 @@ export function StatusTab({
             <p className='sticky top-0 z-10 flex items-center justify-between gap-2 bg-[var(--page)] px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--ink-muted)]'>
               <span>{label}</span>
               {/* Never let a stale snapshot read as a live all-clear. */}
-              {!live && <span className='normal-case tracking-normal'>not answering · last known</span>}
+              {!live && (
+                <span className='normal-case tracking-normal'>not answering · last known</span>
+              )}
             </p>
             {checks.map((c) => (
               <div
@@ -162,5 +164,11 @@ export const ALERTS_TABS: { key: AlertsTab; label: string }[] = [
 /** Props the menu threads straight through to whichever pane is open. */
 export type AlertsTabData = Pick<
   DeviceAlerts,
-  "active" | "history" | "statusList" | "firstSeen" | "historianUp" | "dishReachable" | "routerReachable"
+  | "active"
+  | "history"
+  | "statusList"
+  | "firstSeen"
+  | "historianUp"
+  | "dishReachable"
+  | "routerReachable"
 >;

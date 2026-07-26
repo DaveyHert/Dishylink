@@ -78,10 +78,7 @@ function servability(t: number): number {
  *  would launch the beam off the hardware. */
 function beamOrigin(art: DishPngArt): [number, number] {
   const [boxX, boxY] = dishBox(art);
-  return [
-    boxX + art.beamExitAnchor[0] * DISH_BOX,
-    boxY + art.beamExitAnchor[1] * DISH_BOX,
-  ];
+  return [boxX + art.beamExitAnchor[0] * DISH_BOX, boxY + art.beamExitAnchor[1] * DISH_BOX];
 }
 
 /** Top-left of the box the art is drawn in, placed so its ground anchor lands on
@@ -93,13 +90,7 @@ function dishBox(art: DishPngArt): [number, number] {
   ];
 }
 
-export function SpeedBeam({
-  value,
-  mode,
-  caption,
-  testActive = false,
-  dishModel,
-}: SpeedBeamProps) {
+export function SpeedBeam({ value, mode, caption, testActive = false, dishModel }: SpeedBeamProps) {
   const art = dishPngArtFor(dishModel);
   const [boxX, boxY] = dishBox(art);
   const origin = useMemo(() => beamOrigin(art), [art]);

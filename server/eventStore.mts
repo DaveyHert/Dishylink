@@ -16,7 +16,11 @@
 // rolling buffer so the panel survives a reboot and covers overnight — it is not
 // an archive, and nothing in the UI reads events older than the 6H chart window.
 
-import { ensureParentDirectory, readJsonLines, writeJsonLinesAtomically } from "./jsonLinesFile.mts";
+import {
+  ensureParentDirectory,
+  readJsonLines,
+  writeJsonLinesAtomically,
+} from "./jsonLinesFile.mts";
 import { canonicalCause } from "../src/lib/telemetry.ts";
 
 export interface StoredEvent {

@@ -2,10 +2,7 @@
 // away from the feed as the beam. Paints in currentColor, so callers set the
 // color (and any dimming) with text/opacity utilities on the icon or its parent.
 
-export function DishIcon({
-  size = 22,
-  ...props
-}: React.ComponentProps<"svg"> & { size?: number }) {
+export function DishIcon({ size = 22, ...props }: React.ComponentProps<"svg"> & { size?: number }) {
   return (
     <svg
       width={size}

@@ -5,7 +5,12 @@
 // carrying a stale value forward.
 
 import { describe, it, expect } from "vitest";
-import { TelemetryAccumulator, decodeHistoryWindow, readRouterLatencyMs, readRouterPingSuccessPercent } from "./telemetry";
+import {
+  TelemetryAccumulator,
+  decodeHistoryWindow,
+  readRouterLatencyMs,
+  readRouterPingSuccessPercent,
+} from "./telemetry";
 import type { DishHistoryJson } from "./dishClient";
 
 /** A ring holding `count` samples, newest last, with the counter at `current`. */
@@ -65,7 +70,9 @@ describe("TelemetryAccumulator router latency stamping", () => {
     // Next poll: latency answered, ping success did not.
     const samples = accumulator.ingest(ring(4), nowMs + 2000, { latencyMs: 19.1 });
 
-    expect(samples.slice(0, 2).map((sample) => sample.routerPingSuccessPercent)).toEqual([98.11, 98.11]);
+    expect(samples.slice(0, 2).map((sample) => sample.routerPingSuccessPercent)).toEqual([
+      98.11, 98.11,
+    ]);
     expect(samples.slice(2).map((sample) => sample.routerPingSuccessPercent)).toEqual([null, null]);
     expect(samples.slice(2).map((sample) => sample.routerLatencyMs)).toEqual([19.1, 19.1]);
   });

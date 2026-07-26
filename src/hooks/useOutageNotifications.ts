@@ -45,7 +45,11 @@ export function useOutageNotifications(telemetry: DishTelemetry): void {
       );
     }
     if (!isDropping && wasDroppingRef.current) {
-      sendNotification("recovered", "Starlink connection restored", "Pings to the Starlink network are succeeding again.");
+      sendNotification(
+        "recovered",
+        "Starlink connection restored",
+        "Pings to the Starlink network are succeeding again.",
+      );
     }
     wasDroppingRef.current = isDropping;
   }, [telemetry.samples]);

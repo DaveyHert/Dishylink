@@ -11,7 +11,15 @@ import {
 } from "../lib/dishClient";
 import { GrpcWebError } from "../lib/grpcWeb";
 import { subscribeRouterStatus } from "../lib/routerStatusFeed";
-import { TelemetryAccumulator, decodeOutageEvents, readRouterLatencyMs, readRouterPingSuccessPercent, type TelemetrySample, type OutageEvent, type RouterReadings } from "../lib/telemetry";
+import {
+  TelemetryAccumulator,
+  decodeOutageEvents,
+  readRouterLatencyMs,
+  readRouterPingSuccessPercent,
+  type TelemetrySample,
+  type OutageEvent,
+  type RouterReadings,
+} from "../lib/telemetry";
 
 /**
  * Backfill from the always-on historian so a page reload never resets the
@@ -20,7 +28,9 @@ import { TelemetryAccumulator, decodeOutageEvents, readRouterLatencyMs, readRout
  */
 async function fetchPersistedSamples(): Promise<TelemetrySample[]> {
   try {
-    const response = await fetch("/api/samples?minutes=360", { signal: AbortSignal.timeout(4_000) });
+    const response = await fetch("/api/samples?minutes=360", {
+      signal: AbortSignal.timeout(4_000),
+    });
     if (!response.ok) return [];
     const payload = (await response.json()) as { samples?: TelemetrySample[] };
     return payload.samples ?? [];
@@ -182,7 +192,10 @@ export function useDishTelemetry(): DishTelemetry {
         if (persistedSamples.length > 0) {
           setSamples([...accumulatorRef.current.seed(persistedSamples)]);
         }
-        client.getDeviceInfo(AbortSignal.timeout(4_000)).then((info) => !disposed && setDeviceInfo(info)).catch(() => {});
+        client
+          .getDeviceInfo(AbortSignal.timeout(4_000))
+          .then((info) => !disposed && setDeviceInfo(info))
+          .catch(() => {});
         await Promise.all([pollStatus(), pollHistory(), pollObstructionMap(), pollLocation()]);
         timerIds.push(window.setInterval(pollStatus, STATUS_POLL_MS));
         timerIds.push(window.setInterval(pollHistory, HISTORY_POLL_MS));
@@ -200,5 +213,15 @@ export function useDishTelemetry(): DishTelemetry {
     };
   }, []);
 
-  return { connectionState, deviceInfo, status, samples, outageEvents, obstructionMap, dishLocation, locationDenied, lastStatusAtMs };
+  return {
+    connectionState,
+    deviceInfo,
+    status,
+    samples,
+    outageEvents,
+    obstructionMap,
+    dishLocation,
+    locationDenied,
+    lastStatusAtMs,
+  };
 }

@@ -25,7 +25,13 @@ afterEach(() => {
 const HOUR_MS = 3_600_000;
 
 function event(startMs: number, overrides: Partial<StoredEvent> = {}): StoredEvent {
-  return { startMs, durationMs: 800, cause: "EVENT_REASON_OUTAGE_NO_PINGS", severity: "warning", ...overrides };
+  return {
+    startMs,
+    durationMs: 800,
+    cause: "EVENT_REASON_OUTAGE_NO_PINGS",
+    severity: "warning",
+    ...overrides,
+  };
 }
 
 describe("EventStore retention", () => {

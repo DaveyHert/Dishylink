@@ -48,13 +48,7 @@ import { TooltipProvider } from "./components/ui/tooltip";
 
 type ThemeName = "light" | "dark";
 type SheetName =
-  | "speedtest"
-  | "alignment"
-  | "datausage"
-  | "network"
-  | "account"
-  | "settings"
-  | "terminal";
+  "speedtest" | "alignment" | "datausage" | "network" | "account" | "settings" | "terminal";
 
 const WINDOW_CHOICES: { label: string; minutes: number }[] = [
   { label: "15M", minutes: 15 },

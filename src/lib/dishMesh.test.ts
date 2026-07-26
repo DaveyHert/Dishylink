@@ -143,7 +143,11 @@ test("the aviation model is wound outward", () => {
     const idx = new Uint16Array(Buffer.from(mesh.indices, "base64").buffer);
     let volume = 0;
     for (let o = 0; o < idx.length; o += 3) {
-      const [a, b, c] = [idx[o], idx[o + 1], idx[o + 2]].map((v) => [p[v * 3], p[v * 3 + 1], p[v * 3 + 2]]);
+      const [a, b, c] = [idx[o], idx[o + 1], idx[o + 2]].map((v) => [
+        p[v * 3],
+        p[v * 3 + 1],
+        p[v * 3 + 2],
+      ]);
       volume +=
         (a[0] * (b[1] * c[2] - b[2] * c[1]) +
           a[1] * (b[2] * c[0] - b[0] * c[2]) +

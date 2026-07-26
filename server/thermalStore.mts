@@ -10,7 +10,11 @@
 // memory and rewrites the file on change rather than doing append-only with
 // compaction. Anything older than the retention window is dropped on write.
 
-import { ensureParentDirectory, readJsonLines, writeJsonLinesAtomically } from "./jsonLinesFile.mts";
+import {
+  ensureParentDirectory,
+  readJsonLines,
+  writeJsonLinesAtomically,
+} from "./jsonLinesFile.mts";
 
 export interface ThermalEpisode {
   /** `alerts` key that produced this, e.g. "thermalThrottle". */

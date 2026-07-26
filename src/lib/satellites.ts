@@ -165,7 +165,10 @@ export async function loadStarlinkTles(): Promise<TleRecord[]> {
       }
       tleText = fetched;
       try {
-        localStorage.setItem(TLE_CACHE_KEY, JSON.stringify({ fetchedAtMs: Date.now(), text: fetched }));
+        localStorage.setItem(
+          TLE_CACHE_KEY,
+          JSON.stringify({ fetchedAtMs: Date.now(), text: fetched }),
+        );
       } catch {
         // storage full — run uncached
       }
@@ -224,8 +227,10 @@ export class StarlinkTracker {
     // Geodetic latitude is the right one here: these axes define the local
     // vertical, which is the normal to the ellipsoid, not the geocentric radius.
     const { latitude, longitude } = this.observerGd;
-    const sinLat = Math.sin(latitude), cosLat = Math.cos(latitude);
-    const sinLon = Math.sin(longitude), cosLon = Math.cos(longitude);
+    const sinLat = Math.sin(latitude),
+      cosLat = Math.cos(latitude);
+    const sinLon = Math.sin(longitude),
+      cosLon = Math.cos(longitude);
     this.east = [-sinLon, cosLon, 0];
     this.north = [-sinLat * cosLon, -sinLat * sinLon, cosLat];
     this.zenith = [cosLat * cosLon, cosLat * sinLon, sinLat];
@@ -302,7 +307,10 @@ export class StarlinkTracker {
     gmst: number,
   ): TopocentricState {
     const posEcf: Vec3 = [positionEcf.x, positionEcf.y, positionEcf.z];
-    const velEcfRotated = satelliteJs.eciToEcf({ x: velocity[0], y: velocity[1], z: velocity[2] }, gmst);
+    const velEcfRotated = satelliteJs.eciToEcf(
+      { x: velocity[0], y: velocity[1], z: velocity[2] },
+      gmst,
+    );
     // ω = (0, 0, ω_e), so ω × r = (−ω_e·r_y, ω_e·r_x, 0); subtract it.
     const velEcf: Vec3 = [
       velEcfRotated.x + EARTH_ROTATION_RAD_S * posEcf[1],
@@ -319,7 +327,11 @@ export class StarlinkTracker {
   }
 
   /** The LVLH triad from an inertial state vector, expressed in observer ENU. */
-  private attitudeFrom(position: Vec3, velocity: Vec3, gmst: number): SatelliteAttitude | undefined {
+  private attitudeFrom(
+    position: Vec3,
+    velocity: Vec3,
+    gmst: number,
+  ): SatelliteAttitude | undefined {
     const radial = normalise(position);
     const crossTrack = cross(position, velocity);
     // Degenerate only if r and v are parallel, which no real orbit produces —
@@ -358,7 +370,8 @@ export class StarlinkTracker {
       for (let satelliteIndex = startIndex; satelliteIndex < endIndex; satelliteIndex++) {
         const satrec = this.satellites[satelliteIndex].satrec;
         const skyNow = this.lookAngles(satrec, nowDate, nowGmst);
-        if (skyNow && skyNow.elevationDeg > COARSE_ELEVATION_FLOOR_DEG) shortlist.push(satelliteIndex);
+        if (skyNow && skyNow.elevationDeg > COARSE_ELEVATION_FLOOR_DEG)
+          shortlist.push(satelliteIndex);
         forecastTimes.forEach((forecastTime, offsetIndex) => {
           const skyLater = this.lookAngles(satrec, forecastTime.atDate, forecastTime.gmst);
           if (skyLater && skyLater.elevationDeg >= SERVING_ELEVATION_FLOOR_DEG) {

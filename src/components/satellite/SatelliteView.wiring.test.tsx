@@ -27,7 +27,10 @@ import { TooltipProvider } from "../ui/tooltip";
 const calls: string[] = [];
 /** What the component last handed the scene, so a test can drive it back. */
 const scene: {
-  trackers: Array<{ name: string; report: (at: { x: number; y: number; behind: boolean } | null) => void }>;
+  trackers: Array<{
+    name: string;
+    report: (at: { x: number; y: number; behind: boolean } | null) => void;
+  }>;
   pick: ((sky: SatelliteSky | null) => void) | null;
 } = { trackers: [], pick: null };
 
@@ -98,7 +101,7 @@ function Harness() {
     // The app mounts one provider at its root; a standalone mount has to supply
     // its own or Radix throws as soon as a tooltip renders.
     <TooltipProvider>
-      <button type="button" data-testid="land-map" onClick={() => setMap(MAP)}>
+      <button type='button' data-testid='land-map' onClick={() => setMap(MAP)}>
         land the obstruction map
       </button>
       <SatelliteView
@@ -137,8 +140,18 @@ test("the scene is wired up when it is created after the wiring already existed"
 // tapped. It once lived inside the serving satellite's name-tag element, which
 // is positioned by a different tracker — so tapping anything put the ring on the
 // serving satellite instead. Two subjects, two elements, two trackers.
-const SERVING: SatelliteSky = { name: "STARLINK-AAA", azimuthDeg: 10, elevationDeg: 70, rangeKm: 550 };
-const TAPPED: SatelliteSky = { name: "STARLINK-BBB", azimuthDeg: 200, elevationDeg: 40, rangeKm: 700 };
+const SERVING: SatelliteSky = {
+  name: "STARLINK-AAA",
+  azimuthDeg: 10,
+  elevationDeg: 70,
+  rangeKm: 550,
+};
+const TAPPED: SatelliteSky = {
+  name: "STARLINK-BBB",
+  azimuthDeg: 200,
+  elevationDeg: 40,
+  rangeKm: 700,
+};
 
 test("the selection ring marks the satellite you tapped, not the serving one", async () => {
   calls.length = 0;

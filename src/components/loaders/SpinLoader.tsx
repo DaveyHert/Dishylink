@@ -58,7 +58,7 @@ function ConicSpinner({ size, label }: VariantProps) {
 
   return (
     <motion.div
-      role="status"
+      role='status'
       aria-label={label}
       style={{
         width: size,
@@ -81,7 +81,7 @@ function SegmentSpinner({ size, label }: VariantProps) {
   const width = Math.max(4, Math.round(size * 0.1));
   return (
     <motion.div
-      role="status"
+      role='status'
       aria-label={label}
       style={{
         width: size,
@@ -105,7 +105,11 @@ function ActivitySpinner({ size, label }: VariantProps) {
   const spokeHeight = size * 0.2727;
 
   return (
-    <div role="status" aria-label={label} style={{ position: "relative", width: size, height: size, flex: "none" }}>
+    <div
+      role='status'
+      aria-label={label}
+      style={{ position: "relative", width: size, height: size, flex: "none" }}
+    >
       {Array.from({ length: 12 }, (_, spoke) => (
         <motion.span
           key={spoke}
@@ -124,7 +128,12 @@ function ActivitySpinner({ size, label }: VariantProps) {
             transform: `rotate(${spoke * 30}deg)`,
           }}
           animate={{ opacity: [1, 0.15] }}
-          transition={{ duration: 1, repeat: Infinity, ease: "linear", delay: -((11 - spoke) / 12) }}
+          transition={{
+            duration: 1,
+            repeat: Infinity,
+            ease: "linear",
+            delay: -((11 - spoke) / 12),
+          }}
         />
       ))}
     </div>

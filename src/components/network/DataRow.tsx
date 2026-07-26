@@ -15,13 +15,7 @@ export function DataRow({ label, value }: { label: string; value: React.ReactNod
 /** Heading for a section inside a drill-in (Throughput, Radio temperatures,
  *  Connected devices) — a section title, not a caption on a field. `children`
  *  are trailing companions on the same line: an InfoDot, a window picker. */
-export function SectionHeading({
-  title,
-  children,
-}: {
-  title: string;
-  children?: React.ReactNode;
-}) {
+export function SectionHeading({ title, children }: { title: string; children?: React.ReactNode }) {
   return (
     <div className='mt-5 mb-2.5 flex items-center gap-[7px]'>
       <span className='text-[14px] font-semibold tracking-[0.01em] text-foreground'>{title}</span>

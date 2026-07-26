@@ -17,7 +17,7 @@ interface FactGridProps {
 export function FactGrid({ columns = 2, className, children }: FactGridProps) {
   return (
     <div
-      data-slot="fact-grid"
+      data-slot='fact-grid'
       className={cn(
         "grid gap-x-8 gap-y-1 max-[1080px]:grid-cols-1",
         columns === 3 ? "grid-cols-3" : "grid-cols-2",
@@ -45,7 +45,7 @@ interface FactColumnProps {
 export function FactColumns({ className, children }: FactColumnProps) {
   return (
     <div
-      data-slot="fact-columns"
+      data-slot='fact-columns'
       className={cn("grid grid-cols-2 gap-x-8 max-[1080px]:grid-cols-1", className)}
     >
       {children}
@@ -57,7 +57,7 @@ export function FactColumns({ className, children }: FactColumnProps) {
 export function FactColumn({ className, children }: FactColumnProps) {
   return (
     <div
-      data-slot="fact-column"
+      data-slot='fact-column'
       className={cn("flex flex-col gap-y-1 [&>*:last-child]:border-b-0", className)}
     >
       {children}
@@ -77,12 +77,15 @@ interface FactRowProps {
 export function FactRow({ label, hint, className, children }: FactRowProps) {
   return (
     <div
-      data-slot="fact-row"
-      className={cn("flex items-baseline justify-between gap-4 border-b border-border py-[7px]", className)}
+      data-slot='fact-row'
+      className={cn(
+        "flex items-baseline justify-between gap-4 border-b border-border py-[7px]",
+        className,
+      )}
     >
       <span
-        data-slot="fact-label"
-        className="inline-flex flex-none items-center gap-[5px] text-[13px] font-medium text-muted-foreground"
+        data-slot='fact-label'
+        className='inline-flex flex-none items-center gap-[5px] text-[13px] font-medium text-muted-foreground'
       >
         {label}
         {hint && <InfoDot tip={hint} />}

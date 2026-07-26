@@ -26,7 +26,9 @@ function endlessBody(signal: AbortSignal) {
 function stubDownload() {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (_url: string, init: { signal: AbortSignal }) => ({ body: endlessBody(init.signal) })),
+    vi.fn(async (_url: string, init: { signal: AbortSignal }) => ({
+      body: endlessBody(init.signal),
+    })),
   );
 }
 

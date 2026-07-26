@@ -33,19 +33,26 @@ const SIZES = {
 export function FigureRow({ figures, className, size = "lg" }: FigureRowProps) {
   const scale = SIZES[size];
   return (
-    <div data-slot="figure-row" className={cn("mt-3 mb-3.5 flex items-center", scale.gap, className)}>
+    <div
+      data-slot='figure-row'
+      className={cn("mt-3 mb-3.5 flex items-center", scale.gap, className)}
+    >
       {figures.map((figure, index) => (
         <Fragment key={figure.label}>
-          {index > 0 && <div data-slot="figure-divider" className="w-px self-stretch bg-border" />}
-          <div data-slot="figure">
+          {index > 0 && <div data-slot='figure-divider' className='w-px self-stretch bg-border' />}
+          <div data-slot='figure'>
             {/* Font-size class first: in Tailwind v4 `text-[…]` carries a
                 line-height, so it must precede `leading-[1.05]` or tailwind-merge
                 drops the explicit leading (figure-row.test enforces 37.8px). */}
             <div className={cn(scale.value, "leading-[1.05] font-bold tracking-[-0.01em]")}>
               {figure.value}
-              <span className={cn("ml-[5px] font-medium text-muted-foreground", scale.unit)}>{figure.unit}</span>
+              <span className={cn("ml-[5px] font-medium text-muted-foreground", scale.unit)}>
+                {figure.unit}
+              </span>
             </div>
-            <div className={cn("mt-0.5 font-medium text-muted-foreground", scale.label)}>{figure.label}</div>
+            <div className={cn("mt-0.5 font-medium text-muted-foreground", scale.label)}>
+              {figure.label}
+            </div>
           </div>
         </Fragment>
       ))}

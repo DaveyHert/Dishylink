@@ -123,7 +123,9 @@ describe("AlertStore retention", () => {
   });
 
   it("keeps an open episode however old — it is current state, not history", () => {
-    seedFile([{ source: "dish", key: "dishWaterDetected", startMs: Date.now() - 30 * DAY_MS, endMs: null }]);
+    seedFile([
+      { source: "dish", key: "dishWaterDetected", startMs: Date.now() - 30 * DAY_MS, endMs: null },
+    ]);
     const served = new AlertStore(file).all();
     expect(served).toHaveLength(1);
     expect(served[0].endMs).toBeNull();

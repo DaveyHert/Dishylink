@@ -9,11 +9,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import {
-  DishClient,
-  type DishStatusJson,
-  type WifiNetworkConfigJson,
-} from "../../lib/dishClient";
+import { DishClient, type DishStatusJson, type WifiNetworkConfigJson } from "../../lib/dishClient";
 import { useDishSettings } from "../../hooks/useDishSettings";
 import { specForHardware } from "../../lib/dishMesh";
 import { RouterSettingsTab } from "./RouterSettingsTab";
@@ -69,7 +65,13 @@ export function SettingsModal({
       ]);
       await navigator.clipboard.writeText(
         JSON.stringify(
-          { capturedAt: new Date().toISOString(), deviceInfo, diagnostics, status, config: settings.config },
+          {
+            capturedAt: new Date().toISOString(),
+            deviceInfo,
+            diagnostics,
+            status,
+            config: settings.config,
+          },
           null,
           2,
         ),
@@ -84,7 +86,9 @@ export function SettingsModal({
     <Dialog open={open} onOpenChange={(stillOpen) => !stillOpen && onClose()}>
       <DialogContent className='max-w-md bg-card border-border p-0 gap-0' showCloseButton={false}>
         <DialogHeader className='flex flex-row items-center justify-between px-5 pt-[12px] pb-1 text-left'>
-          <DialogTitle className='text-[17px] font-semibold tracking-[0.01em]'>Settings</DialogTitle>
+          <DialogTitle className='text-[17px] font-semibold tracking-[0.01em]'>
+            Settings
+          </DialogTitle>
           <button
             className='inline-flex h-[30px] w-[30px] cursor-pointer items-center justify-center rounded-full border-0 bg-[color-mix(in_srgb,var(--ink)_6%,var(--surface))] text-[13px] leading-none text-[color:var(--ink-secondary)] transition-colors hover:text-foreground'
             onClick={onClose}

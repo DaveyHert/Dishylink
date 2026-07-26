@@ -26,14 +26,19 @@ export function ensureOuiLoaded(): Promise<void> {
 
 /** First 3 octets as 6 lowercase hex chars, separators stripped. */
 function ouiKey(macAddress: string): string {
-  return macAddress.replace(/[^0-9a-fA-F]/g, "").slice(0, 6).toLowerCase();
+  return macAddress
+    .replace(/[^0-9a-fA-F]/g, "")
+    .slice(0, 6)
+    .toLowerCase();
 }
 
 /** True when the MAC is a randomized/locally-administered address (2nd nibble is 2,6,A,E). */
 export function isPrivateMac(macAddress: string | undefined): boolean {
   if (!macAddress) return false;
   const secondNibble = macAddress.replace(/[^0-9a-fA-F]/g, "")[1]?.toLowerCase();
-  return secondNibble === "2" || secondNibble === "6" || secondNibble === "a" || secondNibble === "e";
+  return (
+    secondNibble === "2" || secondNibble === "6" || secondNibble === "a" || secondNibble === "e"
+  );
 }
 
 /** Best-effort brand for a device: real OUI vendor, else "Private" for a

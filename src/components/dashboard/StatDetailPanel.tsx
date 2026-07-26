@@ -73,7 +73,10 @@ const WINDOW_CHOICES: { label: string; minutes: number }[] = [
 ];
 
 /** ToggleGroup values are strings; minutes stay the source of truth. */
-const WINDOW_OPTIONS = WINDOW_CHOICES.map((choice) => ({ label: choice.label, value: String(choice.minutes) }));
+const WINDOW_OPTIONS = WINDOW_CHOICES.map((choice) => ({
+  label: choice.label,
+  value: String(choice.minutes),
+}));
 
 interface StatDetailPanelProps {
   detail: StatDetail;
@@ -88,7 +91,10 @@ export function StatDetailPanel({ detail, samples }: StatDetailPanelProps) {
 
   const getSeriesValue = detail.series[0].getValue;
   const windowed = useMemo(() => windowSlice(samples, windowMinutes), [samples, windowMinutes]);
-  const averageValue = useMemo(() => averageOf(windowed, getSeriesValue), [windowed, getSeriesValue]);
+  const averageValue = useMemo(
+    () => averageOf(windowed, getSeriesValue),
+    [windowed, getSeriesValue],
+  );
   const windowEnergy = useMemo(
     () => (detail.showWindowEnergy ? energyKWh(windowed) : 0),
     [detail.showWindowEnergy, windowed],
@@ -102,7 +108,9 @@ export function StatDetailPanel({ detail, samples }: StatDetailPanelProps) {
     historianRange ?? "6h",
     Boolean(detail.showWindowEnergy && historianRange),
   );
-  const useHistorianEnergy = Boolean(historianRange && !energyHistory.unavailable && energyHistory.data);
+  const useHistorianEnergy = Boolean(
+    historianRange && !energyHistory.unavailable && energyHistory.data,
+  );
   const displayEnergyKWh = useHistorianEnergy ? energyHistory.data!.totalKWh : windowEnergy;
   const energyNote = useHistorianEnergy
     ? energyHistory.data!.coverage.fraction >= 0.95
@@ -161,8 +169,8 @@ export function StatDetailPanel({ detail, samples }: StatDetailPanelProps) {
         options={WINDOW_OPTIONS}
         value={String(windowMinutes)}
         onChange={(minutes) => setWindowMinutes(Number(minutes))}
-        label="Time window"
-        className="mb-2.5"
+        label='Time window'
+        className='mb-2.5'
       />
 
       <TelemetryChart
@@ -179,13 +187,16 @@ export function StatDetailPanel({ detail, samples }: StatDetailPanelProps) {
       {/* Two lines on one axis need naming; a single line is named by the sheet
           title. Same placement as the official app: dots under the chart. */}
       {detail.series.length > 1 && (
-        <div className="mt-2 flex items-center justify-center gap-5">
+        <div className='mt-2 flex items-center justify-center gap-5'>
           {detail.series.map((chartSeries) => (
             <span
               key={chartSeries.id}
-              className="inline-flex items-center gap-1.5 text-[12px] font-semibold"
+              className='inline-flex items-center gap-1.5 text-[12px] font-semibold'
             >
-              <span className="size-[9px] flex-none rounded-full" style={{ background: `var(${chartSeries.colorVar})` }} />
+              <span
+                className='size-[9px] flex-none rounded-full'
+                style={{ background: `var(${chartSeries.colorVar})` }}
+              />
               {chartSeries.label}
             </span>
           ))}
@@ -193,9 +204,9 @@ export function StatDetailPanel({ detail, samples }: StatDetailPanelProps) {
       )}
 
       {detail.distribution && (
-        <section className="mt-4">
-          <h3 className="text-[15px] font-semibold">Latency distribution</h3>
-          <p className="mt-0.5 mb-2 text-[12px] font-medium text-muted-foreground">
+        <section className='mt-4'>
+          <h3 className='text-[15px] font-semibold'>Latency distribution</h3>
+          <p className='mt-0.5 mb-2 text-[12px] font-medium text-muted-foreground'>
             over the selected window
           </p>
           <LatencyHistogram samples={windowed} series={detail.series} />
@@ -203,14 +214,14 @@ export function StatDetailPanel({ detail, samples }: StatDetailPanelProps) {
       )}
 
       {detail.secondaryChart && (
-        <section className="mt-4">
-          <h3 className="text-[15px] font-semibold">{detail.secondaryChart.title}</h3>
-          <p className="mt-0.5 mb-2 text-[12px] font-medium text-muted-foreground">
+        <section className='mt-4'>
+          <h3 className='text-[15px] font-semibold'>{detail.secondaryChart.title}</h3>
+          <p className='mt-0.5 mb-2 text-[12px] font-medium text-muted-foreground'>
             {detail.secondaryChart.note}
           </p>
           {hasSecondaryData ? (
             <>
-              <FigureRow className="mt-0 mb-3" size="sm" figures={secondaryFigures} />
+              <FigureRow className='mt-0 mb-3' size='sm' figures={secondaryFigures} />
               <TelemetryChart
                 samples={windowed}
                 series={detail.secondaryChart.series}
@@ -223,15 +234,19 @@ export function StatDetailPanel({ detail, samples }: StatDetailPanelProps) {
               />
             </>
           ) : (
-            <EmptyState className="py-6">{detail.secondaryChart.emptyNote}</EmptyState>
+            <EmptyState className='py-6'>{detail.secondaryChart.emptyNote}</EmptyState>
           )}
         </section>
       )}
 
       {detail.showWindowEnergy && (
-        <div className="mt-3.5 rounded-lg bg-[color-mix(in_srgb,var(--ink)_5%,var(--surface))] px-[15px] py-[13px]">
-          <div className="text-[23px] font-bold">{displayEnergyKWh.toFixed(displayEnergyKWh < 1 ? 3 : 2)} kWh</div>
-          <div className="mt-0.5 text-[12px] font-medium text-muted-foreground">energy used {energyNote}</div>
+        <div className='mt-3.5 rounded-lg bg-[color-mix(in_srgb,var(--ink)_5%,var(--surface))] px-[15px] py-[13px]'>
+          <div className='text-[23px] font-bold'>
+            {displayEnergyKWh.toFixed(displayEnergyKWh < 1 ? 3 : 2)} kWh
+          </div>
+          <div className='mt-0.5 text-[12px] font-medium text-muted-foreground'>
+            energy used {energyNote}
+          </div>
         </div>
       )}
 

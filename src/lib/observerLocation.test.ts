@@ -16,12 +16,8 @@ globalThis.localStorage = {
   },
 } as Storage;
 
-const {
-  loadSavedLocation,
-  loadLocationCleared,
-  saveLocation,
-  clearSavedLocation,
-} = await import("./observerLocation");
+const { loadSavedLocation, loadLocationCleared, saveLocation, clearSavedLocation } =
+  await import("./observerLocation");
 
 const SITE = { latitudeDeg: 4.8172, longitudeDeg: 6.9679, altitudeM: 0 };
 

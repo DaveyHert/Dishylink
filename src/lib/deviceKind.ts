@@ -9,14 +9,7 @@
 // random hostname) carries nothing and falls back to a generic glyph.
 
 export type DeviceKind =
-  | "phone"
-  | "laptop"
-  | "desktop"
-  | "tablet"
-  | "watch"
-  | "tv"
-  | "console"
-  | "unknown";
+  "phone" | "laptop" | "desktop" | "tablet" | "watch" | "tv" | "console" | "unknown";
 
 // Most-specific first — "Galaxy Watch"/"Galaxy Tab" must beat the "galaxy" phone
 // hint, "Apple TV" must beat "apple".
@@ -31,11 +24,29 @@ export type DeviceKind =
 // which on a network panel is more often a switch.
 const KIND_RULES: { kind: DeviceKind; tokens: string[]; text: string[] }[] = [
   { kind: "watch", tokens: ["watch"], text: ["applewatch", "apple watch", "galaxy watch"] },
-  { kind: "tablet", tokens: ["ipad", "tablet", "kindle"], text: ["ipad", "galaxy tab", "surface pro"] },
+  {
+    kind: "tablet",
+    tokens: ["ipad", "tablet", "kindle"],
+    text: ["ipad", "galaxy tab", "surface pro"],
+  },
   {
     kind: "tv",
     tokens: ["tv", "roku", "chromecast", "firestick", "shield", "appletv"],
-    text: ["apple tv", "apple-tv", "fire tv", "firetv", "chromecast", "roku", "nvidia shield", "bravia", "vizio", "webos", "smart tv", "smarttv", "google tv"],
+    text: [
+      "apple tv",
+      "apple-tv",
+      "fire tv",
+      "firetv",
+      "chromecast",
+      "roku",
+      "nvidia shield",
+      "bravia",
+      "vizio",
+      "webos",
+      "smart tv",
+      "smarttv",
+      "google tv",
+    ],
   },
   {
     kind: "console",
@@ -44,18 +55,59 @@ const KIND_RULES: { kind: DeviceKind; tokens: string[]; text: string[] }[] = [
   },
   {
     kind: "phone",
-    tokens: ["phone", "iphone", "android", "pixel", "galaxy", "oneplus", "oppo", "vivo", "moto", "nokia"],
-    text: ["iphone", "android", "pixel", "oneplus", "xiaomi", "redmi", "huawei", "oppo", "motorola", "nokia"],
+    tokens: [
+      "phone",
+      "iphone",
+      "android",
+      "pixel",
+      "galaxy",
+      "oneplus",
+      "oppo",
+      "vivo",
+      "moto",
+      "nokia",
+    ],
+    text: [
+      "iphone",
+      "android",
+      "pixel",
+      "oneplus",
+      "xiaomi",
+      "redmi",
+      "huawei",
+      "oppo",
+      "motorola",
+      "nokia",
+    ],
   },
   {
     kind: "laptop",
     tokens: ["laptop", "macbook", "notebook", "thinkpad", "chromebook", "xps"],
-    text: ["macbook", "laptop", "notebook", "thinkpad", "chromebook", "zenbook", "ideapad", "spectre", "elitebook"],
+    text: [
+      "macbook",
+      "laptop",
+      "notebook",
+      "thinkpad",
+      "chromebook",
+      "zenbook",
+      "ideapad",
+      "spectre",
+      "elitebook",
+    ],
   },
   {
     kind: "desktop",
     tokens: ["imac", "desktop", "pc", "workstation", "macmini", "macstudio"],
-    text: ["imac", "mac mini", "mac-mini", "macmini", "mac studio", "macstudio", "desktop", "workstation"],
+    text: [
+      "imac",
+      "mac mini",
+      "mac-mini",
+      "macmini",
+      "mac studio",
+      "macstudio",
+      "desktop",
+      "workstation",
+    ],
   },
 ];
 
@@ -64,7 +116,10 @@ export function classifyDevice(name?: string): DeviceKind {
   if (raw === "") return "unknown";
   const tokens = new Set(raw.split(/[^a-z0-9]+/).filter(Boolean));
   for (const rule of KIND_RULES) {
-    if (rule.tokens.some((token) => tokens.has(token)) || rule.text.some((text) => raw.includes(text))) {
+    if (
+      rule.tokens.some((token) => tokens.has(token)) ||
+      rule.text.some((text) => raw.includes(text))
+    ) {
       return rule.kind;
     }
   }

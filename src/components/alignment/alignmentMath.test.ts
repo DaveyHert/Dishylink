@@ -161,7 +161,9 @@ describe("computeAlignment", () => {
 
   it("falls back to a 70° target when the dish reports none", () => {
     // proto3 omits a zero, so 0 means "not sent" rather than "aim at the horizon".
-    expect(computeAlignment(statusAt(0, 70, { desiredBoresightElevationDeg: 0 })).targetElevationDeg).toBe(70);
+    expect(
+      computeAlignment(statusAt(0, 70, { desiredBoresightElevationDeg: 0 })).targetElevationDeg,
+    ).toBe(70);
   });
 });
 
@@ -206,23 +208,35 @@ describe("resolveDishModel", () => {
 
 describe("computeAlignment band ceiling", () => {
   it("holds a standard kit to the 75° band", () => {
-    expect(computeAlignment(kitAimedAt(85, { hardwareVersion: "rev4_panda_prod2" })).isAligned).toBe(false);
+    expect(
+      computeAlignment(kitAimedAt(85, { hardwareVersion: "rev4_panda_prod2" })).isAligned,
+    ).toBe(false);
   });
 
   it("holds a Mini to the 75° band too", () => {
     // Its default tilt is 20°, not under 8° — the Mini is not a flat kit.
-    expect(computeAlignment(kitAimedAt(85, { hardwareVersion: "mini1_panda_prod1" })).isAligned).toBe(false);
+    expect(
+      computeAlignment(kitAimedAt(85, { hardwareVersion: "mini1_panda_prod1" })).isAligned,
+    ).toBe(false);
   });
 
   it("lets a flat kit aim to the zenith", () => {
-    const flatPerformance = kitAimedAt(85, { hardwareVersion: "hp1_prod0", hasActuators: "HAS_ACTUATORS_NO" });
+    const flatPerformance = kitAimedAt(85, {
+      hardwareVersion: "hp1_prod0",
+      hasActuators: "HAS_ACTUATORS_NO",
+    });
     expect(computeAlignment(flatPerformance).isAligned).toBe(true);
     expect(computeAlignment(flatPerformance).upperElevationLimitDeg).toBe(90);
-    expect(computeAlignment(kitAimedAt(85, { hardwareVersion: "rev4_hp_prod1" })).isAligned).toBe(true);
+    expect(computeAlignment(kitAimedAt(85, { hardwareVersion: "rev4_hp_prod1" })).isAligned).toBe(
+      true,
+    );
   });
 
   it("lets a MOBILE install aim to the zenith whatever the model", () => {
-    const roaming = kitAimedAt(85, { hardwareVersion: "rev4_panda_prod2", mobilityClass: "MOBILE" });
+    const roaming = kitAimedAt(85, {
+      hardwareVersion: "rev4_panda_prod2",
+      mobilityClass: "MOBILE",
+    });
     expect(computeAlignment(roaming).isAligned).toBe(true);
     expect(computeAlignment(roaming).upperElevationLimitDeg).toBe(90);
   });

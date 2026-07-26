@@ -1,7 +1,8 @@
 // Shared display formatting for telemetry values.
 
 export function formatThroughput(bitsPerSecond: number): { value: string; unit: string } {
-  if (bitsPerSecond >= 1_000_000_000) return { value: (bitsPerSecond / 1e9).toFixed(2), unit: "Gbps" };
+  if (bitsPerSecond >= 1_000_000_000)
+    return { value: (bitsPerSecond / 1e9).toFixed(2), unit: "Gbps" };
   if (bitsPerSecond >= 1_000_000) return { value: (bitsPerSecond / 1e6).toFixed(1), unit: "Mbps" };
   return { value: (bitsPerSecond / 1e3).toFixed(0), unit: "kbps" };
 }

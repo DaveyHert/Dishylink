@@ -16,7 +16,8 @@ export function loadSavedLocation(): ObserverLocation | null {
     const saved = localStorage.getItem(LOCATION_STORAGE_KEY);
     if (!saved) return null;
     const parsed = JSON.parse(saved) as ObserverLocation;
-    if (typeof parsed.latitudeDeg !== "number" || typeof parsed.longitudeDeg !== "number") return null;
+    if (typeof parsed.latitudeDeg !== "number" || typeof parsed.longitudeDeg !== "number")
+      return null;
     return parsed;
   } catch {
     return null;

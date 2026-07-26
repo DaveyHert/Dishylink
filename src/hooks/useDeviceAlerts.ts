@@ -61,7 +61,8 @@ function useFirstSeen(active: AlertState[]): Map<string, number> {
     const current = new Set(active.map((a) => `${a.source}:${a.key}`));
     for (const id of current) if (!firstSeenRef.current.has(id)) firstSeenRef.current.set(id, now);
     // Forget cleared alerts, so a recurrence is timed from its new onset.
-    for (const id of [...firstSeenRef.current.keys()]) if (!current.has(id)) firstSeenRef.current.delete(id);
+    for (const id of [...firstSeenRef.current.keys()])
+      if (!current.has(id)) firstSeenRef.current.delete(id);
     return new Map(firstSeenRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ids]);
@@ -118,7 +119,8 @@ const SYSTEM_ALERTS: AlertSpec[] = [
     key: "dishUnreachable",
     ok: "Dish is answering",
     firing: "Dish isn’t answering",
-    advice: "Check that the dish has power and that its cable to the router is seated at both ends.",
+    advice:
+      "Check that the dish has power and that its cable to the router is seated at both ends.",
     severity: "critical",
     notify: true,
   },
@@ -241,9 +243,7 @@ export function useDeviceAlerts(
     // A device that isn't answering leaves a stale snapshot, not an all-clear:
     // drop its checks and raise the unreachability itself instead.
     const firing = statusList.filter(
-      (a) =>
-        a.active &&
-        (a.source === "dish" ? dishReachable : routerReachable !== false),
+      (a) => a.active && (a.source === "dish" ? dishReachable : routerReachable !== false),
     );
     const system = [
       ...(dishReachable ? [] : [DISH_UNREACHABLE]),

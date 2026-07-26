@@ -21,7 +21,9 @@ function ssidsWithBands(wifiConfig: WifiNetworkConfigJson | null): [string, stri
     if (!set.ssid) continue;
     const bands = byName.get(set.ssid) ?? [];
     if (set.band) {
-      bands.push(set.band.replace("RF_", "").replace("GHZ", " GHz").replace("5 GHz_HIGH", "5 GHz hi"));
+      bands.push(
+        set.band.replace("RF_", "").replace("GHZ", " GHz").replace("5 GHz_HIGH", "5 GHz hi"),
+      );
     }
     byName.set(set.ssid, bands);
   }
@@ -39,7 +41,8 @@ export function RouterSettingsTab({
   const meshNodes = Object.values(wifiConfig?.meshConfigs ?? {});
 
   if (routerReachable === null) return <Loading message='Contacting the router…' />;
-  if (routerReachable === false) return <Callout tone='error'>{ROUTER_UNREACHABLE_MESSAGE}</Callout>;
+  if (routerReachable === false)
+    return <Callout tone='error'>{ROUTER_UNREACHABLE_MESSAGE}</Callout>;
   if (!wifiConfig) return null;
 
   return (

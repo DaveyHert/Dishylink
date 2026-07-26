@@ -154,7 +154,10 @@ export function TelemetryChart({
   const windowEndMs = samples.length > 0 ? samples[samples.length - 1].timestampMs : Date.now();
   const windowStartMs = windowEndMs - windowMinutes * 60_000;
 
-  const { buckets, bucketSpanMs } = useMemo<{ buckets: BucketPoint[]; bucketSpanMs: number }>(() => {
+  const { buckets, bucketSpanMs } = useMemo<{
+    buckets: BucketPoint[];
+    bucketSpanMs: number;
+  }>(() => {
     const visibleSamples = samples.filter((sample) => sample.timestampMs >= windowStartMs);
     if (visibleSamples.length === 0) return { buckets: [], bucketSpanMs: 0 };
     const bucketCount = Math.min(Math.max(Math.floor(plotWidth / 2), 30), visibleSamples.length);
@@ -213,13 +216,15 @@ export function TelemetryChart({
     const tickStep = niceCeiling(rawCeiling / 4);
     const ceiling = maxValue ?? Math.max(Math.ceil(rawCeiling / tickStep), 1) * tickStep;
     const ticks: number[] = [];
-    for (let tickValue = tickStep; tickValue <= ceiling * 1.001; tickValue += tickStep) ticks.push(tickValue);
+    for (let tickValue = tickStep; tickValue <= ceiling * 1.001; tickValue += tickStep)
+      ticks.push(tickValue);
     return { yMax: ceiling, yTickValues: ticks };
   }, [buckets, maxValue, headroom]);
 
   const xForTime = useCallback(
     (timestampMs: number) =>
-      PLOT_MARGIN.left + ((timestampMs - windowStartMs) / (windowEndMs - windowStartMs)) * plotWidth,
+      PLOT_MARGIN.left +
+      ((timestampMs - windowStartMs) / (windowEndMs - windowStartMs)) * plotWidth,
     [windowStartMs, windowEndMs, plotWidth],
   );
   const yForValue = useCallback(
@@ -263,7 +268,9 @@ export function TelemetryChart({
         const firstX = run[0].x.toFixed(1);
         const lastX = run[run.length - 1].x.toFixed(1);
         const ground = baselineY.toFixed(1);
-        const lineSegment = run.map((point) => `L${point.x.toFixed(1)},${point.y.toFixed(1)}`).join("");
+        const lineSegment = run
+          .map((point) => `L${point.x.toFixed(1)},${point.y.toFixed(1)}`)
+          .join("");
         // Each run's fill spans only its own data, matching the line.
         return `M${firstX},${ground}${lineSegment}L${lastX},${ground}Z`;
       })
@@ -285,13 +292,18 @@ export function TelemetryChart({
     }
     for (let index = 1; index < buckets.length; index++) {
       if (buckets[index].hasGapBefore) {
-        regions.push({ startMs: buckets[index - 1].timestampMs, endMs: buckets[index].timestampMs });
+        regions.push({
+          startMs: buckets[index - 1].timestampMs,
+          endMs: buckets[index].timestampMs,
+        });
       }
     }
     return regions;
   }, [buckets, bucketSpanMs, windowStartMs]);
 
-  const xTickTimes = [0.25, 0.5, 0.75].map((fraction) => windowStartMs + (windowEndMs - windowStartMs) * fraction);
+  const xTickTimes = [0.25, 0.5, 0.75].map(
+    (fraction) => windowStartMs + (windowEndMs - windowStartMs) * fraction,
+  );
 
   // Only events that occupy a stretch of time shade the chart. The router's log
   // carries point-in-time entries (power cycle, band switch) with no duration,
@@ -333,10 +345,11 @@ export function TelemetryChart({
     height: plotHeight,
   };
   const hoveredBucket = hoverIndex !== null ? buckets[hoverIndex] : null;
-  const tooltipOnLeft = hoveredBucket !== null && xForTime(hoveredBucket.timestampMs) > containerWidth * 0.62;
+  const tooltipOnLeft =
+    hoveredBucket !== null && xForTime(hoveredBucket.timestampMs) > containerWidth * 0.62;
 
   return (
-    <div className="relative" ref={containerRef}>
+    <div className='relative' ref={containerRef}>
       <svg
         width={containerWidth}
         height={height}
@@ -366,7 +379,10 @@ export function TelemetryChart({
           frame={plotFrame}
           bands={visibleOutages.map((outage, outageIndex) => {
             const bandStartX = Math.max(xForTime(outage.startMs), leftEdgeX);
-            const bandEndX = Math.min(xForTime(outage.startMs + outage.durationMs), leftEdgeX + plotWidth);
+            const bandEndX = Math.min(
+              xForTime(outage.startMs + outage.durationMs),
+              leftEdgeX + plotWidth,
+            );
             return { key: outageIndex, x: bandStartX, width: Math.max(bandEndX - bandStartX, 2) };
           })}
         />
@@ -408,21 +424,31 @@ export function TelemetryChart({
 
       {hoveredBucket && (
         <div
-          className="pointer-events-none absolute z-10 min-w-[138px] rounded-md bg-popover px-[11px] py-[9px] font-mono text-[11px] shadow-[0_8px_28px_rgba(0,0,0,0.35)]"
+          className='pointer-events-none absolute z-10 min-w-[138px] rounded-md bg-popover px-[11px] py-[9px] font-mono text-[11px] shadow-[0_8px_28px_rgba(0,0,0,0.35)]'
           style={{
             left: tooltipOnLeft ? undefined : xForTime(hoveredBucket.timestampMs) + 12,
-            right: tooltipOnLeft ? containerWidth - xForTime(hoveredBucket.timestampMs) + 12 : undefined,
+            right: tooltipOnLeft
+              ? containerWidth - xForTime(hoveredBucket.timestampMs) + 12
+              : undefined,
             top: PLOT_MARGIN.top + 4,
           }}
         >
-          <div className="mb-[5px] text-[10px] tracking-[0.05em] text-muted-foreground">{formatClockTime(hoveredBucket.timestampMs)}</div>
+          <div className='mb-[5px] text-[10px] tracking-[0.05em] text-muted-foreground'>
+            {formatClockTime(hoveredBucket.timestampMs)}
+          </div>
           {series.map((chartSeries, seriesIndex) => (
-            <div className="flex items-center justify-between gap-[7px] leading-[1.7]" key={chartSeries.id}>
-              <span className="inline-flex items-center gap-1.5 text-[var(--ink-secondary)]">
-                <span className="size-[9px] flex-none rounded-full" style={{ background: `var(${chartSeries.colorVar})` }} />
+            <div
+              className='flex items-center justify-between gap-[7px] leading-[1.7]'
+              key={chartSeries.id}
+            >
+              <span className='inline-flex items-center gap-1.5 text-[var(--ink-secondary)]'>
+                <span
+                  className='size-[9px] flex-none rounded-full'
+                  style={{ background: `var(${chartSeries.colorVar})` }}
+                />
                 {chartSeries.label}
               </span>
-              <span className="font-mono tabular-nums">
+              <span className='font-mono tabular-nums'>
                 {hoveredBucket.values[seriesIndex] === null
                   ? "—"
                   : formatValue(hoveredBucket.values[seriesIndex]!)}

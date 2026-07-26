@@ -31,7 +31,8 @@ const THERMAL_ALERTS: ThermalAlertSpec[] = [
     cause: "thermal shutdown",
     severity: "critical",
     onsetTitle: "Dish thermal shutdown",
-    onsetBody: "The dish has shut itself down to avoid overheating. Service stays offline until it cools.",
+    onsetBody:
+      "The dish has shut itself down to avoid overheating. Service stays offline until it cools.",
     clearedTitle: "Dish thermal shutdown ended",
     clearedBody: "The dish has cooled enough to come back online.",
   },
@@ -49,7 +50,8 @@ const THERMAL_ALERTS: ThermalAlertSpec[] = [
     cause: "power supply thermal throttle",
     severity: "warning",
     onsetTitle: "Power supply thermally throttled",
-    onsetBody: "The dish's power supply is hot and is limiting output. Check for airflow around it.",
+    onsetBody:
+      "The dish's power supply is hot and is limiting output. Check for airflow around it.",
     clearedTitle: "Power supply throttling ended",
     clearedBody: "The dish's power supply has cooled back to normal.",
   },

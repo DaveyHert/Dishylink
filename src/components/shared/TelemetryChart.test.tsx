@@ -53,7 +53,9 @@ function renderWith(outageEvents: OutageEvent[]) {
 
 describe("TelemetryChart outage bands", () => {
   test("shades an outage that occupies a stretch of time", async () => {
-    renderWith([{ startMs: NOW - 30_000, durationMs: 8_000, cause: "OUTAGE_NO_PINGS", severity: "warning" }]);
+    renderWith([
+      { startMs: NOW - 30_000, durationMs: 8_000, cause: "OUTAGE_NO_PINGS", severity: "warning" },
+    ]);
     await waitFor(() => document.querySelector("svg"), "chart");
     await waitFor(() => (outageBandCount() > 0 ? true : null), "outage band");
     expect(outageBandCount()).toBe(1);
@@ -61,8 +63,18 @@ describe("TelemetryChart outage bands", () => {
 
   test("does not shade point-in-time router events", async () => {
     renderWith([
-      { startMs: NOW - 30_000, durationMs: 0, cause: "EVENT_REASON_ROUTER_POWER_CYCLE", severity: "advisory" },
-      { startMs: NOW - 20_000, durationMs: 0, cause: "EVENT_REASON_CLIENT_SWITCHING_BAND", severity: "advisory" },
+      {
+        startMs: NOW - 30_000,
+        durationMs: 0,
+        cause: "EVENT_REASON_ROUTER_POWER_CYCLE",
+        severity: "advisory",
+      },
+      {
+        startMs: NOW - 20_000,
+        durationMs: 0,
+        cause: "EVENT_REASON_CLIENT_SWITCHING_BAND",
+        severity: "advisory",
+      },
     ]);
     await waitFor(() => document.querySelector("svg"), "chart");
     expect(outageBandCount()).toBe(0);
@@ -71,7 +83,9 @@ describe("TelemetryChart outage bands", () => {
   test("still shades the dish's own advisory outages, which do have duration", async () => {
     // "outage booting" is advisory but a real 38s gap — severity is not the
     // discriminator here, duration is.
-    renderWith([{ startMs: NOW - 40_000, durationMs: 38_170, cause: "OUTAGE_BOOTING", severity: "advisory" }]);
+    renderWith([
+      { startMs: NOW - 40_000, durationMs: 38_170, cause: "OUTAGE_BOOTING", severity: "advisory" },
+    ]);
     await waitFor(() => document.querySelector("svg"), "chart");
     await waitFor(() => (outageBandCount() > 0 ? true : null), "outage band");
     expect(outageBandCount()).toBe(1);

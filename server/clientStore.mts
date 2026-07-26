@@ -16,7 +16,12 @@
 // compute deltas from these rows: real totals come from the odometer, which
 // deltas per entry before it accumulates.
 
-import { appendJsonLines, ensureParentDirectory, readJsonLines, writeJsonLinesAtomically } from "./jsonLinesFile.mts";
+import {
+  appendJsonLines,
+  ensureParentDirectory,
+  readJsonLines,
+  writeJsonLinesAtomically,
+} from "./jsonLinesFile.mts";
 
 export interface ClientReading {
   macAddress: string;

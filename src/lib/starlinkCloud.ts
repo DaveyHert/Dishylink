@@ -107,7 +107,10 @@ export const routerTelemetryId = (routerId: string | undefined) => `Router-${rou
 
 /** Three states, like the portal's dot: gray (inactive — long gone), red
  *  (offline — should be up but its telemetry went stale), green (online). */
-export function dishStatus(terminal: CloudTerminal, tel: DeviceTelemetry | undefined): DeviceStatus {
+export function dishStatus(
+  terminal: CloudTerminal,
+  tel: DeviceTelemetry | undefined,
+): DeviceStatus {
   const last = terminal.lastConnected ? new Date(terminal.lastConnected).getTime() : 0;
   if (last && Date.now() - last > INACTIVE_MS) return "inactive";
   if (tel && Date.now() - tel.timestampMs < FRESH_MS) return "online";
@@ -133,7 +136,10 @@ export function dishDisplayName(terminal: CloudTerminal): string {
 }
 
 /** Friendly router name: the controller reads "Main Router", a repeater "MESH". */
-export function routerDisplayName(routerId: string | undefined, tel: RouterTelemetry | undefined): string {
+export function routerDisplayName(
+  routerId: string | undefined,
+  tel: RouterTelemetry | undefined,
+): string {
   const hex = (routerId ?? "").slice(-12).replace(/^0+/, "").toUpperCase();
   const isMesh = tel?.isRepeater === true || (tel?.hops ?? 0) > 0;
   const prefix = tel ? (isMesh ? "MESH" : "Main Router") : "Router";

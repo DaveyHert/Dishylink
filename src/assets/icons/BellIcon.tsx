@@ -1,10 +1,7 @@
 // Notification bell. Paints in currentColor like the other icons here;
 // callers set the color.
 
-export function BellIcon({
-  size = 14,
-  ...props
-}: React.ComponentProps<"svg"> & { size?: number }) {
+export function BellIcon({ size = 14, ...props }: React.ComponentProps<"svg"> & { size?: number }) {
   return (
     <svg
       width={size}

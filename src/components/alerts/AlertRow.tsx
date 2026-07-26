@@ -26,7 +26,10 @@ export function AlertRow({
           dot stays put if the type changes and never drifts to the middle of a
           title that wraps to two lines. */}
       <span className='flex h-[1.375em] shrink-0 items-center text-[13.5px]'>
-        <span className='size-2 rounded-full' style={{ background: color, opacity: dim ? 0.4 : 1 }} />
+        <span
+          className='size-2 rounded-full'
+          style={{ background: color, opacity: dim ? 0.4 : 1 }}
+        />
       </span>
       <div className='min-w-0 flex-1'>
         <p className='text-[13.5px] leading-snug text-[var(--ink)]'>

@@ -14,7 +14,10 @@ export function PauseIcon({
           <rect x={9.5} y={3} width={2.5} height={10} rx={1} fill='currentColor' />
         </>
       ) : (
-        <path d='M5 3.4v9.2a.6.6 0 0 0 .93.5l7-4.6a.6.6 0 0 0 0-1l-7-4.6A.6.6 0 0 0 5 3.4z' fill='currentColor' />
+        <path
+          d='M5 3.4v9.2a.6.6 0 0 0 .93.5l7-4.6a.6.6 0 0 0 0-1l-7-4.6A.6.6 0 0 0 5 3.4z'
+          fill='currentColor'
+        />
       )}
     </svg>
   );

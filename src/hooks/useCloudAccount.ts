@@ -20,7 +20,10 @@ interface CloudResource<T> {
   reload: () => void;
 }
 
-function useCloudResource<T>(fetcher: (signal?: AbortSignal) => Promise<T>, active: boolean): CloudResource<T> {
+function useCloudResource<T>(
+  fetcher: (signal?: AbortSignal) => Promise<T>,
+  active: boolean,
+): CloudResource<T> {
   const [data, setData] = useState<T | null>(null);
   const [status, setStatus] = useState<Status>("loading");
   const [nonce, setNonce] = useState(0);

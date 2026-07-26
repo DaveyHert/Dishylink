@@ -62,7 +62,10 @@ describe("fetchPersistedClientHistory", () => {
     // Per-minute rows only — the state just after a historian restart. Those are
     // not tail-able, so the tail must start from the full window, not from a
     // minute boundary that would skip the raw samples recorded since.
-    stubHistorian({ history: [{ minute: 60, macAddress: MAC, downMbps: 4, upMbps: 1 }], samples: [] });
+    stubHistorian({
+      history: [{ minute: 60, macAddress: MAC, downMbps: 4, upMbps: 1 }],
+      samples: [],
+    });
 
     const { history, newestSampleMs } = await fetchPersistedClientHistory();
 
@@ -126,7 +129,21 @@ describe("appendClientSamples", () => {
 
   it("appends both samples to one fresh array when a batch repeats a MAC", () => {
     const history = new Map<string, TelemetrySample[]>([
-      [MAC, [{ timestampMs: 0, latencyMs: null, dropRate: 0, downlinkBps: 0, uplinkBps: 0, powerW: 0, routerLatencyMs: null, routerPingSuccessPercent: null }]],
+      [
+        MAC,
+        [
+          {
+            timestampMs: 0,
+            latencyMs: null,
+            dropRate: 0,
+            downlinkBps: 0,
+            uplinkBps: 0,
+            powerW: 0,
+            routerLatencyMs: null,
+            routerPingSuccessPercent: null,
+          },
+        ],
+      ],
     ]);
     const originalRef = history.get(MAC)!;
     const newestMs = appendClientSamples(history, [

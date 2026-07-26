@@ -47,11 +47,19 @@ const NO_QUALITY: LinkQuality = { latencyMs: null, jitterMs: null, lossPct: null
  * so these fill in shortly after the run finishes rather than instantly — the
  * Starlink app behaves the same way for the same reason.
  */
-function linkQualityOver(samples: TelemetrySample[], startedAtMs: number | null, endedAtMs: number | null): LinkQuality {
+function linkQualityOver(
+  samples: TelemetrySample[],
+  startedAtMs: number | null,
+  endedAtMs: number | null,
+): LinkQuality {
   if (startedAtMs === null) return NO_QUALITY;
   const until = endedAtMs ?? Date.now();
-  const window = samples.filter((sample) => sample.timestampMs >= startedAtMs && sample.timestampMs <= until);
-  const latencies = window.map((sample) => sample.latencyMs).filter((latency): latency is number => latency !== null);
+  const window = samples.filter(
+    (sample) => sample.timestampMs >= startedAtMs && sample.timestampMs <= until,
+  );
+  const latencies = window
+    .map((sample) => sample.latencyMs)
+    .filter((latency): latency is number => latency !== null);
   if (latencies.length === 0) return NO_QUALITY;
 
   // Jitter = mean absolute difference between consecutive pings (Ookla-style).
@@ -88,11 +96,13 @@ function HeadlineFigure({
 }) {
   const pending = value === null;
   return (
-    <div className={`flex-1 pt-2 pb-[9px] text-center transition-opacity ${active ? "opacity-100" : "opacity-50"}`}>
+    <div
+      className={`flex-1 pt-2 pb-[9px] text-center transition-opacity ${active ? "opacity-100" : "opacity-50"}`}
+    >
       <div
         className={`text-[11px] font-semibold tracking-[0.04em] ${active ? "text-foreground" : "text-muted-foreground"}`}
       >
-        <span className="inline-flex align-[-1px]">{icon}</span> {label}
+        <span className='inline-flex align-[-1px]'>{icon}</span> {label}
       </div>
       {/* The number is what the eye tracks down the column, so it — not the
           number-plus-unit — is what sits centred under the label. The unit rides
@@ -100,9 +110,9 @@ function HeadlineFigure({
       <div
         className={`text-[28px] font-bold leading-[1.1] tracking-[-0.01em] tabular-nums ${pending ? "text-muted-foreground" : "text-foreground"}`}
       >
-        <span className="relative inline-block">
+        <span className='relative inline-block'>
           {pending ? "0" : fmt(value, digits)}
-          <span className="absolute bottom-[0.14em] left-full ml-[4px] text-[13px] font-medium text-muted-foreground">
+          <span className='absolute bottom-[0.14em] left-full ml-[4px] text-[13px] font-medium text-muted-foreground'>
             {unit}
           </span>
         </span>
@@ -113,11 +123,11 @@ function HeadlineFigure({
 
 function MetricPill({ label, value, unit }: { label: string; value: string; unit: string }) {
   return (
-    <div className="flex items-center gap-[7px]">
-      <span className="text-[12px] text-muted-foreground">{label}</span>
-      <span className="text-[13px] font-semibold text-foreground tabular-nums">
+    <div className='flex items-center gap-[7px]'>
+      <span className='text-[12px] text-muted-foreground'>{label}</span>
+      <span className='text-[13px] font-semibold text-foreground tabular-nums'>
         {value}
-        <span className="font-medium text-muted-foreground"> {unit}</span>
+        <span className='font-medium text-muted-foreground'> {unit}</span>
       </span>
     </div>
   );
@@ -170,11 +180,11 @@ export function SpeedTestPanel({
               : { value: null, mode: "idle" as const, caption: "Ready" };
 
   return (
-    <div className="flex flex-col items-center gap-1">
+    <div className='flex flex-col items-center gap-1'>
       <SegmentedControl
-        variant="glider"
-        label="Speed test view"
-        className="mb-3"
+        variant='glider'
+        label='Speed test view'
+        className='mb-3'
         disabled={isRunning}
         value={view}
         onChange={setView}
@@ -184,40 +194,40 @@ export function SpeedTestPanel({
         ]}
       />
 
-      <div className="flex w-full gap-3">
+      <div className='flex w-full gap-3'>
         {/* Emphasis marks the phase being measured; with nothing running they read equally. */}
         {/* Throughput carries the decimal the gauge shows; latency is a median of
             whole-millisecond pings, so a decimal there would be invented precision. */}
         <HeadlineFigure
           icon={<ArrowDownIcon size={12} strokeWidth={2.5} />}
-          label="DOWNLOAD"
-          unit="Mbps"
+          label='DOWNLOAD'
+          unit='Mbps'
           digits={1}
           value={progress.downloadMbps}
           active={!isRunning || phase === "download"}
         />
         <HeadlineFigure
           icon={<ArrowUpIcon size={12} strokeWidth={2.5} />}
-          label="UPLOAD"
-          unit="Mbps"
+          label='UPLOAD'
+          unit='Mbps'
           digits={1}
           value={progress.uploadMbps}
           active={!isRunning || phase === "upload"}
         />
         <HeadlineFigure
           icon={<ClockIcon size={12} strokeWidth={2.5} />}
-          label="LATENCY"
-          unit="ms"
+          label='LATENCY'
+          unit='ms'
           digits={0}
           value={quality.latencyMs}
           active={!isRunning}
         />
       </div>
 
-      <div className="flex w-full justify-center gap-[18px] border-t border-b border-border py-2">
+      <div className='flex w-full justify-center gap-[18px] border-t border-b border-border py-2'>
         {/* a decimal place: real Starlink jitter is often sub-1ms and would round to a bare 0 */}
-        <MetricPill label="Jitter" value={fmt(quality.jitterMs, 1)} unit="ms" />
-        <MetricPill label="Loss" value={fmt(quality.lossPct, 1)} unit="%" />
+        <MetricPill label='Jitter' value={fmt(quality.jitterMs, 1)} unit='ms' />
+        <MetricPill label='Loss' value={fmt(quality.lossPct, 1)} unit='%' />
       </div>
 
       {view === "beam" ? (
@@ -255,10 +265,10 @@ export function SpeedTestPanel({
       >
         {isRunning || phase === "resting" ? (
           <LoaderIcon
-            className="animate-[speedtest-spin_1s_steps(12,end)_infinite]"
+            className='animate-[speedtest-spin_1s_steps(12,end)_infinite]'
             size={20}
             strokeWidth={2.5}
-            aria-label="Running speed test"
+            aria-label='Running speed test'
           />
         ) : phase === "done" ? (
           <>
@@ -282,7 +292,7 @@ export function SpeedTestPanel({
       >
         {PHASE_LABEL[phase]}
       </div>
-      <div className="mt-1 text-center text-[10.5px] font-medium text-muted-foreground opacity-70">
+      <div className='mt-1 text-center text-[10.5px] font-medium text-muted-foreground opacity-70'>
         Measured against Cloudflare · may read lower than tests to a nearby server
       </div>
     </div>

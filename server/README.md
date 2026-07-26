@@ -19,7 +19,7 @@ dish (≈15 min ring buffer) nor the browser tab (≤6 h, wiped on reload) retai
 Energy is integrated **only over minutes actually sampled**. If the historian is
 down (sleep, restart, Wi‑Fi drop) those minutes simply have no data — the total
 never invents "last known watts" across a gap. Every response includes a
-`coverage` fraction, and the UI shows e.g. *"collected 82% of this period"*.
+`coverage` fraction, and the UI shows e.g. _"collected 82% of this period"_.
 
 Short gaps (≤15 min) are backfilled losslessly on the next poll from the dish's
 own ring buffer; longer gaps show as reduced coverage.

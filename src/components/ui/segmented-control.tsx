@@ -66,7 +66,7 @@ export function SegmentedControl<T extends string>({
         )}
       >
         <span
-          aria-hidden="true"
+          aria-hidden='true'
           className={cn(
             "pointer-events-none absolute inset-y-[3px] left-[3px] w-[calc(50%-3px)] rounded-[999px] bg-[var(--ink)]",
             "transition-transform duration-[220ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
@@ -78,7 +78,7 @@ export function SegmentedControl<T extends string>({
           <ToggleGroupPrimitive.Item
             key={option.value}
             value={option.value}
-            data-slot="segmented-control-item"
+            data-slot='segmented-control-item'
             className={cn(
               "relative z-[1] cursor-pointer border-0 bg-transparent px-6 py-[7px] text-center font-sans text-[13px] font-semibold transition-colors duration-200 disabled:cursor-default disabled:opacity-50",
               option.value === value
@@ -105,8 +105,8 @@ export function SegmentedControl<T extends string>({
         <ToggleGroupPrimitive.Item
           key={option.value}
           value={option.value}
-          data-slot="segmented-control-item"
-          className="cursor-pointer border-0 bg-transparent px-[13px] py-[5px] font-mono text-[10.5px] tracking-[0.06em] text-muted-foreground [transition:color_120ms_ease,background_120ms_ease] hover:text-foreground data-[state=on]:bg-primary data-[state=on]:font-semibold data-[state=on]:text-primary-foreground"
+          data-slot='segmented-control-item'
+          className='cursor-pointer border-0 bg-transparent px-[13px] py-[5px] font-mono text-[10.5px] tracking-[0.06em] text-muted-foreground [transition:color_120ms_ease,background_120ms_ease] hover:text-foreground data-[state=on]:bg-primary data-[state=on]:font-semibold data-[state=on]:text-primary-foreground'
         >
           {option.label}
         </ToggleGroupPrimitive.Item>

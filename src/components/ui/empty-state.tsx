@@ -18,7 +18,10 @@ interface EmptyStateProps {
 
 export function EmptyState({ children, className }: EmptyStateProps) {
   return (
-    <p data-slot="empty-state" className={cn("text-center text-[13px] font-medium text-muted-foreground", className)}>
+    <p
+      data-slot='empty-state'
+      className={cn("text-center text-[13px] font-medium text-muted-foreground", className)}
+    >
       {children}
     </p>
   );

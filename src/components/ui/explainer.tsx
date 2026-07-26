@@ -22,13 +22,13 @@ interface ExplainerProps {
 export function Explainer({ title, children, className }: ExplainerProps) {
   return (
     <div
-      data-slot="explainer"
+      data-slot='explainer'
       className={cn(
         "mt-4 rounded-xl border border-[var(--hairline)] px-[14px] py-[13px] text-[13.5px] leading-[1.55] text-[var(--ink-secondary)]",
         className,
       )}
     >
-      <div data-slot="explainer-title" className="mb-1 text-[14.5px] font-[650] text-foreground">
+      <div data-slot='explainer-title' className='mb-1 text-[14.5px] font-[650] text-foreground'>
         {title}
       </div>
       {children}

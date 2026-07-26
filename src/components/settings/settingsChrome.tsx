@@ -52,7 +52,6 @@ export function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-
 /** Destructive action with inline armed-confirm, using the app's buttons. */
 export function DangerAction({
   title,
@@ -106,7 +105,11 @@ export function DangerAction({
           >
             {busy ? "Sending…" : confirmLabel}
           </button>
-          <button className={actionButton("subtle")} disabled={busy} onClick={() => setArmed(false)}>
+          <button
+            className={actionButton("subtle")}
+            disabled={busy}
+            onClick={() => setArmed(false)}
+          >
             Cancel
           </button>
         </>

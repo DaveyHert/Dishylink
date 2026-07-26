@@ -14,7 +14,7 @@ test("the real CSS engine resolves Tailwind utilities + theme tokens", async () 
   // rounded-xl reads --radius-xl (16px) from @theme; the arbitrary padding utilities
   // exercise the same engine the migrated cards now rely on.
   render(
-    <div data-testid="probe" className="rounded-xl px-[18px] py-4">
+    <div data-testid='probe' className='rounded-xl px-[18px] py-4'>
       card
     </div>,
   );
@@ -29,7 +29,7 @@ test("the real CSS engine resolves Tailwind utilities + theme tokens", async () 
 });
 
 test("bg-card is an exact substitute for background: var(--surface)", async () => {
-  render(<div className="bg-card">card</div>);
+  render(<div className='bg-card'>card</div>);
   await tick();
 
   // Tailwind v4's `@theme inline` RESOLVES the var at build time, so --color-card

@@ -8,10 +8,7 @@ import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { grpcWebUnaryCall } from "../src/lib/grpcWeb.ts";
 
 const registry = createFileRegistry(
-  fromBinary(
-    FileDescriptorSetSchema,
-    readFileSync("public/dish.protoset"),
-  ),
+  fromBinary(FileDescriptorSetSchema, readFileSync("public/dish.protoset")),
 );
 const responseSchema = registry.getMessage("SpaceX.API.Device.Response")!;
 
@@ -33,9 +30,7 @@ const json = toJson(responseSchema, fromBinary(responseSchema, bytes), { registr
   dishGetStatus?: Record<string, unknown>;
 };
 const status = json.wifiGetStatus ?? json.dishGetStatus ?? {};
-const pingFields = Object.fromEntries(
-  Object.entries(status).filter(([key]) => /ping/i.test(key)),
-);
+const pingFields = Object.fromEntries(Object.entries(status).filter(([key]) => /ping/i.test(key)));
 console.log("ping-related fields:", JSON.stringify(pingFields, null, 2));
 console.log("alerts:", JSON.stringify(status.alerts ?? {}));
 console.log("all top-level keys:", Object.keys(status).join(", "));

@@ -11,7 +11,12 @@
 // chip. Temperature climbing while duty cycle falls is Wi-Fi being slow
 // *because* of heat — the reading and its consequence, kept together.
 
-import { appendJsonLines, ensureParentDirectory, readJsonLines, writeJsonLinesAtomically } from "./jsonLinesFile.mts";
+import {
+  appendJsonLines,
+  ensureParentDirectory,
+  readJsonLines,
+  writeJsonLinesAtomically,
+} from "./jsonLinesFile.mts";
 
 export interface RadioReading {
   /** e.g. "RF_2GHZ", "RF_5GHZ", "RF_5GHZ_HIGH". */
@@ -31,7 +36,10 @@ const RETENTION_DAYS = 30;
 
 export class RadioStore {
   /** Per-minute accumulator for the minute still in progress. */
-  private pending = new Map<string, { sum: number; count: number; dutyMin: number; minute: number; band: string }>();
+  private pending = new Map<
+    string,
+    { sum: number; count: number; dutyMin: number; minute: number; band: string }
+  >();
 
   constructor(private readonly filePath: string) {
     ensureParentDirectory(filePath);

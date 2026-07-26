@@ -6,8 +6,8 @@ service, which gives field names and wire types and nothing else — no units, n
 update rates, and **no indication of which fields the firmware actually fills
 in**.
 
-That last point is the expensive one. Reflection describes the *interface*; it
-says nothing about the *implementation*. A field can be present, correctly
+That last point is the expensive one. Reflection describes the _interface_; it
+says nothing about the _implementation_. A field can be present, correctly
 typed, and permanently empty.
 
 Everything below was measured against live hardware, not read from a spec.
@@ -19,27 +19,27 @@ Re-measure after a firmware update before trusting any of it.
 
 ## Sample clocks — the floor on resolution
 
-| Source | Rate | Depth |
-|---|---|---|
-| `dish_get_history` ring buffer | **1.00 s/sample** (counter advanced 10 over 10.1s) | 900 samples = 15 min |
-| `dish_get_status` | sub-second (49 distinct readings in 50 polls at 200ms) | instantaneous only |
-| `wifi_get_clients` | instantaneous only — **no buffer** | — |
+| Source                         | Rate                                                   | Depth                |
+| ------------------------------ | ------------------------------------------------------ | -------------------- |
+| `dish_get_history` ring buffer | **1.00 s/sample** (counter advanced 10 over 10.1s)     | 900 samples = 15 min |
+| `dish_get_status`              | sub-second (49 distinct readings in 50 polls at 200ms) | instantaneous only   |
+| `wifi_get_clients`             | instantaneous only — **no buffer**                     | —                    |
 
 **Polling faster than the sample clock buys nothing.** For the dish this matters
 less than it sounds: every `dish_get_history` call returns the whole 900-sample
 ring, so a 5s poll still captures every 1 Hz sample. Poll rate there controls
-*freshness* (how old the newest point is), not *resolution*.
+_freshness_ (how old the newest point is), not _resolution_.
 
 For the router the opposite holds. There is no working buffer, so the poll rate
 **is** the resolution — whatever isn't sampled is gone for good.
 
 ## Poll costs
 
-| RPC | Payload | Median RTT | Cost at 1 Hz |
-|---|---|---|---|
-| `dish_get_history` (1007) | 18,128 B | 66 ms | 17.7 kB/s |
-| `dish_get_status` (1004) | 523 B | 86 ms | 0.5 kB/s |
-| `wifi_get_clients` (3002) | 1,611 B (5 clients) | 7 ms | 1.6 kB/s |
+| RPC                       | Payload             | Median RTT | Cost at 1 Hz |
+| ------------------------- | ------------------- | ---------- | ------------ |
+| `dish_get_history` (1007) | 18,128 B            | 66 ms      | 17.7 kB/s    |
+| `dish_get_status` (1004)  | 523 B               | 86 ms      | 0.5 kB/s     |
+| `wifi_get_clients` (3002) | 1,611 B (5 clients) | 7 ms       | 1.6 kB/s     |
 
 `wifi_get_clients` at 1 Hz occupies the router ~0.7% of each second, 0 failures
 over 30 consecutive calls. One call covers every client — there is no per-device
@@ -72,12 +72,12 @@ Re-check with `scripts/probe-client-history.mts`.
 
 ### Others
 
-| RPC | Field | Reality |
-|---|---|---|
-| `dish_get_status` | `popPingDropRate` | absent — history only |
-| `dish_get_status` | `powerIn` | absent — history only |
-| `get_radio_stats` | `thermalStatus.temp` | absent; only `temp2` is filled |
-| `TransceiverGetStatus` | all | `Unimplemented` — no numeric dish temperatures exist |
+| RPC                    | Field                | Reality                                              |
+| ---------------------- | -------------------- | ---------------------------------------------------- |
+| `dish_get_status`      | `popPingDropRate`    | absent — history only                                |
+| `dish_get_status`      | `powerIn`            | absent — history only                                |
+| `get_radio_stats`      | `thermalStatus.temp` | absent; only `temp2` is filled                       |
+| `TransceiverGetStatus` | all                  | `Unimplemented` — no numeric dish temperatures exist |
 
 The `dish_get_status` gaps matter more than they look: building chart samples
 from status alone silently zeroes `dropRate` and `powerW`, which flat-lines the
@@ -86,14 +86,14 @@ recent sample shows total packet loss.
 
 ## Where the data actually comes from
 
-| Series | Source | Why |
-|---|---|---|
-| Dish throughput / latency / power | `dish_get_history` @ 1s | full 1 Hz ring; poll rate is freshness |
-| Live stat tiles | `dish_get_status` @ 1s | sub-second, tiny payload |
-| Per-device throughput | `wifi_get_clients` @ 1s → `ClientWindow` | only source; no buffer to fall back on |
-| Per-device 6h view | same → `ClientStore` (per-minute) | aggregate tier |
-| Router event log | `wifi_get_history` (1007 to the router) | same `UXEvent` shape as the dish |
-| Wi-Fi radio temps | `get_radio_stats` (1036, router only) | dish answers `Unimplemented` |
+| Series                            | Source                                   | Why                                    |
+| --------------------------------- | ---------------------------------------- | -------------------------------------- |
+| Dish throughput / latency / power | `dish_get_history` @ 1s                  | full 1 Hz ring; poll rate is freshness |
+| Live stat tiles                   | `dish_get_status` @ 1s                   | sub-second, tiny payload               |
+| Per-device throughput             | `wifi_get_clients` @ 1s → `ClientWindow` | only source; no buffer to fall back on |
+| Per-device 6h view                | same → `ClientStore` (per-minute)        | aggregate tier                         |
+| Router event log                  | `wifi_get_history` (1007 to the router)  | same `UXEvent` shape as the dish       |
+| Wi-Fi radio temps                 | `get_radio_stats` (1036, router only)    | dish answers `Unimplemented`           |
 
 ## LAN writes are blocked
 

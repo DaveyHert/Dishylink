@@ -1,9 +1,6 @@
 // Disc and eight rays — the theme toggle's dark-mode face.
 
-export function SunIcon({
-  size = 14,
-  ...props
-}: React.ComponentProps<"svg"> & { size?: number }) {
+export function SunIcon({ size = 14, ...props }: React.ComponentProps<"svg"> & { size?: number }) {
   return (
     <svg width={size} height={size} viewBox='0 0 24 24' fill='none' aria-hidden='true' {...props}>
       <circle cx={12} cy={12} r={4} stroke='currentColor' strokeWidth={2} />

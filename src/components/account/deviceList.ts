@@ -55,8 +55,7 @@ export function buildDeviceList(
     });
     const routerItems: DeviceItem[] = (terminal.routers ?? []).map((router, routerIndex) => {
       const rtel = deviceTelemetry[routerTelemetryId(router.routerId)] as
-        | RouterTelemetry
-        | undefined;
+        RouterTelemetry | undefined;
       return {
         key: router.routerId ?? `router-${terminalIndex}-${routerIndex}`,
         kind: "router",

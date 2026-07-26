@@ -33,7 +33,11 @@ export interface RadioTemps {
 const REFRESH_MS = 15_000;
 
 export function useRadioTemps(active: boolean, hours = 6): RadioTemps {
-  const [data, setData] = useState<Omit<RadioTemps, "unavailable">>({ current: [], atMs: null, history: [] });
+  const [data, setData] = useState<Omit<RadioTemps, "unavailable">>({
+    current: [],
+    atMs: null,
+    history: [],
+  });
   const [unavailable, setUnavailable] = useState(false);
 
   useEffect(() => {
@@ -42,11 +46,17 @@ export function useRadioTemps(active: boolean, hours = 6): RadioTemps {
 
     const load = async () => {
       try {
-        const response = await fetch(`/api/radio?hours=${hours}`, { signal: AbortSignal.timeout(4_000) });
+        const response = await fetch(`/api/radio?hours=${hours}`, {
+          signal: AbortSignal.timeout(4_000),
+        });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const payload = (await response.json()) as Omit<RadioTemps, "unavailable">;
         if (cancelled) return;
-        setData({ current: payload.current ?? [], atMs: payload.atMs ?? null, history: payload.history ?? [] });
+        setData({
+          current: payload.current ?? [],
+          atMs: payload.atMs ?? null,
+          history: payload.history ?? [],
+        });
         setUnavailable(false);
       } catch {
         if (!cancelled) setUnavailable(true);

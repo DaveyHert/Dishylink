@@ -25,10 +25,16 @@ interface LoadingProps {
   className?: string;
 }
 
-export function Loading({ message, size = 16, variant = "conic", stacked = false, className }: LoadingProps) {
+export function Loading({
+  message,
+  size = 16,
+  variant = "conic",
+  stacked = false,
+  className,
+}: LoadingProps) {
   return (
     <div
-      data-slot="loading"
+      data-slot='loading'
       className={cn(
         "flex items-center justify-center gap-2.5 py-[18px] text-[13px] font-medium text-muted-foreground",
         stacked && "flex-col gap-3 py-14",

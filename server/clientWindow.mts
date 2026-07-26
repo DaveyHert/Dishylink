@@ -86,7 +86,8 @@ export class ClientWindow {
     // A device that has gone away stops being written to, so its series would
     // otherwise sit at full length forever.
     for (const [macAddress, series] of this.byMac) {
-      if (series.length > 0 && series[series.length - 1].atMs < cutoffMs) this.byMac.delete(macAddress);
+      if (series.length > 0 && series[series.length - 1].atMs < cutoffMs)
+        this.byMac.delete(macAddress);
     }
   }
 

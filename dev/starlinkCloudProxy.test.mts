@@ -6,7 +6,9 @@ function jsonResponse(status: number, body: unknown, setCookie?: string) {
   return {
     status,
     ok: status >= 200 && status < 300,
-    headers: { get: (name: string) => (name.toLowerCase() === "set-cookie" ? (setCookie ?? null) : null) },
+    headers: {
+      get: (name: string) => (name.toLowerCase() === "set-cookie" ? (setCookie ?? null) : null),
+    },
     json: async () => body,
   } as unknown as Response;
 }
@@ -25,7 +27,11 @@ function makeFetch(opts: { authStatus?: number; failDataCallsUntil?: { count: nu
     calls.push(u);
     if (u.includes("/auth-rp/auth/user")) {
       if (opts.authStatus && opts.authStatus !== 200) return jsonResponse(opts.authStatus, {});
-      return jsonResponse(200, { name: "Ada", email: "a@b.co" }, "Starlink.Com.Access.V1=NEW; Path=/");
+      return jsonResponse(
+        200,
+        { name: "Ada", email: "a@b.co" },
+        "Starlink.Com.Access.V1=NEW; Path=/",
+      );
     }
     // Data calls: optionally 401 for the first N to force a refresh+retry.
     if (opts.failDataCallsUntil && opts.failDataCallsUntil.count > 0) {
@@ -78,7 +84,8 @@ describe("createCloudHandler", () => {
   it("surfaces a genuine upstream failure as 502, not 428", async () => {
     const doFetch = (async (url: string | URL | Request) => {
       const u = String(url);
-      if (u.includes("/auth-rp/auth/user")) return jsonResponse(200, {}, "Starlink.Com.Access.V1=NEW");
+      if (u.includes("/auth-rp/auth/user"))
+        return jsonResponse(200, {}, "Starlink.Com.Access.V1=NEW");
       return jsonResponse(500, {}); // service-lines list explodes
     }) as unknown as typeof fetch;
     const handler = createCloudHandler({ fetch: doFetch, readCookie: CONNECTED });
@@ -146,7 +153,10 @@ describe("deviceTelemetryFrom", () => {
 
   it("decodes a dish row", () => {
     const out = deviceTelemetryFrom({
-      data: { columnNamesByDeviceType: legend, values: [["u", 1_700_000_000_000_000, "ut1", 0.05, 3600]] },
+      data: {
+        columnNamesByDeviceType: legend,
+        values: [["u", 1_700_000_000_000_000, "ut1", 0.05, 3600]],
+      },
     });
     expect(out.ut1).toMatchObject({ kind: "dish", obstructionPct: 0.05, uptimeS: 3600 });
     expect(out.ut1.timestampMs).toBe(1_700_000_000); // UtcTimestampNs / 1e6

@@ -44,7 +44,13 @@ export function foldSamplesToMinutes(samples: TelemetrySample[]): Map<number, Mi
   const buckets = new Map<number, MinuteBucket>();
   for (const sample of samples) {
     const minute = Math.floor(sample.timestampMs / 60_000) * 60;
-    const bucket = buckets.get(minute) ?? { minute, wattSeconds: 0, samples: 0, dlBits: 0, ulBits: 0 };
+    const bucket = buckets.get(minute) ?? {
+      minute,
+      wattSeconds: 0,
+      samples: 0,
+      dlBits: 0,
+      ulBits: 0,
+    };
     bucket.wattSeconds += sample.powerW ?? 0;
     // per-second sample: bps over one second ≈ bits transferred
     bucket.dlBits = (bucket.dlBits ?? 0) + (sample.downlinkBps ?? 0);

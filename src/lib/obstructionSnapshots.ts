@@ -51,4 +51,3 @@ export async function fetchSnapshots(): Promise<ObstructionSnapshot[] | null> {
     return null;
   }
 }
-

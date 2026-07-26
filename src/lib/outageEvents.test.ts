@@ -25,7 +25,9 @@ describe("outageEventMeta", () => {
   });
 
   it("resolves a legacy persisted label to the same meaning", () => {
-    expect(outageEventMeta("ut alert rain snr persistently low").label).toBe("Weather interference");
+    expect(outageEventMeta("ut alert rain snr persistently low").label).toBe(
+      "Weather interference",
+    );
   });
 
   it("names the router (wifi_get_history) events, auto-cleaning the long tail", () => {

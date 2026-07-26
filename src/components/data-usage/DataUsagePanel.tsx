@@ -43,17 +43,19 @@ function UsageBars({ buckets, range }: { buckets: UsageBucket[]; range: EnergyRa
       bar: missing ? (
         // An empty slot, not a zero one: mark the hole rather than draw a
         // bar claiming no traffic passed.
-        <div style={{ height: "100%", width: "100%", background: "var(--ink-muted)", opacity: 0.06 }} />
+        <div
+          style={{ height: "100%", width: "100%", background: "var(--ink-muted)", opacity: 0.06 }}
+        />
       ) : (
         <div
-          className="flex min-h-0.5 w-full flex-col overflow-hidden rounded-t-[3px]"
+          className='flex min-h-0.5 w-full flex-col overflow-hidden rounded-t-[3px]'
           style={{ height: `${(total / maxTotalGB) * 100}%` }}
         >
           <div
-            className="min-h-0 bg-[var(--chart-warm)]"
+            className='min-h-0 bg-[var(--chart-warm)]'
             style={{ height: `${((bucket.upGB ?? 0) / Math.max(total, 1e-9)) * 100}%` }}
           />
-          <div className="bg-[var(--chart-ink)] opacity-75" style={{ flex: 1 }} />
+          <div className='bg-[var(--chart-ink)] opacity-75' style={{ flex: 1 }} />
         </div>
       ),
     };
@@ -77,9 +79,9 @@ export function DataUsagePanel() {
         options={SOURCE_TABS}
         value={source}
         onChange={setSource}
-        label="Data usage source"
-        variant="glider"
-        className="mb-1"
+        label='Data usage source'
+        variant='glider'
+        className='mb-1'
       />
       {source === "local" ? <LocalDataUsage /> : <CloudDataUsage active={source === "cloud"} />}
     </div>
@@ -93,9 +95,9 @@ function LocalDataUsage() {
 
   if (unavailable) {
     return (
-      <Callout className="mt-2.5">
-        Data usage needs the history recorder running. Start it with <code>npm run historian</code> and
-        DishyLink will meter traffic from now on.
+      <Callout className='mt-2.5'>
+        Data usage needs the history recorder running. Start it with <code>npm run historian</code>{" "}
+        and DishyLink will meter traffic from now on.
       </Callout>
     );
   }
@@ -106,29 +108,33 @@ function LocalDataUsage() {
         figures={[
           { label: "↓ Download", value: data ? formatGB(data.totalDownGB) : "—", unit: "GB" },
           { label: "↑ Upload", value: data ? formatGB(data.totalUpGB) : "—", unit: "GB" },
-          { label: "Total", value: data ? formatGB(data.totalDownGB + data.totalUpGB) : "—", unit: "GB" },
+          {
+            label: "Total",
+            value: data ? formatGB(data.totalDownGB + data.totalUpGB) : "—",
+            unit: "GB",
+          },
         ]}
       />
       <SegmentedControl
         options={RANGE_TABS}
         value={range}
         onChange={setRange}
-        label="Data usage range"
-        className="mb-2.5"
+        label='Data usage range'
+        className='mb-2.5'
       />
 
       {data && <UsageBars buckets={data.buckets} range={range} />}
       {data && (
-        <div className="mt-0.5 text-[12px] font-medium text-muted-foreground">
+        <div className='mt-0.5 text-[12px] font-medium text-muted-foreground'>
           collected {coveragePct}% of this period
           {coveragePct < 95 && " — totals cover only the time the recorder was running"}
         </div>
       )}
 
-      <Explainer title="How is this measured?">
-        DishyLink integrates the dish's own per-second throughput telemetry into per-minute volume, on this
-        machine. It tracks your real traffic from the moment the historian started — it is not Starlink's
-        billing meter, which lives in their cloud and counts in UTC.
+      <Explainer title='How is this measured?'>
+        DishyLink integrates the dish's own per-second throughput telemetry into per-minute volume,
+        on this machine. It tracks your real traffic from the moment the historian started — it is
+        not Starlink's billing meter, which lives in their cloud and counts in UTC.
       </Explainer>
 
       <DeviceUsageList />

@@ -185,9 +185,10 @@ describe("attitude in the observer's ENU frame", () => {
     // change so the two are directly comparable.
     const step: Vec3 = [p1.x - p0.x, p1.y - p0.y, p1.z - p0.z];
     const stepLength = norm(step);
-    const travelled = (
-      tracker as unknown as { toEnu(d: Vec3, gmst: number): Vec3 }
-    ).toEnu([step[0] / stepLength, step[1] / stepLength, step[2] / stepLength], gmst);
+    const travelled = (tracker as unknown as { toEnu(d: Vec3, gmst: number): Vec3 }).toEnu(
+      [step[0] / stepLength, step[1] / stepLength, step[2] / stepLength],
+      gmst,
+    );
 
     const cosine = Math.min(1, Math.max(-1, dot(attitude.alongTrack, travelled)));
     const offByDeg = (Math.acos(cosine) * 180) / Math.PI;
@@ -200,7 +201,8 @@ describe("attitude in the observer's ENU frame", () => {
     const satrec = satelliteJs.twoline2satrec(line1, line2);
     expect(satrec.error).toBe(0);
     const state = satelliteJs.propagate(satrec, new Date("2024-01-01T12:00:00Z"));
-    if (!state?.position || !state.velocity) throw new Error("propagation produced no state vector");
+    if (!state?.position || !state.velocity)
+      throw new Error("propagation produced no state vector");
     const position = state.position as { x: number; y: number; z: number };
     const velocity = state.velocity as { x: number; y: number; z: number };
     const attitude = atOrigin().attitudeFrom(
@@ -227,7 +229,12 @@ describe("look-angle extrapolation", () => {
       atDate: Date,
       gmst: number,
       withAttitude: boolean,
-    ): { azimuthDeg: number; elevationDeg: number; rangeKm: number; topocentric?: TopocentricState } | null;
+    ): {
+      azimuthDeg: number;
+      elevationDeg: number;
+      rangeKm: number;
+      topocentric?: TopocentricState;
+    } | null;
   };
 
   const line1 = "1 25544U 98067A   24001.50000000  .00016717  00000-0  30777-3 0  9993";
@@ -261,7 +268,8 @@ describe("look-angle extrapolation", () => {
     // Compare as pointing directions, so an azimuth wrap near a pole can't
     // masquerade as a large error.
     const toVec = (azDeg: number, elDeg: number) => {
-      const az = (azDeg * Math.PI) / 180, el = (elDeg * Math.PI) / 180;
+      const az = (azDeg * Math.PI) / 180,
+        el = (elDeg * Math.PI) / 180;
       return [Math.cos(el) * Math.sin(az), Math.cos(el) * Math.cos(az), Math.sin(el)];
     };
     const a = toVec(advanced.azimuthDeg, advanced.elevationDeg);

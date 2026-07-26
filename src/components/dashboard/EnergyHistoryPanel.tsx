@@ -3,7 +3,11 @@
 // energy above it — fetched from the historian, not the in-memory samples.
 
 import { useState } from "react";
-import { useEnergyHistory, type EnergyRange, type EnergyBucket } from "../../hooks/useEnergyHistory";
+import {
+  useEnergyHistory,
+  type EnergyRange,
+  type EnergyBucket,
+} from "../../hooks/useEnergyHistory";
 import { RANGE_TABS, RangeBars, bucketLabel, type RangeBarColumn } from "../shared/RangeBarChart";
 import { SegmentedControl } from "../ui/segmented-control";
 import { Callout } from "../ui/callout";
@@ -11,7 +15,9 @@ import { Callout } from "../ui/callout";
 /** Slot the historian only caught part of: its total is real but understates the period. */
 function isPartial(bucket: EnergyBucket): boolean {
   return (
-    bucket.kWh !== null && bucket.expectedSeconds > 0 && bucket.sampledSeconds / bucket.expectedSeconds < 0.9
+    bucket.kWh !== null &&
+    bucket.expectedSeconds > 0 &&
+    bucket.sampledSeconds / bucket.expectedSeconds < 0.9
   );
 }
 
@@ -36,12 +42,12 @@ function EnergyBars({ buckets, range }: { buckets: EnergyBucket[]; range: Energy
         // An empty slot, not a zero one: a faint full-height wash marks the
         // hole without claiming no energy was used.
         <div
-          className="w-full min-h-[2px] rounded-t-[3px]"
+          className='w-full min-h-[2px] rounded-t-[3px]'
           style={{ height: "100%", background: "var(--ink-muted)", opacity: 0.06 }}
         />
       ) : (
         <div
-          className="w-full min-h-[2px] rounded-t-[3px] bg-[var(--chart-warm)]"
+          className='w-full min-h-[2px] rounded-t-[3px] bg-[var(--chart-warm)]'
           style={{
             height: `${(bucket.kWh / maxKWh) * 100}%`,
             // Part-sampled slots are real but short by construction; fade one
@@ -61,24 +67,30 @@ export function EnergyHistoryPanel({ active }: { active: boolean }) {
   const coveragePct = data ? Math.round(data.coverage.fraction * 100) : 0;
 
   return (
-    <div className="mt-4 border-t border-[var(--hairline)] pt-[13px]">
-      <div className="flex flex-wrap items-center justify-between gap-2.5">
-        <span className="text-[14.5px] font-[650]">Total energy used</span>
-        <SegmentedControl options={RANGE_TABS} value={range} onChange={setRange} label="Energy range" />
+    <div className='mt-4 border-t border-[var(--hairline)] pt-[13px]'>
+      <div className='flex flex-wrap items-center justify-between gap-2.5'>
+        <span className='text-[14.5px] font-[650]'>Total energy used</span>
+        <SegmentedControl
+          options={RANGE_TABS}
+          value={range}
+          onChange={setRange}
+          label='Energy range'
+        />
       </div>
 
       {unavailable ? (
-        <Callout className="mt-2.5">
-          Long-term energy needs the history recorder running. Start it with <code>npm run historian</code>
+        <Callout className='mt-2.5'>
+          Long-term energy needs the history recorder running. Start it with{" "}
+          <code>npm run historian</code>
           and it will build up day / week / month history from now on.
         </Callout>
       ) : (
         <>
-          <div className="mt-2.5 text-[27px] font-bold">
+          <div className='mt-2.5 text-[27px] font-bold'>
             {data ? `${data.totalKWh.toFixed(data.totalKWh < 1 ? 3 : 2)} kWh` : loading ? "…" : "—"}
           </div>
           {data && (
-            <div className="mt-1 text-[12px] font-medium text-muted-foreground">
+            <div className='mt-1 text-[12px] font-medium text-muted-foreground'>
               collected {coveragePct}% of this period
               {coveragePct < 95 && " — total covers only the time the recorder was running"}
             </div>

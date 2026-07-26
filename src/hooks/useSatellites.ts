@@ -84,7 +84,9 @@ function pickServingCandidate(
       break;
     }
   }
-  return bestUnobstructed ?? (inView[0]?.elevationDeg >= SERVING_ELEVATION_FLOOR_DEG ? inView[0] : null);
+  return (
+    bestUnobstructed ?? (inView[0]?.elevationDeg >= SERVING_ELEVATION_FLOOR_DEG ? inView[0] : null)
+  );
 }
 
 export function useSatellites(
@@ -147,7 +149,9 @@ export function useSatellites(
           setStats((previousStats) => ({
             ...previousStats,
             inViewCount: inView.length,
-            serviceableCount: inView.filter((sky) => sky.elevationDeg >= SERVING_ELEVATION_FLOOR_DEG).length,
+            serviceableCount: inView.filter(
+              (sky) => sky.elevationDeg >= SERVING_ELEVATION_FLOOR_DEG,
+            ).length,
             servingCandidate,
             constellationSize: tracker.constellationSize,
           }));

@@ -21,7 +21,14 @@ export function AppLogo({ size = 26, ...props }: React.ComponentProps<"svg"> & {
       <g transform='translate(110, 110)' stroke='currentColor' fill='currentColor'>
         {/* orbits */}
         <circle r='95' fill='none' strokeWidth={7} opacity={0.85} />
-        <ellipse rx='95' ry='105' fill='none' strokeWidth={3} opacity={0.4} transform='rotate(45)' />
+        <ellipse
+          rx='95'
+          ry='105'
+          fill='none'
+          strokeWidth={3}
+          opacity={0.4}
+          transform='rotate(45)'
+        />
         {/* satellite, and its dimmer counterpart opposite */}
         <circle cx='67' cy='-67' r='13' stroke='none' />
         <circle cx='-67' cy='67' r='8' stroke='none' opacity={0.55} />

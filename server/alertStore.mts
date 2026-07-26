@@ -15,7 +15,11 @@
 // open one must be closed later, so the whole log stays in memory and is
 // rewritten on change — same shape as thermalStore, which this generalises.
 
-import { ensureParentDirectory, readJsonLines, writeJsonLinesAtomically } from "./jsonLinesFile.mts";
+import {
+  ensureParentDirectory,
+  readJsonLines,
+  writeJsonLinesAtomically,
+} from "./jsonLinesFile.mts";
 
 /** The two devices, plus "system" for conditions the historian observes about
  *  them rather than reads off them — chiefly a device not answering at all,

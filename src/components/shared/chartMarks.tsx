@@ -106,7 +106,9 @@ function Band({
   fill: string;
   opacity: number;
 }) {
-  return <rect x={x} y={frame.top} width={width} height={frame.height} fill={fill} opacity={opacity} />;
+  return (
+    <rect x={x} y={frame.top} width={width} height={frame.height} fill={fill} opacity={opacity} />
+  );
 }
 
 /** When the link was down. */

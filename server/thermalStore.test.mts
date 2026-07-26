@@ -43,7 +43,11 @@ describe("ThermalStore.all", () => {
 
   it("hides a closed episode that aged out, with nothing written since", () => {
     seedFile([
-      { alertKey: "thermalThrottle", startMs: Date.now() - 26 * HOUR_MS, endMs: Date.now() - 25 * HOUR_MS },
+      {
+        alertKey: "thermalThrottle",
+        startMs: Date.now() - 26 * HOUR_MS,
+        endMs: Date.now() - 25 * HOUR_MS,
+      },
     ]);
     expect(new ThermalStore(file).all()).toHaveLength(0);
   });

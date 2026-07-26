@@ -14,7 +14,11 @@
 // 2-bits-per-cell base64 the browser used, so the client's `unpackCells` and the
 // snapshot rendering path are unchanged.
 
-import { ensureParentDirectory, readJsonLines, writeJsonLinesAtomically } from "./jsonLinesFile.mts";
+import {
+  ensureParentDirectory,
+  readJsonLines,
+  writeJsonLinesAtomically,
+} from "./jsonLinesFile.mts";
 
 export interface ObstructionSnapshot {
   takenAtMs: number;

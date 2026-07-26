@@ -32,7 +32,9 @@ async function probe(label: string, url: string, field: number, branch: string) 
       unknown
     >;
     const reply = json[branch];
-    console.log(`${label}: OK — keys: ${reply ? Object.keys(reply as object).join(", ") : "(empty branch)"}`);
+    console.log(
+      `${label}: OK — keys: ${reply ? Object.keys(reply as object).join(", ") : "(empty branch)"}`,
+    );
   } catch (error) {
     console.log(`${label}: FAILED — ${(error as Error).message}`);
   }

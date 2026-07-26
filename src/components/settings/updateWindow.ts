@@ -24,10 +24,34 @@ export interface UpdateWindow {
 }
 
 export const UPDATE_WINDOWS: UpdateWindow[] = [
-  { hour: 3, label: "Overnight, around 3 AM", range: "Between 12 AM and 6 AM", startHour: 0, endHour: 6 },
-  { hour: 9, label: "Morning, around 9 AM", range: "Between 6 AM and 12 PM", startHour: 6, endHour: 12 },
-  { hour: 15, label: "Afternoon, around 3 PM", range: "Between 12 PM and 6 PM", startHour: 12, endHour: 18 },
-  { hour: 21, label: "Evening, around 9 PM", range: "Between 6 PM and 12 AM", startHour: 18, endHour: 24 },
+  {
+    hour: 3,
+    label: "Overnight, around 3 AM",
+    range: "Between 12 AM and 6 AM",
+    startHour: 0,
+    endHour: 6,
+  },
+  {
+    hour: 9,
+    label: "Morning, around 9 AM",
+    range: "Between 6 AM and 12 PM",
+    startHour: 6,
+    endHour: 12,
+  },
+  {
+    hour: 15,
+    label: "Afternoon, around 3 PM",
+    range: "Between 12 PM and 6 PM",
+    startHour: 12,
+    endHour: 18,
+  },
+  {
+    hour: 21,
+    label: "Evening, around 9 PM",
+    range: "Between 6 PM and 12 AM",
+    startHour: 18,
+    endHour: 24,
+  },
 ];
 
 /**

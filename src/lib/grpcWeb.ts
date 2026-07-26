@@ -71,7 +71,10 @@ export async function grpcWebUnaryCall(
   let readOffset = 0;
   while (readOffset + 5 <= body.length) {
     const frameFlag = body[readOffset];
-    const frameLength = new DataView(body.buffer, body.byteOffset + readOffset + 1, 4).getUint32(0, false);
+    const frameLength = new DataView(body.buffer, body.byteOffset + readOffset + 1, 4).getUint32(
+      0,
+      false,
+    );
     const framePayload = body.subarray(readOffset + 5, readOffset + 5 + frameLength);
     readOffset += 5 + frameLength;
 

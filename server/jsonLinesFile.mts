@@ -21,7 +21,14 @@
 // accumulator for the minute in progress. Inheritance would force one lifecycle
 // onto all three and buy nothing.
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname } from "node:path";
 
 /** Create the directory a store's file lives in. Called from constructors, so a
@@ -31,7 +38,7 @@ export function ensureParentDirectory(filePath: string): void {
 }
 
 /**
- * Every parseable row of an NDJSON log, in file order.
+ * Every parseable row of a JSON Lines log, in file order.
  *
  * A missing file is an empty log, not an error: that is simply a store which has
  * not recorded anything yet. A line that does not parse is skipped rather than

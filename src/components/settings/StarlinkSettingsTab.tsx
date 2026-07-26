@@ -55,7 +55,8 @@ export function StarlinkSettingsTab({
 
   // Every write is fire-and-forget with the failure swallowed: the hook already
   // surfaces `settings.error`, and a rejected promise here would be unhandled.
-  const save = (patch: Parameters<typeof settings.save>[0]) => void settings.save(patch).catch(() => {});
+  const save = (patch: Parameters<typeof settings.save>[0]) =>
+    void settings.save(patch).catch(() => {});
 
   return (
     <>
@@ -194,7 +195,11 @@ export function StarlinkSettingsTab({
                 });
               }}
             >
-              {copyState === "copied" ? "Copied ✓" : copyState === "failed" ? "Copy failed" : "Copy"}
+              {copyState === "copied"
+                ? "Copied ✓"
+                : copyState === "failed"
+                  ? "Copy failed"
+                  : "Copy"}
             </button>
           </SettingRow>
 

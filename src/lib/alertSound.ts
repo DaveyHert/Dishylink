@@ -88,7 +88,11 @@ const lastPlayedAtByKey = new Map<string, number>();
 
 /** Chime for an alert opening (severity-toned) or clearing. A `throttleKey`
  *  rate-limits repeats of the same alert; omit it for one-off UI feedback. */
-export function playAlertSound(severity: AlertSeverity, cleared = false, throttleKey?: string): void {
+export function playAlertSound(
+  severity: AlertSeverity,
+  cleared = false,
+  throttleKey?: string,
+): void {
   if (!alertSoundEnabled() || audioContext === null) return;
   if (throttleKey !== undefined) {
     const lastPlayedAtMs = lastPlayedAtByKey.get(throttleKey) ?? 0;

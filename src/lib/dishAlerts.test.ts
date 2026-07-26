@@ -12,7 +12,13 @@ import { resolve } from "node:path";
 import { createFileRegistry, fromBinary } from "@bufbuild/protobuf";
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { describe, expect, it } from "vitest";
-import { DISH_ALERTS, ROUTER_ALERTS, resolveAlerts, sortBySeverity, type AlertSpec } from "./dishAlerts";
+import {
+  DISH_ALERTS,
+  ROUTER_ALERTS,
+  resolveAlerts,
+  sortBySeverity,
+  type AlertSpec,
+} from "./dishAlerts";
 
 const registry = createFileRegistry(
   fromBinary(FileDescriptorSetSchema, readFileSync(resolve("public/dish.protoset"))),

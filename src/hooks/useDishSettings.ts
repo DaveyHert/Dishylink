@@ -34,7 +34,10 @@ export function useDishSettings(active: boolean): DishSettingsState {
     setLoading(true);
     setError(null);
     loadConfig()
-      .catch((loadError) => !disposed && setError(`Couldn't read dish config: ${(loadError as Error).message}`))
+      .catch(
+        (loadError) =>
+          !disposed && setError(`Couldn't read dish config: ${(loadError as Error).message}`),
+      )
       .finally(() => !disposed && setLoading(false));
     return () => {
       disposed = true;

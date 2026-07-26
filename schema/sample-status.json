@@ -13,7 +13,7 @@
     "deviceState": {
       "uptimeS": "15065"
     },
-    "secondsToFirstNonemptySlot": 1.7840812e+09,
+    "secondsToFirstNonemptySlot": 1.7840812e9,
     "obstructionStats": {
       "fractionObstructed": 0.00061099796,
       "validS": 15024,
@@ -71,10 +71,7 @@
       "stableConnection": 39
     },
     "secondsUntilSwupdateRebootPossible": -1,
-    "connectedRouters": [
-      "Router-010000000000000001B31340",
-      "Router-01000000000000000049375B"
-    ],
+    "connectedRouters": ["Router-010000000000000001B31340", "Router-01000000000000000049375B"],
     "plcStats": {
       "port1Stats": {},
       "port2Stats": {},

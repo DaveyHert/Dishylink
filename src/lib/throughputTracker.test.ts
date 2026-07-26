@@ -70,7 +70,12 @@ describe("ThroughputTracker.rates", () => {
     tracker.rates(MAC, { rxBytes: 0, txBytes: 0 }, T0, FALLBACK);
     // The step is observed one poll later, but the router accumulated it over
     // its own period — so that period is the divisor, not our 200 ms poll gap.
-    const rates = tracker.rates(MAC, { rxBytes: STEP_BYTES, txBytes: 1.25 * MB }, T0 + POLL_MS, FALLBACK);
+    const rates = tracker.rates(
+      MAC,
+      { rxBytes: STEP_BYTES, txBytes: 1.25 * MB },
+      T0 + POLL_MS,
+      FALLBACK,
+    );
 
     expect(rates.downMbps).toBeCloseTo(STEP_MBPS, 5);
     expect(rates.upMbps).toBeCloseTo((1.25 * MB * 8) / 1_000_000 / (REFRESH_MS / 1000), 5);
@@ -129,7 +134,12 @@ describe("ThroughputTracker.rates", () => {
     tracker.rates(MAC, { rxBytes: 0, txBytes: 0 }, T0, FALLBACK);
     // The historian stalled for five refresh intervals. The bytes are real and
     // did arrive, but over five steps, not one.
-    const rates = tracker.rates(MAC, { rxBytes: 5 * STEP_BYTES, txBytes: 0 }, T0 + 5 * REFRESH_MS, FALLBACK);
+    const rates = tracker.rates(
+      MAC,
+      { rxBytes: 5 * STEP_BYTES, txBytes: 0 },
+      T0 + 5 * REFRESH_MS,
+      FALLBACK,
+    );
 
     expect(rates.downMbps).toBeCloseTo(STEP_MBPS, 5);
   });
@@ -152,7 +162,12 @@ describe("ThroughputTracker.rates", () => {
     const tracker = new ThroughputTracker();
     tracker.rates(MAC, { rxBytes: 900 * MB, txBytes: 0 }, T0, FALLBACK);
     tracker.rates(MAC, { rxBytes: 2 * MB, txBytes: 0 }, T0 + POLL_MS, FALLBACK); // reset
-    const rates = tracker.rates(MAC, { rxBytes: 2 * MB + STEP_BYTES, txBytes: 0 }, T0 + 2 * POLL_MS, FALLBACK);
+    const rates = tracker.rates(
+      MAC,
+      { rxBytes: 2 * MB + STEP_BYTES, txBytes: 0 },
+      T0 + 2 * POLL_MS,
+      FALLBACK,
+    );
 
     // Measured against the post-reset baseline, not the 900 MB that belonged to
     // the previous association.
@@ -180,7 +195,12 @@ describe("ThroughputTracker.rates", () => {
 
     // And the blip must not become the baseline — the next real reading is still
     // measured from T0, so it reports the traffic it actually saw.
-    const after = tracker.rates(MAC, { rxBytes: STEP_BYTES, txBytes: 0 }, T0 + 2 * POLL_MS, FALLBACK);
+    const after = tracker.rates(
+      MAC,
+      { rxBytes: STEP_BYTES, txBytes: 0 },
+      T0 + 2 * POLL_MS,
+      FALLBACK,
+    );
     expect(after.downMbps).toBeCloseTo(STEP_MBPS, 5);
   });
 
@@ -206,6 +226,8 @@ describe("ThroughputTracker.rates", () => {
 
     // No baseline any more, so this reads as a first sighting rather than
     // computing a rate against a counter that belongs to a previous association.
-    expect(tracker.rates(MAC, { rxBytes: STEP_BYTES, txBytes: 0 }, T0 + POLL_MS, FALLBACK)).toEqual(FALLBACK);
+    expect(tracker.rates(MAC, { rxBytes: STEP_BYTES, txBytes: 0 }, T0 + POLL_MS, FALLBACK)).toEqual(
+      FALLBACK,
+    );
   });
 });

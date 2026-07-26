@@ -31,7 +31,9 @@ export function Card({
       className={`flex min-w-0 flex-col ${border ? "border border-border/70" : ""} rounded-xl bg-card px-[18px] py-4`}
     >
       <div className='mb-2.5 flex items-center justify-between gap-3'>
-        <span className='text-[16px] font-semibold tracking-[0.005em] text-foreground'>{title}</span>
+        <span className='text-[16px] font-semibold tracking-[0.005em] text-foreground'>
+          {title}
+        </span>
         {meta}
       </div>
       {children}

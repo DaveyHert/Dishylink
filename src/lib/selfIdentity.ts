@@ -36,7 +36,10 @@ function isRoutable(ip: string): boolean {
 }
 
 function clean(ips: (string | undefined)[]): string[] {
-  return ips.filter((ip): ip is string => !!ip).map(normalizeIp).filter(isRoutable);
+  return ips
+    .filter((ip): ip is string => !!ip)
+    .map(normalizeIp)
+    .filter(isRoutable);
 }
 
 interface ElectronBridge {

@@ -35,16 +35,48 @@ export interface DishPngArt {
 }
 
 const PNG_ART: Record<DishModel, DishPngArt> = {
-  rev2Circular: { pngSrc: rev2Circular, groundAnchor: [0.5, 0.7793], beamExitAnchor: [0.5305, 0.3242] },
-  rev3Rectangular: { pngSrc: rev3Rectangular, groundAnchor: [0.5, 0.7614], beamExitAnchor: [0.5251, 0.3327] },
-  rev4Standard: { pngSrc: rev4Standard, groundAnchor: [0.5, 0.6571], beamExitAnchor: [0.5075, 0.4863] },
-  rev5Standard: { pngSrc: rev5Standard, groundAnchor: [0.5, 0.6558], beamExitAnchor: [0.5158, 0.4766] },
-  performanceGen1: { pngSrc: performanceGen1, groundAnchor: [0.5, 0.7614], beamExitAnchor: [0.5251, 0.3327] },
-  performanceGen2: { pngSrc: performanceGen2, groundAnchor: [0.5, 0.6602], beamExitAnchor: [0.5075, 0.4819] },
-  performanceGen3: { pngSrc: performanceGen3, groundAnchor: [0.5, 0.6563], beamExitAnchor: [0.4991, 0.5017] },
+  rev2Circular: {
+    pngSrc: rev2Circular,
+    groundAnchor: [0.5, 0.7793],
+    beamExitAnchor: [0.5305, 0.3242],
+  },
+  rev3Rectangular: {
+    pngSrc: rev3Rectangular,
+    groundAnchor: [0.5, 0.7614],
+    beamExitAnchor: [0.5251, 0.3327],
+  },
+  rev4Standard: {
+    pngSrc: rev4Standard,
+    groundAnchor: [0.5, 0.6571],
+    beamExitAnchor: [0.5075, 0.4863],
+  },
+  rev5Standard: {
+    pngSrc: rev5Standard,
+    groundAnchor: [0.5, 0.6558],
+    beamExitAnchor: [0.5158, 0.4766],
+  },
+  performanceGen1: {
+    pngSrc: performanceGen1,
+    groundAnchor: [0.5, 0.7614],
+    beamExitAnchor: [0.5251, 0.3327],
+  },
+  performanceGen2: {
+    pngSrc: performanceGen2,
+    groundAnchor: [0.5, 0.6602],
+    beamExitAnchor: [0.5075, 0.4819],
+  },
+  performanceGen3: {
+    pngSrc: performanceGen3,
+    groundAnchor: [0.5, 0.6563],
+    beamExitAnchor: [0.4991, 0.5017],
+  },
   // No aviation render yet. It borrows the Performance Gen 3 panel it is built
   // from — at 46 units the speed test wants the terminal, not the airframe.
-  aviation: { pngSrc: performanceGen3, groundAnchor: [0.5, 0.6563], beamExitAnchor: [0.4991, 0.5017] },
+  aviation: {
+    pngSrc: performanceGen3,
+    groundAnchor: [0.5, 0.6563],
+    beamExitAnchor: [0.4991, 0.5017],
+  },
   mini1: { pngSrc: mini1, groundAnchor: [0.5, 0.6618], beamExitAnchor: [0.5165, 0.4699] },
   mini2: { pngSrc: mini2, groundAnchor: [0.5, 0.6618], beamExitAnchor: [0.5165, 0.4699] },
   // Borrows the Standard's render, as the dome borrows its body — the speed test

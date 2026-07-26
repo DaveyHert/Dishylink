@@ -10,7 +10,8 @@ import { create, createFileRegistry, fromBinary, toBinary, toJson } from "@bufbu
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { grpcWebUnaryCall, GrpcWebError } from "../src/lib/grpcWeb.ts";
 
-const ROUTER_URL = process.env.ROUTER_URL ?? "http://192.168.1.1:9001/SpaceX.API.Device.Device/Handle";
+const ROUTER_URL =
+  process.env.ROUTER_URL ?? "http://192.168.1.1:9001/SpaceX.API.Device.Device/Handle";
 const registry = createFileRegistry(
   fromBinary(FileDescriptorSetSchema, readFileSync(resolve("public/dish.protoset"))),
 );
@@ -80,7 +81,9 @@ try {
     console.log(`→ sample interval ≈ ${intervalSec.toFixed(2)}s`);
     if (depth > 0) {
       const spanSec = depth * intervalSec;
-      console.log(`→ buffer depth ${depth} samples ≈ ${(spanSec / 60).toFixed(1)} minutes of history`);
+      console.log(
+        `→ buffer depth ${depth} samples ≈ ${(spanSec / 60).toFixed(1)} minutes of history`,
+      );
     }
   } else {
     console.log("→ counter did not advance: buffer may be idle-gated or updated on a longer cycle");
