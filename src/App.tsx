@@ -73,6 +73,28 @@ function sparklineFrom(
   return samples.slice(-90).map(getValue);
 }
 
+/**
+ * What the dish is doing this second, for a tile that reports a live figure.
+ *
+ * Reads from the sample ring because power is absent from `get_status` — the
+ * throughput and latency tiles can take their live value from the status reply,
+ * power cannot. The ring is one sample per second with its newest entry pinned
+ * to now, so its tail is the current reading.
+ *
+ * A missing ring entry decodes as 0 (decodeHistoryWindow), so a few seconds are
+ * searched for a real one rather than reporting a dropped second as no draw.
+ */
+function latestReading(
+  samples: TelemetrySample[],
+  getValue: (sample: TelemetrySample) => number | null,
+): number {
+  for (const sample of samples.slice(-5).reverse()) {
+    const value = getValue(sample);
+    if (value !== null && value > 0) return value;
+  }
+  return 0;
+}
+
 function recentAverage(
   samples: TelemetrySample[],
   getValue: (sample: TelemetrySample) => number | null,
@@ -123,8 +145,8 @@ export default function App() {
   }, [dishLla, savedObserver, accountObserver]);
   const satellites = useSatellites(observerLocation, telemetry.obstructionMap);
   useOutageNotifications(telemetry);
-  // Live alerts for both devices, and the notifications that go with them —
-  // a superset of the old thermal-only notifications, off live device status.
+  // Live alerts for both devices, and the notifications that go with them, read
+  // off live device status rather than the historian.
   const deviceAlerts = useDeviceAlerts(telemetry.status, telemetry.connectionState);
   const thermalEvents = useThermalEvents();
   // The dish's own event list is short and resets on reboot; the historian's log
@@ -152,7 +174,10 @@ export default function App() {
   // The buffer holds 6h; the charts draw one window of it. Trim once here rather
   // than handing each chart the whole thing.
   const chartSamples = useMemo(() => windowTail(samples, windowMinutes), [samples, windowMinutes]);
-  const livePowerW = useMemo(() => recentAverage(samples, (sample) => sample.powerW), [samples]);
+  const livePowerW = useMemo(() => latestReading(samples, (sample) => sample.powerW), [samples]);
+  // A day's projection needs a settled figure: extrapolated from a single second
+  // it would swing by whole kWh as the dish breathes.
+  const averagePowerW = useMemo(() => recentAverage(samples, (sample) => sample.powerW), [samples]);
   const recentDropRate = useMemo(
     () => recentAverage(samples, (sample) => sample.dropRate),
     [samples],
@@ -237,7 +262,7 @@ export default function App() {
                     label='Power draw'
                     value={livePowerW > 0 ? livePowerW.toFixed(0) : "—"}
                     unit='W'
-                    caption='average, last minute'
+                    caption='current draw'
                     sparkValues={sparklineFrom(samples, (sample) => sample.powerW)}
                     onOpenDetail={() => setOpenDetailId("power")}
                   />
@@ -314,7 +339,7 @@ export default function App() {
                   <SectionCard
                     title='Latency'
                     className='col-span-8'
-                    meta='pop ping · spikes preserved · red bands = outages'
+                    meta='pop ping · red bands = outages'
                   >
                     <TelemetryChart
                       samples={chartSamples}
@@ -329,7 +354,7 @@ export default function App() {
                   <SectionCard
                     title='Power draw'
                     className='col-span-8'
-                    meta={`≈ ${((livePowerW * 24) / 1000).toFixed(2)} kWh/day at current draw`}
+                    meta={`≈ ${((averagePowerW * 24) / 1000).toFixed(2)} kWh/day at recent draw`}
                   >
                     <TelemetryChart
                       samples={chartSamples}
