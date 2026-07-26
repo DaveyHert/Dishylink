@@ -1,7 +1,7 @@
 // The shape every baked dish model has, and the only thing the renderer needs to
 // know about them.
 //
-// This lived in standard4.ts because that model was written first, which left
+// This lived in rev4Standard.ts because that model was written first, which left
 // every sibling — and buildDish itself — importing a type from one particular
 // dish's data file. That made a generated file the contract for all the others:
 // regenerating it could break them, and deleting it would break them for no
@@ -27,4 +27,25 @@ export interface DishModelMesh {
    * stored units as `positions`.
    */
   joint?: { baseVertex: number; pivot: [number, number, number] };
+  /**
+   * Hold the camera outside this model's own radius.
+   *
+   * Only for a body with an interior to fall into. A panel on a mast can be
+   * taller than the camera's closest orbit and still needs nothing — it has no
+   * inside, so the eye passes it rather than entering it. An aircraft does: once
+   * the eye is within the hull the near wall clips away and the viewer is left
+   * looking at the far wall from inside.
+   *
+   * Opt-in rather than derived from size, because size does not distinguish the
+   * two cases: rev2Circular's radius exceeds the floor and it is perfectly fine.
+   */
+  keepCameraOutside?: boolean;
+  /**
+   * Where the beam leaves the panel, in millimetres in the model's own frame.
+   * Defaults to 14mm along the boresight, which is just clear of the face on a
+   * model that IS a panel. A model carrying its dish somewhere other than the
+   * origin — an aircraft with a terminal on its crown — has to say so, or the
+   * beam starts inside the body.
+   */
+  beamOriginMm?: [number, number, number];
 }

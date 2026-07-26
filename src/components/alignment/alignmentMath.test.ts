@@ -186,9 +186,9 @@ function kitAimedAt(
 }
 
 describe("resolveDishModel", () => {
-  it("reads an HP Gen 4 as its own model, not as a standard Gen 3", () => {
-    // Every HP Gen 4 string also starts with "rev4"; testing "rev4" first — or
-    // matching it as a substring — swallows this case.
+  it("reads a Performance Gen 3 as its own model, not as a Standard", () => {
+    // Every Performance Gen 3 string also starts with "rev4"; testing "rev4"
+    // first — or matching it as a substring — swallows this case.
     expect(resolveDishModel("rev4_hp_prod1", false)).toBe("performanceGen3");
     expect(resolveDishModel("rev4_panda_prod2", false)).toBe("rev4Standard");
   });
@@ -198,9 +198,9 @@ describe("resolveDishModel", () => {
     expect(resolveDishModel("hp1_prod0", false)).toBe("performanceGen2");
   });
 
-  it("falls back to a standard Gen 3 for an unknown or absent string", () => {
-    expect(resolveDishModel(undefined, false)).toBe("rev4Standard");
-    expect(resolveDishModel("something_new", false)).toBe("rev4Standard");
+  it("resolves an unknown or absent string to the unknown kit", () => {
+    expect(resolveDishModel(undefined, false)).toBe("unknown");
+    expect(resolveDishModel("something_new", false)).toBe("unknown");
   });
 });
 

@@ -86,12 +86,12 @@ export function computeAlignment(status: DishStatusJson): AlignmentReading {
   const stats = status.alignmentStats;
   // Their band ceiling, ported exactly:
   //   (mobilityClass === MOBILE || defaultTiltDeg < 8) ? 90 : 75
-  // Only the flat kits (Flat HP and HP Gen 4, both 0°) clear the 8° bar — the
-  // Mini's default tilt is 20°, so it takes 75 like a standard kit. A MOBILE
+  // Only the flat kits (Performance Gen 2 and Gen 3, both 0°) clear the 8° bar —
+  // the Mini's default tilt is 20°, so it takes 75 like a standard kit. A MOBILE
   // install gets 90 whatever the model, since it can be aimed from anywhere.
   // Top-level `hasActuators` only, as their `Vl` reads it — not the copy on
   // alignmentStats. The two can disagree, and on an `hp` string this flag alone
-  // decides HP (tilt 25°, ceiling 75°) versus Flat HP (tilt 0°, ceiling 90°).
+  // decides Gen 1 (tilt 25°, ceiling 75°) versus Gen 2 (tilt 0°, ceiling 90°).
   const motorised = status.hasActuators === "HAS_ACTUATORS_YES";
   const model = resolveDishModel(status.deviceInfo?.hardwareVersion, motorised);
   const maxTargetElevation =

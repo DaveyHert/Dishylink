@@ -48,6 +48,15 @@ export interface SkyCamera {
   /** Gently ease the tilt and zoom back to the opening framing, leaving the
    *  heading you are looking along untouched. Yields at once to a drag or wheel. */
   resetView(): void;
+  /**
+   * Keep the eye this far out, on top of the usual floor. A body the viewer can
+   * zoom inside — an aircraft, not a panel — asks for its own radius here, or the
+   * near wall clips away and you find yourself looking at its interior.
+   *
+   * Only raises the floor, never lowers it: a model smaller than the standing
+   * minimum leaves the zoom exactly as it was.
+   */
+  setMinDistance(distance: number): void;
   dispose(): void;
 }
 
@@ -76,6 +85,10 @@ export function createSkyCamera(
 ): SkyCamera {
   let { yaw, pitch } = INITIAL;
   let distance = initialDistance ?? INITIAL.distance;
+  // Raised only by a model that needs clearance; DISTANCE_MIN still governs
+  // everything else.
+  let modelFloor = 0;
+  const floor = () => Math.max(DISTANCE_MIN, modelFloor);
   // The opening framing — the tilt and distance the camera first sat at above the
   // dome, captured so a reset can return to it whatever this scene was built with.
   const home = { pitch, distance };
@@ -136,7 +149,7 @@ export function createSkyCamera(
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
     resetTo = null;
-    distance = Math.min(DISTANCE_MAX, Math.max(DISTANCE_MIN, distance + e.deltaY * 0.0035));
+    distance = Math.min(DISTANCE_MAX, Math.max(floor(), distance + e.deltaY * 0.0035));
     lastInteraction = performance.now();
   };
 
@@ -200,6 +213,13 @@ export function createSkyCamera(
     },
     isRotating() {
       return autoRotate;
+    },
+    setMinDistance(next: number) {
+      modelFloor = next;
+      // Push the eye out if it is already inside the new floor — switching to a
+      // bigger body mid-view would otherwise leave the camera stranded within it
+      // until the next scroll.
+      if (distance < floor()) distance = floor();
     },
     resetView() {
       // Only the tilt and zoom return to where the view opened; the heading you

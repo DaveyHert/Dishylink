@@ -1,7 +1,8 @@
 // Starlink V5 dish (Starlink_V5.obj). Body+plate rotated 180 about z (OBJ mirror-
-// flipped from v4; thick edge must land at +y so buildDish props it). Stand: the
-// kickstand from kickstand_3d_model.tsx (ribbon loop + base plate, dark 0.22),
-// scaled to ~105mm wide (nearer the spec/v4 stand than the tsx default) and
+// flipped from rev4Standard; thick edge must land at +y so buildDish props it).
+// Stand: the kickstand from kickstand_3d_model.tsx (ribbon loop + base plate,
+// dark 0.22), scaled to ~105mm wide (nearer the spec/rev4Standard stand than the
+// tsx default) and
 // seated on the +y thick edge with a 15-deg depth lean so its base meets the ground.
 import type { DishModelMesh } from "./types";
 export const rev5StandardDish: DishModelMesh = {

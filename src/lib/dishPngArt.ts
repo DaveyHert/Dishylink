@@ -42,8 +42,14 @@ const PNG_ART: Record<DishModel, DishPngArt> = {
   performanceGen1: { pngSrc: performanceGen1, groundAnchor: [0.5, 0.7614], beamExitAnchor: [0.5251, 0.3327] },
   performanceGen2: { pngSrc: performanceGen2, groundAnchor: [0.5, 0.6602], beamExitAnchor: [0.5075, 0.4819] },
   performanceGen3: { pngSrc: performanceGen3, groundAnchor: [0.5, 0.6563], beamExitAnchor: [0.4991, 0.5017] },
+  // No aviation render yet. It borrows the Performance Gen 3 panel it is built
+  // from — at 46 units the speed test wants the terminal, not the airframe.
+  aviation: { pngSrc: performanceGen3, groundAnchor: [0.5, 0.6563], beamExitAnchor: [0.4991, 0.5017] },
   mini1: { pngSrc: mini1, groundAnchor: [0.5, 0.6618], beamExitAnchor: [0.5165, 0.4699] },
   mini2: { pngSrc: mini2, groundAnchor: [0.5, 0.6618], beamExitAnchor: [0.5165, 0.4699] },
+  // Borrows the Standard's render, as the dome borrows its body — the speed test
+  // still needs a dish to launch the beam from.
+  unknown: { pngSrc: rev4Standard, groundAnchor: [0.5, 0.6571], beamExitAnchor: [0.5075, 0.4863] },
 };
 
 /** Named to match `dishModelFor(status)` in dishMesh, the resolver that produces

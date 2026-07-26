@@ -17,8 +17,10 @@ const MODELS: DishModel[] = [
   "performanceGen1",
   "performanceGen2",
   "performanceGen3",
+  "aviation",
   "mini1",
   "mini2",
+  "unknown",
 ];
 
 /** Where the beam meets the dish, as the scene lays it out. */
@@ -51,11 +53,31 @@ test.each(MODELS)("%s draws its own render, with the beam on its panel", async (
   expect(footY).toBeLessThan(y + 46);
 });
 
-/** The two Minis share one render on purpose — the side band that separates them
- *  in the 3D dome is invisible at 46 units. Every other kit gets its own. */
-const SHARED: DishModel[][] = [["mini1", "mini2"]];
+/** Kits with no art of their own, which draw another kit's render outright.
+ *  Aviation borrows the Performance Gen 3 panel it is built from, because at 46
+ *  units the speed test wants the terminal rather than the airframe; the unknown
+ *  kit borrows the Standard's body, as it does in the dome. First in each group
+ *  is the owner. */
+const BORROWED_RENDER: DishModel[][] = [
+  ["performanceGen3", "aviation"],
+  ["rev4Standard", "unknown"],
+];
 
-test("each body draws its own render, and only the Minis share one", async () => {
+/** Kits sharing a beam anchor while drawing their own art. A borrower inherits
+ *  its owner's anchors; beyond those, the two Minis differ only in a side band,
+ *  and Performance Gen 1 is the same rectangular panel on the same mast as the
+ *  Gen 2 rectangular dish — same hull, so the beam leaves at the same point. */
+const SHARED_FOOT: DishModel[][] = [
+  ["mini1", "mini2"],
+  ["rev3Rectangular", "performanceGen1"],
+  ...BORROWED_RENDER,
+];
+
+/** One representative per group, dropping the members that defer to the first. */
+const representatives = (groups: DishModel[][]) =>
+  MODELS.filter((m) => !groups.some((g) => g.slice(1).includes(m)));
+
+test("each body draws its own render, and only the declared kits share one", async () => {
   // A copy-pasted row pointing two kits at one file passes the per-model test
   // above — the render still lands in its own box. Only distinctness catches it,
   // so the sharing that IS intended has to be declared rather than assumed.
@@ -69,13 +91,21 @@ test("each body draws its own render, and only the Minis share one", async () =>
     footFor.set(model, String(beamFoot(screen.container)));
   }
 
-  for (const group of SHARED) {
-    const [first, ...rest] = group;
-    for (const model of rest) expect(renderFor.get(model)).toBe(renderFor.get(first));
+  // A borrowed render is only borrowed if the anchors come with it: the same art
+  // seated differently would put the beam off the hardware it is drawn on.
+  for (const [owner, ...borrowers] of BORROWED_RENDER) {
+    for (const model of borrowers) {
+      expect(renderFor.get(model), model).toBe(renderFor.get(owner));
+      expect(footFor.get(model), model).toBe(footFor.get(owner));
+    }
+  }
+  for (const [owner, ...rest] of SHARED_FOOT) {
+    for (const model of rest) expect(footFor.get(model), model).toBe(footFor.get(owner));
   }
 
-  // One representative per shared group, then every distinct body must differ.
-  const bodies = MODELS.filter((m) => !SHARED.some((g) => g.slice(1).includes(m)));
-  expect(new Set(bodies.map((m) => renderFor.get(m))).size).toBe(bodies.length);
-  expect(new Set(bodies.map((m) => footFor.get(m))).size).toBe(bodies.length);
+  // Every kit that is not declared a borrower must be telling itself apart.
+  const ownRender = representatives(BORROWED_RENDER);
+  expect(new Set(ownRender.map((m) => renderFor.get(m))).size).toBe(ownRender.length);
+  const ownFoot = representatives(SHARED_FOOT);
+  expect(new Set(ownFoot.map((m) => footFor.get(m))).size).toBe(ownFoot.length);
 });

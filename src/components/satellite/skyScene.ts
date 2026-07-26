@@ -615,6 +615,14 @@ export function createSkyScene(
       : undefined,
   });
 
+  // ── knob ───────────────────────────────────────────────────────────────────
+  // How far outside its own radius a model that asked for clearance holds the
+  // camera. 1.0 grazes the hull, higher backs off. Models that did not ask report
+  // no radius at all, so no value here can reach them.
+  const DISH_CLEARANCE = 1.1;
+  const holdCameraClear = () => camera.setMinDistance(dish.radius * DISH_CLEARANCE);
+  holdCameraClear();
+
   const resize = () => {
     const dpr = Math.min(devicePixelRatio, 2);
     canvas.width = canvas.clientWidth * dpr;
@@ -752,6 +760,7 @@ export function createSkyScene(
       domeData = buildDomePoints(next, trimUnmapped);
       dish = buildDish(meshForModel(next.dishModel), next, dishScale);
       dishData = dish.data;
+      holdCameraClear();
       gl.bindBuffer(gl.ARRAY_BUFFER, domeBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, domeData, gl.DYNAMIC_DRAW);
       gl.bindBuffer(gl.ARRAY_BUFFER, dishBuffer);

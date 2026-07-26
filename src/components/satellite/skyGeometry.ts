@@ -494,10 +494,30 @@ export function buildDish(model: DishModelMesh, survey: SkySurvey, scale = 1) {
   let low = Infinity;
   for (let i = 1; i < out.length; i += 6) low = Math.min(low, out[i]);
   for (let i = 1; i < out.length; i += 6) out[i] -= low;
+  // How much room this model occupies, measured off the drawn vertices rather
+  // than declared — but reported only for a model that asked to keep the camera
+  // out, so the models that are happy being orbited closely stay untouched.
+  let radius = 0;
+  if (model.keepCameraOutside) {
+    for (let i = 0; i < out.length; i += 6) {
+      radius = Math.max(radius, Math.hypot(out[i], out[i + 1], out[i + 2]));
+    }
+  }
   // Where the beam leaves from: just clear of the sky-facing face, along the
   // boresight. Starting at the panel's centre buries half the ribbon inside the
   // dish, and the depth test then clips it — which reads as the beam abruptly
   // changing width exactly at the panel's edge.
-  const centre = place(0, 0, 14 * mm);
-  return { data: new Float32Array(out), origin: [centre[0], centre[1] - low, centre[2]] as const };
+  // The exit has to ride the same frame as the hardware it leaves. `place` swings
+  // with the boresight, which is right when the panel swings with it — but a
+  // model that is entirely planted (baseVertex 0) never moves, so `place` would
+  // walk the beam off the dish as the served satellite changes. Follow whichever
+  // branch this model's own vertices took.
+  const [bx, by, bz] = model.beamOriginMm ?? [0, 0, 14];
+  const exit = joint && joint.baseVertex === 0 ? plant : place;
+  const centre = exit(bx * mm, by * mm, bz * mm);
+  return {
+    data: new Float32Array(out),
+    origin: [centre[0], centre[1] - low, centre[2]] as const,
+    radius,
+  };
 }

@@ -19,33 +19,41 @@ export type DishModel =
   | "performanceGen1"
   | "performanceGen2"
   | "performanceGen3"
+  | "aviation"
   | "mini1"
-  | "mini2";
+  | "mini2"
+  /** Hardware this table doesn't know. Draws the Standard as a stand-in, but is
+   *  named as unknown rather than claiming to be a kit the user doesn't own. */
+  | "unknown";
 
 /**
  * Their `Vl`, ported: the model from the hardware string plus the actuator flag.
  *
- * Prefix tests, in their order, and the order carries meaning — every HP Gen 4
- * reports a `rev4_hp…` string, so testing `rev4` first would swallow it. A
+ * Prefix tests, in their order, and the order carries meaning — every Performance
+ * Gen 3 reports a `rev4_hp…` string, so testing `rev4` first would swallow it. A
  * substring match does the same thing, which is why this is prefix-based rather
  * than a list of regexes.
  *
  * Some families spell the revision with a redundant `rev_` before the real token
  * — `rev_hp1_proto0` (Performance Gen 1 and 2), `rev_rev1_proto3` (a V1
  * prototype). Stripping it lets the one prefix table below cover both spellings;
- * without it those strings match nothing and fall through to `v4`, drawing a
- * mast-mounted High Performance kit as a Standard on a kickstand.
+ * without it those strings match nothing and fall through to `unknown`, drawing a
+ * mast-mounted Performance kit as a Standard on a kickstand.
  *
  * An earlier version of this table also matched `high_perf` and `flat_hp`
  * anywhere in the string; no dish has been observed reporting either, and a dish
- * that did would resolve to `v4` here exactly as it would in their app.
+ * that did would fall through to `unknown` here rather than being named.
  */
 export function resolveDishModel(
   hardwareVersion: string | undefined,
   motorised: boolean,
 ): DishModel {
   const hardware = (hardwareVersion?.toLowerCase() ?? "").replace(/^rev_/, "");
-  if (hardware === "") return "rev4Standard";
+  if (hardware === "") return "unknown";
+  // Before both HP tests: the aviation kits spell themselves `hp1_aviation_*` and
+  // `rev4_hp_aviation_*`, so either prefix below would swallow them and draw an
+  // airliner's terminal as a mast or flat Performance kit.
+  if (hardware.includes("aviation")) return "aviation";
   if (hardware.startsWith("hp")) return motorised ? "performanceGen1" : "performanceGen2";
   if (hardware.startsWith("rev3") || hardware.startsWith("dishy")) return "rev3Rectangular";
   if (hardware.startsWith("rev1") || hardware.startsWith("rev2")) return "rev2Circular";
@@ -55,7 +63,7 @@ export function resolveDishModel(
   // Mini 1 (including Rugged) is the unit with the dark side band; Mini 2 is white.
   if (hardware.startsWith("mini1")) return "mini1";
   if (hardware.startsWith("mini2")) return "mini2";
-  return "rev4Standard";
+  return "unknown";
 }
 
 /** The kit to draw, straight from a status reply. Every surface that renders
@@ -92,6 +100,12 @@ const MODEL_SPECS: Record<DishModel, DishModelSpec> = {
   performanceGen1: { displayName: "Performance (Gen 1)", mount: "mast", defaultTiltDeg: 25 },
   performanceGen2: { displayName: "Performance (Gen 2)", mount: "flat", defaultTiltDeg: 0 },
   performanceGen3: { displayName: "Performance (Gen 3)", mount: "flat", defaultTiltDeg: 0 },
+  // Flat like the Performance kits it is built from, so it clears the 8° bar and
+  // may aim to zenith — right for a terminal that spends its life level.
+  aviation: { displayName: "Aviation", mount: "flat", defaultTiltDeg: 0 },
+  // Mount and tilt match the Standard, whose body stands in for it, so alignment
+  // behaves exactly as the old fallback did — only the name stops guessing.
+  unknown: { displayName: "Unknown Model", mount: "kickstand", defaultTiltDeg: 20 },
 };
 
 export function specForModel(model: DishModel): DishModelSpec {
