@@ -186,7 +186,6 @@ export function createSkyScene(
   let trimUnmapped = initialTrim;
   let domeData = buildDomePoints(survey, trimUnmapped);
   let domeVisible = true;
-  // let dish = buildDish(meshForModel(survey.dishModel), survey, dishScale);
   let dish = buildDish(meshForModel(survey.dishModel), survey, dishScale);
   let dishData = dish.data;
   const starData = stars ? buildStars() : null;
