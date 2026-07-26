@@ -11,8 +11,7 @@
 // chip. Temperature climbing while duty cycle falls is Wi-Fi being slow
 // *because* of heat — the reading and its consequence, kept together.
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { appendJsonLines, ensureParentDirectory, readJsonLines, writeJsonLinesAtomically } from "./jsonLinesFile.mts";
 
 export interface RadioReading {
   /** e.g. "RF_2GHZ", "RF_5GHZ", "RF_5GHZ_HIGH". */
@@ -35,36 +34,22 @@ export class RadioStore {
   private pending = new Map<string, { sum: number; count: number; dutyMin: number; minute: number; band: string }>();
 
   constructor(private readonly filePath: string) {
-    mkdirSync(dirname(filePath), { recursive: true });
+    ensureParentDirectory(filePath);
     this.compact();
   }
 
   private readAll(): RadioMinute[] {
-    if (!existsSync(this.filePath)) return [];
-    const rows: RadioMinute[] = [];
-    for (const line of readFileSync(this.filePath, "utf8").split("\n")) {
-      if (!line) continue;
-      try {
-        rows.push(JSON.parse(line) as RadioMinute);
-      } catch {
-        // skip a torn final line from a crash mid-write
-      }
-    }
-    return rows;
+    return readJsonLines<RadioMinute>(this.filePath);
   }
 
   /** Drop rows past the retention window so the log cannot grow without bound. */
   compact(): number {
-    if (!existsSync(this.filePath)) return 0;
     const all = this.readAll();
     const cutoffSec = Math.floor(Date.now() / 1000) - RETENTION_DAYS * 86_400;
     const kept = all.filter((row) => row.minute >= cutoffSec);
     const dropped = all.length - kept.length;
     if (dropped === 0) return 0;
-    const body = kept.map((row) => JSON.stringify(row)).join("\n");
-    const tempPath = `${this.filePath}.tmp`;
-    writeFileSync(tempPath, body ? body + "\n" : "");
-    renameSync(tempPath, this.filePath);
+    writeJsonLinesAtomically(this.filePath, kept);
     return dropped;
   }
 
@@ -87,9 +72,7 @@ export class RadioStore {
       });
       this.pending.delete(key);
     }
-    if (completed.length > 0) {
-      appendFileSync(this.filePath, completed.map((row) => JSON.stringify(row)).join("\n") + "\n");
-    }
+    appendJsonLines(this.filePath, completed);
     for (const reading of readings) {
       const key = `${minute}:${reading.band}`;
       const bucket = this.pending.get(key) ?? {

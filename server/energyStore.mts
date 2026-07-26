@@ -1,4 +1,4 @@
-// Persistent per-minute energy store, dependency-free (NDJSON append log).
+// Persistent per-minute energy store, dependency-free (JSON Lines append log).
 //
 // One line per *completed* wall-clock minute: { minute, wattSeconds, samples }.
 // `minute` is epoch seconds at the minute's start. `samples` counts the
@@ -11,8 +11,12 @@
 // go. A year of minutes is ~525k lines to answer "how much in March"; the
 // rollup answers it with one, and nothing any view can draw is lost.
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import {
+  appendJsonLines,
+  ensureParentDirectory,
+  readJsonLines,
+  writeJsonLinesAtomically,
+} from "./jsonLinesFile.mts";
 import type { TelemetrySample } from "../src/lib/telemetry.ts";
 
 export interface MinuteBucket {
@@ -74,7 +78,7 @@ export class EnergyStore {
 
   constructor(private readonly filePath: string) {
     this.monthlyPath = filePath.replace(/\.ndjson$/, "") + "-monthly.ndjson";
-    mkdirSync(dirname(filePath), { recursive: true });
+    ensureParentDirectory(filePath);
     this.compact();
     for (const bucket of this.readAll()) {
       if (bucket.minute > this.maxWrittenMinute) this.maxWrittenMinute = bucket.minute;
@@ -87,7 +91,6 @@ export class EnergyStore {
    * erasing it. Idempotent: a month already archived is not written twice.
    */
   compact(): number {
-    if (!existsSync(this.filePath)) return 0;
     const all = this.readAll();
     const cutoffSec = startOfYearSec(new Date());
     const kept = all.filter((bucket) => bucket.minute >= cutoffSec);
@@ -106,32 +109,18 @@ export class EnergyStore {
       row.ulBits += bucket.ulBits ?? 0;
       folded.set(month, row);
     }
-    if (folded.size > 0) {
-      const rows = [...folded.values()].sort((a, b) => a.month - b.month);
-      appendFileSync(this.monthlyPath, rows.map((row) => JSON.stringify(row)).join("\n") + "\n");
-    }
+    appendJsonLines(
+      this.monthlyPath,
+      [...folded.values()].sort((a, b) => a.month - b.month),
+    );
 
-    const body = kept.map((bucket) => JSON.stringify(bucket)).join("\n");
-    // temp + rename so a crash mid-write never tears the log
-    const tempPath = `${this.filePath}.tmp`;
-    writeFileSync(tempPath, body ? body + "\n" : "");
-    renameSync(tempPath, this.filePath);
+    writeJsonLinesAtomically(this.filePath, kept);
     return expired.length;
   }
 
   /** Archived monthly summaries, oldest first. Cheap: one row per month. */
   readMonths(): MonthBucket[] {
-    if (!existsSync(this.monthlyPath)) return [];
-    const rows: MonthBucket[] = [];
-    for (const line of readFileSync(this.monthlyPath, "utf8").split("\n")) {
-      if (!line) continue;
-      try {
-        rows.push(JSON.parse(line) as MonthBucket);
-      } catch {
-        // skip a torn final line from a crash mid-write
-      }
-    }
-    return rows.sort((a, b) => a.month - b.month);
+    return readJsonLines<MonthBucket>(this.monthlyPath).sort((a, b) => a.month - b.month);
   }
 
   /** Newest minute already persisted; incoming samples at/below this are ignored to avoid double-counting on restart. */
@@ -140,22 +129,12 @@ export class EnergyStore {
   }
 
   append(bucket: MinuteBucket): void {
-    appendFileSync(this.filePath, JSON.stringify(bucket) + "\n");
+    appendJsonLines(this.filePath, [bucket]);
     if (bucket.minute > this.maxWrittenMinute) this.maxWrittenMinute = bucket.minute;
   }
 
   private readAll(): MinuteBucket[] {
-    if (!existsSync(this.filePath)) return [];
-    const buckets: MinuteBucket[] = [];
-    for (const line of readFileSync(this.filePath, "utf8").split("\n")) {
-      if (!line) continue;
-      try {
-        buckets.push(JSON.parse(line) as MinuteBucket);
-      } catch {
-        // skip a torn final line from a crash mid-write
-      }
-    }
-    return buckets;
+    return readJsonLines<MinuteBucket>(this.filePath);
   }
 
   /** Persisted buckets whose minute falls in [startSec, endSec). */

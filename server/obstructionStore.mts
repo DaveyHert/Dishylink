@@ -14,8 +14,7 @@
 // 2-bits-per-cell base64 the browser used, so the client's `unpackCells` and the
 // snapshot rendering path are unchanged.
 
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { ensureParentDirectory, readJsonLines, writeJsonLinesAtomically } from "./jsonLinesFile.mts";
 
 export interface ObstructionSnapshot {
   takenAtMs: number;
@@ -64,30 +63,13 @@ export class ObstructionStore {
   private snapshots: ObstructionSnapshot[] = [];
 
   constructor(private readonly filePath: string) {
-    mkdirSync(dirname(filePath), { recursive: true });
-    this.snapshots = this.readFile();
-  }
-
-  private readFile(): ObstructionSnapshot[] {
-    if (!existsSync(this.filePath)) return [];
-    const out: ObstructionSnapshot[] = [];
-    for (const line of readFileSync(this.filePath, "utf8").split("\n")) {
-      if (!line) continue;
-      try {
-        const parsed = JSON.parse(line) as ObstructionSnapshot;
-        if (parsed.gridSize > 0 && typeof parsed.packedCells === "string") out.push(parsed);
-      } catch {
-        // A torn last line survives a mid-write kill; skip it rather than
-        // discarding the whole history.
-      }
-    }
-    return out;
-  }
-
-  private writeFile(): void {
-    const temporary = `${this.filePath}.tmp`;
-    writeFileSync(temporary, this.snapshots.map((s) => JSON.stringify(s)).join("\n") + "\n");
-    renameSync(temporary, this.filePath);
+    ensureParentDirectory(filePath);
+    // A snapshot without a grid or its packed cells cannot be rendered, so it is
+    // dropped on read rather than handed to the scrubber as a hole.
+    this.snapshots = readJsonLines<ObstructionSnapshot>(
+      filePath,
+      (snapshot) => snapshot.gridSize > 0 && typeof snapshot.packedCells === "string",
+    );
   }
 
   /** Newest last, which is the order the scrubber expects. */
@@ -105,7 +87,7 @@ export class ObstructionStore {
   record(snapshot: ObstructionSnapshot): ObstructionSnapshot[] {
     const cutoff = snapshot.takenAtMs - RETENTION_MS;
     this.snapshots = [...this.snapshots, snapshot].filter((s) => s.takenAtMs >= cutoff);
-    this.writeFile();
+    writeJsonLinesAtomically(this.filePath, this.snapshots);
     return this.snapshots;
   }
 }

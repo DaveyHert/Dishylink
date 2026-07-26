@@ -15,8 +15,7 @@
 // open one must be closed later, so the whole log stays in memory and is
 // rewritten on change — same shape as thermalStore, which this generalises.
 
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { ensureParentDirectory, readJsonLines, writeJsonLinesAtomically } from "./jsonLinesFile.mts";
 
 /** The two devices, plus "system" for conditions the historian observes about
  *  them rather than reads off them — chiefly a device not answering at all,
@@ -42,22 +41,8 @@ export class AlertStore {
   private episodes: AlertEpisode[] = [];
 
   constructor(private readonly filePath: string) {
-    mkdirSync(dirname(filePath), { recursive: true });
-    this.episodes = this.readFile();
-  }
-
-  private readFile(): AlertEpisode[] {
-    if (!existsSync(this.filePath)) return [];
-    const episodes: AlertEpisode[] = [];
-    for (const line of readFileSync(this.filePath, "utf8").split("\n")) {
-      if (!line) continue;
-      try {
-        episodes.push(JSON.parse(line) as AlertEpisode);
-      } catch {
-        // skip a torn final line from a crash mid-write
-      }
-    }
-    return episodes;
+    ensureParentDirectory(filePath);
+    this.episodes = readJsonLines<AlertEpisode>(filePath);
   }
 
   private flush(): void {
@@ -66,11 +51,7 @@ export class AlertStore {
     this.episodes = this.episodes.filter(
       (episode) => episode.endMs === null || episode.startMs >= cutoffMs,
     );
-    const body = this.episodes.map((episode) => JSON.stringify(episode)).join("\n");
-    // temp + rename so a crash mid-write never tears the log
-    const tempPath = `${this.filePath}.tmp`;
-    writeFileSync(tempPath, body ? body + "\n" : "");
-    renameSync(tempPath, this.filePath);
+    writeJsonLinesAtomically(this.filePath, this.episodes);
   }
 
   /**

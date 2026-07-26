@@ -16,8 +16,7 @@
 // rolling buffer so the panel survives a reboot and covers overnight — it is not
 // an archive, and nothing in the UI reads events older than the 6H chart window.
 
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { ensureParentDirectory, readJsonLines, writeJsonLinesAtomically } from "./jsonLinesFile.mts";
 import { canonicalCause } from "../src/lib/telemetry.ts";
 
 export interface StoredEvent {
@@ -44,22 +43,8 @@ export class EventStore {
   private events = new Map<string, StoredEvent>();
 
   constructor(private readonly filePath: string) {
-    mkdirSync(dirname(filePath), { recursive: true });
-    for (const event of this.readFile()) this.events.set(keyOf(event), event);
-  }
-
-  private readFile(): StoredEvent[] {
-    if (!existsSync(this.filePath)) return [];
-    const events: StoredEvent[] = [];
-    for (const line of readFileSync(this.filePath, "utf8").split("\n")) {
-      if (!line) continue;
-      try {
-        events.push(JSON.parse(line) as StoredEvent);
-      } catch {
-        // skip a torn final line from a crash mid-write
-      }
-    }
-    return events;
+    ensureParentDirectory(filePath);
+    for (const event of readJsonLines<StoredEvent>(filePath)) this.events.set(keyOf(event), event);
   }
 
   private flush(): void {
@@ -67,14 +52,9 @@ export class EventStore {
     for (const [key, event] of this.events) {
       if (event.startMs < cutoffMs) this.events.delete(key);
     }
-    const body = [...this.events.values()]
-      .sort((a, b) => a.startMs - b.startMs)
-      .map((event) => JSON.stringify(event))
-      .join("\n");
-    // temp + rename so a crash mid-write never tears the log
-    const tempPath = `${this.filePath}.tmp`;
-    writeFileSync(tempPath, body ? body + "\n" : "");
-    renameSync(tempPath, this.filePath);
+    // Oldest first on disk, so the log reads chronologically.
+    const ordered = [...this.events.values()].sort((a, b) => a.startMs - b.startMs);
+    writeJsonLinesAtomically(this.filePath, ordered);
   }
 
   /**

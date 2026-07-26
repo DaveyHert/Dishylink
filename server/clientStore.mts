@@ -16,8 +16,7 @@
 // compute deltas from these rows: real totals come from the odometer, which
 // deltas per entry before it accumulates.
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { appendJsonLines, ensureParentDirectory, readJsonLines, writeJsonLinesAtomically } from "./jsonLinesFile.mts";
 
 export interface ClientReading {
   macAddress: string;
@@ -72,36 +71,22 @@ export class ClientStore {
   private pending = new Map<string, PendingBucket>();
 
   constructor(private readonly filePath: string) {
-    mkdirSync(dirname(filePath), { recursive: true });
+    ensureParentDirectory(filePath);
     this.compact();
   }
 
   private readAll(): ClientMinute[] {
-    if (!existsSync(this.filePath)) return [];
-    const rows: ClientMinute[] = [];
-    for (const line of readFileSync(this.filePath, "utf8").split("\n")) {
-      if (!line) continue;
-      try {
-        rows.push(JSON.parse(line) as ClientMinute);
-      } catch {
-        // skip a torn final line from a crash mid-write
-      }
-    }
-    return rows;
+    return readJsonLines<ClientMinute>(this.filePath);
   }
 
   /** Drop rows past the retention window so the log cannot grow without bound. */
   compact(): number {
-    if (!existsSync(this.filePath)) return 0;
     const all = this.readAll();
     const cutoffSec = Math.floor(Date.now() / 1000) - RETENTION_HOURS * 3_600;
     const kept = all.filter((row) => row.minute >= cutoffSec);
     const dropped = all.length - kept.length;
     if (dropped === 0) return 0;
-    const body = kept.map((row) => JSON.stringify(row)).join("\n");
-    const tempPath = `${this.filePath}.tmp`;
-    writeFileSync(tempPath, body ? body + "\n" : "");
-    renameSync(tempPath, this.filePath);
+    writeJsonLinesAtomically(this.filePath, kept);
     return dropped;
   }
 
@@ -124,9 +109,7 @@ export class ClientStore {
       });
       this.pending.delete(key);
     }
-    if (completed.length > 0) {
-      appendFileSync(this.filePath, completed.map((row) => JSON.stringify(row)).join("\n") + "\n");
-    }
+    appendJsonLines(this.filePath, completed);
     for (const reading of readings) {
       if (!reading.macAddress) continue;
       const key = `${minute}:${reading.macAddress}`;

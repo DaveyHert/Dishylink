@@ -10,8 +10,7 @@
 // memory and rewrites the file on change rather than doing append-only with
 // compaction. Anything older than the retention window is dropped on write.
 
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { ensureParentDirectory, readJsonLines, writeJsonLinesAtomically } from "./jsonLinesFile.mts";
 
 export interface ThermalEpisode {
   /** `alerts` key that produced this, e.g. "thermalThrottle". */
@@ -30,22 +29,8 @@ export class ThermalStore {
   private episodes: ThermalEpisode[] = [];
 
   constructor(private readonly filePath: string) {
-    mkdirSync(dirname(filePath), { recursive: true });
-    this.episodes = this.readFile();
-  }
-
-  private readFile(): ThermalEpisode[] {
-    if (!existsSync(this.filePath)) return [];
-    const episodes: ThermalEpisode[] = [];
-    for (const line of readFileSync(this.filePath, "utf8").split("\n")) {
-      if (!line) continue;
-      try {
-        episodes.push(JSON.parse(line) as ThermalEpisode);
-      } catch {
-        // skip a torn final line from a crash mid-write
-      }
-    }
-    return episodes;
+    ensureParentDirectory(filePath);
+    this.episodes = readJsonLines<ThermalEpisode>(filePath);
   }
 
   private flush(): void {
@@ -55,11 +40,7 @@ export class ThermalStore {
     this.episodes = this.episodes.filter(
       (episode) => episode.endMs === null || episode.startMs >= cutoffMs,
     );
-    const body = this.episodes.map((episode) => JSON.stringify(episode)).join("\n");
-    // temp + rename so a crash mid-write never tears the log
-    const tempPath = `${this.filePath}.tmp`;
-    writeFileSync(tempPath, body ? body + "\n" : "");
-    renameSync(tempPath, this.filePath);
+    writeJsonLinesAtomically(this.filePath, this.episodes);
   }
 
   /**

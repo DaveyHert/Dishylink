@@ -16,8 +16,8 @@
 // every sample expires within the hour, and a torn tail costs at most a restart's
 // worth of detail.
 
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { ensureParentDirectory, writeJsonAtomically } from "./jsonLinesFile.mts";
 import type { ClientReading } from "./clientStore.mts";
 
 export interface ClientSample {
@@ -42,7 +42,7 @@ export class ClientWindow {
   private byMac = new Map<string, ClientSample[]>();
 
   constructor(private readonly filePath: string) {
-    mkdirSync(dirname(filePath), { recursive: true });
+    ensureParentDirectory(filePath);
     this.restore();
   }
 
@@ -110,9 +110,7 @@ export class ClientWindow {
     const all = this.samples();
     if (all.length === 0) return;
     try {
-      const tempPath = `${this.filePath}.tmp`;
-      writeFileSync(tempPath, JSON.stringify(all));
-      renameSync(tempPath, this.filePath);
+      writeJsonAtomically(this.filePath, all);
     } catch {
       // a failed snapshot costs detail after a restart, never the live window
     }
