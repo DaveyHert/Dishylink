@@ -524,7 +524,7 @@ export function createSkyScene(
       const ex = eye[0] - point[0],
         ey = eye[1] - point[1],
         ez = eye[2] - point[2];
-      let sx = dir[1] * ez - dir[2] * ey,
+      const sx = dir[1] * ez - dir[2] * ey,
         sy = dir[2] * ex - dir[0] * ez,
         sz = dir[0] * ey - dir[1] * ex;
       const sl = Math.hypot(sx, sy, sz) || 1;
@@ -538,7 +538,7 @@ export function createSkyScene(
       for (let i = 1; i < length; i++) {
         const a = trail[i - 1],
           b = trail[i];
-        let dx = b[0] - a[0],
+        const dx = b[0] - a[0],
           dy = b[1] - a[1],
           dz = b[2] - a[2];
         const dl = Math.hypot(dx, dy, dz) || 1;

@@ -1,0 +1,92 @@
+# The gate the project did not have: 288 tests and a clean `tsc -b` that nothing
+# enforced, so every check depended on a human remembering to run it.
+#
+# Four jobs rather than one, so a failure names itself in the run list — a red
+# "typecheck" reads differently from a red "test", and the difference is the first
+# thing you want to know.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# A second push to the same branch makes the first one's answer irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Errors fail the build; warnings are reported and do not. The React
+      # Compiler-era hook rules are warnings here on purpose — see eslint.config.js.
+      - run: npm run lint
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # The dish and router are not reachable from CI. Everything under test here
+      # is pure logic and rendering; nothing dials 192.168.100.1.
+      - run: npm test
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Two commits, so a push can be diffed against what it replaced.
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Only what this push touched, not the whole tree. Prettier arrived long
+      # after the code did, so a full check would fail on files nobody edited;
+      # this way formatting is enforced going forward and the backlog drains as
+      # files are next touched. `npm run format` fixes the whole tree at once.
+      - name: Check formatting of changed files
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          else
+            base="${{ github.event.before }}"
+          fi
+          # A new branch reports an all-zero base; nothing to diff against.
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            echo "No comparable base commit — skipping."
+            exit 0
+          fi
+          changed=$(git diff --name-only --diff-filter=ACMR "$base" HEAD \
+            -- '*.ts' '*.tsx' '*.mts' '*.mjs' '*.js' '*.json' '*.css' '*.md' || true)
+          if [ -z "$changed" ]; then
+            echo "No formattable files changed."
+            exit 0
+          fi
+          echo "$changed"
+          echo "$changed" | xargs npx prettier --check --ignore-unknown
