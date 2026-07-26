@@ -1,0 +1,7 @@
+# Formatting-only commits, skipped by `git blame`.
+#
+# Enable once per clone:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# Apply Prettier to the 123 files it could reach
+7f0e294
