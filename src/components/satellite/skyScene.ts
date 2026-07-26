@@ -79,15 +79,11 @@ const SATELLITE_SHELL = 2;
 const SATELLITE_SIZE = (0.032 * SATELLITE_SHELL) / 22;
 const MAX_SATELLITES = 400;
 
-/** How many points a trail keeps, and how often it lays a new one down. The two
+/** How many points span a trail, and how far apart in time they sit. The two
  *  together set the trail's length in time — a short streak behind the craft,
  *  with enough points along it that the ribbon stays smooth. */
 const TRAIL_MAX_POINTS = 12;
 const TRAIL_INTERVAL_MS = 550;
-/** A gap larger than this is the render loop having stalled — a hidden tab pauses
- *  rAF — not a normal frame. The craft has jumped far since the last point, so the
- *  path restarts from where it is now rather than bridging the jump with a streak. */
-const TRAIL_STALE_MS = 2000;
 
 /** Matches the dashboard's dark --page (#000000) so the canvas and the chrome agree. */
 const FOG: [number, number, number] = [0, 0, 0];
@@ -234,6 +230,9 @@ export function createSkyScene(
   /** This frame's satellites and their world positions, kept for picking and labels. */
   let frameSky: SatelliteSky[] = [];
   let framePositions: Array<[number, number, number]> = [];
+  /** This frame's trails, one per drawn satellite, oldest point first. Rebuilt
+   *  each frame from the live sample rather than accumulated across frames. */
+  let frameTrails: Array<Array<[number, number, number]>> = [];
   /** Last frame's view-projection, reused by picking so a click matches what is drawn. */
   let lastMvp = new Float32Array(16);
   let trackers: SkyTracker[] = [];
@@ -242,13 +241,11 @@ export function createSkyScene(
   const beamBuffer = buffer(beamVerts, gl.DYNAMIC_DRAW);
   let sampleSatellites: (() => SatelliteSky[]) | null = null;
 
-  // Each satellite's recent path, as world points laid down on a timer. The wake
-  // ribbon is rebuilt from these every frame, camera-facing, so it needs the eye
-  // — hence it is drawn from `drawTrails` rather than assembled here. Two
-  // triangles (6 vertices) per segment, each xyz + rgb + across + glow (8
-  // floats); sized for the whole cap up front so the buffer never reallocates.
+  // The wake ribbon's vertices. It is camera-facing, so it needs the eye and is
+  // assembled in `drawTrails` from this frame's trail points rather than here.
+  // Two triangles (6 vertices) per segment, each xyz + across + glow (5 floats);
+  // sized for the whole cap up front so the buffer never reallocates.
   const TRAIL_FLOATS_PER_VERTEX = 5; // position, across, glow — colour is fixed in the shader
-  const trails = new Map<string, Array<{ pos: [number, number, number]; atMs: number }>>();
   const trailVerts = new Float32Array(
     MAX_SATELLITES * (TRAIL_MAX_POINTS - 1) * 6 * TRAIL_FLOATS_PER_VERTEX,
   );
@@ -259,21 +256,13 @@ export function createSkyScene(
    * direction — the part that has to be right — and range only sets how far out
    * along that ray the model is drawn, so the shell scale is purely cosmetic.
    */
-  /**
-   * Display position for a tracked satellite: true bearing, cosmetic radius.
-   * Look angles are advanced to the current instant from the sample they came
-   * from — SGP4 runs at ~10 Hz, this draws at 60, so without the extrapolation
-   * a satellite would hold still for six frames and then jump, which is obvious
-   * once it fills the view. The velocity is exact enough over that 100 ms gap.
-   */
-  function skyToWorld(sat: SatelliteSky): [number, number, number] {
-    let azimuthDeg = sat.azimuthDeg,
-      elevationDeg = sat.elevationDeg,
-      rangeKm = sat.rangeKm;
-    if (sat.topocentric && sat.sampledAtMs !== undefined) {
-      const dt = Math.min(0.25, Math.max(0, (Date.now() - sat.sampledAtMs) / 1000));
-      ({ azimuthDeg, elevationDeg, rangeKm } = advanceLookAngles(sat.topocentric, dt));
-    }
+  /** Look angles to a world point: azimuth and elevation give the true bearing,
+   *  range only sets how far out along that ray the model sits (cosmetic). */
+  function lookAnglesToWorld(
+    azimuthDeg: number,
+    elevationDeg: number,
+    rangeKm: number,
+  ): [number, number, number] {
     const az = (azimuthDeg * Math.PI) / 180;
     const el = (elevationDeg * Math.PI) / 180;
     const radius = SATELLITE_SHELL * (1.12 + (Math.max(rangeKm, 550) / 550 - 1) * 0.26);
@@ -282,6 +271,49 @@ export function createSkyScene(
       Math.sin(el) * radius,
       -Math.cos(el) * Math.cos(az) * radius,
     ];
+  }
+
+  /**
+   * Display position for a tracked satellite: true bearing, cosmetic radius.
+   * Look angles are advanced to the current instant from the sample they came
+   * from — SGP4 runs at ~10 Hz, this draws at 60, so without the extrapolation
+   * a satellite would hold still for six frames and then jump, which is obvious
+   * once it fills the view. The velocity is exact enough over that 100 ms gap.
+   */
+  function skyToWorld(sat: SatelliteSky): [number, number, number] {
+    if (sat.topocentric && sat.sampledAtMs !== undefined) {
+      const dt = Math.min(0.25, Math.max(0, (Date.now() - sat.sampledAtMs) / 1000));
+      const { azimuthDeg, elevationDeg, rangeKm } = advanceLookAngles(sat.topocentric, dt);
+      return lookAnglesToWorld(azimuthDeg, elevationDeg, rangeKm);
+    }
+    return lookAnglesToWorld(sat.azimuthDeg, sat.elevationDeg, sat.rangeKm);
+  }
+
+  /**
+   * The trail as a pure function of the current sample, not a stored history: the
+   * head is the live position and each earlier point is that sample stepped one
+   * interval further back by its ENU velocity — the same first-order transport
+   * advanceLookAngles runs forward for the live position, read the other way.
+   * Because nothing is accumulated across frames, a paused render loop (a hidden
+   * tab, a debugger, a GC hitch) leaves no stale point to bridge on return; the
+   * path is simply drawn correct for the new instant. Ordered oldest-first so it
+   * matches drawTrails, which fades from the tail up to the head at the end.
+   */
+  function buildTrail(
+    sat: SatelliteSky,
+    head: [number, number, number],
+    nowMs: number,
+  ): Array<[number, number, number]> {
+    if (!sat.topocentric || sat.sampledAtMs === undefined) return [head];
+    const nowDt = Math.min(0.25, Math.max(0, (nowMs - sat.sampledAtMs) / 1000));
+    const points: Array<[number, number, number]> = [];
+    for (let k = TRAIL_MAX_POINTS - 1; k >= 1; k--) {
+      const dt = nowDt - (k * TRAIL_INTERVAL_MS) / 1000;
+      const { azimuthDeg, elevationDeg, rangeKm } = advanceLookAngles(sat.topocentric, dt);
+      points.push(lookAnglesToWorld(azimuthDeg, elevationDeg, rangeKm));
+    }
+    points.push(head); // k = 0: the live head, coincident with the drawn craft
+    return points;
   }
 
   /**
@@ -386,7 +418,7 @@ export function createSkyScene(
     if (!satellites || !sampleSatellites) {
       satelliteCount = 0;
       beamTarget = null;
-      trails.clear(); // scrubbed into history — start the paths fresh on return
+      frameTrails = [];
       return;
     }
     const sky = sampleSatellites();
@@ -395,30 +427,17 @@ export function createSkyScene(
     beamTarget = null;
     frameSky = [];
     framePositions = [];
-    const inView = new Set<string>();
+    frameTrails = [];
     let n = 0;
     for (const sat of sky) {
       if (n >= MAX_SATELLITES) break;
       if (sat.elevationDeg < floorDeg) continue; // outside the dome's coverage
       const at = skyToWorld(sat);
 
-      // Lay a trail point down on the timer, so the path is a handful of spaced
-      // marks rather than one per frame. Sampled position, not the extrapolated
-      // one, so the trail records where the satellite actually was.
-      inView.add(sat.name);
-      const trail = trails.get(sat.name);
-      if (!trail) {
-        trails.set(sat.name, [{ pos: at, atMs: nowMs }]);
-      } else {
-        const newest = trail[trail.length - 1];
-        const gap = nowMs - newest.atMs;
-        if (gap >= TRAIL_STALE_MS) {
-          trails.set(sat.name, [{ pos: at, atMs: nowMs }]);
-        } else if (gap >= TRAIL_INTERVAL_MS) {
-          trail.push({ pos: at, atMs: nowMs });
-          if (trail.length > TRAIL_MAX_POINTS) trail.shift();
-        }
-      }
+      // The trail behind the craft, derived from this frame's sample — see
+      // buildTrail. Rebuilt every frame, so leaving and re-entering the view (or
+      // the render loop pausing) carries no stale state to clean up or bridge.
+      frameTrails.push(buildTrail(sat, at, nowMs));
       // Take the beam's endpoint from this same per-frame sample. Holding the
       // serving satellite's own object instead would pin the beam to whatever
       // React last handed us — about once a second — and it would visibly step
@@ -482,22 +501,18 @@ export function createSkyScene(
       gl.bindBuffer(gl.ARRAY_BUFFER, b);
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, data);
     }
-
-    // Drop trails for satellites that have left the view; the ribbon geometry
-    // itself is rebuilt each frame in drawTrails, where the eye is known.
-    for (const name of trails.keys()) {
-      if (!inView.has(name)) trails.delete(name);
-    }
   }
 
   /**
-   * The satellite trails: a soft, camera-facing ribbon down each path. Built
-   * here rather than in refreshSatellites because facing the camera needs the
-   * eye. A faint white wisp that dies away behind the craft — additive, so it
-   * glows rather than paints.
+   * The satellite trails: a soft, camera-facing ribbon down each path, turned to
+   * face the eye — which is why the mesh is assembled here, at draw, rather than
+   * with the trail points in refreshSatellites. It is rebuilt every frame from
+   * frameTrails, which is itself re-derived from the live sample each frame, so
+   * there is no held ribbon that a stalled loop could leave stale. A faint white
+   * wisp that dies away behind the craft — additive, so it glows rather than paints.
    */
   function drawTrails(mvp: Float32Array, eye: number[]) {
-    if (trails.size === 0) return;
+    if (frameTrails.length === 0) return;
     // Half-width as a fraction of distance, so the trail holds its apparent size
     // whatever the zoom, widening only slightly along its length.
     const HEAD_WIDTH = 0.004,
@@ -518,12 +533,12 @@ export function createSkyScene(
     };
     const distTo = (p: [number, number, number]) =>
       Math.hypot(eye[0] - p[0], eye[1] - p[1], eye[2] - p[2]);
-    for (const trail of trails.values()) {
+    for (const trail of frameTrails) {
       const length = trail.length;
       if (length < 2) continue;
       for (let i = 1; i < length; i++) {
-        const a = trail[i - 1].pos,
-          b = trail[i].pos;
+        const a = trail[i - 1],
+          b = trail[i];
         let dx = b[0] - a[0],
           dy = b[1] - a[1],
           dz = b[2] - a[2];
