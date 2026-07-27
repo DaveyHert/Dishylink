@@ -97,6 +97,7 @@ async function serveStatic(rendererRoot: string, pathname: string): Promise<Resp
 export function handleAppProtocol(
   rendererRoot: string,
   apiHandler: (request: Request) => Promise<Response>,
+  cloudHandler: (request: Request) => Promise<Response>,
 ): void {
   protocol.handle(SCHEME, (request) => {
     const url = new URL(request.url);
@@ -111,11 +112,13 @@ export function handleAppProtocol(
     if (pathname.startsWith("/celestrak/")) {
       return proxy(request, CELESTRAK_ORIGIN + pathname.slice("/celestrak".length) + search);
     }
-    // The collector runs in this process; its /api handler is served in-process.
+    // The collector and the cloud client both run in this process and answer here.
     if (pathname.startsWith("/api/")) {
       return apiHandler(request);
     }
-    // /cloud (the signed-in account) is added when the cloud sign-in lands.
+    if (pathname.startsWith("/cloud/")) {
+      return cloudHandler(request);
+    }
 
     return serveStatic(rendererRoot, pathname);
   });

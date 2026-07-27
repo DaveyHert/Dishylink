@@ -14,6 +14,7 @@ import { dirname, join } from "node:path";
 import { existsSync, writeFileSync } from "node:fs";
 import { registerAppProtocolScheme, handleAppProtocol, APP_ENTRY_URL } from "./appProtocol";
 import { startCollector, handleApiRequest } from "./collector";
+import { startCloud, handleCloudRequest } from "./cloud";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const rendererRoot = join(here, "../dist");
@@ -37,8 +38,8 @@ let tray: Tray | null = null;
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 860,
+    width: 1450,
+    height: 1080,
     // Below this the dashboard's tiles and charts stop being usable; the app's
     // responsive layout still adapts down to it.
     minWidth: 700,
@@ -120,7 +121,9 @@ function createTray(): void {
  */
 function configureLoginItem(): void {
   if (!app.isPackaged) {
-    app.setLoginItemSettings({ openAtLogin: false });
+    // macOS refuses login-item changes for a non-bundled app, so only attempt the
+    // clear when there is actually an entry to remove.
+    if (app.getLoginItemSettings().openAtLogin) app.setLoginItemSettings({ openAtLogin: false });
     return;
   }
   const marker = join(app.getPath("userData"), ".setup-done");
@@ -145,7 +148,8 @@ void app.whenReady().then(async () => {
   // so starting a second collector here would just double-poll the dish.
   if (!devServerUrl) {
     await startCollector(rendererRoot);
-    handleAppProtocol(rendererRoot, handleApiRequest);
+    startCloud();
+    handleAppProtocol(rendererRoot, handleApiRequest, handleCloudRequest);
     configureLoginItem();
   }
   createTray();
