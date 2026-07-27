@@ -83,9 +83,12 @@ export function SatelliteView({
   const [immersive, setImmersive] = useState(false);
   const trimmed = useDomeTrim();
   const [unsupported, setUnsupported] = useState(false);
-  // With no location set, this panel exists to ask for one, so the picker starts
-  // open on its form.
-  const [changingLocation, setChangingLocation] = useState(() => !observerLocation);
+  // The picker opens to its form when there is no location, and folds away once one
+  // exists — which can happen after the first render, when the dish's GPS arrives.
+  // Keyed on the has-location boolean, so a GPS refresh mid-edit does not fold it.
+  const hasLocation = observerLocation !== null;
+  const [changingLocation, setChangingLocation] = useState(!hasLocation);
+  useEffect(() => setChangingLocation(!hasLocation), [hasLocation]);
   const snapshots = useObstructionSnapshots();
   const [scrubIndex, setScrubIndex] = useState<number | null>(null); // null = live
 
