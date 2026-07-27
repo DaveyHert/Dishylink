@@ -304,6 +304,59 @@ export function readRouterPingSuccessPercent(dropRate5M: number | undefined): nu
 }
 
 /**
+ * A position in the dish's since-boot sample counter — how far a consumer has
+ * already read the ring buffer. Small and copyable so it can be held in memory
+ * by a long-lived loop or persisted by one that is torn down between polls.
+ */
+export interface SampleCursor {
+  /** Absolute count of samples the dish had written the last time we read. 0
+   *  means "unknown" — nothing read yet, or a buffer seeded without one. */
+  counter: number;
+  /** Timestamp (ms) of the newest sample already taken. The fallback dedup key
+   *  for when the counter cannot be trusted. */
+  newestSampleMs: number;
+}
+
+/**
+ * The samples in this poll's window that have not been recorded yet.
+ *
+ * Consecutive polls re-read the dish's 15-minute ring buffer, so all but the
+ * newest few seconds overlap what the previous poll already saw. This is the one
+ * place that decides which samples are genuinely new, so the record neither
+ * stores a sample twice nor skips one.
+ *
+ * Pure — no state, no side effects — so a long-lived loop and an alarm that
+ * re-reads the same window (the extension, which keeps no persistent process)
+ * share a single definition of "new".
+ *
+ * New is judged by the dish's since-boot sample counter when it can be trusted,
+ * and by timestamp when it cannot: a reboot restarts the counter, and a buffer
+ * just restored from a snapshot has no counter yet. Both untrusted cases take the
+ * one timestamp fallback, leaving a single edge to reason about rather than two.
+ */
+export function selectFreshSamples(
+  window: { samples: TelemetrySample[]; newestCounter: number },
+  cursor: SampleCursor,
+): TelemetrySample[] {
+  if (window.samples.length === 0) return [];
+  const counterTrustworthy = cursor.counter > 0 && window.newestCounter >= cursor.counter;
+  if (!counterTrustworthy) {
+    // Nothing recorded yet: the whole window is new.
+    if (cursor.newestSampleMs === 0) return window.samples;
+    // Otherwise keep only what is newer by clock than the newest sample held. The
+    // +500ms absorbs the sub-second jitter in a sample's stamped time across
+    // overlapping polls, so a sample already held is never re-appended.
+    return window.samples.filter((sample) => sample.timestampMs > cursor.newestSampleMs + 500);
+  }
+  // A trustworthy counter means exactly the samples past it are new — drain
+  // strictly by position, independent of how many the caller currently holds. A
+  // persisted-cursor caller with no in-memory buffer (the extension) relies on
+  // this: it must get only what advanced past its cursor, never the whole window.
+  const freshCount = Math.min(window.newestCounter - cursor.counter, window.samples.length);
+  return window.samples.slice(window.samples.length - freshCount);
+}
+
+/**
  * Stitches ring-buffer polls into one continuous series holding a fixed span of
  * clock.
  *
@@ -352,29 +405,14 @@ export class TelemetryAccumulator {
     const window = decodeHistoryWindow(history, nowMs);
     if (window.samples.length === 0) return this.samples;
 
-    // The dish's sample counter runs backwards on a reboot — and also whenever
-    // the link drops long enough for its ring to restart. That only invalidates
-    // counter arithmetic; it says nothing about the history we already recorded,
-    // which is the user's data. Never discard it: reset the counter and fall
-    // through to the wall-clock splice below, which appends only samples newer
-    // than what we hold.
-    if (window.newestCounter < this.newestCounter) {
-      this.newestCounter = 0;
-    }
-
-    let freshSamples: TelemetrySample[];
-    if (this.newestCounter === 0 && this.samples.length > 0) {
-      // First live poll on top of seeded history: the dish ring overlaps the
-      // seed's tail, so splice by wall-clock time instead of sample counter.
-      const seedNewestMs = this.samples[this.samples.length - 1].timestampMs;
-      freshSamples = window.samples.filter((sample) => sample.timestampMs > seedNewestMs + 500);
-    } else {
-      const freshSampleCount =
-        this.newestCounter === 0 || this.samples.length === 0
-          ? window.samples.length
-          : Math.min(window.newestCounter - this.newestCounter, window.samples.length);
-      freshSamples = window.samples.slice(window.samples.length - freshSampleCount);
-    }
+    // Which samples are new is decided by the shared, pure selectFreshSamples: by
+    // counter normally, by timestamp when a reboot has run the counter backwards
+    // or a seeded buffer has no counter yet. The buffer holds the user's recorded
+    // history and is never discarded across a reboot — only appended to.
+    const freshSamples = selectFreshSamples(window, {
+      counter: this.newestCounter,
+      newestSampleMs: this.samples.length ? this.samples[this.samples.length - 1].timestampMs : 0,
+    });
     for (const sample of freshSamples) {
       if (router.latencyMs != null) sample.routerLatencyMs = router.latencyMs;
       if (router.pingSuccessPercent != null) {

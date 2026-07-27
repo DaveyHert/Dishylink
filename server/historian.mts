@@ -364,9 +364,12 @@ const clientStore = new ClientStore(CLIENTS_FILE);
 const clientWindow = new ClientWindow(CLIENT_SAMPLES_FILE);
 const alertStore = new AlertStore(ALERTS_FILE);
 let latestRadio: { readings: RadioReading[]; atMs: number } | null = null;
-// Minutes seen but not yet completed (the in-progress minute, replaced each poll
-// with the authoritative recompute from the ring buffer).
-const pending = new Map<number, MinuteBucket>();
+// The minutes seen but not yet finalized (the in-progress minute at the head of
+// the ring buffer), each replaced every poll with the authoritative recompute
+// from the buffer. RAM-only on purpose: it is rebuilt from the dish's 15-minute
+// ring on the very next poll, so a restart loses nothing — the durable energy
+// log holds only minutes already finalized, gated by lastWrittenMinute.
+const openMinuteBuckets = new Map<number, MinuteBucket>();
 
 // Rolling full-resolution window served to the frontend so page reloads (and
 // historian restarts, via the snapshot file) never reset the charts.
@@ -670,16 +673,16 @@ async function poll(): Promise<void> {
 
   // Replace (not accumulate) so re-seeing a minute across overlapping polls is idempotent.
   for (const [minute, bucket] of perMinute) {
-    if (minute > store.lastWrittenMinute) pending.set(minute, bucket);
+    if (minute > store.lastWrittenMinute) openMinuteBuckets.set(minute, bucket);
   }
 
   const currentMinute = Math.floor(now / 60_000) * 60;
-  const completed = [...pending.keys()]
+  const completed = [...openMinuteBuckets.keys()]
     .filter((minute) => minute < currentMinute)
     .sort((a, b) => a - b);
   for (const minute of completed) {
-    store.append(pending.get(minute)!);
-    pending.delete(minute);
+    store.append(openMinuteBuckets.get(minute)!);
+    openMinuteBuckets.delete(minute);
   }
   if (completed.length > 0) {
     const newest = new Date(store.lastWrittenMinute * 1000).toLocaleTimeString();
@@ -794,7 +797,7 @@ function nextGroupKey(key: number, spec: RangeSpec): number {
 /** Merge persisted + in-progress buckets, since "today" should include the current partial minute. */
 function bucketsInRange(startSec: number, endSec: number): MinuteBucket[] {
   const merged = store.readRange(startSec, endSec);
-  for (const bucket of pending.values()) {
+  for (const bucket of openMinuteBuckets.values()) {
     if (bucket.minute >= startSec && bucket.minute < endSec) merged.push(bucket);
   }
   return merged;
