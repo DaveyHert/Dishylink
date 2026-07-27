@@ -83,7 +83,9 @@ export function SatelliteView({
   const [immersive, setImmersive] = useState(false);
   const trimmed = useDomeTrim();
   const [unsupported, setUnsupported] = useState(false);
-  const [changingLocation, setChangingLocation] = useState(false);
+  // With no location yet, the picker opens to the form: the empty state's whole
+  // job is to ask for a location, so it should not take a click to reveal it.
+  const [changingLocation, setChangingLocation] = useState(() => !observerLocation);
   const snapshots = useObstructionSnapshots();
   const [scrubIndex, setScrubIndex] = useState<number | null>(null); // null = live
 
