@@ -97,11 +97,6 @@ export const POWER_SERIES: ChartSeries[] = [
   },
 ];
 
-/** The tail of the series covering the last `windowMinutes` (samples are ~1/sec). */
-export function windowSlice(samples: TelemetrySample[], windowMinutes: number): TelemetrySample[] {
-  return samples.slice(-Math.max(1, Math.round(windowMinutes * 60)));
-}
-
 export function averageOf(
   samples: TelemetrySample[],
   getValue: (sample: TelemetrySample) => number | null,
@@ -121,15 +116,35 @@ export function energyKWh(samples: TelemetrySample[]): number {
   return wattSeconds / 3_600_000;
 }
 
-/** Human span actually covered by a slice, honoring that data may not reach the full window. */
+/** A step longer than this is an outage, not a missed reading: the dish's ring
+ *  advances at 1 Hz, so a few dropped samples still count as covered time. */
+const COVERAGE_GAP_MS = 5_000;
+
+/**
+ * How much of the window was actually recorded.
+ *
+ * Coverage is the sum of the steps between readings, not the span from the
+ * first to the last. Span counts an outage as if it were measured — a window
+ * with a ten-minute hole in the middle spans its full width and would read as
+ * fully covered. Summing steps and dropping the ones too long to be readings
+ * leaves only time the dish was actually observed, at either edge or between.
+ * Phrased like the historian-backed note beside it, so the two read alike.
+ */
 export function coverageNote(slice: TelemetrySample[], windowMinutes: number): string {
-  if (slice.length < 2) return "not enough data yet";
-  const spanMinutes = (slice[slice.length - 1].timestampMs - slice[0].timestampMs) / 60_000;
-  if (spanMinutes < windowMinutes * 0.95) {
-    const rounded = spanMinutes >= 1 ? `${Math.round(spanMinutes)} min` : "< 1 min";
-    return `last ${rounded} — all data available this session`;
+  // No readings in the window at all — the dish has been silent for longer than
+  // the window is wide. Distinct from a thin window, which is a real if short
+  // measurement and reports the minutes it has.
+  if (slice.length === 0) return "nothing recorded in this window";
+  let coveredMs = 0;
+  for (let index = 1; index < slice.length; index++) {
+    const step = slice[index].timestampMs - slice[index - 1].timestampMs;
+    if (step <= COVERAGE_GAP_MS) coveredMs += step;
   }
-  return "over the selected window";
+  const windowMs = windowMinutes * 60_000;
+  if (coveredMs >= windowMs * 0.95) return "over the selected window";
+  const coveredMinutes = coveredMs / 60_000;
+  const rounded = coveredMinutes >= 1 ? `${Math.round(coveredMinutes)} min` : "< 1 min";
+  return `recorded ${rounded} of this window`;
 }
 
 export interface StatDetailInputs {

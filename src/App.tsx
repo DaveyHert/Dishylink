@@ -29,6 +29,7 @@ import { NetworkPanel } from "./components/network/NetworkPanel";
 import { AccountPanel } from "./components/account/AccountPanel";
 import { SettingsModal } from "./components/settings/SettingsModal";
 import { useRouterNetwork } from "./hooks/useRouterNetwork";
+import { useNow } from "./hooks/useNow";
 import {
   THROUGHPUT_SERIES,
   LATENCY_SERIES,
@@ -169,11 +170,18 @@ export default function App() {
 
   const { status, samples } = telemetry;
 
+  // Chart windows end at wall-clock now, so they keep advancing while the dish
+  // is silent rather than resting on the last stretch that had data.
+  const nowMs = useNow();
+
   const liveDownlink = formatThroughput(status?.downlinkThroughputBps ?? 0);
   const liveUplink = formatThroughput(status?.uplinkThroughputBps ?? 0);
   // The buffer holds 6h; the charts draw one window of it. Trim once here rather
   // than handing each chart the whole thing.
-  const chartSamples = useMemo(() => windowTail(samples, windowMinutes), [samples, windowMinutes]);
+  const chartSamples = useMemo(
+    () => windowTail(samples, windowMinutes, nowMs),
+    [samples, windowMinutes, nowMs],
+  );
   const livePowerW = useMemo(() => latestReading(samples, (sample) => sample.powerW), [samples]);
   // A day's projection needs a settled figure: extrapolated from a single second
   // it would swing by whole kWh as the dish breathes.

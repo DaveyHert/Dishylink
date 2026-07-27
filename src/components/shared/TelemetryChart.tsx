@@ -16,6 +16,7 @@ import {
   WashGradient,
   type PlotFrame,
 } from "./chartMarks";
+import { useNow } from "../../hooks/useNow";
 
 export interface ChartSeries {
   id: string;
@@ -124,12 +125,22 @@ function niceCeiling(rawMax: number): number {
 /** The tail of a series the chart would actually draw for `windowMinutes`.
  *  Callers holding long buffers (the dish keeps 6h, per-device history 6h) pass
  *  this so the chart isn't handed points its own window filter drops. Mirrors
- *  the windowEndMs/windowStartMs pair below, so the two stay in step. */
-export function windowTail(samples: TelemetrySample[], windowMinutes: number): TelemetrySample[] {
+ *  the windowEndMs/windowStartMs pair below, so the two stay in step.
+ *
+ *  `nowMs` is required rather than defaulted to Date.now(): callers memoize this,
+ *  and a clock read hidden inside a useMemo is a window that stops advancing as
+ *  soon as its other deps go quiet. Pass the ticking value from useNow, so the
+ *  memo lists it as a dependency and recomputes with it. */
+export function windowTail(
+  samples: TelemetrySample[],
+  windowMinutes: number,
+  nowMs: number,
+): TelemetrySample[] {
   if (samples.length === 0) return samples;
-  const startMs = samples[samples.length - 1].timestampMs - windowMinutes * 60_000;
+  const startMs = nowMs - windowMinutes * 60_000;
   const firstVisible = samples.findIndex((sample) => sample.timestampMs >= startMs);
-  return firstVisible <= 0 ? samples : samples.slice(firstVisible);
+  if (firstVisible === -1) return [];
+  return firstVisible === 0 ? samples : samples.slice(firstVisible);
 }
 
 export function TelemetryChart({
@@ -151,7 +162,13 @@ export function TelemetryChart({
 
   const plotWidth = Math.max(containerWidth - PLOT_MARGIN.left - PLOT_MARGIN.right, 50);
   const plotHeight = height - PLOT_MARGIN.top - PLOT_MARGIN.bottom;
-  const windowEndMs = samples.length > 0 ? samples[samples.length - 1].timestampMs : Date.now();
+  // The window ends now, not at the newest sample held. "15M" is a claim about
+  // the clock: the last fifteen minutes, whether or not anything was recorded in
+  // them. A dish that has been silent for ten of those minutes draws two minutes
+  // of line and ten of empty right edge, which is the true picture. Anchoring to
+  // the newest sample instead would keep the chart looking full by quietly
+  // showing an older fifteen minutes under a live label.
+  const windowEndMs = useNow();
   const windowStartMs = windowEndMs - windowMinutes * 60_000;
 
   const { buckets, bucketSpanMs } = useMemo<{
@@ -284,7 +301,10 @@ export function TelemetryChart({
    * not because six hours were measured.
    */
   const gapRegions = useMemo(() => {
-    if (buckets.length === 0) return [];
+    // Nothing at all in the window — a dish that has been silent longer than the
+    // window is wide. The whole span is unmeasured, and saying so is the entire
+    // content of the chart at that point.
+    if (buckets.length === 0) return [{ startMs: windowStartMs, endMs: windowEndMs }];
     const gapThresholdMs = Math.max(bucketSpanMs * 1.5, minGapMs);
     const regions: { startMs: number; endMs: number }[] = [];
     if (buckets[0].timestampMs - windowStartMs > gapThresholdMs) {
@@ -298,8 +318,16 @@ export function TelemetryChart({
         });
       }
     }
+    // A hole at the right edge: readings stopped partway through the window and
+    // have not resumed — the outage that is still going on. It gets the same
+    // treatment as one in the middle, since it is the same fact about the same
+    // window.
+    const newestMs = buckets[buckets.length - 1].timestampMs;
+    if (windowEndMs - newestMs > gapThresholdMs) {
+      regions.push({ startMs: newestMs, endMs: windowEndMs });
+    }
     return regions;
-  }, [buckets, bucketSpanMs, windowStartMs]);
+  }, [buckets, bucketSpanMs, windowStartMs, windowEndMs, minGapMs]);
 
   const xTickTimes = [0.25, 0.5, 0.75].map(
     (fraction) => windowStartMs + (windowEndMs - windowStartMs) * fraction,

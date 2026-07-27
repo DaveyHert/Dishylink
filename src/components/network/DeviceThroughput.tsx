@@ -10,6 +10,7 @@ import { THROUGHPUT_SERIES } from "../../lib/statDetails";
 import type { TelemetrySample } from "../../lib/telemetry";
 import { InfoDot } from "../shared/InfoDot";
 import { TelemetryChart, windowTail } from "../shared/TelemetryChart";
+import { useNow } from "../../hooks/useNow";
 import { SegmentedControl } from "../ui/segmented-control";
 import { SectionHeading } from "./DataRow";
 import { PER_DEVICE_GAP_MS, WINDOW_OPTIONS } from "./networkFormat";
@@ -25,8 +26,12 @@ export function DeviceThroughput({
   upMbps: number;
 }) {
   const [windowMinutes, setWindowMinutes] = useState(15);
+  const nowMs = useNow();
   // The hook retains 6h per device; the charts draw one window of it.
-  const chartHistory = useMemo(() => windowTail(history, windowMinutes), [history, windowMinutes]);
+  const chartHistory = useMemo(
+    () => windowTail(history, windowMinutes, nowMs),
+    [history, windowMinutes, nowMs],
+  );
 
   return (
     <>
