@@ -14,6 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "historian": "tsx server/historian.mts",
+    "seed:desktop": "node scripts/seed-desktop.mjs",
     "typecheck": "tsc -b",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
