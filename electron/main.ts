@@ -4,7 +4,7 @@
 // through the typed bridge in preload.ts: there is no localhost port, so nothing on
 // the machine but this app can reach the user's dish data or cloud session.
 
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, nativeImage } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { registerAppProtocolScheme, handleAppProtocol, APP_ENTRY_URL } from "./appProtocol";
@@ -26,7 +26,7 @@ function createWindow(): void {
     height: 860,
     // Below this the dashboard's tiles and charts stop being usable; the app's
     // responsive layout still adapts down to it.
-    minWidth: 820,
+    minWidth: 700,
     minHeight: 600,
     // The desktop window keeps this fixed title; the shared page <title> is the
     // neutral "Starlink Companion (Unofficial)" that the browser and extension use.
@@ -60,6 +60,12 @@ function createWindow(): void {
 }
 
 void app.whenReady().then(() => {
+  // An unpackaged run shows Electron's default icon; set ours on the macOS dock.
+  // A packaged build carries the icon in its bundle, so this only applies in dev.
+  if (process.platform === "darwin" && !app.isPackaged) {
+    const icon = nativeImage.createFromPath(join(here, "../build/icon.png"));
+    if (!icon.isEmpty()) app.dock?.setIcon(icon);
+  }
   handleAppProtocol(rendererRoot);
   createWindow();
 });
