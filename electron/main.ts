@@ -88,24 +88,24 @@ function createTray(): void {
   const image = nativeImage.createFromPath(iconPath);
   tray = new Tray(image.isEmpty() ? image : image.resize({ width: 18, height: 18 }));
   tray.setToolTip("DishyLink");
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: "Open DishyLink", click: showWindow },
-      { type: "separator" },
-      {
-        label: "Open at Login",
-        type: "checkbox",
-        checked: app.getLoginItemSettings().openAtLogin,
-        // openAsHidden starts it in the background (tray only) at boot.
-        click: (item) =>
-          app.setLoginItemSettings({ openAtLogin: item.checked, openAsHidden: true }),
-      },
-      { type: "separator" },
-      { label: "Quit DishyLink", role: "quit" },
-    ]),
-  );
-  // On Windows/Linux a tray click opens the window; on macOS it shows the menu.
+  const menu = Menu.buildFromTemplate([
+    { label: "Open DishyLink", click: showWindow },
+    { type: "separator" },
+    {
+      label: "Open at Login",
+      type: "checkbox",
+      checked: app.getLoginItemSettings().openAtLogin,
+      // openAsHidden starts it in the background (tray only) at boot.
+      click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked, openAsHidden: true }),
+    },
+    { type: "separator" },
+    { label: "Quit DishyLink", role: "quit" },
+  ]);
+  // Left click opens the app; right click shows the menu. Attaching the menu with
+  // setContextMenu would make a left click open the menu too (macOS), so it is
+  // popped up on right click instead.
   tray.on("click", showWindow);
+  tray.on("right-click", () => tray?.popUpContextMenu(menu));
 }
 
 /**
