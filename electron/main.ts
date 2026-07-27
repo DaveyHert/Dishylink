@@ -12,6 +12,11 @@ import { registerAppProtocolScheme, handleAppProtocol, APP_ENTRY_URL } from "./a
 const here = dirname(fileURLToPath(import.meta.url));
 const rendererRoot = join(here, "../dist");
 
+// Name the app before anything reads it — it drives the menu-bar title and the
+// per-app data directory. The macOS dock-hover tooltip comes from the bundle
+// itself, so it only reflects this once the app is packaged.
+app.setName("DishyLink");
+
 // Declaring the app:// scheme must happen before the app is ready, so it runs at
 // module load rather than inside whenReady.
 registerAppProtocolScheme();
