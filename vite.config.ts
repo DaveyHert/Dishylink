@@ -5,16 +5,37 @@ import { defineConfig } from "vitest/config";
 import { playwright } from "@vitest/browser-playwright";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import electron from "vite-plugin-electron/simple";
 import { starlinkCloudProxy } from "./dev/starlinkCloudProxy";
 
 interface OutgoingProxyRequest {
   removeHeader(headerName: string): void;
 }
 
+// The Electron host is opt-in per command (ELECTRON=1) so plain `vite` stays a
+// browser dev server — running the extension/browser build never launches a window.
+const withElectron = process.env.ELECTRON === "1";
+
 // The dish's grpc-web endpoint (port 9201) only allows CORS from its own
 // origin, so the dev server proxies it same-origin under /dishy.
-export default defineConfig({
-  plugins: [react(), tailwindcss(), starlinkCloudProxy()],
+export default defineConfig(({ command }) => ({
+  // A packaged Electron app loads the renderer from disk via loadFile, so its
+  // assets must be referenced relatively. The browser build and every dev server
+  // keep an absolute base.
+  base: withElectron && command === "build" ? "./" : "/",
+  plugins: [
+    react(),
+    tailwindcss(),
+    starlinkCloudProxy(),
+    ...(withElectron
+      ? [
+          electron({
+            main: { entry: "electron/main.ts" },
+            preload: { input: "electron/preload.ts" },
+          }),
+        ]
+      : []),
+  ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -114,4 +135,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));
