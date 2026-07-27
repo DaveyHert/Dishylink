@@ -58,7 +58,7 @@ const CONNECTION_DOT: Record<DishConnectionState, string> = {
 // Nav text button, read-only status readouts (divider-separated, no button feel),
 // and round icon button — repeated in the header.
 const navLink =
-  "cursor-pointer border-0 bg-transparent p-0 font-sans text-[14px] font-semibold text-[var(--ink-secondary)] transition-colors hover:text-foreground";
+  "cursor-pointer whitespace-nowrap border-0 bg-transparent p-0 font-sans text-[14px] font-semibold text-[var(--ink-secondary)] transition-colors hover:text-foreground";
 const statusItem =
   "inline-flex items-center gap-[7px] whitespace-nowrap text-[12.5px] font-medium text-[var(--ink-secondary)]";
 const statusDivider = "border-l border-[var(--baseline)] pl-2.5";

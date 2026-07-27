@@ -18,6 +18,9 @@ function createWindow(): void {
   const window = new BrowserWindow({
     width: 1280,
     height: 860,
+    // The desktop window keeps this fixed title; the shared page <title> is the
+    // neutral "Starlink Companion (Unofficial)" that the browser and extension use.
+    title: "DishyLink — Starlink Companion Desktop App (Unofficial)",
     // Paint nothing until the app has rendered, so there is no white flash.
     show: false,
     webPreferences: {
@@ -29,6 +32,9 @@ function createWindow(): void {
       sandbox: true,
     },
   });
+
+  // Keep the fixed window title above; without this the page's <title> replaces it.
+  window.on("page-title-updated", (event) => event.preventDefault());
 
   window.once("ready-to-show", () => window.show());
 
