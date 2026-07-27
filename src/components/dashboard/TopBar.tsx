@@ -16,7 +16,7 @@ import { SettingsIcon } from "../../assets/icons/SettingsIcon";
 import { MoonIcon } from "../../assets/icons/MoonIcon";
 import { SunIcon } from "../../assets/icons/SunIcon";
 import type { DishConnectionState } from "../../hooks/useDishTelemetry";
-import type { DishStatusJson } from "../../lib/dishClient";
+import type { DishStatusJson } from "@core/dishClient";
 import { formatUptime } from "../../lib/format";
 import { AlertsMenu } from "../alerts/AlertsMenu";
 import { AppLogo } from "../../assets/icons/AppLogo";

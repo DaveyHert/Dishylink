@@ -2,8 +2,8 @@
 // applies partial changes (only touched fields are written, via apply_* flags).
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DishClient, type DishConfigJson } from "../lib/dishClient";
-import { GrpcWebError } from "../lib/grpcWeb";
+import { DishClient, type DishConfigJson } from "@core/dishClient";
+import { GrpcWebError } from "@core/grpcWeb";
 
 export interface DishSettingsState {
   config: (DishConfigJson & Record<string, unknown>) | null;

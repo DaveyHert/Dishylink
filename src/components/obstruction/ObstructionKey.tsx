@@ -1,7 +1,7 @@
 // Legend and stat blocks under the dome. The standard card shows the obstruction
 // half; the immersive view adds the satellite entries and the live feed stats.
 
-import type { DishObstructionStatsJson } from "../../lib/dishClient";
+import type { DishObstructionStatsJson } from "@core/dishClient";
 import type { SatelliteFeed } from "../../hooks/useSatellites";
 import { StatLabel } from "../shared/InfoDot";
 

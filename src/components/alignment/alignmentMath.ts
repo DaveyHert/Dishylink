@@ -10,7 +10,7 @@
 // Kept apart from the instruments that draw it: this is the whole reason the
 // panel can say "aligned", and it is checkable without an SVG.
 
-import type { DishStatusJson } from "../../lib/dishClient";
+import type { DishStatusJson } from "@core/dishClient";
 import { resolveDishModel, specForModel } from "../../lib/dishMesh";
 
 export const DEG_TO_RAD = Math.PI / 180;

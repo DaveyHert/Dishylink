@@ -17,7 +17,7 @@ import {
   readJsonLines,
   writeJsonLinesAtomically,
 } from "./jsonLinesFile.mts";
-import type { TelemetrySample } from "../src/lib/telemetry.ts";
+import type { TelemetrySample } from "../core/telemetry.ts";
 
 export interface MinuteBucket {
   minute: number;

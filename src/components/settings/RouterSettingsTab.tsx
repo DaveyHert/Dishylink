@@ -8,7 +8,7 @@ import {
   DishClient,
   ROUTER_UNREACHABLE_MESSAGE,
   type WifiNetworkConfigJson,
-} from "../../lib/dishClient";
+} from "@core/dishClient";
 import { Badge } from "@/components/ui/badge";
 import { DangerAction, SectionLabel, SettingRow } from "./settingsChrome";
 

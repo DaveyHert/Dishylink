@@ -3,9 +3,10 @@
 // so the row, the node detail and the device detail all read a device the same
 // way rather than each deriving its own label.
 
-import { throughputMbps, type WifiClientJson } from "../../lib/dishClient";
+import { throughputMbps, type WifiClientJson } from "@core/dishClient";
+import { usageKey } from "@core/clientUsage";
 import { vendorForMac } from "../../lib/macVendor";
-import type { ThroughputRates } from "../../lib/throughputTracker";
+import type { ThroughputRates } from "@core/throughputTracker";
 
 /** Silence past this reads as idle. Live polling shows noDataIdleS bouncing
  *  between 1s and 5s on devices doing nothing but background chatter. */
@@ -68,7 +69,9 @@ export function liveThroughputMbps(
   client: WifiClientJson,
   rates: Map<string, ThroughputRates>,
 ): number {
-  const rate = client.macAddress ? rates.get(client.macAddress) : undefined;
+  const rate = client.macAddress
+    ? rates.get(usageKey(client.clientId, client.macAddress))
+    : undefined;
   if (rate) return rate.downMbps + rate.upMbps;
   return throughputMbps(client.rxStats) + throughputMbps(client.txStats);
 }

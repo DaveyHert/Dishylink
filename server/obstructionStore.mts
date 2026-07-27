@@ -1,18 +1,17 @@
 // Durable hourly snapshots of the dish's obstruction map, for the time-lapse.
 //
-// These used to live in the browser's localStorage, written by the dashboard's
-// dome as new maps arrived. That had three problems the historian does not:
+// Recorded here, by the service, rather than by the browser — which is what makes
+// the history worth showing. Three properties a tab cannot provide:
 //
-//   - it only recorded while a tab was open, so a day with the app closed left
-//     a hole in the history;
-//   - localStorage is per-browser and per-origin, so Chrome, Firefox and Safari
-//     each accumulated a separate, disagreeing history;
-//   - quota pressure capped it at 48 entries (~2 days).
+//   - it records whether or not anyone is looking, so a day with the app closed
+//     leaves no hole;
+//   - there is one history, not one per browser: localStorage is per-browser and
+//     per-origin, so Chrome, Firefox and Safari would each accumulate their own
+//     and disagree;
+//   - a week fits on disk, where a storage quota allowed roughly 48 entries.
 //
-// The historian already runs as a service and writes to disk, so it can record
-// on its own clock and keep a longer window. Cells are stored in the same packed
-// 2-bits-per-cell base64 the browser used, so the client's `unpackCells` and the
-// snapshot rendering path are unchanged.
+// Cells are packed 2 bits per cell as base64, the same shape the client's
+// `unpackCells` and the snapshot rendering path read.
 
 import {
   ensureParentDirectory,
@@ -29,7 +28,8 @@ export interface ObstructionSnapshot {
   maxThetaDeg?: number;
 }
 
-/** One snapshot an hour, matching what the browser used to record. */
+/** One snapshot an hour: obstruction maps change slowly, and a week of hourly
+ *  frames is a scrubber you can actually read. */
 export const SNAPSHOT_INTERVAL_MS = 3_600_000;
 
 /**

@@ -4,7 +4,7 @@
 // and the full sky view — because they read the same grid the same way and must
 // not drift into two answers about which cell is obstructed or which kit this is.
 
-import type { DishObstructionMapJson, DishStatusJson } from "../../lib/dishClient";
+import type { DishObstructionMapJson, DishStatusJson } from "@core/dishClient";
 import { dishModelFor } from "../../lib/dishMesh";
 import { unpackCells, type ObstructionSnapshot } from "../../lib/obstructionSnapshots";
 import { liveKindAtCell, snapshotKindAtCell } from "../obstruction/obstructionGrid";

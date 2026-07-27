@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { create, createFileRegistry, fromBinary, toBinary, toJson } from "@bufbuild/protobuf";
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { grpcWebUnaryCall, GrpcWebError } from "../src/lib/grpcWeb.ts";
+import { grpcWebUnaryCall, GrpcWebError } from "../core/grpcWeb.ts";
 
 const ROUTER_URL =
   process.env.ROUTER_URL ?? "http://192.168.1.1:9001/SpaceX.API.Device.Device/Handle";

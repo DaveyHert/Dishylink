@@ -13,7 +13,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { appendClientSamples, fetchPersistedClientHistory } from "./useRouterNetwork";
-import type { TelemetrySample } from "../lib/telemetry";
+import type { TelemetrySample } from "@core/telemetry";
 
 const MAC = "aa:bb:cc:dd:ee:ff";
 
@@ -32,9 +32,9 @@ describe("fetchPersistedClientHistory", () => {
   it("reports the newest sample it holds, so the first tail resumes past it", async () => {
     stubHistorian({
       samples: [
-        { macAddress: MAC, atMs: 1_000, downMbps: 1, upMbps: 0.1 },
-        { macAddress: MAC, atMs: 3_000, downMbps: 3, upMbps: 0.3 },
-        { macAddress: MAC, atMs: 2_000, downMbps: 2, upMbps: 0.2 },
+        { key: MAC, macAddress: MAC, atMs: 1_000, downMbps: 1, upMbps: 0.1 },
+        { key: MAC, macAddress: MAC, atMs: 3_000, downMbps: 3, upMbps: 0.3 },
+        { key: MAC, macAddress: MAC, atMs: 2_000, downMbps: 2, upMbps: 0.2 },
       ],
     });
 
@@ -63,7 +63,7 @@ describe("fetchPersistedClientHistory", () => {
     // not tail-able, so the tail must start from the full window, not from a
     // minute boundary that would skip the raw samples recorded since.
     stubHistorian({
-      history: [{ minute: 60, macAddress: MAC, downMbps: 4, upMbps: 1 }],
+      history: [{ minute: 60, key: MAC, macAddress: MAC, downMbps: 4, upMbps: 1 }],
       samples: [],
     });
 
@@ -104,12 +104,14 @@ describe("appendClientSamples", () => {
   it("replaces a touched series with a new array reference", () => {
     const history = new Map<string, TelemetrySample[]>();
     const before = appendClientSamples(history, [
-      { macAddress: MAC, atMs: 1_000, downMbps: 1, upMbps: 0.1 },
+      { key: MAC, macAddress: MAC, atMs: 1_000, downMbps: 1, upMbps: 0.1 },
     ]);
     const firstRef = history.get(MAC)!;
     expect(before).toBe(1_000);
 
-    appendClientSamples(history, [{ macAddress: MAC, atMs: 2_000, downMbps: 2, upMbps: 0.2 }]);
+    appendClientSamples(history, [
+      { key: MAC, macAddress: MAC, atMs: 2_000, downMbps: 2, upMbps: 0.2 },
+    ]);
     const secondRef = history.get(MAC)!;
 
     // A new reference is the whole fix — the memo downstream keys on it.
@@ -119,10 +121,14 @@ describe("appendClientSamples", () => {
 
   it("leaves an untouched device's array reference alone", () => {
     const history = new Map<string, TelemetrySample[]>();
-    appendClientSamples(history, [{ macAddress: "other", atMs: 1_000, downMbps: 1, upMbps: 0 }]);
+    appendClientSamples(history, [
+      { key: "other", macAddress: "other", atMs: 1_000, downMbps: 1, upMbps: 0 },
+    ]);
     const untouchedRef = history.get("other")!;
 
-    appendClientSamples(history, [{ macAddress: MAC, atMs: 2_000, downMbps: 2, upMbps: 0 }]);
+    appendClientSamples(history, [
+      { key: MAC, macAddress: MAC, atMs: 2_000, downMbps: 2, upMbps: 0 },
+    ]);
 
     expect(history.get("other")!).toBe(untouchedRef);
   });
@@ -147,8 +153,8 @@ describe("appendClientSamples", () => {
     ]);
     const originalRef = history.get(MAC)!;
     const newestMs = appendClientSamples(history, [
-      { macAddress: MAC, atMs: 1_000, downMbps: 1, upMbps: 0 },
-      { macAddress: MAC, atMs: 2_000, downMbps: 2, upMbps: 0 },
+      { key: MAC, macAddress: MAC, atMs: 1_000, downMbps: 1, upMbps: 0 },
+      { key: MAC, macAddress: MAC, atMs: 2_000, downMbps: 2, upMbps: 0 },
     ]);
 
     expect(newestMs).toBe(2_000);

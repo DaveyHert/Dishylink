@@ -12,7 +12,7 @@
 // firmware answers with Unimplemented. The flags are the whole signal.
 
 import { useEffect, useMemo, useState } from "react";
-import type { OutageEvent } from "../lib/telemetry";
+import type { OutageEvent } from "@core/telemetry";
 
 interface ThermalAlertSpec {
   /** Key on `alerts`, as emitted by the protobuf JSON mapping. */
@@ -66,11 +66,10 @@ interface ThermalEpisodeJson {
   endMs: number | null;
 }
 
-// Live thermal notifications used to live here (useThermalNotifications). They
-// were folded into useDeviceAlerts, which notifies on every notifiable alert on
-// both devices off the same live status — a superset. This file now only reads
-// the durable thermal log back for the event list. THERMAL_ALERTS stays: it maps
-// the historian's stored keys to the wording the event log shows.
+// History only: this reads the historian's durable thermal log back for the event
+// list. Live thermal alerting and its notifications belong to useDeviceAlerts,
+// which watches every notifiable alert on both devices off live status.
+// THERMAL_ALERTS maps the historian's stored keys to the event log's wording.
 
 /**
  * Thermal episodes from the historian's durable log, shaped as OutageEvents for

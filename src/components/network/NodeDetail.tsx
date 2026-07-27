@@ -5,7 +5,7 @@
 // empty). This shows what a node actually has: what it serves, and what it is.
 
 import type { RadioReading } from "../../hooks/useRadioTemps";
-import type { WifiNetworkConfigJson } from "../../lib/dishClient";
+import type { WifiNetworkConfigJson } from "@core/dishClient";
 import type { SelfIdentity } from "../../lib/selfIdentity";
 import { RouterIcon } from "../../assets/icons/RouterIcon";
 import { DataRow, SectionHeading } from "./DataRow";

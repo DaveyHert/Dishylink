@@ -10,7 +10,7 @@
 // of situations where a delta would lie and the tracker has to decline.
 
 import { describe, expect, it } from "vitest";
-import { ThroughputTracker } from "./throughputTracker";
+import { ThroughputTracker } from "@core/throughputTracker";
 
 const MAC = "aa:bb:cc:dd:ee:ff";
 const FALLBACK = { downMbps: 9, upMbps: 3 };

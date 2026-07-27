@@ -303,12 +303,31 @@ export function readRouterPingSuccessPercent(dropRate5M: number | undefined): nu
     : null;
 }
 
-/** Stitches ring-buffer polls into one continuous capped series. */
+/**
+ * Stitches ring-buffer polls into one continuous series holding a fixed span of
+ * clock.
+ *
+ * The span is real time, so a silence occupies room in the buffer: six hours of
+ * retention across a five-hour outage holds one hour of readings, and the
+ * outage is part of what those six hours have to say. Consumers window by
+ * timestamp, and a buffer measured the same way can never hand them more time
+ * than they asked for.
+ */
 export class TelemetryAccumulator {
   private samples: TelemetrySample[] = [];
   private newestCounter = 0;
 
-  constructor(private readonly maxSamples: number) {}
+  constructor(private readonly retentionMs: number) {}
+
+  /** Drop everything older than the retention span, measured back from the
+   *  newest sample held. A buffer seeded from a snapshot is entirely in the
+   *  past; measured back from Date.now() it would empty itself on restore. */
+  private trim(): void {
+    if (this.samples.length === 0) return;
+    const cutoffMs = this.samples[this.samples.length - 1].timestampMs - this.retentionMs;
+    const firstKept = this.samples.findIndex((sample) => sample.timestampMs >= cutoffMs);
+    if (firstKept > 0) this.samples = this.samples.slice(firstKept);
+  }
 
   /**
    * Backfill with previously persisted samples (from the historian service or
@@ -316,7 +335,8 @@ export class TelemetryAccumulator {
    */
   seed(persistedSamples: TelemetrySample[]): TelemetrySample[] {
     if (this.samples.length === 0 && persistedSamples.length > 0) {
-      this.samples = persistedSamples.slice(-this.maxSamples);
+      this.samples = [...persistedSamples];
+      this.trim();
     }
     return this.samples;
   }
@@ -364,9 +384,7 @@ export class TelemetryAccumulator {
     this.samples.push(...freshSamples);
     this.newestCounter = window.newestCounter;
 
-    if (this.samples.length > this.maxSamples) {
-      this.samples = this.samples.slice(this.samples.length - this.maxSamples);
-    }
+    this.trim();
     return this.samples;
   }
 }

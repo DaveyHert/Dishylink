@@ -14,8 +14,9 @@ interface StatTileProps {
   onOpenDetail?: () => void;
 }
 
-// Card shell + tile layout; the clickable variant is a button, so it carries the
-// reset (appearance/font/align) the old `button.card` rule used to supply.
+// Card shell + tile layout. The clickable variant is a real <button>, so it has to
+// undo what the browser gives buttons — appearance, font and text alignment — to
+// sit flush with the static tiles beside it.
 const tileBase = "flex min-w-0 flex-col gap-1 rounded-xl bg-card px-[17px] py-[15px]";
 const tileClickable =
   "cursor-pointer border-0 text-left text-inherit [appearance:none] [font:inherit] [transition:background_120ms_ease,transform_120ms_ease] hover:bg-secondary active:scale-[0.99]";

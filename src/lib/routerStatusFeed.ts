@@ -10,7 +10,7 @@
 // anything new that wants a router status reading subscribes here rather than
 // adding a poll.
 
-import { DishClient, type WifiStatusJson } from "./dishClient";
+import { DishClient, type WifiStatusJson } from "@core/dishClient";
 
 export interface RouterStatusSnapshot {
   /** The last reply. Kept through failures so alert state can caveat as stale

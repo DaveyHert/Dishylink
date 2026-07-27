@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import { createFileRegistry, fromBinary, toJson } from "@bufbuild/protobuf";
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { grpcWebUnaryCall } from "../src/lib/grpcWeb.ts";
+import { grpcWebUnaryCall } from "../core/grpcWeb.ts";
 
 const registry = createFileRegistry(
   fromBinary(FileDescriptorSetSchema, readFileSync("public/dish.protoset")),

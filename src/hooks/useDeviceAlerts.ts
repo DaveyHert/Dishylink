@@ -6,15 +6,15 @@
 // alerts from a light get_status poll this hook runs itself (5s). Neither goes
 // through the historian — the thing whose job is to warn you must not depend on
 // a background process that can die. Notifications fire from this live diff too,
-// which is why this replaces useThermalNotifications (a superset: all notifiable
-// alerts on both devices, not just the three thermal ones).
+// for every notifiable alert on both devices: one place decides what is worth
+// interrupting someone for, so no alert can be watched without being notifiable.
 //
 // The historian is only a historian. It records episodes so an alert that came
 // and went while no browser was open still shows up under History — and its own
 // health is surfaced as an alert (a dead-man's switch), never as a dependency.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { DishStatusJson } from "../lib/dishClient";
+import type { DishStatusJson } from "@core/dishClient";
 import { subscribeRouterStatus } from "../lib/routerStatusFeed";
 import type { DishConnectionState } from "./useDishTelemetry";
 import {

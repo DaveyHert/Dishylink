@@ -5,10 +5,10 @@
 //
 // Distinct from ui/dialog.tsx, which is the CENTERED dialog used by Settings.
 //
-// Built on Radix, which gives it what the hand-rolled version never had: focus trap,
-// focus restore on close, body scroll lock, and correct pointer-down/up outside
-// detection (the old one closed on ANY overlay click, so a drag that merely ended on
-// the backdrop dismissed it).
+// Built on Radix for the behaviour a modal has to get right and is easy to get
+// wrong: focus trap, focus restore on close, body scroll lock, and dismissal keyed
+// to where the pointer went DOWN — so a drag that merely ends on the backdrop
+// (selecting a reading, dragging a scrubber) does not close the panel.
 //
 // Exact values are enforced by details-modal.test.tsx. @keyframes rise lives in index.css.
 

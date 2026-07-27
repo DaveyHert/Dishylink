@@ -16,7 +16,7 @@ import type {
   DishObstructionMapJson,
   DishObstructionStatsJson,
   DishStatusJson,
-} from "../../lib/dishClient";
+} from "@core/dishClient";
 import { ObstructionDome } from "./ObstructionDome";
 import { ObstructionKey, ObstructionStats } from "./ObstructionKey";
 import { SkyControl } from "../satellite/SkyControl";

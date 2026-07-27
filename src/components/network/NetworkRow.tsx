@@ -6,7 +6,7 @@
 // disabled button — `.netrow-offline` was a parallel way of saying the same
 // thing, including a :hover rule whose only job was to cancel the base :hover.
 
-import type { WifiClientJson } from "../../lib/dishClient";
+import type { WifiClientJson } from "@core/dishClient";
 import { matchesSelf } from "../../lib/selfIdentity";
 import type { SelfIdentity } from "../../lib/selfIdentity";
 import { classifyDevice } from "../../lib/deviceKind";
@@ -27,6 +27,7 @@ export function NetworkRow({
   subIcon,
   sub,
   band,
+  paused,
   showChevron,
   disabled,
   highlight,
@@ -39,6 +40,9 @@ export function NetworkRow({
   subIcon?: React.ReactNode;
   sub: React.ReactNode;
   band?: React.ReactNode;
+  /** Shows a "Paused" tag left of the band chip when the device's internet is
+   *  blocked. */
+  paused?: boolean;
   showChevron?: boolean;
   disabled?: boolean;
   /** The viewer's own device — resting tint bumped so it reads as pinned, like
@@ -67,7 +71,14 @@ export function NetworkRow({
           {sub}
         </span>
       </span>
-      {band && <Badge className='flex-none'>{band}</Badge>}
+      {(paused || band) && (
+        // Grouped tight so the pair reads as one unit — [Paused][5 GHz] — rather
+        // than each taking the row's wider inter-item gap.
+        <span className='flex flex-none items-center gap-1.5'>
+          {paused && <Badge>Paused</Badge>}
+          {band && <Badge>{band}</Badge>}
+        </span>
+      )}
       {showChevron && (
         <span className='flex-none text-[18px] leading-none text-muted-foreground'>›</span>
       )}
@@ -94,8 +105,7 @@ export function deviceRowSubtitle(client: WifiClientJson, isSelf: boolean): Reac
 /**
  * A client device as a row: signal glyph leading, device-type glyph on the
  * subtitle, band chip trailing. The Devices tab and a node's "Connected devices"
- * list render exactly this, so they cannot drift apart — previously each spelled
- * the same five props out by hand.
+ * list both render exactly this, so a device looks the same wherever it is listed.
  */
 export function DeviceRow({
   client,
@@ -122,6 +132,7 @@ export function DeviceRow({
       }
       sub={deviceRowSubtitle(client, isSelf)}
       band={bandLabel(client)}
+      paused={client.blocked}
       highlight={isSelf}
       showChevron
       onClick={() => {

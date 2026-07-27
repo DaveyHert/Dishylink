@@ -1,8 +1,8 @@
 // The row of big numbers at the top of a detail panel: "10.5 Mbps / Average".
 //
-// StatDetailPanel had a private BigNumber for this; DataUsagePanel hand-rolled the same
-// markup three times. Both also placed the hairline dividers by hand — the row owns that
-// now, since "a divider between each pair" is the row's job, not the caller's.
+// One definition shared by every detail panel, dividers included: "a hairline
+// between each pair" is the row's job, not something each caller places by hand and
+// gets subtly differently.
 //
 // Exact values enforced by figure-row.test.tsx.
 

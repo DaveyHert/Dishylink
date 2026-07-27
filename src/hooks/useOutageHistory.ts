@@ -6,7 +6,7 @@
 // but only over the time the historian has been running.
 
 import { useEffect, useMemo, useState } from "react";
-import { canonicalCause, type OutageEvent } from "../lib/telemetry";
+import { canonicalCause, type OutageEvent } from "@core/telemetry";
 
 const REFRESH_MS = 30_000;
 

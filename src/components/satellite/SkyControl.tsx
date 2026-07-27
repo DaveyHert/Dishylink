@@ -8,11 +8,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 const roundControl =
   "inline-flex h-[30px] w-[30px] cursor-pointer items-center justify-center rounded-full " +
-  "border border-[#8b97a82e] bg-[#0a0e16b8] text-[13px] text-[#8b97a8] backdrop-blur-sm hover:text-[#c7d0dc]";
+  "border border-[#8b97a82e] bg-[#0a0e16b8] text-[13px] text-[#8b97a8] backdrop-blur-sm hover:text-[#c7d0dc] " +
+  "aria-pressed:border-[#c7d0dc59] aria-pressed:bg-[#161f2ecc] aria-pressed:text-[#e6ebf2]";
 
 /** One of the round controls over the sky. The label is both the tooltip and the
- *  accessible name, so the two can never drift apart; `pressed` marks the ones
- *  that are a state rather than an action. */
+ *  accessible name, so the two can never drift apart; `pressed` marks a control
+ *  that holds a state rather than firing an action, and lights it while on. */
 export function SkyControl({
   label,
   pressed,

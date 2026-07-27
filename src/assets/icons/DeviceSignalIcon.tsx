@@ -1,7 +1,7 @@
 // The leading glyph on a device row: wifi arcs scaled to signal quality, or an
 // Ethernet port for a wired client (which has no RSSI to show as arcs).
 
-import type { WifiClientJson } from "../../lib/dishClient";
+import type { WifiClientJson } from "@core/dishClient";
 import type { SignalQuality } from "../../components/network/networkFormat";
 
 /** Concentric wifi-arc glyph (like the official app): white/ink arcs, with the

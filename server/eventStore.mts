@@ -21,7 +21,7 @@ import {
   readJsonLines,
   writeJsonLinesAtomically,
 } from "./jsonLinesFile.mts";
-import { canonicalCause } from "../src/lib/telemetry.ts";
+import { canonicalCause } from "../core/telemetry.ts";
 
 export interface StoredEvent {
   startMs: number;

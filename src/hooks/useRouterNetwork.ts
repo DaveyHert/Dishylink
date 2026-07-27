@@ -4,10 +4,10 @@
 // surface (Network sheet or Settings modal) is open.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DishClient, type WifiClientJson, type WifiNetworkConfigJson } from "../lib/dishClient";
-import type { ThroughputRates } from "../lib/throughputTracker";
-import type { TelemetrySample } from "../lib/telemetry";
-import type { ClientUsageTotal } from "../lib/clientUsage";
+import { DishClient, type WifiClientJson, type WifiNetworkConfigJson } from "@core/dishClient";
+import type { ThroughputRates } from "@core/throughputTracker";
+import type { TelemetrySample } from "@core/telemetry";
+import { usageKey, type ClientUsageTotal } from "@core/clientUsage";
 
 // Roster only — names, signal, addresses, link rates. These change on the order
 // of minutes, so there is nothing to gain from asking faster.
@@ -40,7 +40,7 @@ function sameTotals(
 ): boolean {
   if (current.size !== next.length) return false;
   return next.every((total) => {
-    const held = current.get(total.macAddress);
+    const held = current.get(usageKey(total.clientId, total.macAddress));
     return (
       held !== undefined &&
       held.rxBytes === total.rxBytes &&
@@ -54,6 +54,9 @@ function sameTotals(
 
 interface ClientMinuteJson {
   minute: number;
+  /** Device key (clientId) — the historian attributes every row it serves, so
+   *  this is always set on the wire even though older stored rows lack it. */
+  key: string;
   macAddress: string;
   downMbps: number;
   upMbps: number;
@@ -61,6 +64,7 @@ interface ClientMinuteJson {
 
 /** One raw sample from the historian's 1 Hz window. */
 interface ClientSampleJson {
+  key: string;
   macAddress: string;
   atMs: number;
   downMbps: number;
@@ -108,17 +112,20 @@ export async function fetchPersistedClientHistory(): Promise<SeededClientHistory
     // first stretch after a historian restart, since the window is twice the
     // chart's span — fall back to the per-minute rows. Coarse beats a "no data"
     // band over time that was in fact recorded.
-    const oldestRawByMac = new Map<string, number>();
+    // Per device, not per MAC: devices sharing a masked MAC reach back different
+    // distances, and one floor for the group would suppress the others' rows and
+    // draw the gap as idle.
+    const oldestRawByKey = new Map<string, number>();
     for (const sample of samples) {
-      const known = oldestRawByMac.get(sample.macAddress);
-      if (known === undefined || sample.atMs < known) oldestRawByMac.set(sample.macAddress, sample.atMs);
+      const known = oldestRawByKey.get(sample.key);
+      if (known === undefined || sample.atMs < known) oldestRawByKey.set(sample.key, sample.atMs);
     }
 
     for (const row of payload.history ?? []) {
-      const rawStartsMs = oldestRawByMac.get(row.macAddress);
+      const rawStartsMs = oldestRawByKey.get(row.key);
       // Skip anything the raw window already covers, so the two never double-plot.
       if (rawStartsMs !== undefined && row.minute * 1000 >= rawStartsMs) continue;
-      const series = history.get(row.macAddress) ?? [];
+      const series = history.get(row.key) ?? [];
       series.push({
         timestampMs: row.minute * 1000,
         latencyMs: null,
@@ -129,11 +136,11 @@ export async function fetchPersistedClientHistory(): Promise<SeededClientHistory
         routerLatencyMs: null,
         routerPingSuccessPercent: null,
       });
-      history.set(row.macAddress, series);
+      history.set(row.key, series);
     }
 
     for (const sample of samples) {
-      const series = history.get(sample.macAddress) ?? [];
+      const series = history.get(sample.key) ?? [];
       series.push({
         timestampMs: sample.atMs,
         latencyMs: null,
@@ -144,7 +151,7 @@ export async function fetchPersistedClientHistory(): Promise<SeededClientHistory
         routerLatencyMs: null,
         routerPingSuccessPercent: null,
       });
-      history.set(sample.macAddress, series);
+      history.set(sample.key, series);
       if (sample.atMs > newestSampleMs) newestSampleMs = sample.atMs;
     }
     // The two tiers were appended in separate passes; the chart assumes order.
@@ -156,7 +163,7 @@ export async function fetchPersistedClientHistory(): Promise<SeededClientHistory
 }
 
 /**
- * Copy-on-write append of a batch of raw samples into the per-MAC history map.
+ * Copy-on-write append of a batch of raw samples into the per-device history map.
  * Returns the newest timestamp seen (0 if `fresh` is empty).
  *
  * Every series this batch touches is replaced with a NEW array. That matters
@@ -164,8 +171,8 @@ export async function fetchPersistedClientHistory(): Promise<SeededClientHistory
  * signal a change, and consumers read series by key: a series mutated in place
  * keeps its reference, so a `useMemo` keyed on it — the per-device chart's
  * `windowTail` — never recomputes and the chart freezes until the panel is
- * remounted. `touched` lets a second sample for the same MAC in one batch keep
- * appending to that fresh array instead of copying it again.
+ * remounted. `touched` lets a second sample for the same device in one batch
+ * keep appending to that fresh array instead of copying it again.
  */
 export function appendClientSamples(
   history: Map<string, TelemetrySample[]>,
@@ -174,13 +181,13 @@ export function appendClientSamples(
   const touched = new Set<string>();
   let newestMs = 0;
   for (const sample of fresh) {
-    const existing = history.get(sample.macAddress);
-    const series = touched.has(sample.macAddress)
+    const existing = history.get(sample.key);
+    const series = touched.has(sample.key)
       ? existing! // already this batch's fresh array
       : existing
         ? existing.slice()
         : [];
-    touched.add(sample.macAddress);
+    touched.add(sample.key);
     series.push({
       timestampMs: sample.atMs,
       latencyMs: null,
@@ -191,7 +198,7 @@ export function appendClientSamples(
       routerLatencyMs: null,
       routerPingSuccessPercent: null,
     });
-    history.set(sample.macAddress, series);
+    history.set(sample.key, series);
     if (sample.atMs > newestMs) newestMs = sample.atMs;
   }
   return newestMs;
@@ -217,7 +224,9 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
   const [clients, setClients] = useState<WifiClientJson[]>([]);
   const [wifiConfig, setWifiConfig] = useState<WifiNetworkConfigJson | null>(null);
   const [routerReachable, setRouterReachable] = useState<boolean | null>(null);
-  const [throughputHistory, setThroughputHistory] = useState<Map<string, TelemetrySample[]>>(new Map());
+  const [throughputHistory, setThroughputHistory] = useState<Map<string, TelemetrySample[]>>(
+    new Map(),
+  );
   const [rates, setRates] = useState<Map<string, ThroughputRates>>(new Map());
   const [totals, setTotals] = useState<Map<string, ClientUsageTotal>>(new Map());
   const ratesRef = useRef<Map<string, ThroughputRates>>(new Map());
@@ -302,7 +311,12 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
               setTotals((current) =>
                 sameTotals(current, nextTotals)
                   ? current
-                  : new Map(nextTotals.map((total) => [total.macAddress, total])),
+                  : new Map(
+                      nextTotals.map((total) => [
+                        usageKey(total.clientId, total.macAddress),
+                        total,
+                      ]),
+                    ),
               );
             }
             const fresh = payload.samples ?? [];
@@ -314,7 +328,7 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
             // Newest sample per device is the live reading the panel shows.
             const nextRates = new Map(ratesRef.current);
             for (const sample of fresh) {
-              nextRates.set(sample.macAddress, { downMbps: sample.downMbps, upMbps: sample.upMbps });
+              nextRates.set(sample.key, { downMbps: sample.downMbps, upMbps: sample.upMbps });
             }
             const cutoff = Date.now() - HISTORY_WINDOW_MS;
             for (const series of history.values()) {
@@ -353,7 +367,9 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
     await routerClient.setClientGivenName(macAddress, givenName, AbortSignal.timeout(10_000));
     // reflect immediately; the next poll confirms from the router
     setClients((current) =>
-      current.map((client) => (client.macAddress === macAddress ? { ...client, givenName } : client)),
+      current.map((client) =>
+        client.macAddress === macAddress ? { ...client, givenName } : client,
+      ),
     );
   }, []);
 

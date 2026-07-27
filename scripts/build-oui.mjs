@@ -23,11 +23,16 @@ function parseCsvLine(line) {
     const char = line[i];
     if (inQuotes) {
       if (char === '"') {
-        if (line[i + 1] === '"') { current += '"'; i++; } else inQuotes = false;
+        if (line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else inQuotes = false;
       } else current += char;
     } else if (char === '"') inQuotes = true;
-    else if (char === ",") { fields.push(current); current = ""; }
-    else current += char;
+    else if (char === ",") {
+      fields.push(current);
+      current = "";
+    } else current += char;
   }
   fields.push(current);
   return fields;
@@ -35,9 +40,14 @@ function parseCsvLine(line) {
 
 /** Trim common corporate suffixes so values read like the official app's short brand. */
 function tidyVendor(name) {
-  return name
-    .replace(/[,.]?\s+(Inc|Incorporated|Corp|Corporation|Co|Company|Ltd|Limited|LLC|GmbH|AG|S\.?A\.?|B\.?V\.?|Pty|Technologies|Technology|Electronics|Communications)\.?$/i, "")
-    .trim() || name.trim();
+  return (
+    name
+      .replace(
+        /[,.]?\s+(Inc|Incorporated|Corp|Corporation|Co|Company|Ltd|Limited|LLC|GmbH|AG|S\.?A\.?|B\.?V\.?|Pty|Technologies|Technology|Electronics|Communications)\.?$/i,
+        "",
+      )
+      .trim() || name.trim()
+  );
 }
 
 console.log(`Fetching ${OUI_CSV_URL} …`);
@@ -55,6 +65,18 @@ for (let i = 1; i < lines.length; i++) {
   if (hex6.length !== 6) continue;
   map[hex6] = tidyVendor(org.trim());
 }
+
+// Consumer-brand overrides applied after the IEEE parse (so they win). IEEE
+// lets a company withhold its name — it then lists as "Private" — and some
+// brands register under an OEM name. These map the OUI to the brand a user
+// recognizes. Govee (Shenzhen Intellirocks) hides two of its blocks as
+// "Private" and uses the Intellirocks name on a third.
+const BRAND_OVERRIDES = {
+  "6074f4": "Govee",
+  d0c907: "Govee",
+  d4adfc: "Govee",
+};
+Object.assign(map, BRAND_OVERRIDES);
 
 const count = Object.keys(map).length;
 writeFileSync(outPath, JSON.stringify(map));

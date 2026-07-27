@@ -7,14 +7,22 @@
 // last night is exactly the one you want to look up this morning.
 //
 // This records the same rates the panel polls, but from the always-on
-// historian, so the series exists whether or not anyone is looking. Keyed by MAC.
+// historian, so the series exists whether or not anyone is looking.
+//
+// Keyed by `key` — the device's clientId, the same key the odometer uses — not
+// by MAC. The router masks each client's MAC down to its vendor OUI, so three
+// Govee bulbs arrive as three roster entries wearing one MAC. Keyed by MAC they
+// were folded into a single row whose rate was the *sum* of all three, and every
+// one of them then drew that sum as its own chart.
+//
+// Rows written before per-device keying have no `key`. They are still the right
+// history for a device whose MAC only ever carried it, and meaningless for one
+// that shared — see `history`.
 //
 // Byte counters ride along for reference. They are cumulative *within an
-// association only* — the router restarts them when a device reconnects — and
-// for a cloned MAC they are the sum across that MAC's roster entries, so a
-// decrease can mean a reconnect or an entry leaving the roster. Nothing may
-// compute deltas from these rows: real totals come from the odometer, which
-// deltas per entry before it accumulates.
+// association only* — the router restarts them when a device reconnects — so a
+// decrease means a reconnect. Nothing may compute deltas from these rows: real
+// totals come from the odometer, which deltas per entry before it accumulates.
 
 import {
   appendJsonLines,
@@ -24,14 +32,16 @@ import {
 } from "./jsonLinesFile.mts";
 
 export interface ClientReading {
+  /** Identity: the router's clientId as a string, falling back to the MAC when it
+   *  reports none. Same shape as the odometer's key, so one lookup serves both. */
+  key: string;
   macAddress: string;
   /** Name the router reports, kept so history survives a device going away. */
   name?: string;
   downMbps: number;
   upMbps: number;
-  /** Cumulative since *this* association — resets when the device reconnects,
-   *  and summed across roster entries when devices share a cloned MAC. Reference
-   *  only; see the file comment. */
+  /** Cumulative since *this* association — resets when the device reconnects.
+   *  Reference only; see the file comment. */
   rxBytes: number;
   txBytes: number;
 }
@@ -39,6 +49,8 @@ export interface ClientReading {
 export interface ClientMinute {
   /** Epoch seconds at the minute's start. */
   minute: number;
+  /** Absent on rows written before per-device keying. */
+  key?: string;
   macAddress: string;
   name?: string;
   /** Mean rate over the minute. */
@@ -61,6 +73,7 @@ const RETENTION_HOURS = 6;
 
 interface PendingBucket {
   minute: number;
+  key: string;
   macAddress: string;
   name?: string;
   downSum: number;
@@ -103,6 +116,7 @@ export class ClientStore {
       if (bucket.minute >= minute) continue;
       completed.push({
         minute: bucket.minute,
+        key: bucket.key,
         macAddress: bucket.macAddress,
         name: bucket.name,
         downMbps: round3(bucket.downSum / Math.max(bucket.count, 1)),
@@ -116,10 +130,11 @@ export class ClientStore {
     }
     appendJsonLines(this.filePath, completed);
     for (const reading of readings) {
-      if (!reading.macAddress) continue;
-      const key = `${minute}:${reading.macAddress}`;
+      if (!reading.key) continue;
+      const key = `${minute}:${reading.key}`;
       const bucket = this.pending.get(key) ?? {
         minute,
+        key: reading.key,
         macAddress: reading.macAddress,
         name: reading.name,
         downSum: 0,
@@ -142,11 +157,17 @@ export class ClientStore {
     }
   }
 
-  /** Persisted rows from the last `hours`, oldest first. Optionally one device. */
-  history(hours: number, macAddress?: string): ClientMinute[] {
+  /**
+   * Persisted rows from the last `hours`, oldest first. Optionally one device.
+   *
+   * Rows written before per-device keying have no `key` and so match no device
+   * here. Attributing those is the caller's job — only it knows which MACs ever
+   * carried a group — see the `/api/clients` handler.
+   */
+  history(hours: number, key?: string): ClientMinute[] {
     const cutoffSec = Math.floor(Date.now() / 1000) - hours * 3_600;
     return this.readAll()
-      .filter((row) => row.minute >= cutoffSec && (!macAddress || row.macAddress === macAddress))
+      .filter((row) => row.minute >= cutoffSec && (!key || row.key === key))
       .sort((a, b) => a.minute - b.minute);
   }
 }

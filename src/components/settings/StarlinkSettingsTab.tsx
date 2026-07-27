@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { DishClient, DishStatusJson, SnowMeltMode } from "../../lib/dishClient";
+import type { DishClient, DishStatusJson, SnowMeltMode } from "@core/dishClient";
 import type { useDishSettings } from "../../hooks/useDishSettings";
 import {
   DangerAction,

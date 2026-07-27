@@ -2,7 +2,7 @@
 // outage bands, crosshair + tooltip. Samples are bucketed per pixel.
 
 import { useMemo, useRef, useState, useEffect, useCallback, useId } from "react";
-import type { TelemetrySample, OutageEvent } from "../../lib/telemetry";
+import type { TelemetrySample, OutageEvent } from "@core/telemetry";
 import { formatClockTime } from "../../lib/format";
 import {
   Crosshair,

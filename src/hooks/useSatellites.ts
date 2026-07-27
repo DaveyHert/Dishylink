@@ -7,7 +7,7 @@
 // the app at animation rate.
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import type { DishObstructionMapJson } from "../lib/dishClient";
+import type { DishObstructionMapJson } from "@core/dishClient";
 import {
   loadStarlinkTles,
   StarlinkTracker,

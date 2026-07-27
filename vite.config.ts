@@ -16,7 +16,10 @@ interface OutgoingProxyRequest {
 export default defineConfig({
   plugins: [react(), tailwindcss(), starlinkCloudProxy()],
   resolve: {
-    alias: { "@": path.resolve(__dirname, "./src") },
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+      "@core": path.resolve(__dirname, "./core"),
+    },
   },
   // satellite.js' wasm/pthreads build spawns Web Workers; Vite bundles workers
   // as iife by default, which can't do the top-level await that build uses.

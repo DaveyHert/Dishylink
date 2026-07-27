@@ -2,8 +2,8 @@
 // row it opens, and the failure message the router's write lock produces.
 
 import { useState } from "react";
-import { GrpcWebError } from "../../lib/grpcWeb";
-import type { WifiClientJson } from "../../lib/dishClient";
+import { GrpcWebError } from "@core/grpcWeb";
+import type { WifiClientJson } from "@core/dishClient";
 import { Input } from "@/components/ui/input";
 import { actionButton } from "../ui/action-button";
 import { PencilIcon } from "../../assets/icons/PencilIcon";

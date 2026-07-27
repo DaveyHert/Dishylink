@@ -19,7 +19,7 @@
 import { useState } from "react";
 import { expect, test, vi } from "vitest";
 import { render } from "vitest-browser-react";
-import type { DishObstructionMapJson, DishStatusJson } from "../../lib/dishClient";
+import type { DishObstructionMapJson, DishStatusJson } from "@core/dishClient";
 import type { SatelliteFeed } from "../../hooks/useSatellites";
 import type { SatelliteSky } from "../../lib/satellites";
 import { TooltipProvider } from "../ui/tooltip";

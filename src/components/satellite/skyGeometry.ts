@@ -327,7 +327,8 @@ export function buildCompass() {
 
   // Radial ticks (like the app's bezel), each is a short
   // quad pointing outward from the centre — quads because a 1px GL line can't be
-  // thickened. Whiter than the old ring (0.62 vs 0.4).
+  // thickened. Brighter than the horizon ring, so the bezel reads as instrument
+  // furniture rather than as part of the sky.
   const TICKS = 48;
   const R0 = 0.99,
     R1 = 1.05; // inner/outer radius of each tick
@@ -416,8 +417,8 @@ export function buildCompassLabels() {
  * contact points, so the lowest vertex is dropped to y = 0.
  *
  * `scale` exaggerates it above true size. The dish is genuinely tiny against a
- * sky dome, which reads fine at full size but disappears on a dashboard card —
- * so the small surface draws it larger on purpose, as the old 2D dome did.
+ * sky dome, which reads fine at full size but disappears on a dashboard card — so
+ * the small surface draws it larger on purpose, trading accuracy for legibility.
  */
 export function buildDish(model: DishModelMesh, survey: SkySurvey, scale = 1) {
   const mm = (0.5 * scale) / model.longAxisMm;

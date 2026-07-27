@@ -1,7 +1,7 @@
 // The Nodes tab's roster: the router plus every mesh node it has been paired
 // with, whether or not that node is currently up.
 
-import type { WifiClientJson, WifiNetworkConfigJson } from "../../lib/dishClient";
+import type { WifiClientJson, WifiNetworkConfigJson } from "@core/dishClient";
 
 /** One row of the Nodes tab: the router itself plus every mesh node it has been
  *  paired with, connected or not. */

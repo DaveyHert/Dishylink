@@ -1,10 +1,10 @@
 // The time-lapse's one source of obstruction history: the historian's store.
 //
-// These used to be written by whichever tab happened to be open, into that
-// browser's localStorage. The historian records them on its own clock instead,
-// so the history is the same in every browser, does not gap while the app is
-// closed, and keeps a week rather than the ~2 days a quota-capped localStorage
-// could hold. Both the dashboard's dome and the full-page sky view read here.
+// The historian records snapshots on its own clock and serves them from disk,
+// which is what makes the history trustworthy: identical in every browser, no gap
+// for the hours the app was closed, and a week deep rather than the ~2 days a
+// per-browser quota would allow. Both the dashboard's dome and the full-page sky
+// view read from here, so they can never show different histories.
 
 import { useEffect, useState } from "react";
 import { fetchSnapshots, type ObstructionSnapshot } from "../lib/obstructionSnapshots";

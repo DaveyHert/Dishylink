@@ -2,13 +2,14 @@
 // and its throughput charts.
 
 import { useState } from "react";
-import { throughputMbps, type WifiClientJson } from "../../lib/dishClient";
-import type { ClientUsageTotal } from "../../lib/clientUsage";
-import type { TelemetrySample } from "../../lib/telemetry";
-import type { ThroughputRates } from "../../lib/throughputTracker";
+import { throughputMbps, type WifiClientJson } from "@core/dishClient";
+import { usageKey, type ClientUsageTotal } from "@core/clientUsage";
+import type { TelemetrySample } from "@core/telemetry";
+import type { ThroughputRates } from "@core/throughputTracker";
 import { classifyDevice } from "../../lib/deviceKind";
 import { vendorForMac } from "../../lib/macVendor";
 import { DeviceTypeIcon } from "../../assets/icons/DeviceTypeIcon";
+import { Badge } from "../ui/badge";
 import { DeviceFactsList } from "./DeviceFactsList";
 import { DeviceNameEditor, RenameButton } from "./DeviceNameEditor";
 import { DeviceSignalIcon } from "../../assets/icons/DeviceSignalIcon";
@@ -44,7 +45,9 @@ export function DeviceDetail({
   const name = displayName(client);
   // Byte-delta rate, so the headline number matches a speed test instead of the
   // router's 60-second average of it. Falls back until the second reading lands.
-  const liveRate = client.macAddress ? rates.get(client.macAddress) : undefined;
+  const liveRate = client.macAddress
+    ? rates.get(usageKey(client.clientId, client.macAddress))
+    : undefined;
   const downMbps = liveRate?.downMbps ?? throughputMbps(client.rxStats);
   const upMbps = liveRate?.upMbps ?? throughputMbps(client.txStats);
 
@@ -58,41 +61,44 @@ export function DeviceDetail({
 
   return (
     <div>
-      <div className='relative mb-3.5 flex items-center gap-2.5'>
-        <DeviceTypeIcon
-          kind={classifyDevice(name)}
-          size={24}
-          className='flex-none text-[var(--ink-secondary)]'
-        />
-        {/* Signal glyph centred on the header row itself — not pinned to either
-            edge — so it reads as the device's headline state, the way the app
-            centres it. Absolute rather than a flex child because the row's true
-            midpoint must not move with the length of the name. */}
-        <span className='absolute left-1/2 top-0 flex -translate-x-1/2 flex-col items-center'>
+      {/* Three columns with equal 1fr flanks put the middle column on the row's
+          true midpoint regardless of the name's length, while the middle column
+          is a normal flow child — so a stacked "Paused" pill grows the row to fit
+          rather than spilling out of it. */}
+      <div className='mb-3.5 grid grid-cols-[1fr_auto_1fr] items-center gap-2.5'>
+        <div className='flex min-w-0 items-center gap-2.5'>
+          <DeviceTypeIcon
+            kind={classifyDevice(name)}
+            size={24}
+            className='flex-none text-[var(--ink-secondary)]'
+          />
+          <div className='min-w-0'>
+            <div className='flex items-center gap-2'>
+              <span className='truncate text-[18px] font-bold text-foreground'>{name}</span>
+              {!editing && <RenameButton onClick={() => setEditing(true)} />}
+            </div>
+            <div className='text-[11.5px] font-medium text-muted-foreground'>
+              {deviceRowSubtitle(client, isThisDevice)}
+            </div>
+          </div>
+        </div>
+        {/* Signal glyph, then the router's clientId, then a Paused pill — the
+            device's headline state, centred like the app. clientId is opaque and
+            uint32 (not a serial, not derived from the MAC) but stable across
+            re-associations. */}
+        <div className='flex flex-col items-center'>
           <span className='flex h-6 items-center'>
             <DeviceSignalIcon client={client} quality={quality} />
           </span>
-          {/* The router's own id for this client, sat under the glyph. Opaque and
-              uint32 — not a serial, and not derived from the MAC (crc32/FNV/djb2
-              over six spellings all miss) — but stable across re-associations,
-              so it identifies the device the way the app uses it. */}
           {client.clientId !== undefined && (
             <span className='font-mono text-[11px] tabular-nums text-muted-foreground/70'>
               {client.clientId}
             </span>
           )}
-        </span>
-        <div className='min-w-0 flex-1'>
-          {/* Capped short of the centred glyph so a long name truncates instead
-              of running underneath it. */}
-          <div className='flex max-w-[calc(50%-36px)] items-center gap-2'>
-            <span className='truncate text-[18px] font-bold text-foreground'>{name}</span>
-            {!editing && <RenameButton onClick={() => setEditing(true)} />}
-          </div>
-          <div className='text-[11.5px] font-medium text-muted-foreground'>
-            {deviceRowSubtitle(client, isThisDevice)}
-          </div>
+          {client.blocked && <Badge className='mt-1'>Paused</Badge>}
         </div>
+        {/* Empty flank balances the left one so the glyph column stays centred. */}
+        <div aria-hidden />
       </div>
 
       {editing && (

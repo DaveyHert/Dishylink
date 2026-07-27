@@ -7,7 +7,7 @@
 import { useMemo, useState } from "react";
 import { formatThroughputLabel, formatThroughputTick } from "../../lib/format";
 import { THROUGHPUT_SERIES } from "../../lib/statDetails";
-import type { TelemetrySample } from "../../lib/telemetry";
+import type { TelemetrySample } from "@core/telemetry";
 import { InfoDot } from "../shared/InfoDot";
 import { TelemetryChart, windowTail } from "../shared/TelemetryChart";
 import { useNow } from "../../hooks/useNow";

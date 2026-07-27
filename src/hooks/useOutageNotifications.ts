@@ -7,7 +7,7 @@
 import { useEffect, useRef } from "react";
 import type { DishTelemetry } from "./useDishTelemetry";
 import { sendNotification } from "../lib/notifications";
-import { outageEventLabel } from "../lib/telemetry";
+import { outageEventLabel } from "@core/telemetry";
 import { formatDurationMs } from "../lib/format";
 
 export function useOutageNotifications(telemetry: DishTelemetry): void {

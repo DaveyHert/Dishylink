@@ -30,8 +30,7 @@ export const ROUTER_LAN_ADDRESS = "192.168.1.1";
  * One wording for "we can't reach the router". The Network panel and Settings both
  * report this; they had drifted into two different sentences saying the same thing.
  */
-export const ROUTER_UNREACHABLE_MESSAGE =
-  `Couldn't reach the Starlink router at ${ROUTER_LAN_ADDRESS} — it may be in bypass mode or on a different subnet.`;
+export const ROUTER_UNREACHABLE_MESSAGE = `Couldn't reach the Starlink router at ${ROUTER_LAN_ADDRESS} — it may be in bypass mode or on a different subnet.`;
 
 // Oneof field numbers inside SpaceX.API.Device.Request (from the dish schema).
 const REQUEST_FIELD = {
@@ -283,7 +282,9 @@ function finiteMbps(value: number | "NaN" | undefined): number | null {
  * first value that is actually a number, since either may arrive as "NaN".
  */
 export function throughputMbps(stats: WifiClientStatsJson | undefined): number {
-  return finiteMbps(stats?.throughputMbpsLast1mAvg) ?? finiteMbps(stats?.throughputMbpsLast15sAvg) ?? 0;
+  return (
+    finiteMbps(stats?.throughputMbpsLast1mAvg) ?? finiteMbps(stats?.throughputMbpsLast15sAvg) ?? 0
+  );
 }
 
 export interface WifiClientJson {
@@ -316,6 +317,11 @@ export interface WifiClientJson {
   /** Seconds since the client last passed traffic. Omitted (proto3 drops zeros)
    *  while data is flowing, so `undefined` means "active right now". */
   noDataIdleS?: number;
+  /** True while the device is paused (its internet blocked). A manual pause is a
+   *  whole-week `_permanent` block schedule in its clientConfig; the router
+   *  surfaces the live effect here. Set from the app (LAN writes are denied), but
+   *  readable locally — see wifiConfig.clientConfigs[].weeklyBlockSchedules. */
+  blocked?: boolean;
   /** Do NOT render these: the router reports nonsense here (uploadMb reads
    *  ~3.7e9 "Mb" against 15 MB of rxStats.bytes). Real per-device totals live in
    *  rxStats.bytes / txStats.bytes. */
@@ -396,7 +402,8 @@ export class DishClient {
     const registry = createFileRegistry(fileDescriptorSet);
     const requestSchema = registry.getMessage("SpaceX.API.Device.Request");
     const responseSchema = registry.getMessage("SpaceX.API.Device.Response");
-    if (!requestSchema || !responseSchema) throw new Error("Device Request/Response missing from dish.protoset");
+    if (!requestSchema || !responseSchema)
+      throw new Error("Device Request/Response missing from dish.protoset");
     return new DishClient(
       target === "dish" ? DISH_HANDLE_URL : ROUTER_HANDLE_URL,
       requestSchema,
@@ -416,7 +423,9 @@ export class DishClient {
       abortSignal,
     );
     const responseMessage = fromBinary(this.responseSchema, responseBytes);
-    return toJson(this.responseSchema, responseMessage, { registry: this.registry }) as DishResponseJson;
+    return toJson(this.responseSchema, responseMessage, {
+      registry: this.registry,
+    }) as DishResponseJson;
   }
 
   async getStatus(abortSignal?: AbortSignal): Promise<DishStatusJson> {
@@ -434,11 +443,16 @@ export class DishClient {
   }
 
   async getDeviceInfo(abortSignal?: AbortSignal): Promise<DishDeviceInfoJson> {
-    return (await this.call(REQUEST_FIELD.getDeviceInfo, abortSignal)).getDeviceInfo?.deviceInfo ?? {};
+    return (
+      (await this.call(REQUEST_FIELD.getDeviceInfo, abortSignal)).getDeviceInfo?.deviceInfo ?? {}
+    );
   }
 
   async getObstructionMap(abortSignal?: AbortSignal): Promise<DishObstructionMapJson> {
-    return (await this.call(REQUEST_FIELD.dishGetObstructionMap, abortSignal)).dishGetObstructionMap ?? {};
+    return (
+      (await this.call(REQUEST_FIELD.dishGetObstructionMap, abortSignal)).dishGetObstructionMap ??
+      {}
+    );
   }
 
   /**
@@ -452,7 +466,9 @@ export class DishClient {
 
   /** Connected clients — meaningful on the ROUTER target. */
   async getWifiClients(abortSignal?: AbortSignal): Promise<WifiClientJson[]> {
-    return (await this.call(REQUEST_FIELD.wifiGetClients, abortSignal)).wifiGetClients?.clients ?? [];
+    return (
+      (await this.call(REQUEST_FIELD.wifiGetClients, abortSignal)).wifiGetClients?.clients ?? []
+    );
   }
 
   /** Reboot this device (dish or router). Drops connectivity for a few minutes. */
@@ -469,20 +485,29 @@ export class DishClient {
   // ---------- schema-encoded requests (config writes and richer payloads) ----------
 
   /** Encode a full Request from proto3 JSON via the bundled schema. */
-  private async callJson(requestJson: Record<string, unknown>, abortSignal?: AbortSignal): Promise<DishResponseJson> {
-    const requestMessage = fromJson(this.requestSchema, requestJson as JsonValue, { registry: this.registry });
+  private async callJson(
+    requestJson: Record<string, unknown>,
+    abortSignal?: AbortSignal,
+  ): Promise<DishResponseJson> {
+    const requestMessage = fromJson(this.requestSchema, requestJson as JsonValue, {
+      registry: this.registry,
+    });
     const responseBytes = await grpcWebUnaryCall(
       this.handleUrl,
       toBinary(this.requestSchema, requestMessage),
       abortSignal,
     );
     const responseMessage = fromBinary(this.responseSchema, responseBytes);
-    return toJson(this.responseSchema, responseMessage, { registry: this.registry }) as DishResponseJson;
+    return toJson(this.responseSchema, responseMessage, {
+      registry: this.registry,
+    }) as DishResponseJson;
   }
 
   /** Current dish configuration (sleep schedule, snow melt, update window …). */
   async getConfig(abortSignal?: AbortSignal): Promise<DishConfigJson & Record<string, unknown>> {
-    return (await this.call(REQUEST_FIELD.dishGetConfig, abortSignal)).dishGetConfig?.dishConfig ?? {};
+    return (
+      (await this.call(REQUEST_FIELD.dishGetConfig, abortSignal)).dishGetConfig?.dishConfig ?? {}
+    );
   }
 
   /**
@@ -511,11 +536,20 @@ export class DishClient {
 
   /** Router WiFi configuration (SSID, channels, mesh) — ROUTER target. */
   async getWifiConfig(abortSignal?: AbortSignal): Promise<WifiNetworkConfigJson> {
-    return (await this.call(REQUEST_FIELD.wifiGetConfig, abortSignal)).wifiGetConfig?.wifiConfig ?? {};
+    return (
+      (await this.call(REQUEST_FIELD.wifiGetConfig, abortSignal)).wifiGetConfig?.wifiConfig ?? {}
+    );
   }
 
   /** Rename a client device (persists in the router) — ROUTER target. */
-  async setClientGivenName(macAddress: string, givenName: string, abortSignal?: AbortSignal): Promise<void> {
-    await this.callJson({ wifiSetClientGivenName: { clientName: { macAddress, givenName } } }, abortSignal);
+  async setClientGivenName(
+    macAddress: string,
+    givenName: string,
+    abortSignal?: AbortSignal,
+  ): Promise<void> {
+    await this.callJson(
+      { wifiSetClientGivenName: { clientName: { macAddress, givenName } } },
+      abortSignal,
+    );
   }
 }

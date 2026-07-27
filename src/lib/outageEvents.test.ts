@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canonicalCause, outageEventMeta } from "./telemetry";
+import { canonicalCause, outageEventMeta } from "@core/telemetry";
 import { formatEventDuration } from "./format";
 
 describe("canonicalCause", () => {

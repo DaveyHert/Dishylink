@@ -1,12 +1,9 @@
 // The app's pill vocabulary, in one place.
 //
-// This file used to hold shadcn's stock Badge, which nothing imported: it is
-// built on primary/secondary theme tokens, and this app speaks in --ink /
-// --baseline / --status-* CSS variables with mono, tabular type. So every
-// surface hand-rolled its own pill instead, and they drifted — the band chip on
-// a network row and the band chip in Settings were the same pill written twice,
-// at 10px and 10.5px, one using `text-[var(--x)]` and the other
-// `text-[color:var(--x)]`.
+// Not shadcn's stock Badge, which is built on primary/secondary theme tokens:
+// this app speaks in --ink / --baseline / --status-* with mono, tabular type. One
+// definition per pill shape, so the same chip on two surfaces cannot drift apart
+// in size or in how it names a colour.
 //
 // Three shapes cover every use:
 //   spec   — a machine fact: band, firmware, hardware, auth state

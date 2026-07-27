@@ -3,7 +3,7 @@
 // ported 1:1 from their web app (AlignmentInstruments.tsx); what lives here is
 // the sheet that arranges them.
 
-import type { DishStatusJson } from "../../lib/dishClient";
+import type { DishStatusJson } from "@core/dishClient";
 import { formatActuatorState, formatAttitudeState, formatHasActuators } from "../../lib/format";
 import { Explainer } from "../ui/explainer";
 import { FactColumn, FactColumns, FactRow } from "../ui/fact-row";

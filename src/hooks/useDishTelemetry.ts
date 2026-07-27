@@ -8,8 +8,8 @@ import {
   type DishDeviceInfoJson,
   type DishObstructionMapJson,
   type DishLocationJson,
-} from "../lib/dishClient";
-import { GrpcWebError } from "../lib/grpcWeb";
+} from "@core/dishClient";
+import { GrpcWebError } from "@core/grpcWeb";
 import { subscribeRouterStatus } from "../lib/routerStatusFeed";
 import {
   TelemetryAccumulator,
@@ -19,7 +19,7 @@ import {
   type TelemetrySample,
   type OutageEvent,
   type RouterReadings,
-} from "../lib/telemetry";
+} from "@core/telemetry";
 
 /**
  * Backfill from the always-on historian so a page reload never resets the
@@ -50,7 +50,7 @@ const STATUS_POLL_MS = 1_000;
 const HISTORY_POLL_MS = 1_000;
 const OBSTRUCTION_POLL_MS = 30_000;
 const LOCATION_RETRY_MS = 60_000; // picks up the app-side toggle without a reload
-const MAX_ACCUMULATED_SAMPLES = 6 * 3_600; // keep up to six hours
+const SAMPLE_RETENTION_MS = 6 * 3_600_000; // keep six hours of clock, gaps included
 
 export type DishConnectionState = "connecting" | "online" | "unreachable";
 
@@ -80,7 +80,7 @@ export function useDishTelemetry(): DishTelemetry {
   const [obstructionMap, setObstructionMap] = useState<DishObstructionMapJson | null>(null);
   const [dishLocation, setDishLocation] = useState<DishLocationJson | null>(null);
   const [locationDenied, setLocationDenied] = useState(false);
-  const accumulatorRef = useRef(new TelemetryAccumulator(MAX_ACCUMULATED_SAMPLES));
+  const accumulatorRef = useRef(new TelemetryAccumulator(SAMPLE_RETENTION_MS));
 
   useEffect(() => {
     let disposed = false;

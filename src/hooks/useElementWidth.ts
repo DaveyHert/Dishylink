@@ -22,9 +22,9 @@ export function useElementWidth<T extends HTMLElement>(): [React.RefObject<T | n
 }
 
 /**
- * Label every Nth bar, skipping only as many as the width actually forces.
- * Ranges whose labels fit get all of them — the old fixed "at most 8" hid
- * labels there was room for.
+ * Label every Nth bar, skipping only as many as the width actually forces. A
+ * range whose labels all fit gets all of them — the stride is measured, never a
+ * fixed cap, so no label is hidden while there is room for it.
  */
 export function labelStride(containerWidth: number, barCount: number, labelPx: number): number {
   if (barCount === 0 || containerWidth === 0) return 1;

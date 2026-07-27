@@ -3,10 +3,10 @@
 //
 // The geometry itself lives in components/satellite/dishModels — one baked mesh
 // per kit, converted from the manufacturer's own exports, which is what the sky
-// dome draws. This file no longer generates any: it grew a panel procedurally
-// from published dimensions until the baked models replaced it.
+// dome draws. Nothing here builds geometry; it resolves identity and mount facts
+// only.
 
-import type { DishStatusJson } from "./dishClient";
+import type { DishStatusJson } from "@core/dishClient";
 
 /** The kit models SpaceX's own web app distinguishes (their `zl`). One id per
  *  model, resolved once, so geometry and alignment can't disagree about which
@@ -85,9 +85,9 @@ export interface DishModelSpec {
   defaultTiltDeg: number;
 }
 
-// defaultTiltDeg is from the dish web app's own model table. Panel dimensions
-// used to sit here to grow the mesh procedurally; each baked model in dishModels
-// now carries its own, measured off the export it was converted from.
+// defaultTiltDeg is from the dish web app's own model table. Panel dimensions are
+// not here: each baked model in dishModels carries its own, measured off the export
+// it was converted from, so the mesh and its dimensions cannot disagree.
 const MODEL_SPECS: Record<DishModel, DishModelSpec> = {
   rev4Standard: { displayName: "Standard 4", mount: "kickstand", defaultTiltDeg: 20 },
   rev5Standard: { displayName: "Starlink V5", mount: "kickstand", defaultTiltDeg: 13 },
@@ -103,8 +103,9 @@ const MODEL_SPECS: Record<DishModel, DishModelSpec> = {
   // Flat like the Performance kits it is built from, so it clears the 8° bar and
   // may aim to zenith — right for a terminal that spends its life level.
   aviation: { displayName: "Aviation", mount: "flat", defaultTiltDeg: 0 },
-  // Mount and tilt match the Standard, whose body stands in for it, so alignment
-  // behaves exactly as the old fallback did — only the name stops guessing.
+  // Mount and tilt match the Standard, whose body stands in for it: unrecognised
+  // hardware gets the commonest kit's alignment limits, and a name that admits it
+  // is a guess rather than asserting a model.
   unknown: { displayName: "Unknown Model", mount: "kickstand", defaultTiltDeg: 20 },
 };
 

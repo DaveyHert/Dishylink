@@ -1,16 +1,13 @@
 // Rolling window of raw per-device throughput samples, one per second.
 //
-// The companion to ClientStore, and the reason the per-device chart can be dense
-// the moment it opens. ClientStore folds every sample into a per-minute bucket
-// at ingest — right for its 6h window, but it means a 15-minute chart drawn from
-// it has ~15 points. The browser used to make up the difference by sampling the
-// router itself, which only produced detail for the stretch someone happened to
-// be watching, and left the rest coarse.
+// The companion to ClientStore, and the reason the per-device chart is dense the
+// moment it opens rather than filling in as you watch. ClientStore folds every
+// sample into a per-minute bucket at ingest — right for its 6h window, but it
+// leaves a 15-minute chart with ~15 points to draw.
 //
-// This keeps the samples unaggregated for a short window instead, exactly as the
-// historian already does for dish telemetry (SAMPLE_WINDOW_SECONDS + the
-// samples.json snapshot). Two tiers, same as the dish: full resolution recently,
-// per-minute further back.
+// So samples stay unaggregated here for a short window: two tiers, the same shape
+// the historian uses for dish telemetry (SAMPLE_WINDOW_MS + the samples.json
+// snapshot) — full resolution recently, per-minute further back.
 //
 // In memory plus a periodic snapshot, not an append log: the window is small,
 // every sample expires within the hour, and a torn tail costs at most a restart's
@@ -21,6 +18,9 @@ import { ensureParentDirectory, writeJsonAtomically } from "./jsonLinesFile.mts"
 import type { ClientReading } from "./clientStore.mts";
 
 export interface ClientSample {
+  /** Device identity — clientId, matching ClientReading. Absent only on samples
+   *  restored from a snapshot written before per-device keying. */
+  key?: string;
   macAddress: string;
   /** Epoch milliseconds. */
   atMs: number;
@@ -38,8 +38,14 @@ function round(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
 
+/** The map bucket a sample lives in: its device key, or — for samples restored
+ *  from a pre-keying snapshot — the MAC, which is what a legacy lookup asks for. */
+function seriesKey(sample: ClientSample): string {
+  return sample.key ?? sample.macAddress;
+}
+
 export class ClientWindow {
-  private byMac = new Map<string, ClientSample[]>();
+  private series = new Map<string, ClientSample[]>();
 
   constructor(private readonly filePath: string) {
     ensureParentDirectory(filePath);
@@ -60,19 +66,21 @@ export class ClientWindow {
     const cutoffMs = nowMs - WINDOW_MS;
     for (const sample of samples) {
       if (sample.atMs < cutoffMs) continue;
-      const series = this.byMac.get(sample.macAddress) ?? [];
+      const key = seriesKey(sample);
+      const series = this.series.get(key) ?? [];
       series.push(sample);
-      this.byMac.set(sample.macAddress, series);
+      this.series.set(key, series);
     }
-    for (const series of this.byMac.values()) series.sort((a, b) => a.atMs - b.atMs);
+    for (const series of this.series.values()) series.sort((a, b) => a.atMs - b.atMs);
   }
 
   /** Record one poll's readings and drop whatever has aged out. */
   ingest(readings: ClientReading[], nowMs: number): void {
     const cutoffMs = nowMs - WINDOW_MS;
     for (const reading of readings) {
-      const series = this.byMac.get(reading.macAddress) ?? [];
+      const series = this.series.get(reading.key) ?? [];
       series.push({
+        key: reading.key,
         macAddress: reading.macAddress,
         atMs: nowMs,
         downMbps: round(reading.downMbps),
@@ -81,28 +89,31 @@ export class ClientWindow {
       // Samples arrive in time order, so the expired ones are always a prefix.
       let firstLive = 0;
       while (firstLive < series.length && series[firstLive].atMs < cutoffMs) firstLive++;
-      this.byMac.set(reading.macAddress, firstLive > 0 ? series.slice(firstLive) : series);
+      this.series.set(reading.key, firstLive > 0 ? series.slice(firstLive) : series);
     }
     // A device that has gone away stops being written to, so its series would
     // otherwise sit at full length forever.
-    for (const [macAddress, series] of this.byMac) {
-      if (series.length > 0 && series[series.length - 1].atMs < cutoffMs)
-        this.byMac.delete(macAddress);
+    for (const [key, series] of this.series) {
+      if (series.length > 0 && series[series.length - 1].atMs < cutoffMs) this.series.delete(key);
     }
   }
 
   /**
-   * Samples oldest first; all devices when `macAddress` is absent.
+   * Samples oldest first; all devices when `key` is absent.
+   *
+   * Samples restored from a pre-keying snapshot carry no `key` and sit under
+   * their MAC, so they come back only in the unfiltered call — the one the
+   * `/api/clients` handler makes, which is where they get attributed.
    *
    * `sinceMs` returns only what is newer, so a caller polling every second asks
    * for the whole window once and then a handful of samples per request instead
    * of re-sending thirty minutes of history each time.
    */
-  samples(macAddress?: string, sinceMs?: number): ClientSample[] {
+  samples(key?: string, sinceMs?: number): ClientSample[] {
     const cutoffMs = Math.max(Date.now() - WINDOW_MS, sinceMs ?? 0);
-    const series = macAddress
-      ? (this.byMac.get(macAddress) ?? [])
-      : [...this.byMac.values()].flat().sort((a, b) => a.atMs - b.atMs);
+    const series = key
+      ? (this.series.get(key) ?? [])
+      : [...this.series.values()].flat().sort((a, b) => a.atMs - b.atMs);
     return series.filter((sample) => sample.atMs > cutoffMs);
   }
 

@@ -9,7 +9,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import { DishClient, type DishStatusJson, type WifiNetworkConfigJson } from "../../lib/dishClient";
+import { DishClient, type DishStatusJson, type WifiNetworkConfigJson } from "@core/dishClient";
 import { useDishSettings } from "../../hooks/useDishSettings";
 import { specForHardware } from "../../lib/dishMesh";
 import { RouterSettingsTab } from "./RouterSettingsTab";

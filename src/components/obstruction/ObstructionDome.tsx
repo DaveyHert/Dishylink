@@ -9,7 +9,7 @@
 // area and floats its chrome on top, so the sky reaches every edge.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { DishObstructionMapJson, DishStatusJson } from "../../lib/dishClient";
+import type { DishObstructionMapJson, DishStatusJson } from "@core/dishClient";
 import { createSkyScene, type SkyScene } from "../satellite/skyScene";
 import { liveSurvey } from "../satellite/skySurvey";
 import { useDomeTrim } from "../../hooks/useDomeTrim";
@@ -27,7 +27,7 @@ const CARD_DISTANCE = 3.6;
 /**
  * The dish, drawn well above true size. At true scale it is a speck under the
  * dome — correct, and invisible at this size — so the card exaggerates it into
- * something you can recognise, the way the old 2D dome did.
+ * something you can recognise at a glance.
  */
 const CARD_DISH_SCALE = 1.5;
 

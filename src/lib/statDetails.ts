@@ -4,8 +4,8 @@
 
 import type { ChartSeries } from "../components/shared/TelemetryChart";
 import type { StatDetail } from "../components/dashboard/StatDetailPanel";
-import type { TelemetrySample, OutageEvent } from "./telemetry";
-import type { DishStatusJson } from "./dishClient";
+import type { TelemetrySample, OutageEvent } from "@core/telemetry";
+import type { DishStatusJson } from "@core/dishClient";
 import { formatThroughput, formatThroughputLabel, formatThroughputTick } from "./format";
 
 export const THROUGHPUT_SERIES: ChartSeries[] = [
@@ -110,25 +110,41 @@ export function averageOf(
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-/** Energy in kWh, integrating power over the samples (≈1s each): ΣW·s ÷ 3.6M. */
-export function energyKWh(samples: TelemetrySample[]): number {
-  const wattSeconds = samples.reduce((sum, sample) => sum + (sample.powerW ?? 0), 0);
-  return wattSeconds / 3_600_000;
-}
-
 /** A step longer than this is an outage, not a missed reading: the dish's ring
  *  advances at 1 Hz, so a few dropped samples still count as covered time. */
 const COVERAGE_GAP_MS = 5_000;
 
 /**
+ * Energy in kWh: ΣW·Δt, with Δt taken from the timestamps.
+ *
+ * The cadence belongs to the dish's firmware, not to this code, so it is read
+ * per step rather than held as a constant here. A cadence that shifted would
+ * scale every figure by the same wrong ratio while every figure went on looking
+ * entirely reasonable.
+ *
+ * A step long enough to be an outage contributes nothing. The dish drew power
+ * through it, but none of that was measured, and the one stretch nothing is
+ * known about is the last place to put a number.
+ */
+export function energyKWh(samples: TelemetrySample[]): number {
+  let wattMilliseconds = 0;
+  for (let index = 1; index < samples.length; index++) {
+    const stepMs = samples[index].timestampMs - samples[index - 1].timestampMs;
+    if (stepMs <= 0 || stepMs > COVERAGE_GAP_MS) continue;
+    wattMilliseconds += (samples[index - 1].powerW ?? 0) * stepMs;
+  }
+  return wattMilliseconds / 3_600_000_000;
+}
+
+/**
  * How much of the window was actually recorded.
  *
- * Coverage is the sum of the steps between readings, not the span from the
- * first to the last. Span counts an outage as if it were measured — a window
- * with a ten-minute hole in the middle spans its full width and would read as
- * fully covered. Summing steps and dropping the ones too long to be readings
- * leaves only time the dish was actually observed, at either edge or between.
- * Phrased like the historian-backed note beside it, so the two read alike.
+ * Coverage is the sum of the steps between readings, with steps too long to be
+ * readings dropped. What survives is time the dish was actually observed,
+ * wherever in the window it falls. The width from the first reading to the last
+ * cannot tell a full window from one with a ten-minute hole in the middle —
+ * both measure the same across. Phrased like the historian-backed note beside
+ * it, so the two read alike.
  */
 export function coverageNote(slice: TelemetrySample[], windowMinutes: number): string {
   // No readings in the window at all — the dish has been silent for longer than
@@ -150,8 +166,12 @@ export function coverageNote(slice: TelemetrySample[], windowMinutes: number): s
 export interface StatDetailInputs {
   status: DishStatusJson | null;
   currentPowerW: number;
-  /** Mean drop rate over the last minute, matching the tile's own readout. */
-  recentDropRate: number;
+  /** Pings answered over the last minute, as a percentage, matching the tile's
+   *  own readout. Success rather than the drop rate it derives from: a minute
+   *  with no readings in it averages to zero drops, and zero drops reads as 100%
+   *  answered — a perfect score at the moment the dish is unreachable. Derived
+   *  once by the caller so no surface has to remember that on its own. */
+  recentPingSuccessPercent: number;
   outageEvents: OutageEvent[];
 }
 
@@ -162,7 +182,7 @@ export interface StatDetailInputs {
 export function buildStatDetails({
   status,
   currentPowerW,
-  recentDropRate,
+  recentPingSuccessPercent,
   outageEvents,
 }: StatDetailInputs): Record<string, StatDetail> {
   return {
@@ -199,7 +219,7 @@ export function buildStatDetails({
     },
     pingSuccess: {
       label: "Ping success",
-      current: (1 - recentDropRate) * 100,
+      current: recentPingSuccessPercent,
       formatBig: (value) => ({ value: value.toFixed(2), unit: "%" }),
       series: PING_SUCCESS_SERIES,
       formatValue: (value) => `${value.toFixed(2)} %`,

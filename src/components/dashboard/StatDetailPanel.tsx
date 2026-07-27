@@ -13,7 +13,7 @@ import { EnergyHistoryPanel } from "./EnergyHistoryPanel";
 import { averageOf, energyKWh, coverageNote } from "../../lib/statDetails";
 import { useEnergyHistory, type EnergyRange } from "../../hooks/useEnergyHistory";
 import { useNow } from "../../hooks/useNow";
-import type { TelemetrySample, OutageEvent } from "../../lib/telemetry";
+import type { TelemetrySample, OutageEvent } from "@core/telemetry";
 import { SegmentedControl } from "../ui/segmented-control";
 import { Explainer } from "../ui/explainer";
 import { EmptyState } from "../ui/empty-state";
@@ -122,9 +122,6 @@ export function StatDetailPanel({ detail, samples }: StatDetailPanelProps) {
     historianRange && !energyHistory.unavailable && energyHistory.data,
   );
   const displayEnergyKWh = useHistorianEnergy ? energyHistory.data!.totalKWh : windowEnergy;
-  // A persisted total stands on its own; the live-sample integral needs samples
-  // in the window to mean anything.
-  const hasWindowReadings = useHistorianEnergy || windowed.length > 0;
   const energyNote = useHistorianEnergy
     ? energyHistory.data!.coverage.fraction >= 0.95
       ? "over the selected window"
@@ -168,10 +165,7 @@ export function StatDetailPanel({ detail, samples }: StatDetailPanelProps) {
   ];
 
   const current = detail.formatBig(detail.current);
-  // A dish silent for longer than the window leaves nothing inside it, and
-  // averageOf answers 0 for an empty set. "0 W" is a reading: it would say the
-  // dish drew nothing, when what happened is that nothing was measured.
-  const average = windowed.length > 0 ? detail.formatBig(averageValue) : { value: "—", unit: "" };
+  const average = detail.formatBig(averageValue);
 
   return (
     <>
@@ -257,13 +251,9 @@ export function StatDetailPanel({ detail, samples }: StatDetailPanelProps) {
 
       {detail.showWindowEnergy && (
         <div className='mt-3.5 rounded-lg bg-[color-mix(in_srgb,var(--ink)_5%,var(--surface))] px-[15px] py-[13px]'>
-          {/* An integral over no samples is 0, which reads as "the dish used no
-              power" rather than "nothing was measured". The note underneath
-              carries the reason either way. */}
+          {/* Zero over an unmeasured window; the note underneath says which. */}
           <div className='text-[23px] font-bold'>
-            {hasWindowReadings
-              ? `${displayEnergyKWh.toFixed(displayEnergyKWh < 1 ? 3 : 2)} kWh`
-              : "—"}
+            {displayEnergyKWh.toFixed(displayEnergyKWh < 1 ? 3 : 2)} kWh
           </div>
           <div className='mt-0.5 text-[12px] font-medium text-muted-foreground'>
             energy used {energyNote}

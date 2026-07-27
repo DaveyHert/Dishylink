@@ -11,7 +11,7 @@ import type {
   DishObstructionMapJson,
   DishObstructionStatsJson,
   DishStatusJson,
-} from "../../lib/dishClient";
+} from "@core/dishClient";
 import type { SatelliteFeed } from "../../hooks/useSatellites";
 import type { ObserverLocation } from "../../lib/satellites";
 import { useObstructionSnapshots } from "../../hooks/useObstructionSnapshots";
@@ -27,6 +27,7 @@ import { createSkyScene, type ScreenPoint, type SkyScene } from "./skyScene";
 import { SkyControl } from "./SkyControl";
 import { DomeIcon } from "../../assets/icons/DomeIcon";
 import { DomeCanopyIcon } from "../../assets/icons/DomeCanopyIcon";
+import { ImmersiveIcon } from "../../assets/icons/ImmersiveIcon";
 import { useDomeTrim } from "../../hooks/useDomeTrim";
 import { domeTrimEnabled, setDomeTrimEnabled } from "../../lib/domeTrim";
 
@@ -77,6 +78,9 @@ export function SatelliteView({
   // state rather than a copy of its default that can drift out of step.
   const [rotating, setRotating] = useState(false);
   const [domeShown, setDomeShown] = useState(true);
+  // Immersive view: clears the panels, scrubber and legend, leaving only the sky
+  // and its controls. The buttons stay so the view can be left again.
+  const [immersive, setImmersive] = useState(false);
   const trimmed = useDomeTrim();
   const [unsupported, setUnsupported] = useState(false);
   const [changingLocation, setChangingLocation] = useState(false);
@@ -252,7 +256,9 @@ export function SatelliteView({
       />
 
       {/* Wide enough that LocationSetup's two buttons sit on one row. */}
-      <div className='pointer-events-none absolute inset-y-0 left-0 flex w-[400px] flex-col gap-4 overflow-y-auto p-6'>
+      <div
+        className={`pointer-events-none absolute inset-y-0 left-0 flex w-[380px] flex-col gap-4 overflow-y-auto p-6 ${immersive ? "hidden" : ""}`}
+      >
         <div className='flex flex-col gap-1.5'>
           <h1 className='m-0 text-[15px] font-semibold'>Live satellite view</h1>
           <p className='m-0 text-xs leading-relaxed text-[#8b97a8]'>
@@ -294,9 +300,7 @@ export function SatelliteView({
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
-                transition={
-                  { duration: 0.28, ease: [0.4, 0, 0.2, 1] }
-                }
+                transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
                 // Cancels the column's gap, which would otherwise appear in full
                 // the moment this mounts and undercut the height animation. The
                 // real spacing is LocationSetup's own margin, inside the clip.
@@ -319,10 +323,9 @@ export function SatelliteView({
           {satellites.feedState === "loading" && (
             <Loading message="Loading SpaceX's published constellation ephemerides…" />
           )}
-          {/* Names whichever side actually failed. The old copy blamed the
-              connection for every fault, which was wrong most of the time —
-              the usual cause is the public data source being slow. Either way
-              the feed retries on its own, so neither asks for a reload. */}
+          {/* Names whichever side actually failed, rather than blaming the user's
+              connection: the usual cause is the public data source being slow.
+              Either way the feed retries on its own, so neither asks for a reload. */}
           {satellites.feedState === "error" && (
             <Callout tone='error'>
               {satellites.errorReason === "offline"
@@ -386,6 +389,13 @@ export function SatelliteView({
 
       <div className='absolute right-6 top-5 flex items-center gap-2'>
         <SkyControl
+          label={immersive ? "Exit immersive view" : "Immersive view"}
+          pressed={immersive}
+          onClick={() => setImmersive((on) => !on)}
+        >
+          <ImmersiveIcon size={14} />
+        </SkyControl>
+        <SkyControl
           label={domeShown ? "Hide dome" : "Show dome"}
           pressed={!domeShown}
           onClick={() => {
@@ -419,7 +429,7 @@ export function SatelliteView({
         </SkyControl>
       </div>
 
-      {domeShown && snapshots.length >= 2 && (
+      {!immersive && domeShown && snapshots.length >= 2 && (
         <div className='absolute bottom-[96px] left-1/2 w-[min(720px,55vw)] min-w-[320px] -translate-x-1/2'>
           {viewingHistory && scrubIndex !== null && (
             <p className='m-0 pb-1 text-center text-[11.5px] font-medium text-muted-foreground'>
@@ -436,13 +446,15 @@ export function SatelliteView({
       )}
 
       {/* The key names the dome's colours, so it goes when the dome does. */}
-      {domeShown && (
+      {!immersive && domeShown && (
         <div className='pointer-events-none absolute bottom-[22px] left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-card px-[18px] py-1.5 [&>div]:flex-nowrap [&>div]:pt-0'>
           <ObstructionKey withServing />
         </div>
       )}
 
-      <p className='pointer-events-none absolute bottom-[74px] left-1/2 m-0 -translate-x-1/2 text-[11px] text-[#8b97a8] opacity-80'>
+      <p
+        className={`pointer-events-none absolute bottom-[74px] left-1/2 m-0 -translate-x-1/2 text-[11px] text-[#8b97a8] opacity-80 ${immersive ? "hidden" : ""}`}
+      >
         {unsupported
           ? "This browser could not open a WebGL context."
           : !hasSurvey

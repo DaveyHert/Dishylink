@@ -3,7 +3,7 @@
 // duration on the right. Each cause carries a plain-English tooltip (the dish's
 // raw jargon explained) via outageEventMeta.
 
-import { outageEventMeta, type OutageEvent } from "../../lib/telemetry";
+import { outageEventMeta, type OutageEvent } from "@core/telemetry";
 import { formatClockTimeShort, formatEventDuration } from "../../lib/format";
 import { EmptyState } from "../ui/empty-state";
 import { InfoDot } from "../shared/InfoDot";

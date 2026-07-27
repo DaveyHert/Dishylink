@@ -7,8 +7,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowDownIcon, ArrowUpIcon, ClockIcon, LoaderIcon, RotateCcwIcon } from "lucide-react";
 import { runSpeedTest, type SpeedTestProgress } from "../../lib/speedTest";
-import type { TelemetrySample } from "../../lib/telemetry";
-import type { DishStatusJson } from "../../lib/dishClient";
+import type { TelemetrySample } from "@core/telemetry";
+import type { DishStatusJson } from "@core/dishClient";
 import { dishModelFor } from "../../lib/dishMesh";
 import { SpeedGauge } from "./SpeedGauge";
 import { SpeedBeam } from "./SpeedBeam";

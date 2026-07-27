@@ -3,10 +3,10 @@
 // in what fills a column, so the frame lives here and the bar comes in as a node.
 //
 // Layout note: the plot and label rows are declared once on the chart and each
-// column adopts them via `subgrid`. A column therefore cannot size its own bar
-// box — which is what previously let a column with no label hand the reclaimed
-// height to its bar, staggering baselines and scaling those bars against a
-// taller box than their neighbours.
+// column adopts them via `subgrid`. A column must not be able to size its own bar
+// box — one that skips its label would otherwise hand the reclaimed height to its
+// bar, staggering the baselines and scaling that bar against a taller box than its
+// neighbours.
 
 import type { ReactNode } from "react";
 import { useElementWidth, labelStride } from "../../hooks/useElementWidth";
@@ -33,10 +33,10 @@ export function bucketLabel(epochSeconds: number, range: EnergyRange): string {
 }
 
 /** Measured render width at 9px IBM Plex Mono: "12:00 AM" = 42px, "7/16" ≈ 30,
- *  "Jul" ≈ 26. This is the true glyph width, not a padded estimate — a label
- *  may sit right up against its neighbour, since the blank columns the stride
- *  skips give it room to spill. Padding it (the old 46) made Today, whose
- *  hourly columns are ~45px, round up to every-other-label for no real reason. */
+ *  "Jul" ≈ 26. True glyph width, deliberately unpadded — a label may sit right up
+ *  against its neighbour, since the blank columns the stride skips give it room to
+ *  spill. Rounding these up costs whole labels: Today's hourly columns are ~45px,
+ *  so a padded 46 would drop it to every other label for no visual gain. */
 function labelWidthFor(range: EnergyRange): number {
   if (range === "month") return 26;
   if (range === "day" || range === "week") return 30;

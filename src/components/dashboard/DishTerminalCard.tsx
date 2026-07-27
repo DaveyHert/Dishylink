@@ -1,6 +1,6 @@
 // Hardware, alignment, GPS, and network facts from the live status message.
 
-import type { DishStatusJson, DishReadyStatesJson } from "../../lib/dishClient";
+import type { DishStatusJson, DishReadyStatesJson } from "@core/dishClient";
 import { dishModelFor, specForModel } from "../../lib/dishMesh";
 import { formatAttitudeState, formatRelativeTime, formatUptime } from "../../lib/format";
 import { FactGrid, FactRow } from "../ui/fact-row";
@@ -117,10 +117,10 @@ export function DishTerminalCard({
       // read as though something had been repaired. What the row answers is
       // whether the dish knows where it is, so it says that.
       //
-      // The state clause only appears when the filter is NOT converged: settled
-      // is the healthy case, and "filter converged" sat there permanently saying
-      // nothing. An absent state stays silent rather than printing a dash — this
-      // row used to append one, which was worse than the jargon it replaced.
+      // The state clause only appears when the filter is NOT converged: settled is
+      // the healthy case, and "filter converged" would sit there permanently saying
+      // nothing. An absent state stays silent rather than printing a dash, which
+      // would read as a fault where there is none.
       label: "Position",
       value: !status.gpsStats?.gpsValid
         ? "no fix"

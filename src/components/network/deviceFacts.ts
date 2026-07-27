@@ -5,8 +5,8 @@
 // row?" rules are the substance here — the list itself is a map over the result.
 
 import { createElement, type ReactNode } from "react";
-import type { WifiClientJson } from "../../lib/dishClient";
-import type { ClientUsageTotal } from "../../lib/clientUsage";
+import type { WifiClientJson } from "@core/dishClient";
+import type { ClientUsageTotal } from "@core/clientUsage";
 import { formatBytes, formatUptime } from "../../lib/format";
 import { bandLabel, IDLE_AFTER_S, type SignalQuality } from "./networkFormat";
 

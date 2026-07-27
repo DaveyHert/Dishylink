@@ -9,7 +9,7 @@
 // recorder actually holds.
 
 import { useMemo } from "react";
-import type { TelemetrySample } from "../../lib/telemetry";
+import type { TelemetrySample } from "@core/telemetry";
 import type { ChartSeries } from "../shared/TelemetryChart";
 
 const BIN_MS = 2;

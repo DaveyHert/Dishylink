@@ -3,10 +3,9 @@
 // tone="info"  — advisory. "here is something worth knowing."
 // tone="error" — something is broken and the user can act on it.
 //
-// Before this existed, advisory text was done three ways (.skydome-note boxed with the
-// ⓘ, .energy-history-hint and .settings-note--foot as plain muted text) and errors were
-// styled identically to loading text — a failure looked exactly like a "…" in progress.
-// The boxed form won; errors now read as errors.
+// Every advisory and every failure in the app comes through here, so a broken thing
+// can never be styled like a pending one — an error that reads as "…" in progress is
+// the failure mode this primitive exists to prevent.
 //
 // Spacing is left to the caller: margin is contextual, not part of the primitive.
 //

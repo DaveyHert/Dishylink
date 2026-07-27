@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DishStatusJson } from "../../lib/dishClient";
+import type { DishStatusJson } from "@core/dishClient";
 import {
   SEPARATION_LIMIT_DEG,
   angularSeparationDeg,

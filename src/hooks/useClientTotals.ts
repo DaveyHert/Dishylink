@@ -5,7 +5,7 @@
 // clients the router reports right now.
 
 import { useCallback, useEffect, useState } from "react";
-import type { ClientUsageTotal } from "../lib/clientUsage";
+import { usageKey, type ClientUsageTotal } from "@core/clientUsage";
 
 const REFRESH_MS = 10_000;
 
@@ -54,14 +54,17 @@ export function useClientTotals(active: boolean) {
   }, [active, load]);
 
   // Optimistic: drop the row immediately, then confirm against the historian.
+  // Keyed by clientId (usageKey), so removing one same-vendor device does not take
+  // its siblings — they share a MAC but not a key.
   const remove = useCallback(
-    async (macAddress: string) => {
+    async (key: string) => {
       setTotals(
-        (current) => current?.filter((total) => total.macAddress !== macAddress) ?? current,
+        (current) =>
+          current?.filter((total) => usageKey(total.clientId, total.macAddress) !== key) ?? current,
       );
       try {
         checkWrite(
-          await fetch(`/api/clients/totals?mac=${encodeURIComponent(macAddress)}`, {
+          await fetch(`/api/clients/totals?client=${encodeURIComponent(key)}`, {
             method: "DELETE",
           }),
         );
@@ -74,18 +77,18 @@ export function useClientTotals(active: boolean) {
 
   // Zero a device's total but keep it listed. Optimistic, then confirm.
   const reset = useCallback(
-    async (macAddress: string) => {
+    async (key: string) => {
       setTotals(
         (current) =>
           current?.map((total) =>
-            total.macAddress === macAddress
+            usageKey(total.clientId, total.macAddress) === key
               ? { ...total, rxBytes: 0, txBytes: 0, sinceMs: Date.now() }
               : total,
           ) ?? current,
       );
       try {
         checkWrite(
-          await fetch(`/api/clients/totals/reset?mac=${encodeURIComponent(macAddress)}`, {
+          await fetch(`/api/clients/totals/reset?client=${encodeURIComponent(key)}`, {
             method: "POST",
           }),
         );

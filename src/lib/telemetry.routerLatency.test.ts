@@ -10,8 +10,8 @@ import {
   decodeHistoryWindow,
   readRouterLatencyMs,
   readRouterPingSuccessPercent,
-} from "./telemetry";
-import type { DishHistoryJson } from "./dishClient";
+} from "@core/telemetry";
+import type { DishHistoryJson } from "@core/dishClient";
 
 /** A ring holding `count` samples, newest last, with the counter at `current`. */
 function ring(count: number, current = count): DishHistoryJson {
@@ -33,15 +33,19 @@ describe("decodeHistoryWindow", () => {
   });
 });
 
+// Retention is a duration. Any span comfortably wider than these fixtures does,
+// since none of these cases is about ageing samples out.
+const RETENTION_MS = 6 * 3_600_000;
+
 describe("TelemetryAccumulator router latency stamping", () => {
   it("stamps the reading on every sample the poll appends", () => {
-    const accumulator = new TelemetryAccumulator(100);
+    const accumulator = new TelemetryAccumulator(RETENTION_MS);
     const samples = accumulator.ingest(ring(3), Date.now(), { latencyMs: 18.6 });
     expect(samples.map((sample) => sample.routerLatencyMs)).toEqual([18.6, 18.6, 18.6]);
   });
 
   it("leaves samples null when the router did not answer, rather than repeating the last reading", () => {
-    const accumulator = new TelemetryAccumulator(100);
+    const accumulator = new TelemetryAccumulator(RETENTION_MS);
     const nowMs = Date.now();
     accumulator.ingest(ring(2), nowMs, { latencyMs: 18.6 });
     // Next poll: two further samples, router unreachable.
@@ -53,7 +57,7 @@ describe("TelemetryAccumulator router latency stamping", () => {
   });
 
   it("does not backdate a reading onto samples recorded before it", () => {
-    const accumulator = new TelemetryAccumulator(100);
+    const accumulator = new TelemetryAccumulator(RETENTION_MS);
     const nowMs = Date.now();
     accumulator.ingest(ring(2), nowMs, {});
     const samples = accumulator.ingest(ring(3), nowMs + 1000, { latencyMs: 21.4 });
@@ -64,7 +68,7 @@ describe("TelemetryAccumulator router latency stamping", () => {
   });
 
   it("stamps ping success by the same rules, independently of latency", () => {
-    const accumulator = new TelemetryAccumulator(100);
+    const accumulator = new TelemetryAccumulator(RETENTION_MS);
     const nowMs = Date.now();
     accumulator.ingest(ring(2), nowMs, { latencyMs: 18.6, pingSuccessPercent: 98.11 });
     // Next poll: latency answered, ping success did not.

@@ -12,7 +12,7 @@
 
 import { useEffect, useState } from "react";
 import { useClientTotals } from "../../hooks/useClientTotals";
-import type { ClientUsageTotal } from "../../lib/clientUsage";
+import { usageKey, type ClientUsageTotal } from "@core/clientUsage";
 import { classifyDevice } from "../../lib/deviceKind";
 import { formatBytes, formatRelativeTime } from "../../lib/format";
 import { vendorForMac, ensureOuiLoaded } from "../../lib/macVendor";
@@ -99,14 +99,19 @@ export function DeviceUsageList() {
       <div
         className={`flex flex-col ${sorted.length > 5 ? "thin-scroll max-h-[300px] overflow-y-auto" : ""}`}
       >
-        {sorted.map((total) => (
-          <DeviceUsageRow
-            key={total.macAddress}
-            total={total}
-            onReset={() => void reset(total.macAddress)}
-            onRemove={() => void remove(total.macAddress)}
-          />
-        ))}
+        {sorted.map((total) => {
+          // clientId, not MAC: same-vendor devices share a masked MAC, so a
+          // MAC key would collide and one row's action would hit its sibling.
+          const key = usageKey(total.clientId, total.macAddress);
+          return (
+            <DeviceUsageRow
+              key={key}
+              total={total}
+              onReset={() => void reset(key)}
+              onRemove={() => void remove(key)}
+            />
+          );
+        })}
       </div>
     </div>
   );

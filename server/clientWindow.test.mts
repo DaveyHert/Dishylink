@@ -26,8 +26,10 @@ afterEach(() => {
 const MINUTE_MS = 60_000;
 const MAC = "aa:bb:cc:dd:ee:ff";
 
-function reading(downMbps: number, macAddress = MAC): ClientReading {
-  return { macAddress, name: "laptop", downMbps, upMbps: 1, rxBytes: 0, txBytes: 0 };
+// `key` defaults to the MAC so the cases that predate per-device keying read the
+// same; the same-MAC cases below pass it explicitly.
+function reading(downMbps: number, macAddress = MAC, key = macAddress): ClientReading {
+  return { key, macAddress, name: "laptop", downMbps, upMbps: 1, rxBytes: 0, txBytes: 0 };
 }
 
 describe("ClientWindow.ingest", () => {
@@ -71,6 +73,40 @@ describe("ClientWindow.ingest", () => {
 
     expect(window.samples("dd:dd:dd:dd:dd:dd")).toEqual([]);
     expect(window.samples(MAC)).toHaveLength(1);
+  });
+
+  // The router masks same-vendor MACs to one OUI, so this is three Govee bulbs on
+  // a single MAC. Keyed by MAC they collapsed into one series carrying the sum,
+  // and each bulb drew that sum as its own chart.
+  it("keeps devices sharing one masked MAC apart, and never sums them", () => {
+    const window = new ClientWindow(file);
+    const now = Date.now();
+    window.ingest([reading(2, MAC, "101"), reading(5, MAC, "102"), reading(11, MAC, "103")], now);
+
+    expect(window.samples("101").map((s) => s.downMbps)).toEqual([2]);
+    expect(window.samples("102").map((s) => s.downMbps)).toEqual([5]);
+    expect(window.samples("103").map((s) => s.downMbps)).toEqual([11]);
+    // The bug in one assertion: nobody reports 18.
+    expect(window.samples().map((s) => s.downMbps)).not.toContain(18);
+  });
+
+  // Samples restored from a snapshot written before keying carry no `key`. The
+  // window keeps them under their MAC and hands them back unfiltered; deciding
+  // which device may claim them needs `sharedMacs`, which lives in the odometer,
+  // so it happens in the /api/clients handler and not here.
+  it("keeps pre-keying samples under their MAC, for the caller to attribute", () => {
+    const now = Date.now();
+    writeFileSync(
+      file,
+      JSON.stringify([{ macAddress: MAC, atMs: now - 2_000, downMbps: 7, upMbps: 1 }]),
+    );
+    const window = new ClientWindow(file);
+    window.ingest([reading(9, MAC, "101")], now);
+
+    expect(window.samples("101").map((s) => s.downMbps)).toEqual([9]);
+    expect(window.samples(MAC).map((s) => s.downMbps)).toEqual([7]);
+    // The unfiltered call — the one the handler makes — sees both.
+    expect(window.samples().map((s) => s.downMbps)).toEqual([7, 9]);
   });
 });
 

@@ -12,13 +12,13 @@
 //
 // Run: npm run historian   (foreground; see server/README for always-on setup)
 
-import { appendFileSync, existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { networkInterfaces } from "node:os";
 import { resolve } from "node:path";
 import { createFileRegistry, fromBinary, toJson, type DescMessage } from "@bufbuild/protobuf";
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { grpcWebUnaryCall } from "../src/lib/grpcWeb.ts";
+import { grpcWebUnaryCall } from "../core/grpcWeb.ts";
 import {
   decodeHistoryWindow,
   decodeOutageEvents,
@@ -27,7 +27,7 @@ import {
   readRouterPingSuccessPercent,
   TelemetryAccumulator,
   type TelemetrySample,
-} from "../src/lib/telemetry.ts";
+} from "../core/telemetry.ts";
 import { EnergyStore, foldSamplesToMinutes, type MinuteBucket } from "./energyStore.mts";
 import { ThermalStore } from "./thermalStore.mts";
 import { EventStore } from "./eventStore.mts";
@@ -35,7 +35,8 @@ import { RadioStore, type RadioReading } from "./radioStore.mts";
 import { ClientStore, type ClientReading } from "./clientStore.mts";
 import { ClientWindow } from "./clientWindow.mts";
 import { ClientTotalsStore } from "./clientTotals.mts";
-import { ThroughputTracker } from "../src/lib/throughputTracker.ts";
+import { ThroughputTracker } from "../core/throughputTracker.ts";
+import { usageKey } from "../core/clientUsage.ts";
 import { AlertStore } from "./alertStore.mts";
 import { ObstructionStore, packCells } from "./obstructionStore.mts";
 
@@ -52,7 +53,6 @@ const CLIENT_SAMPLES_FILE = resolve("server/data/client-samples.json");
 const CLIENT_TOTALS_FILE = resolve("server/data/client-totals.json");
 const ALERTS_FILE = resolve("server/data/alerts.ndjson");
 const OBSTRUCTION_FILE = resolve("server/data/obstruction.ndjson");
-const MAC_COLLISIONS_FILE = resolve("server/data/mac-collisions.ndjson");
 const PORT = Number(process.env.HISTORIAN_PORT ?? 8088);
 const POLL_MS = 5_000;
 /**
@@ -92,7 +92,7 @@ const ROUTER_URL =
  * and they only exist while they are set. Nobody records them but us.
  */
 const THERMAL_ALERT_KEYS = ["thermalThrottle", "thermalShutdown", "powerSupplyThermalThrottle"];
-const SAMPLE_WINDOW_SECONDS = 6 * 3_600;
+const SAMPLE_WINDOW_MS = 6 * 3_600_000;
 const SNAPSHOT_EVERY_MS = 60_000;
 
 const registry = createFileRegistry(
@@ -279,18 +279,24 @@ async function getClientReadings(): Promise<ClientReading[]> {
   const json = toJson(responseSchema, fromBinary(responseSchema, bytes), { registry }) as {
     wifiGetClients?: { clients?: WireClient[] };
   };
-  // One reading per MAC even when the roster lists a MAC more than once — two
-  // devices sharing a cloned MAC each get their own entry. Rates and ride-along
-  // counters are summed across a MAC's entries, but only after each entry's
-  // delta is computed against its own stream (keyed mac|entryId below):
-  // deltaing across two interleaved counters reads their difference as resets
-  // and invented traffic.
-  const byMac = new Map<string, ClientReading>();
+  // One reading per roster entry, not per MAC. The router masks each client's MAC
+  // to its vendor OUI, so a same-vendor group arrives as several entries wearing
+  // one MAC; folding them together made every member report the group's summed
+  // rate as its own. Each entry already deltas against its own counter stream, so
+  // there is nothing to merge — only an identity to carry through.
+  const readings: ClientReading[] = [];
   const liveEntryKeys: string[] = [];
   const nowMs = Date.now();
-  for (const client of json.wifiGetClients?.clients ?? []) {
-    // The router itself reports empty stats — it is the network, not a client of it.
-    if (!client.macAddress || (client.role && client.role !== "CLIENT")) continue;
+  // Every live client this poll, so the odometer can learn which OUIs are shared
+  // and tell an orphan bucket from a live one before it folds any counter in.
+  const clients = (json.wifiGetClients?.clients ?? []).filter(
+    (client): client is WireClient & { macAddress: string } =>
+      !!client.macAddress && (!client.role || client.role === "CLIENT"),
+  );
+  const totalsLiveKeys = clientTotals.notePoll(
+    clients.map((client) => ({ clientId: client.clientId, macAddress: client.macAddress })),
+  );
+  for (const client of clients) {
     const entryId = entryIdOf(client);
     const entryKey = `${client.macAddress}|${entryId}`;
     liveEntryKeys.push(entryKey);
@@ -311,12 +317,13 @@ async function getClientReadings(): Promise<ClientReading[]> {
     // rather than a second later when it has already climbed back up.
     if (counters) {
       clientTotals.observe(
+        client.clientId,
         client.macAddress,
         counters.rxBytes,
         counters.txBytes,
         nowMs,
         client.givenName ?? client.name,
-        entryId,
+        totalsLiveKeys,
       );
     }
 
@@ -328,85 +335,21 @@ async function getClientReadings(): Promise<ClientReading[]> {
       upMbps: finiteMbps(client.txStats?.throughputMbpsLast15sAvg) ?? 0,
     });
 
-    const held = byMac.get(client.macAddress);
-    if (held) {
-      held.downMbps += rates.downMbps;
-      held.upMbps += rates.upMbps;
-      held.rxBytes += counters?.rxBytes ?? 0;
-      held.txBytes += counters?.txBytes ?? 0;
-      held.name ??= client.givenName ?? client.name;
-    } else {
-      byMac.set(client.macAddress, {
-        macAddress: client.macAddress,
-        name: client.givenName ?? client.name,
-        downMbps: rates.downMbps,
-        upMbps: rates.upMbps,
-        rxBytes: counters?.rxBytes ?? 0,
-        txBytes: counters?.txBytes ?? 0,
-      });
-    }
+    readings.push({
+      // usageKey, not entryId: entryId falls back through IP to keep two
+      // clientId-less entries apart in the rate tracker, but the stored key has
+      // to be the one the odometer and the browser both join on.
+      key: usageKey(client.clientId, client.macAddress),
+      macAddress: client.macAddress,
+      name: client.givenName ?? client.name,
+      downMbps: rates.downMbps,
+      upMbps: rates.upMbps,
+      rxBytes: counters?.rxBytes ?? 0,
+      txBytes: counters?.txBytes ?? 0,
+    });
   }
   clientThroughput.retain(liveEntryKeys);
-  recordMacCollisions(json.wifiGetClients?.clients ?? [], nowMs);
-  return [...byMac.values()];
-}
-
-/**
- * Instrumentation for shared MACs: whenever the set of MACs listed more than
- * once — or the entry ids behind one — changes, append a line describing it.
- * Change-triggered rather than per-poll, so a stable collision writes one line,
- * not five a second. This log is what will say whether clientId stays stable
- * across re-associations, the prerequisite for ever splitting a shared MAC's
- * usage per device instead of totalling it jointly.
- */
-let lastCollisionSignature = "";
-function recordMacCollisions(clients: WireClient[], atMs: number): void {
-  const byMac = new Map<string, WireClient[]>();
-  for (const client of clients) {
-    if (!client.macAddress || (client.role && client.role !== "CLIENT")) continue;
-    byMac.set(client.macAddress, [...(byMac.get(client.macAddress) ?? []), client]);
-  }
-  const collisions = [...byMac]
-    .filter(([, entries]) => entries.length > 1)
-    .map(([macAddress, entries]) => ({
-      macAddress,
-      entries: entries
-        .map((entry) => ({
-          clientId: entry.clientId,
-          ipAddress: entry.ipAddress,
-          name: entry.givenName ?? entry.name,
-        }))
-        .sort((a, b) => (a.clientId ?? 0) - (b.clientId ?? 0)),
-    }))
-    .sort((a, b) => a.macAddress.localeCompare(b.macAddress));
-  const signature = collisions
-    .map((c) => `${c.macAddress}=${c.entries.map((e) => e.clientId ?? e.ipAddress ?? "?").join("+")}`)
-    .join(";");
-  if (signature === lastCollisionSignature) return;
-  lastCollisionSignature = signature;
-  try {
-    // An empty `collisions` line records a collision clearing.
-    appendFileSync(MAC_COLLISIONS_FILE, JSON.stringify({ atMs, collisions }) + "\n");
-  } catch {
-    // instrumentation must never take down recording
-  }
-}
-
-/** The collision log is change-triggered, but a flapping entry id could still
- *  make "change" frequent — trim to the newest lines on boot and the daily
- *  sweep, the same rewrite-through-temp pattern as the client store. */
-const COLLISION_LOG_MAX_LINES = 1_000;
-function trimCollisionLog(): void {
-  if (!existsSync(MAC_COLLISIONS_FILE)) return;
-  try {
-    const lines = readFileSync(MAC_COLLISIONS_FILE, "utf8").split("\n").filter(Boolean);
-    if (lines.length <= COLLISION_LOG_MAX_LINES) return;
-    const tempPath = `${MAC_COLLISIONS_FILE}.tmp`;
-    writeFileSync(tempPath, lines.slice(-COLLISION_LOG_MAX_LINES).join("\n") + "\n");
-    renameSync(tempPath, MAC_COLLISIONS_FILE);
-  } catch {
-    // a long log is not worth failing over
-  }
+  return readings;
 }
 
 const store = new EnergyStore(DATA_FILE);
@@ -427,13 +370,13 @@ const pending = new Map<number, MinuteBucket>();
 
 // Rolling full-resolution window served to the frontend so page reloads (and
 // historian restarts, via the snapshot file) never reset the charts.
-const sampleWindow = new TelemetryAccumulator(SAMPLE_WINDOW_SECONDS);
+const sampleWindow = new TelemetryAccumulator(SAMPLE_WINDOW_MS);
 
 function loadSampleSnapshot(): void {
   if (!existsSync(SAMPLES_SNAPSHOT_FILE)) return;
   try {
     const persisted = JSON.parse(readFileSync(SAMPLES_SNAPSHOT_FILE, "utf8")) as TelemetrySample[];
-    const cutoffMs = Date.now() - SAMPLE_WINDOW_SECONDS * 1000;
+    const cutoffMs = Date.now() - SAMPLE_WINDOW_MS;
     latestSamples = sampleWindow.seed(persisted.filter((sample) => sample.timestampMs >= cutoffMs));
     console.log(`[historian] restored ${latestSamples.length} samples from snapshot`);
   } catch (error) {
@@ -517,7 +460,10 @@ async function pollObstruction(): Promise<void> {
     const bytes = await grpcWebUnaryCall(DISH_URL, requestBytes(GET_OBSTRUCTION_MAP_FIELD));
     const json = toJson(responseSchema, fromBinary(responseSchema, bytes), { registry }) as {
       dishGetObstructionMap?: {
-        numRows?: number; numCols?: number; snr?: number[]; maxThetaDeg?: number;
+        numRows?: number;
+        numCols?: number;
+        snr?: number[];
+        maxThetaDeg?: number;
       };
     };
     const map = json.dishGetObstructionMap;
@@ -671,12 +617,14 @@ function seedClientTotals(nowMs: number): void {
   }
   let seeded = 0;
   for (const [mac, agg] of perMac) {
-    if (clientTotals.has(mac)) continue;
     // Seed at the minute the device was last recorded, not now: most of this
     // history belongs to devices that are currently offline, and stamping them
-    // with `nowMs` would have the list report every one of them as active.
-    clientTotals.seed(mac, Math.round(agg.rx), Math.round(agg.tx), agg.lastMs, agg.name);
-    seeded++;
+    // with `nowMs` would have the list report every one of them as active. seed()
+    // is a no-op (returns false) when any bucket already covers this MAC — a
+    // clientId-keyed one after a restart — so it never lays down a second bucket
+    // that the next poll would double-count.
+    if (clientTotals.seed(mac, Math.round(agg.rx), Math.round(agg.tx), agg.lastMs, agg.name))
+      seeded++;
   }
   if (seeded > 0) console.log(`[historian] seeded ${seeded} device total(s) from recorded history`);
 }
@@ -1001,22 +949,25 @@ const server = createServer((request, response) => {
   }
   // Zero one device's total but keep it listed (a reset, distinct from delete).
   if (url.pathname === "/api/clients/totals/reset" && request.method === "POST") {
-    const mac = url.searchParams.get("mac");
-    const reset = mac ? clientTotals.reset(mac, Date.now()) : false;
+    // Keyed by clientId. The UI's `usageKey` sends the clientId for a live device
+    // and the MAC for an as-yet-unadopted legacy bucket — both are the store key,
+    // so one param covers both without a MAC fallback that would hit inconsistently.
+    const client = url.searchParams.get("client");
+    const reset = client ? clientTotals.reset(client, Date.now()) : false;
     if (reset) clientTotals.snapshot();
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify({ reset }));
     return;
   }
   // Per-device monthly usage odometer: read the list, or delete one device's
-  // record (?mac=) or all of them (no mac). Deleting removes the entry; use
+  // record (?client=) or all of them (no id). Deleting removes the entry; use
   // /reset above to zero a device while keeping it listed.
   if (url.pathname === "/api/clients/totals") {
     response.setHeader("Content-Type", "application/json");
     if (request.method === "DELETE") {
-      const mac = url.searchParams.get("mac");
-      if (mac) {
-        const removed = clientTotals.remove(mac);
+      const client = url.searchParams.get("client");
+      if (client) {
+        const removed = clientTotals.remove(client);
         clientTotals.snapshot();
         response.end(JSON.stringify({ removed }));
       } else {
@@ -1029,9 +980,37 @@ const server = createServer((request, response) => {
     response.end(JSON.stringify({ totals: clientTotals.totals() }));
     return;
   }
+  /**
+   * Give every row a device key, and drop the ones no device can claim.
+   *
+   * Rows recorded before per-device keying carry only a MAC. On a MAC that only
+   * ever wore one device that is still its own history, and it keeps it — the
+   * point of doing this at all is that a device the masking never affected sees
+   * no break at the moment this shipped. On a MAC that carried a vendor group the
+   * row is the group's summed traffic, which is the bug itself; those go.
+   */
+  function attribute<T extends { key?: string; macAddress: string }>(rows: T[]): T[] {
+    const resolved = new Map<string, string | undefined>();
+    const out: T[] = [];
+    for (const row of rows) {
+      if (row.key !== undefined) {
+        out.push(row);
+        continue;
+      }
+      if (!resolved.has(row.macAddress))
+        resolved.set(row.macAddress, clientTotals.resolveLegacyMac(row.macAddress));
+      const key = resolved.get(row.macAddress);
+      if (key !== undefined) out.push({ ...row, key });
+    }
+    return out;
+  }
+
   if (url.pathname === "/api/clients") {
     const hours = Math.min(6, Math.max(1, Number(url.searchParams.get("hours") ?? 6)));
-    const mac = url.searchParams.get("mac") ?? undefined;
+    // One key across history, samples and the odometer: the clientId. The old
+    // `mac` filter is gone — a masked MAC names a vendor, not a device, which is
+    // what made three bulbs answer to one filter.
+    const client = url.searchParams.get("client") ?? undefined;
     // Two tiers, like the dish: `samples` is the raw 1 Hz window behind the
     // 15-minute detail chart, `history` the per-minute rows behind the 6h view.
     // Opt in, because the raw window is far larger than the aggregate.
@@ -1042,15 +1021,15 @@ const server = createServer((request, response) => {
       JSON.stringify({
         // `since` callers are tailing the live window and already hold the
         // per-minute rows; re-sending 6h of them every second is pure waste.
-        history: sinceMs ? [] : clientStore.history(hours, mac),
-        ...(wantSamples ? { samples: clientWindow.samples(mac, sinceMs) } : {}),
+        history: sinceMs ? [] : attribute(clientStore.history(hours, client)),
+        ...(wantSamples ? { samples: attribute(clientWindow.samples(client, sinceMs)) } : {}),
         // Monthly odometer, so the device detail can show a real total that
         // survives the reconnects the router's own counter resets on. Asked for
         // explicitly (or implied by a seed request): the sample tail polls at 1 Hz
         // and re-sending every device's total that often is pure waste, so it
         // requests these on a slower beat.
         ...(url.searchParams.get("totals") === "1" || !sinceMs
-          ? { totals: clientTotals.totals(mac) }
+          ? { totals: clientTotals.totals(client) }
           : {}),
       }),
     );
@@ -1127,7 +1106,6 @@ server.listen(PORT, () => {
 
 loadSampleSnapshot();
 recordRecorderGap();
-trimCollisionLog();
 // Seed device totals from history already on disk before the first poll, so a
 // fresh install opens with real figures instead of zero. No-op after a restart,
 // which reloads the accumulated totals from their own snapshot instead.
@@ -1154,7 +1132,6 @@ setInterval(() => {
   const radioDropped = radioStore.compact();
   if (radioDropped > 0)
     console.log(`[historian] compacted radio log, dropped ${radioDropped} old row(s)`);
-  trimCollisionLog();
 }, COMPACT_EVERY_MS);
 // The per-device log keeps only six hours, so it cannot wait for the daily sweep.
 setInterval(() => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { averageOf, coverageNote } from "./statDetails";
-import type { TelemetrySample } from "./telemetry";
+import { averageOf, coverageNote, energyKWh } from "./statDetails";
+import type { TelemetrySample } from "@core/telemetry";
 
 function sample(routerPingSuccessPercent: number | null): TelemetrySample {
   return {
@@ -80,5 +80,45 @@ describe("coverageNote", () => {
 
   it("reports a lone reading as under a minute rather than as no data", () => {
     expect(coverageNote(run(NOW, 1), 15)).toBe("recorded < 1 min of this window");
+  });
+});
+
+describe("energyKWh", () => {
+  const NOW = 1_784_400_000_000;
+
+  /** `count` readings of `watts`, spaced `stepMs` apart, ending at `endMs`. */
+  function readings(endMs: number, count: number, watts: number, stepMs = 1000) {
+    return Array.from({ length: count }, (_, index) => ({
+      timestampMs: endMs - (count - 1 - index) * stepMs,
+      latencyMs: 40,
+      dropRate: 0,
+      downlinkBps: 0,
+      uplinkBps: 0,
+      powerW: watts,
+      routerLatencyMs: null,
+      routerPingSuccessPercent: null,
+    }));
+  }
+
+  it("integrates an hour at a steady draw", () => {
+    // 3600 steps of 1s at 100 W is 100 Wh.
+    expect(energyKWh(readings(NOW, 3601, 100))).toBeCloseTo(0.1, 6);
+  });
+
+  it("reads the spacing rather than assuming one second per reading", () => {
+    // Same 3600 seconds of elapsed time, half as many readings. Counting
+    // readings would halve the answer.
+    expect(energyKWh(readings(NOW, 1801, 100, 2000))).toBeCloseTo(0.1, 6);
+  });
+
+  it("counts no energy across an outage, having measured none", () => {
+    const before = readings(NOW - 3_600_000, 1801, 100);
+    const after = readings(NOW, 1801, 100);
+    // Two half-hours at 100 W, an hour apart: 100 Wh, not 200.
+    expect(energyKWh([...before, ...after])).toBeCloseTo(0.1, 6);
+  });
+
+  it("has no energy to report from a single reading", () => {
+    expect(energyKWh(readings(NOW, 1, 100))).toBe(0);
   });
 });

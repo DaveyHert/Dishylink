@@ -91,8 +91,8 @@ export function CloudDataUsage({ active }: { active: boolean }) {
     return <Loading message='Loading Starlink billing data…' size={26} stacked />;
   }
   // Ready but nothing to draw — a service line whose first billing cycle hasn't
-  // been reported yet. Previously this re-entered the Loading branch and span
-  // forever; it is an empty state, not a pending one.
+  // been reported yet. An empty state, not a pending one: a spinner here would
+  // promise data that is not coming.
   if (!cycle) {
     return (
       <EmptyState className='mt-6'>

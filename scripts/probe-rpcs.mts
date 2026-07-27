@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createFileRegistry, fromBinary, toJson } from "@bufbuild/protobuf";
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { grpcWebUnaryCall, GrpcWebError } from "../src/lib/grpcWeb.ts";
+import { grpcWebUnaryCall, GrpcWebError } from "../core/grpcWeb.ts";
 
 const DISH_URL = "http://192.168.100.1:9201/SpaceX.API.Device.Device/Handle";
 const registry = createFileRegistry(

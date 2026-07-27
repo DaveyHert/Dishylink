@@ -9,7 +9,7 @@ import type { RouterNetwork } from "../../hooks/useRouterNetwork";
 import { useRadioTemps } from "../../hooks/useRadioTemps";
 import { useSelfIdentity } from "../../hooks/useSelfIdentity";
 import { matchesSelf } from "../../lib/selfIdentity";
-import { ROUTER_UNREACHABLE_MESSAGE } from "../../lib/dishClient";
+import { ROUTER_UNREACHABLE_MESSAGE } from "@core/dishClient";
 import { ensureOuiLoaded } from "../../lib/macVendor";
 import { Loading } from "../ui/loading";
 import { Callout } from "../ui/callout";
@@ -19,6 +19,7 @@ import { DeviceDetail } from "./DeviceDetail";
 import { NodeDetail } from "./NodeDetail";
 import { DeviceRow, NetworkRow } from "./NetworkRow";
 import { buildNodeRoster } from "./nodeRoster";
+import { usageKey } from "@core/clientUsage";
 import { clientEntryKey, liveThroughputMbps } from "./networkFormat";
 
 export function NetworkPanel({
@@ -95,8 +96,10 @@ export function NetworkPanel({
       <DeviceDetail
         client={selected}
         rates={network.rates}
-        total={selected.macAddress ? network.totals.get(selected.macAddress) : undefined}
-        history={(selected.macAddress && network.throughputHistory.get(selected.macAddress)) || []}
+        total={network.totals.get(usageKey(selected.clientId, selected.macAddress))}
+        history={
+          network.throughputHistory.get(usageKey(selected.clientId, selected.macAddress)) || []
+        }
         upstreamName={
           nodes.find((node) => node.client?.macAddress === selected.upstreamMacAddress)?.name
         }

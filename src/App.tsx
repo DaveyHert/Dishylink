@@ -29,7 +29,7 @@ import { NetworkPanel } from "./components/network/NetworkPanel";
 import { AccountPanel } from "./components/account/AccountPanel";
 import { SettingsModal } from "./components/settings/SettingsModal";
 import { useRouterNetwork } from "./hooks/useRouterNetwork";
-import { useNow } from "./hooks/useNow";
+import { useLiveReadings } from "./hooks/useLiveReadings";
 import {
   THROUGHPUT_SERIES,
   LATENCY_SERIES,
@@ -44,7 +44,6 @@ import {
   clearSavedLocation,
 } from "./lib/observerLocation";
 import type { ObserverLocation } from "./lib/satellites";
-import type { TelemetrySample } from "./lib/telemetry";
 import { TooltipProvider } from "./components/ui/tooltip";
 
 type ThemeName = "light" | "dark";
@@ -66,47 +65,6 @@ const WINDOW_OPTIONS = WINDOW_CHOICES.map((choice) => ({
 // Throughput legend entry (swatch + series name).
 const legendItem =
   "inline-flex items-center gap-1.5 text-[12px] font-medium text-[var(--ink-secondary)]";
-
-function sparklineFrom(
-  samples: TelemetrySample[],
-  getValue: (sample: TelemetrySample) => number | null,
-) {
-  return samples.slice(-90).map(getValue);
-}
-
-/**
- * What the dish is doing this second, for a tile that reports a live figure.
- *
- * Reads from the sample ring because power is absent from `get_status` — the
- * throughput and latency tiles can take their live value from the status reply,
- * power cannot. The ring is one sample per second with its newest entry pinned
- * to now, so its tail is the current reading.
- *
- * A missing ring entry decodes as 0 (decodeHistoryWindow), so a few seconds are
- * searched for a real one rather than reporting a dropped second as no draw.
- */
-function latestReading(
-  samples: TelemetrySample[],
-  getValue: (sample: TelemetrySample) => number | null,
-): number {
-  for (const sample of samples.slice(-5).reverse()) {
-    const value = getValue(sample);
-    if (value !== null && value > 0) return value;
-  }
-  return 0;
-}
-
-function recentAverage(
-  samples: TelemetrySample[],
-  getValue: (sample: TelemetrySample) => number | null,
-): number {
-  const recentValues = samples
-    .slice(-60)
-    .map(getValue)
-    .filter((value): value is number => value !== null);
-  if (recentValues.length === 0) return 0;
-  return recentValues.reduce((sum, value) => sum + value, 0) / recentValues.length;
-}
 
 export default function App() {
   // Dark is the instrument's resting state — it's how the Starlink app ships and
@@ -170,9 +128,10 @@ export default function App() {
 
   const { status, samples } = telemetry;
 
-  // Chart windows end at wall-clock now, so they keep advancing while the dish
-  // is silent rather than resting on the last stretch that had data.
-  const nowMs = useNow();
+  // One clock for the tiles and the chart windows alike, so a figure and the
+  // chart beneath it always describe the same instant.
+  const { nowMs, livePowerW, averagePowerW, recentPingSuccessPercent, sparklines } =
+    useLiveReadings(samples);
 
   const liveDownlink = formatThroughput(status?.downlinkThroughputBps ?? 0);
   const liveUplink = formatThroughput(status?.uplinkThroughputBps ?? 0);
@@ -182,18 +141,15 @@ export default function App() {
     () => windowTail(samples, windowMinutes, nowMs),
     [samples, windowMinutes, nowMs],
   );
-  const livePowerW = useMemo(() => latestReading(samples, (sample) => sample.powerW), [samples]);
-  // A day's projection needs a settled figure: extrapolated from a single second
-  // it would swing by whole kWh as the dish breathes.
-  const averagePowerW = useMemo(() => recentAverage(samples, (sample) => sample.powerW), [samples]);
-  const recentDropRate = useMemo(
-    () => recentAverage(samples, (sample) => sample.dropRate),
-    [samples],
-  );
-
   const statDetails = useMemo(
-    () => buildStatDetails({ status, currentPowerW: livePowerW, recentDropRate, outageEvents }),
-    [status, livePowerW, recentDropRate, outageEvents],
+    () =>
+      buildStatDetails({
+        status,
+        currentPowerW: livePowerW,
+        recentPingSuccessPercent,
+        outageEvents,
+      }),
+    [status, livePowerW, recentPingSuccessPercent, outageEvents],
   );
   const openDetail = openDetailId ? statDetails[openDetailId] : null;
 
@@ -245,7 +201,7 @@ export default function App() {
                     value={liveDownlink.value}
                     unit={liveDownlink.unit}
                     caption='current traffic'
-                    sparkValues={sparklineFrom(samples, (sample) => sample.downlinkBps)}
+                    sparkValues={sparklines.downlink}
                     sparkColorVar='--series-down'
                     onOpenDetail={() => setOpenDetailId("download")}
                   />
@@ -254,32 +210,32 @@ export default function App() {
                     value={liveUplink.value}
                     unit={liveUplink.unit}
                     caption='current traffic'
-                    sparkValues={sparklineFrom(samples, (sample) => sample.uplinkBps)}
+                    sparkValues={sparklines.uplink}
                     sparkColorVar='--series-up'
                     onOpenDetail={() => setOpenDetailId("upload")}
                   />
                   <StatTile
                     label='Latency'
-                    value={status?.popPingLatencyMs?.toFixed(0) ?? "—"}
+                    value={(status?.popPingLatencyMs ?? 0).toFixed(0)}
                     unit='ms'
                     caption='pop ping, live'
-                    sparkValues={sparklineFrom(samples, (sample) => sample.latencyMs)}
+                    sparkValues={sparklines.latency}
                     onOpenDetail={() => setOpenDetailId("latency")}
                   />
                   <StatTile
                     label='Power draw'
-                    value={livePowerW > 0 ? livePowerW.toFixed(0) : "—"}
+                    value={livePowerW.toFixed(0)}
                     unit='W'
                     caption='current draw'
-                    sparkValues={sparklineFrom(samples, (sample) => sample.powerW)}
+                    sparkValues={sparklines.power}
                     onOpenDetail={() => setOpenDetailId("power")}
                   />
                   <StatTile
                     label='Ping success'
-                    value={(100 - recentDropRate * 100).toFixed(1)}
+                    value={recentPingSuccessPercent.toFixed(1)}
                     unit='%'
                     caption='last minute'
-                    sparkValues={sparklineFrom(samples, (sample) => (1 - sample.dropRate) * 100)}
+                    sparkValues={sparklines.pingSuccess}
                     onOpenDetail={() => setOpenDetailId("pingSuccess")}
                   />
                   <StatTile
