@@ -8,13 +8,13 @@
 // background job. Closing the window releases the renderer but leaves the collector
 // running in the tray; the app quits only when the user chooses Quit.
 
-import { app, BrowserWindow, Tray, Menu, nativeImage } from "electron";
+import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, Notification } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { existsSync, writeFileSync } from "node:fs";
 import { registerAppProtocolScheme, handleAppProtocol, APP_ENTRY_URL } from "./appProtocol";
 import { startCollector, handleApiRequest } from "./collector";
-import { startCloud, handleCloudRequest } from "./cloud";
+import { startCloud, handleCloudRequest, signIn } from "./cloud";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const rendererRoot = join(here, "../dist");
@@ -39,7 +39,7 @@ let tray: Tray | null = null;
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1450,
-    height: 1080,
+    height: 980,
     // Below this the dashboard's tiles and charts stop being usable; the app's
     // responsive layout still adapts down to it.
     minWidth: 700,
@@ -136,6 +136,97 @@ function configureLoginItem(): void {
   }
 }
 
+/**
+ * The account session: the sign-in window, and the renderer's /cloud/* calls
+ * carried over IPC rather than over its own origin.
+ *
+ * A packaged window loads over app:// and could fetch those routes directly, but
+ * a dev-server window cannot — Vite's origin has its own binding, with its own
+ * session file. Handing both windows to the same handler gives the desktop app
+ * one account session however it was launched. The payload stays plain JSON so
+ * the browser extension can reuse the shape over chrome.runtime messaging.
+ */
+function registerCloudHandlers(): void {
+  ipcMain.handle("starlink-signin", (event) =>
+    signIn(BrowserWindow.fromWebContents(event.sender) ?? undefined),
+  );
+  ipcMain.handle(
+    "cloud-request",
+    async (
+      _event,
+      { path, method = "GET", body }: { path: string; method?: string; body?: unknown },
+    ) => {
+      // This bridge exists for the cloud routes alone; it must not become a way
+      // for the renderer to reach anything else the main process can answer.
+      if (!path.startsWith("/cloud/")) return { status: 404, body: { error: "not_found" } };
+      // handleCloudRequest routes on the pathname alone, so the origin here only
+      // makes the URL absolute. Nothing dials it.
+      const request = new Request(new URL(path, "http://desktop.invalid").toString(), {
+        method,
+        ...(body === undefined
+          ? {}
+          : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+      });
+      const response = await handleCloudRequest(request);
+      return { status: response.status, body: await response.json() };
+    },
+  );
+}
+
+/**
+ * Desktop notifications, posted from here rather than from the renderer.
+ *
+ * The window loads over app://, and a sandboxed renderer on a custom origin
+ * cannot get web notification permission granted — which left the app unable to
+ * notify at all, and its "Enable notifications" control unable to ever report
+ * itself on. Main talks to the OS directly, so there is no web permission in the
+ * way; macOS asks once for DishyLink itself, as it does for any native app.
+ *
+ * Clicking one raises the window: a notification about the dish is only useful
+ * if it can take you to the dashboard showing why.
+ */
+/**
+ * Why the OS would not post, phrased for the person who clicked enable. A
+ * packaged, signed app that is refused has simply been switched off in System
+ * Settings. An unsigned dev run is refused whatever that switch says, because
+ * macOS will not post for a binary it cannot verify — the "Electron" entry reads
+ * as allowed and the notification still fails. Naming the real cause keeps the
+ * toggle from sending someone to a switch that is already on.
+ */
+function undeliverableReason(): string {
+  return app.isPackaged
+    ? "macOS isn’t delivering notifications — allow DishyLink under System Settings ▸ Notifications."
+    : "Native notifications need the installed DishyLink app; a dev run can’t post them.";
+}
+
+function registerNotificationHandler(): void {
+  ipcMain.handle("notify", async (_event, { title, body }: { title: string; body: string }) => {
+    if (!Notification.isSupported()) return { delivered: false, reason: undeliverableReason() };
+    const notification = new Notification({ title, body });
+    notification.on("click", showWindow);
+    // Whether it actually reached the user, not merely that we asked — and why
+    // not when it didn't, since only here is the packaged-vs-unsigned distinction
+    // known. The renderer needs the truth so its toggle cannot report itself on
+    // while nothing is being delivered.
+    return new Promise<{ delivered: boolean; reason?: string }>((resolve) => {
+      let settled = false;
+      const settle = (delivered: boolean) => {
+        if (settled) return;
+        settled = true;
+        resolve(
+          delivered ? { delivered: true } : { delivered: false, reason: undeliverableReason() },
+        );
+      };
+      notification.on("show", () => settle(true));
+      notification.on("failed", () => settle(false));
+      notification.show();
+      // Not every platform emits `show`; assume success rather than disable a
+      // working channel over a missing event.
+      setTimeout(() => settle(true), 1_500);
+    });
+  });
+}
+
 void app.whenReady().then(async () => {
   // An unpackaged run shows Electron's default icon; set ours on the macOS dock.
   // A packaged build carries the icon in its bundle, so this only applies in dev.
@@ -143,15 +234,23 @@ void app.whenReady().then(async () => {
     const icon = nativeImage.createFromPath(iconPath);
     if (!icon.isEmpty()) app.dock?.setIcon(icon);
   }
+  // The cloud account is a property of this host, not of packaging: the session
+  // belongs in the keychain and the sign-in window is ours to open, in a dev run
+  // exactly as in a packaged one. It is bound before the window loads so the
+  // renderer's first /cloud/* call has somewhere to land.
+  startCloud();
+  registerCloudHandlers();
   // Only the packaged app serves itself: the collector runs in this process and
   // app:// answers /api. In dev the Vite server proxies /api to the dev historian,
   // so starting a second collector here would just double-poll the dish.
   if (!devServerUrl) {
     await startCollector(rendererRoot);
-    startCloud();
     handleAppProtocol(rendererRoot, handleApiRequest, handleCloudRequest);
     configureLoginItem();
   }
+  // Registered for dev and packaged runs alike: notifications are the app's
+  // alerting channel, not a packaging feature.
+  registerNotificationHandler();
   createTray();
   // A normal launch opens the window; a launch the login item triggered stays in
   // the background (tray only), so booting the machine doesn't pop a window.

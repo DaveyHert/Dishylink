@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canonicalCause, outageEventMeta } from "@core/telemetry";
+import { canonicalCause, outageEventKind, outageEventMeta } from "@core/telemetry";
 import { formatEventDuration } from "./format";
 
 describe("canonicalCause", () => {
@@ -49,6 +49,46 @@ describe("outageEventMeta", () => {
 
   it("passes an already-human label (thermal episode) through untouched", () => {
     expect(outageEventMeta("Thermal throttle (ongoing)").label).toBe("Thermal throttle (ongoing)");
+  });
+});
+
+describe("outageEventKind", () => {
+  // The tokens below are the ones this dish and router actually logged; the
+  // router's keepalive drops ran 30–90s each and were banding the charts red
+  // while the throughput line underneath showed traffic flowing throughout.
+  it("counts only a real loss of service as an outage", () => {
+    expect(outageEventKind("EVENT_REASON_OUTAGE_NO_PINGS")).toBe("outage");
+    expect(outageEventKind("EVENT_REASON_OUTAGE_NO_DOWNLINK")).toBe("outage");
+    expect(outageEventKind("EVENT_REASON_OUTAGE_BOOTING")).toBe("outage");
+    expect(outageEventKind("OBSTRUCTED")).toBe("outage");
+    expect(outageEventKind("EVENT_REASON_ETH_NO_LINK")).toBe("outage");
+  });
+
+  it("calls the router's keepalive and packet-loss events degraded, not outages", () => {
+    expect(outageEventKind("EVENT_REASON_ROUTER_POP_IPV4_PING_DROP")).toBe("degraded");
+    expect(outageEventKind("EVENT_REASON_ROUTER_POP_IPV6_PING_DROP")).toBe("degraded");
+    expect(outageEventKind("EVENT_REASON_ROUTER_DISH_PING_DROP")).toBe("degraded");
+    expect(outageEventKind("EVENT_REASON_HIGH_DOWNLINK_PACKET_LOSS")).toBe("degraded");
+  });
+
+  it("treats point-in-time router chatter as information", () => {
+    expect(outageEventKind("EVENT_REASON_CLIENT_SWITCHING_BAND")).toBe("info");
+    expect(outageEventKind("EVENT_REASON_CLIENT_SWITCHING_UPSTREAM_MAC")).toBe("info");
+    expect(outageEventKind("EVENT_REASON_ROUTER_POWER_CYCLE")).toBe("info");
+    expect(outageEventKind("EVENT_REASON_ROUTER_PUBLIC_IPV4_CHANGE")).toBe("info");
+  });
+
+  it("defaults an unknown token to info, so only OUTAGE_* can claim an outage", () => {
+    // A firmware update adding a reason must not paint red bands on sight.
+    expect(outageEventKind("EVENT_REASON_ROUTER_SOFTWARE_UPDATE")).toBe("info");
+    expect(outageEventKind("EVENT_REASON_SOME_FUTURE_THING")).toBe("info");
+    // …but one the firmware itself namespaces as an outage is taken at its word.
+    expect(outageEventKind("EVENT_REASON_OUTAGE_SOME_FUTURE_CAUSE")).toBe("outage");
+  });
+
+  it("gives the thermal episodes' human labels a kind rather than undefined", () => {
+    expect(outageEventKind("Thermal throttle (ongoing)")).toBe("info");
+    expect(outageEventKind("")).toBe("info");
   });
 });
 

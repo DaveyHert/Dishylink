@@ -78,7 +78,13 @@ export function CloudDataUsage({ active }: { active: boolean }) {
   );
 
   if (status === "not-connected") {
-    return <ConnectAccount onConnected={reload} />;
+    // Same framing as the account sheet's connect state, so switching between the
+    // two tabs doesn't move the panel around.
+    return (
+      <div className='flex min-h-[360px] items-center justify-center px-4 py-8'>
+        <ConnectAccount onConnected={reload} />
+      </div>
+    );
   }
   if (status === "error") {
     return (

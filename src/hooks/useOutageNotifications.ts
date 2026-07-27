@@ -1,36 +1,29 @@
-// Watches telemetry for the three connection stories worth interrupting a
-// user for, and says which one is happening:
-//   - Starlink outage: dish reachable but pop pings failing (satellite side)
-//   - local issue: the dish itself stopped answering on the LAN
-//   - recovery: back online after either of the above
+// Watches telemetry for the Starlink-side stories worth interrupting a user for:
+//   - an outage in progress: the dish is reachable but its pings to the PoP are
+//     failing, so the satellite side is down while the hardware here is fine
+//   - recovery: those pings succeeding again
+//   - an outage the dish itself logged and we had not already seen
+//
+// Losing contact with the dish is not one of them. That is an alert about this
+// machine's own reach, and useDeviceAlerts owns every alert-shaped notification
+// so that exactly one place decides what is worth a chime and a banner.
 
 import { useEffect, useRef } from "react";
 import type { DishTelemetry } from "./useDishTelemetry";
 import { sendNotification } from "../lib/notifications";
-import { outageEventLabel } from "@core/telemetry";
+import { outageEventKind, outageEventLabel } from "@core/telemetry";
 import { formatDurationMs } from "../lib/format";
 
 export function useOutageNotifications(telemetry: DishTelemetry): void {
-  const previousConnectionRef = useRef(telemetry.connectionState);
   const lastSeenOutageStartRef = useRef(0);
   const wasDroppingRef = useRef(false);
 
-  // dish reachable/unreachable transitions
-  useEffect(() => {
-    const previous = previousConnectionRef.current;
-    const current = telemetry.connectionState;
-    if (previous === "online" && current === "unreachable") {
-      sendNotification(
-        "dish-unreachable",
-        "Dish unreachable",
-        "DishyLink lost contact with the dish on your local network — check power and cabling. (This is a local issue, not a Starlink outage.)",
-      );
-    }
-    if (previous === "unreachable" && current === "online") {
-      sendNotification("recovered", "Dish back online", "Contact with the dish has been restored.");
-    }
-    previousConnectionRef.current = current;
-  }, [telemetry.connectionState]);
+  // Losing contact with the dish is NOT handled here, though it used to be. It
+  // is an alert (`dishUnreachable`), and useDeviceAlerts is the one place that
+  // decides what is worth interrupting someone for — it raises it, chimes, and
+  // notifies, only once the failures are sustained. A second notification path
+  // firing off the raw connection state meant the threshold there bought
+  // nothing: the first failed poll still put a notification on screen.
 
   // Starlink-side outage: pings to the point of presence failing right now
   useEffect(() => {
@@ -56,8 +49,15 @@ export function useOutageNotifications(telemetry: DishTelemetry): void {
 
   // new entries appended to the dish's own outage log
   useEffect(() => {
-    if (telemetry.outageEvents.length === 0) return;
-    const newestOutage = telemetry.outageEvents.reduce((latest, outage) =>
+    // Only the entries that were actually outages. The same log carries link
+    // and informational events, and announcing one as "Outage recorded: device
+    // switched WiFi band" both cries wolf and spends the throttle that a real
+    // outage arriving a minute later would have needed.
+    const outages = telemetry.outageEvents.filter(
+      (event) => outageEventKind(event.cause) === "outage",
+    );
+    if (outages.length === 0) return;
+    const newestOutage = outages.reduce((latest, outage) =>
       outage.startMs > latest.startMs ? outage : latest,
     );
     const isFirstObservation = lastSeenOutageStartRef.current === 0;

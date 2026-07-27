@@ -126,12 +126,48 @@ function requestBytes(fieldNumber: number): Uint8Array {
   return new Uint8Array([...encodeVarint((fieldNumber << 3) | 2), 0]);
 }
 
+/**
+ * How long any one device call may take. Matches the browser's polls, which
+ * bound every request for the same reason.
+ *
+ * A dish that is powered off does not refuse the connection — it goes silent,
+ * and the TCP connect sits there until the OS gives up (~75s). Node's fetch
+ * imposes no deadline of its own, so an unbounded call blocks this whole cycle
+ * for as long as that takes. Every alert this process records is derived from
+ * how long a call took to fail, so an unbounded call does not merely stall the
+ * poll: it invents the outage it then writes down.
+ */
+const REQUEST_TIMEOUT_MS = 4_000;
+/** The obstruction map is a 900+ float grid and legitimately slower to build. */
+const OBSTRUCTION_TIMEOUT_MS = 10_000;
+
+/**
+ * The one way this process talks to a device.
+ *
+ * The deadline lives here rather than at the call sites so it cannot be left
+ * off: an unbounded call is not something to remember to avoid, it is something
+ * that should be unwritable. Decoding rides along because every caller did the
+ * same three steps to get from bytes to JSON.
+ */
+async function deviceCall(
+  url: string,
+  fieldNumber: number,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+): Promise<Record<string, unknown>> {
+  const bytes = await grpcWebUnaryCall(
+    url,
+    requestBytes(fieldNumber),
+    AbortSignal.timeout(timeoutMs),
+  );
+  return toJson(responseSchema, fromBinary(responseSchema, bytes), { registry }) as Record<
+    string,
+    unknown
+  >;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getHistory(): Promise<any> {
-  const bytes = await grpcWebUnaryCall(DISH_URL, requestBytes(GET_HISTORY_FIELD));
-  const json = toJson(responseSchema, fromBinary(responseSchema, bytes), { registry }) as {
-    dishGetHistory?: unknown;
-  };
+  const json = (await deviceCall(DISH_URL, GET_HISTORY_FIELD)) as { dishGetHistory?: unknown };
   return json.dishGetHistory ?? {};
 }
 
@@ -139,8 +175,7 @@ async function getHistory(): Promise<any> {
 // wifi_get_history — the router's own event log (power cycles, reboots, software
 // updates, client band-switching, …), the same UXEvent shape as the dish's.
 async function getWifiHistory(): Promise<{ eventLog?: { events?: unknown[] } }> {
-  const bytes = await grpcWebUnaryCall(ROUTER_URL, requestBytes(GET_HISTORY_FIELD));
-  const json = toJson(responseSchema, fromBinary(responseSchema, bytes), { registry }) as {
+  const json = (await deviceCall(ROUTER_URL, GET_HISTORY_FIELD)) as {
     wifiGetHistory?: { eventLog?: { events?: unknown[] } };
   };
   return json.wifiGetHistory ?? {};
@@ -151,8 +186,7 @@ async function getWifiHistory(): Promise<{ eventLog?: { events?: unknown[] } }> 
  * `=== true` is the check, and absence means clear.
  */
 async function getStatusAlerts(): Promise<Record<string, boolean>> {
-  const bytes = await grpcWebUnaryCall(DISH_URL, requestBytes(GET_STATUS_FIELD));
-  const json = toJson(responseSchema, fromBinary(responseSchema, bytes), { registry }) as {
+  const json = (await deviceCall(DISH_URL, GET_STATUS_FIELD)) as {
     dishGetStatus?: { alerts?: Record<string, boolean> };
   };
   return json.dishGetStatus?.alerts ?? {};
@@ -168,8 +202,7 @@ async function getRouterStatus(): Promise<{
   popPingLatencyMs?: number;
   popPingDropRate5m?: number;
 }> {
-  const bytes = await grpcWebUnaryCall(ROUTER_URL, requestBytes(GET_STATUS_FIELD));
-  const json = toJson(responseSchema, fromBinary(responseSchema, bytes), { registry }) as {
+  const json = (await deviceCall(ROUTER_URL, GET_STATUS_FIELD)) as {
     wifiGetStatus?: {
       alerts?: Record<string, boolean>;
       popPingLatencyMs?: number;
@@ -207,8 +240,7 @@ let latestRouterPingSuccessPercent: number | null = null;
  * back rather than assume.
  */
 async function getRadioReadings(): Promise<RadioReading[]> {
-  const bytes = await grpcWebUnaryCall(ROUTER_URL, requestBytes(GET_RADIO_STATS_FIELD));
-  const json = toJson(responseSchema, fromBinary(responseSchema, bytes), { registry }) as {
+  const json = (await deviceCall(ROUTER_URL, GET_RADIO_STATS_FIELD)) as {
     getRadioStats?: {
       radioStats?: Array<{
         band?: string;
@@ -278,8 +310,7 @@ function entryIdOf(client: WireClient): string {
 }
 
 async function getClientReadings(): Promise<ClientReading[]> {
-  const bytes = await grpcWebUnaryCall(ROUTER_URL, requestBytes(WIFI_GET_CLIENTS_FIELD));
-  const json = toJson(responseSchema, fromBinary(responseSchema, bytes), { registry }) as {
+  const json = (await deviceCall(ROUTER_URL, WIFI_GET_CLIENTS_FIELD)) as {
     wifiGetClients?: { clients?: WireClient[] };
   };
   // One reading per roster entry, not per MAC. The router masks each client's MAC
@@ -463,8 +494,11 @@ async function pollObstruction(): Promise<void> {
   const now = Date.now();
   if (!obstructionStore.isDue(now)) return;
   try {
-    const bytes = await grpcWebUnaryCall(DISH_URL, requestBytes(GET_OBSTRUCTION_MAP_FIELD));
-    const json = toJson(responseSchema, fromBinary(responseSchema, bytes), { registry }) as {
+    const json = (await deviceCall(
+      DISH_URL,
+      GET_OBSTRUCTION_MAP_FIELD,
+      OBSTRUCTION_TIMEOUT_MS,
+    )) as {
       dishGetObstructionMap?: {
         numRows?: number;
         numCols?: number;
@@ -486,10 +520,18 @@ async function pollObstruction(): Promise<void> {
   }
 }
 
+/**
+ * Every episode boundary below is stamped after its call returns, never from a
+ * clock read at the top of the cycle. A timestamp taken before an await does not
+ * describe the observation, it describes the intention to make it — and with a
+ * request that can sit for its full deadline the two are seconds apart. Episodes
+ * on disk carried that error: overlapping duplicates, and one that closed five
+ * seconds before it opened.
+ */
 async function pollAlerts(): Promise<void> {
-  const now = Date.now();
   try {
     const dishAlerts = await getStatusAlerts();
+    const now = Date.now();
     for (const alertKey of THERMAL_ALERT_KEYS) {
       const isActive = dishAlerts[alertKey] === true;
       const wasActive = thermalStore.isOpen(alertKey);
@@ -511,7 +553,7 @@ async function pollAlerts(): Promise<void> {
     // No reply. Leave the dish's own episodes open — an unreachable dish means
     // no reading, not a cleared alert — and record the unreachability itself so
     // it survives in history instead of only being a console warning.
-    alertStore.open("system", "dishUnreachable", now);
+    alertStore.open("system", "dishUnreachable", Date.now());
   }
   try {
     // One status reply, two consumers: the alert set, and the ping the sample
@@ -561,22 +603,18 @@ async function pollRadio(): Promise<void> {
  * stores once a second. Recording every poll would quintuple both tiers to store
  * the same per-second numbers five times over.
  */
-let clientPollInFlight = false;
 /** Newest rates from the fast poll, waiting to be recorded. */
 let latestClientReadings: ClientReading[] = [];
+// A router that stops answering must not stack a request every poll until the
+// connection budget starves the dish poll — at 200ms this is the poll where
+// overlap would bite first. The guard is `nonOverlapping` at the scheduler now,
+// the same one every other poll gets.
 async function pollClients(): Promise<void> {
-  // A router that stops answering must not stack a request every poll until the
-  // connection budget starves the dish poll — the tighter interval makes this
-  // guard matter more, not less.
-  if (clientPollInFlight) return;
-  clientPollInFlight = true;
   try {
     const readings = await getClientReadings();
     if (readings.length > 0) latestClientReadings = readings;
   } catch {
     // router unreachable (or bypass mode) — keep what we have
-  } finally {
-    clientPollInFlight = false;
   }
 }
 
@@ -633,6 +671,31 @@ function seedClientTotals(nowMs: number): void {
       seeded++;
   }
   if (seeded > 0) console.log(`[historian] seeded ${seeded} device total(s) from recorded history`);
+}
+
+/**
+ * Wrap a poll so it can never overlap itself: while one run is in flight, the
+ * next tick is skipped rather than queued.
+ *
+ * A cycle makes several device calls in sequence, so even with every call
+ * bounded it can outlast its own interval when devices are slow — and two
+ * cycles running at once against the same stores interleave their observations,
+ * which is how the alert log ended up with overlapping episodes. Guarding at the
+ * scheduler means a poll cannot be added without the property; the alternative,
+ * a boolean each function remembers to check, is the version that gets forgotten
+ * (`poll` had no guard at all while the two polls around it did).
+ */
+function nonOverlapping(run: () => Promise<void>): () => Promise<void> {
+  let inFlight = false;
+  return async () => {
+    if (inFlight) return;
+    inFlight = true;
+    try {
+      await run();
+    } finally {
+      inFlight = false;
+    }
+  };
 }
 
 async function poll(): Promise<void> {
@@ -1121,18 +1184,24 @@ recordRecorderGap();
 // fresh install opens with real figures instead of zero. No-op after a restart,
 // which reloads the accumulated totals from their own snapshot instead.
 seedClientTotals(Date.now());
-void poll();
-setInterval(() => void poll(), POLL_MS);
+// Every device poll is scheduled through nonOverlapping, so a slow or silent
+// device makes a cycle be skipped rather than run alongside the one before it.
+const pollCycle = nonOverlapping(poll);
+const pollClientsCycle = nonOverlapping(pollClients);
+const pollObstructionCycle = nonOverlapping(pollObstruction);
+
+void pollCycle();
+setInterval(() => void pollCycle(), POLL_MS);
 setInterval(writeSampleSnapshot, SNAPSHOT_EVERY_MS);
 // Clients run on their own timers: the router keeps no history, so nothing is
 // recoverable after the fact. Polling is fast enough to catch each counter step
 // as it happens; recording runs at 1 Hz and is what sets chart resolution. One
 // call covers every client.
-void pollClients();
-setInterval(() => void pollClients(), CLIENTS_POLL_MS);
+void pollClientsCycle();
+setInterval(() => void pollClientsCycle(), CLIENTS_POLL_MS);
 // Checked every 5 minutes; the store's isDue() keeps the actual dish call hourly.
-void pollObstruction();
-setInterval(() => void pollObstruction(), 300_000);
+void pollObstructionCycle();
+setInterval(() => void pollObstructionCycle(), 300_000);
 setInterval(recordClients, CLIENTS_RECORD_MS);
 setInterval(() => clientWindow.snapshot(), SNAPSHOT_EVERY_MS);
 setInterval(() => clientTotals.snapshot(), SNAPSHOT_EVERY_MS);

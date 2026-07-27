@@ -3,7 +3,8 @@
 // and live probing; what broke here were the edges.
 
 import { expect, describe, test, afterEach, vi } from "vitest";
-import { render } from "vitest-browser-react";
+import { render, cleanup } from "vitest-browser-react";
+import { noteCloudSessionChanged } from "../../lib/cloudHost";
 import { CloudDataUsage } from "./CloudDataUsage";
 
 async function waitFor<T>(get: () => T | null, what: string, timeoutMs = 2000): Promise<T> {
@@ -28,6 +29,13 @@ function stubUsage(body: unknown, status = 200) {
 const text = () => document.body.textContent ?? "";
 
 afterEach(() => {
+  // The account/usage data lives in one shared store per session, not per
+  // component, so a fetch's result outlives the render that asked for it.
+  // Unmount, then return the store to its pre-connection state the same way the
+  // app does when the session changes — otherwise the next case reads the answer
+  // this one loaded and asserts against a snapshot it never stubbed.
+  cleanup();
+  noteCloudSessionChanged();
   vi.unstubAllGlobals();
 });
 

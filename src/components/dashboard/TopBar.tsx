@@ -30,6 +30,7 @@ interface TopBarProps {
   onToggleTheme: () => void;
   deviceAlerts: DeviceAlerts;
   notificationsOn: boolean;
+  notificationsBlockedReason: string | null;
   onToggleNotifications: () => void;
   onOpenSpeedTest: () => void;
   onOpenAlignment: () => void;
@@ -72,6 +73,7 @@ export function TopBar({
   onToggleTheme,
   deviceAlerts,
   notificationsOn,
+  notificationsBlockedReason,
   onToggleNotifications,
   onOpenSpeedTest,
   onOpenAlignment,
@@ -163,6 +165,7 @@ export function TopBar({
         <AlertsMenu
           alerts={deviceAlerts}
           notificationsOn={notificationsOn}
+          notificationsBlockedReason={notificationsBlockedReason}
           onToggleNotifications={onToggleNotifications}
         />
         <button

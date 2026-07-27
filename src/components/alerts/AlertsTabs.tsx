@@ -84,7 +84,6 @@ export function HistoryTab({
         <AlertRow
           key={`${e.source}:${e.key}:${e.startMs}`}
           color={SEVERITY_COLOR[e.severity]}
-          dim
           title={e.label}
           meta={`${deviceLabel(e.source)} · lasted ${formatSpan(e.startMs, e.endMs!)} · cleared ${relativeTime(e.endMs!)}`}
         />

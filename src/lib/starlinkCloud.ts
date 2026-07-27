@@ -1,10 +1,13 @@
 // Typed client for the user's own starlink.com account data, read-only.
 //
 // The UI only ever talks to /cloud/* (served by the host's cloud binding — the
-// Vite dev proxy today, Electron main / the extension background worker later,
-// see CLOUD-ACCOUNT.md). It never touches starlink.com directly. Transport is
+// Vite dev proxy, Electron main, the extension background worker later, see
+// CLOUD-ACCOUNT.md). It never touches starlink.com directly, and it never picks
+// a host: cloudHost.ts decides how a /cloud/* call is carried. Transport is
 // deliberately separate from the historian: this needs internet + the account
 // session, nothing about the local dish.
+
+import { cloudRequest, noteCloudSessionChanged } from "./cloudHost";
 
 // ---- response shapes (only the fields the UI reads) ----
 
@@ -212,10 +215,10 @@ export class CloudNotConnectedError extends Error {
 }
 
 async function cloudGet<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(path, { signal });
-  if (response.status === 428) throw new CloudNotConnectedError();
-  if (!response.ok) throw new Error(`${path} → HTTP ${response.status}`);
-  return (await response.json()) as T;
+  const { status, body } = await cloudRequest({ path, signal });
+  if (status === 428) throw new CloudNotConnectedError();
+  if (status < 200 || status >= 300) throw new Error(`${path} → HTTP ${status}`);
+  return body as T;
 }
 
 export function fetchCloudAccount(signal?: AbortSignal): Promise<CloudAccount> {
@@ -229,19 +232,21 @@ export function fetchCloudUsage(signal?: AbortSignal): Promise<CloudUsage> {
 /** Persist a pasted session via the host binding. The host validates it against
  *  starlink.com and rejects a bad paste, whose message we surface to the user. */
 export async function connectCloud(cookie: string): Promise<void> {
-  const response = await fetch("/cloud/session", {
+  const { status, body } = await cloudRequest({
+    path: "/cloud/session",
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ cookie }),
+    body: { cookie },
   });
-  if (!response.ok) {
-    const info = (await response.json().catch(() => ({}))) as { message?: string };
-    throw new Error(info.message ?? `Couldn’t connect (HTTP ${response.status}).`);
+  if (status < 200 || status >= 300) {
+    const { message } = (body ?? {}) as { message?: string };
+    throw new Error(message ?? `Couldn’t connect (HTTP ${status}).`);
   }
+  noteCloudSessionChanged();
 }
 
 export async function disconnectCloud(): Promise<void> {
-  await fetch("/cloud/session", { method: "DELETE" });
+  await cloudRequest({ path: "/cloud/session", method: "DELETE" });
+  noteCloudSessionChanged();
 }
 
 // ---- derived helpers the UI leans on ----

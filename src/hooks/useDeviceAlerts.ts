@@ -87,35 +87,23 @@ export interface DeviceAlerts {
   firstSeen: Map<string, number>;
 }
 
-/** The dish not answering at all. Not one of its 20 alerts — those only exist in
- *  a get_status reply, so the one condition that silences them can never be one
- *  of them. Only the client can see it, so only the client can raise it. */
-const DISH_UNREACHABLE: AlertState = {
-  key: "dishUnreachable",
-  source: "system",
-  ok: "Dish is answering",
-  firing: "Dish isn’t answering",
-  advice: "Check that the dish has power and that its cable to the router is seated at both ends.",
-  severity: "critical",
-  notify: true,
-  active: true,
-};
-
-/** Same shape for the router: its 21 alerts only exist inside its reply. */
-const ROUTER_UNREACHABLE: AlertState = {
-  key: "routerUnreachable",
-  source: "system",
-  ok: "Router is answering",
-  firing: "Router isn’t answering",
-  severity: "warning",
-  notify: true,
-  active: true,
-};
-
-/** Conditions the historian records about a device rather than off it. Their
- *  wording has to live here too, or history shows a raw key. */
-const SYSTEM_ALERTS: AlertSpec[] = [
-  {
+/**
+ * Conditions the app observes ABOUT a device rather than reads OFF one: a device
+ * not answering can never appear in that device's own alert payload, because the
+ * payload is what failed to arrive.
+ *
+ * Declared once, and used for both faces — the live alert and the history label.
+ * They were two separate literals carrying the same wording, which is a rename
+ * away from history and the alert panel describing the same event differently.
+ *
+ * A device that has stopped answering is critical and is raised the instant it
+ * happens. Nothing here waits to see whether it recovers: a delay would mean the
+ * top bar showing "dish unreachable" while this panel still said "no active
+ * alerts", and the whole point of an alert is that it arrives when the thing
+ * goes wrong, not once it has been wrong for a while.
+ */
+const SYSTEM_ALERTS = {
+  dishUnreachable: {
     key: "dishUnreachable",
     ok: "Dish is answering",
     firing: "Dish isn’t answering",
@@ -124,7 +112,7 @@ const SYSTEM_ALERTS: AlertSpec[] = [
     severity: "critical",
     notify: true,
   },
-  {
+  routerUnreachable: {
     key: "routerUnreachable",
     ok: "Router is answering",
     firing: "Router isn’t answering",
@@ -133,31 +121,37 @@ const SYSTEM_ALERTS: AlertSpec[] = [
   },
   // Recorded by the recorder about itself: a boot that finds its heartbeat
   // stale logs the gap, so History can say "not recorded" instead of implying
-  // "nothing happened". Never fires live — HISTORIAN_DOWN covers the present.
-  {
+  // "nothing happened". Never fires live — historianDown covers the present.
+  recorderOff: {
     key: "recorderOff",
     ok: "Recording ran continuously",
     firing: "Recording was off — anything in this gap went unrecorded",
     severity: "advisory",
   },
-];
+  // The historian being down is itself an alert: recording has silently stopped.
+  historianDown: {
+    key: "historianDown",
+    ok: "History recorder running",
+    firing: "History recorder is down — live alerts still work, but nothing is being recorded",
+    severity: "warning",
+    notify: true,
+  },
+} satisfies Record<string, AlertSpec>;
+
+/** A system spec as a live, firing alert. One definition, both faces. */
+function firingSystemAlert(spec: AlertSpec): AlertState {
+  return { ...spec, source: "system", active: true };
+}
 
 const SPEC_BY_SOURCE_KEY = new Map<string, AlertSpec>([
   ...DISH_ALERTS.map((spec) => [`dish:${spec.key}`, spec] as const),
   ...ROUTER_ALERTS.map((spec) => [`router:${spec.key}`, spec] as const),
-  ...SYSTEM_ALERTS.map((spec) => [`system:${spec.key}`, spec] as const),
+  ...Object.values(SYSTEM_ALERTS).map((spec) => [`system:${spec.key}`, spec] as const),
 ]);
 
-/** The historian being down is itself an alert: recording has silently stopped. */
-const HISTORIAN_DOWN: AlertState = {
-  key: "historianDown",
-  source: "system",
-  ok: "History recorder running",
-  firing: "History recorder is down — live alerts still work, but nothing is being recorded",
-  severity: "warning",
-  notify: true,
-  active: true,
-};
+const DISH_UNREACHABLE = firingSystemAlert(SYSTEM_ALERTS.dishUnreachable);
+const ROUTER_UNREACHABLE = firingSystemAlert(SYSTEM_ALERTS.routerUnreachable);
+const HISTORIAN_DOWN = firingSystemAlert(SYSTEM_ALERTS.historianDown);
 
 /** "dishWaterDetected" -> "dish water detected", for a key no catalogue knows. */
 function humanizeKey(key: string): string {
@@ -245,6 +239,9 @@ export function useDeviceAlerts(
     const firing = statusList.filter(
       (a) => a.active && (a.source === "dish" ? dishReachable : routerReachable !== false),
     );
+    // Raised the moment a device stops answering, off the same value the filter
+    // above uses. The top bar and this panel therefore never disagree: anything
+    // that turns the indicator red is an active alert in the same render.
     const system = [
       ...(dishReachable ? [] : [DISH_UNREACHABLE]),
       ...(routerReachable === false ? [ROUTER_UNREACHABLE] : []),

@@ -74,6 +74,9 @@ export default function App() {
   );
   const [windowMinutes, setWindowMinutes] = useState(15);
   const [notificationsOn, setNotificationsOn] = useState(notificationsEnabled);
+  // Why an enable attempt was refused, shown beside the toggle. Null whenever
+  // notifications are on or off for an ordinary reason.
+  const [notificationsBlockedReason, setNotificationsBlockedReason] = useState<string | null>(null);
   const [openDetailId, setOpenDetailId] = useState<string | null>(null);
   const [openSheet, setOpenSheet] = useState<SheetName | null>(null);
   // Full-viewport surface: the dashboard behind it is unmounted, not just covered,
@@ -177,8 +180,12 @@ export default function App() {
               onToggleTheme={() => setTheme(theme === "light" ? "dark" : "light")}
               deviceAlerts={deviceAlerts}
               notificationsOn={notificationsOn}
+              notificationsBlockedReason={notificationsBlockedReason}
               onToggleNotifications={() => {
-                toggleNotifications().then(setNotificationsOn);
+                toggleNotifications().then((result) => {
+                  setNotificationsOn(result.enabled);
+                  setNotificationsBlockedReason(result.blockedReason ?? null);
+                });
               }}
               onOpenSpeedTest={() => setOpenSheet("speedtest")}
               onOpenAlignment={() => setOpenSheet("alignment")}

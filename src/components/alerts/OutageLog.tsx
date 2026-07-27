@@ -8,6 +8,11 @@ import { formatClockTimeShort, formatEventDuration } from "../../lib/format";
 import { EmptyState } from "../ui/empty-state";
 import { InfoDot } from "../shared/InfoDot";
 
+// Severity, not the event kind. The thermal episodes reach this list with human
+// labels and no catalogue entry (useThermalEvents), so a kind lookup returns the
+// unknown-token default and paints a thermal shutdown the same grey as a Wi-Fi
+// band switch. Severity is carried on every event from every source, including
+// those, and is the one field that is always right here.
 const SEVERITY_COLOR_VAR: Record<OutageEvent["severity"], string> = {
   advisory: "--ink-muted",
   warning: "--chart-warm",

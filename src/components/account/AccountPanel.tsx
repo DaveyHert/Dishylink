@@ -20,7 +20,11 @@ export function AccountPanel() {
   const { data, status, reload } = useCloudAccount(true);
 
   if (status === "not-connected") {
-    return <ConnectAccount onConnected={reload} />;
+    return (
+      <div className='flex min-h-[360px] items-center justify-center px-4 py-8'>
+        <ConnectAccount onConnected={reload} />
+      </div>
+    );
   }
   if (status === "error") {
     return (

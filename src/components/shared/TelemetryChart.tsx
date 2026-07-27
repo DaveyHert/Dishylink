@@ -2,7 +2,7 @@
 // outage bands, crosshair + tooltip. Samples are bucketed per pixel.
 
 import { useMemo, useRef, useState, useEffect, useCallback, useId } from "react";
-import type { TelemetrySample, OutageEvent } from "@core/telemetry";
+import { outageEventKind, type TelemetrySample, type OutageEvent } from "@core/telemetry";
 import { formatClockTime } from "../../lib/format";
 import {
   Crosshair,
@@ -333,13 +333,16 @@ export function TelemetryChart({
     (fraction) => windowStartMs + (windowEndMs - windowStartMs) * fraction,
   );
 
-  // Only events that occupy a stretch of time shade the chart. The router's log
-  // carries point-in-time entries (power cycle, band switch) with no duration,
-  // and the band renderer floors every band at 2px — so without this they paint
-  // a red critical hairline on a chart whose caption reads "red bands = outages".
-  // Duration, not severity: the dish's own "outage booting" is advisory too.
+  // Only real outages shade the chart, and the event's kind is what says so —
+  // not its severity (the dish files "outage booting" as advisory) and not its
+  // duration (the router's keepalive-ping drops run for half a minute or more).
+  // Banding those was telling the reader service was down across a stretch where
+  // the throughput line directly above showed traffic flowing the whole time.
+  // Duration still has to be positive: the band renderer floors every band at
+  // 2px, so a zero-length outage would paint a red hairline over nothing.
   const visibleOutages = outageEvents.filter(
     (outage) =>
+      outageEventKind(outage.cause) === "outage" &&
       outage.durationMs > 0 &&
       outage.startMs + outage.durationMs > windowStartMs &&
       outage.startMs < windowEndMs,

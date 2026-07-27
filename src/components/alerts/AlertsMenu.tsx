@@ -74,7 +74,7 @@ const AlertsBellTrigger = forwardRef<
       style={count > 0 ? { color } : undefined}
       {...triggerProps}
     >
-      <BellIcon />
+      <BellIcon muted={muted} />
       {count > 0 && (
         <span
           className='absolute -top-1 -right-1 flex h-[15px] min-w-[15px] items-center justify-center rounded-full border-[1.5px] border-solid border-[var(--page)] px-1 text-[10px] font-bold leading-none text-white'
@@ -90,10 +90,12 @@ const AlertsBellTrigger = forwardRef<
 export function AlertsMenu({
   alerts,
   notificationsOn,
+  notificationsBlockedReason,
   onToggleNotifications,
 }: {
   alerts: DeviceAlerts;
   notificationsOn: boolean;
+  notificationsBlockedReason: string | null;
   onToggleNotifications: () => void;
 }) {
   const [tab, setTab] = useState<AlertsTab>("active");
@@ -141,6 +143,14 @@ export function AlertsMenu({
             )}
           </span>
         </div>
+
+        {/* Why an enable attempt was refused — so the toggle explains itself
+            instead of reading as a click that did nothing. */}
+        {notificationsBlockedReason && (
+          <p className='px-4 pb-2 text-[11px] leading-snug text-[var(--ink-secondary)]'>
+            {notificationsBlockedReason}
+          </p>
+        )}
 
         <div className='flex items-center gap-5 px-4'>
           {ALERTS_TABS.map(({ key, label }) => (

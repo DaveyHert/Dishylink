@@ -152,37 +152,64 @@
   color-scheme: dark;
 }
 
+/* The app scrolls inside #root; the document itself never scrolls.
+
+   This is what keeps the page still when a modal opens. Radix locks background
+   scrolling by pinning `body { overflow: hidden }` and adding a margin equal to
+   the scrollbar width it just removed — it measures that width as
+   `innerWidth - documentElement.clientWidth`. With the gutter reserved on <html>
+   the space was already held, so the margin was a second reservation for the
+   same 6px and everything under the overlay slid sideways by exactly that.
+
+   Fighting that margin with a more-specific !important would be an arms race
+   with a library doing the right thing on its own terms. The actual fault is
+   having two mechanisms reserve space for one scrollbar, so this leaves one: the
+   document has no scrollbar to measure, the lock's compensation computes to
+   zero, and #root holds a permanently stable gutter of its own. Background
+   scrolling is still blocked — that comes from the lock's wheel handlers, not
+   from the overflow it sets.
+
+   Nothing here depends on the document being the scroller: the top bar's
+   `sticky top-0` sticks to #root, which fills the viewport, so it lands in the
+   same place. */
 html,
 body {
   height: 100%;
+  overflow: hidden;
 }
 
-html {
-  /* Reserve the scrollbar gutter permanently so the page doesn't shift sideways
-     when content grows past one screen or a modal toggles the scrollbar. */
+#root {
+  height: 100%;
+  overflow-y: auto;
+  /* Held permanently so the page doesn't shift when content grows past one
+     screen — the same reason it used to sit on <html>. */
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: var(--baseline) transparent;
+  /* The dot grid rides the scroller, not the viewport: on <body> it would now
+     sit still while the content moved over it. */
+  background-image: radial-gradient(var(--grid-dot) 1px, transparent 1px);
+  background-size: 26px 26px;
 }
 
-html::-webkit-scrollbar {
+#root::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
-html::-webkit-scrollbar-track {
+#root::-webkit-scrollbar-track {
   background: transparent;
 }
 
-html::-webkit-scrollbar-thumb {
+#root::-webkit-scrollbar-thumb {
   background: var(--baseline);
   border-radius: 999px;
 }
 
 body {
+  /* Colour only. The grid moved to #root above; body keeps the page colour so
+     the canvas behind an overscroll bounce is never bare. */
   background: var(--page);
-  background-image: radial-gradient(var(--grid-dot) 1px, transparent 1px);
-  background-size: 26px 26px;
   color: var(--ink);
   font-family: var(--font-ui);
   font-size: 14px;
