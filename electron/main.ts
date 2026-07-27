@@ -93,8 +93,8 @@ function createTray(): void {
     { type: "separator" },
     {
       // A login launch stays in the tray with no window (openAsHidden, plus the
-      // wasOpenedAtLogin check below), so the machine boots straight into background
-      // collection instead of a window the user then has to close.
+      // wasOpenedAtLogin check below), so booting the machine starts background
+      // collection with no window shown.
       label: "Start at Login",
       type: "checkbox",
       checked: app.getLoginItemSettings().openAtLogin,

@@ -83,8 +83,8 @@ export function SatelliteView({
   const [immersive, setImmersive] = useState(false);
   const trimmed = useDomeTrim();
   const [unsupported, setUnsupported] = useState(false);
-  // With no location yet, the picker opens to the form: the empty state's whole
-  // job is to ask for a location, so it should not take a click to reveal it.
+  // With no location set, this panel exists to ask for one, so the picker starts
+  // open on its form.
   const [changingLocation, setChangingLocation] = useState(() => !observerLocation);
   const snapshots = useObstructionSnapshots();
   const [scrubIndex, setScrubIndex] = useState<number | null>(null); // null = live
@@ -272,7 +272,7 @@ export function SatelliteView({
           className={`pointer-events-auto flex flex-col gap-3.5 rounded-xl px-[16px] py-4 ${glassPanel}`}
         >
           <div className='flex items-baseline justify-between gap-2 text-[12px] font-medium text-muted-foreground'>
-            <span>{site ? `site ${site}` : "no location set"}</span>
+            <span>{site ? `site ${site}` : "no location set to fetch live satellites"}</span>
             <span className='flex shrink-0 items-baseline gap-2.5'>
               <button
                 type='button'
