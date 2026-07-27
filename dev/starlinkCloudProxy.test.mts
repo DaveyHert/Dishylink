@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createCloudHandler, deviceTelemetryFrom } from "./starlinkCloudProxy.ts";
+import { createCloudHandler, deviceTelemetryFrom } from "../cloud/starlinkCloudHandler.ts";
 
 // A minimal Response stand-in for the injected fetch.
 function jsonResponse(status: number, body: unknown, setCookie?: string) {

@@ -17,5 +17,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts", "electron"]
+  "include": ["vite.config.ts", "electron", "cloud"]
 }
