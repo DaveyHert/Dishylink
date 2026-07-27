@@ -276,3 +276,20 @@ body {
     transform: rotate(360deg);
   }
 }
+
+/* ---------- desktop (Electron) title bar ---------- */
+
+/* The desktop window hides the macOS title-bar band (titleBarStyle hiddenInset),
+   so the top bar reaches the window's top edge. Reserve room for the traffic
+   lights, and make the bar draggable since there is no title bar left to grab;
+   the interactive controls opt back out so they stay clickable. */
+:root[data-host="electron"] header {
+  padding-left: 84px;
+  -webkit-app-region: drag;
+}
+:root[data-host="electron"] header button,
+:root[data-host="electron"] header a,
+:root[data-host="electron"] header input,
+:root[data-host="electron"] header [role="button"] {
+  -webkit-app-region: no-drag;
+}
