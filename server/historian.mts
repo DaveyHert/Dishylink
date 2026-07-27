@@ -13,9 +13,9 @@
 // Run: npm run historian   (foreground; see server/README for always-on setup)
 
 import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { networkInterfaces } from "node:os";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { createFileRegistry, fromBinary, toJson, type DescMessage } from "@bufbuild/protobuf";
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { grpcWebUnaryCall } from "../core/grpcWeb.ts";
@@ -42,17 +42,20 @@ import { ObstructionStore, packCells } from "./obstructionStore.mts";
 
 const DISH_URL =
   process.env.DISH_URL ?? "http://192.168.100.1:9201/SpaceX.API.Device.Device/Handle";
-const PROTOSET_PATH = resolve("public/dish.protoset");
-const DATA_FILE = resolve("server/data/energy.ndjson");
-const SAMPLES_SNAPSHOT_FILE = resolve("server/data/samples.json");
-const THERMAL_FILE = resolve("server/data/thermal.ndjson");
-const EVENTS_FILE = resolve("server/data/events.ndjson");
-const RADIO_FILE = resolve("server/data/radio.ndjson");
-const CLIENTS_FILE = resolve("server/data/clients.ndjson");
-const CLIENT_SAMPLES_FILE = resolve("server/data/client-samples.json");
-const CLIENT_TOTALS_FILE = resolve("server/data/client-totals.json");
-const ALERTS_FILE = resolve("server/data/alerts.ndjson");
-const OBSTRUCTION_FILE = resolve("server/data/obstruction.ndjson");
+// Where the collector reads and writes. Defaults to the repo's server/data for the
+// dev process; a host (the Electron app) points it at its own per-user data dir.
+const DATA_DIR = process.env.HISTORIAN_DATA_DIR ?? resolve("server/data");
+const PROTOSET_PATH = process.env.HISTORIAN_PROTOSET ?? resolve("public/dish.protoset");
+const DATA_FILE = join(DATA_DIR, "energy.ndjson");
+const SAMPLES_SNAPSHOT_FILE = join(DATA_DIR, "samples.json");
+const THERMAL_FILE = join(DATA_DIR, "thermal.ndjson");
+const EVENTS_FILE = join(DATA_DIR, "events.ndjson");
+const RADIO_FILE = join(DATA_DIR, "radio.ndjson");
+const CLIENTS_FILE = join(DATA_DIR, "clients.ndjson");
+const CLIENT_SAMPLES_FILE = join(DATA_DIR, "client-samples.json");
+const CLIENT_TOTALS_FILE = join(DATA_DIR, "client-totals.json");
+const ALERTS_FILE = join(DATA_DIR, "alerts.ndjson");
+const OBSTRUCTION_FILE = join(DATA_DIR, "obstruction.ndjson");
 const PORT = Number(process.env.HISTORIAN_PORT ?? 8088);
 const POLL_MS = 5_000;
 /**
@@ -895,7 +898,7 @@ function isLocalOrigin(origin?: string): boolean {
   return /^f[cd][0-9a-f]{2}:/i.test(hostname);
 }
 
-const server = createServer((request, response) => {
+export function handleRequest(request: IncomingMessage, response: ServerResponse): void {
   const url = new URL(request.url ?? "/", `http://localhost:${PORT}`);
   response.setHeader("Access-Control-Allow-Origin", "*");
   // The usage list can reset (POST) and delete (DELETE) records — allow both,
@@ -1100,12 +1103,17 @@ const server = createServer((request, response) => {
   }
   response.statusCode = 404;
   response.end("not found");
-});
+}
 
-server.listen(PORT, () => {
-  console.log(`[historian] API on http://localhost:${PORT}  (dish: ${DISH_URL})`);
-  console.log(`[historian] persisting to ${DATA_FILE}`);
-});
+// The dev process serves the collector over loopback HTTP. An embedded host (the
+// Electron app) sets HISTORIAN_EMBED and calls handleRequest directly instead, so
+// there is no open port.
+if (process.env.HISTORIAN_EMBED !== "1") {
+  createServer(handleRequest).listen(PORT, () => {
+    console.log(`[historian] API on http://localhost:${PORT}  (dish: ${DISH_URL})`);
+    console.log(`[historian] persisting to ${DATA_FILE}`);
+  });
+}
 
 loadSampleSnapshot();
 recordRecorderGap();

@@ -8,6 +8,7 @@ import { app, BrowserWindow, nativeImage } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { registerAppProtocolScheme, handleAppProtocol, APP_ENTRY_URL } from "./appProtocol";
+import { startCollector, handleApiRequest } from "./collector";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const rendererRoot = join(here, "../dist");
@@ -64,14 +65,20 @@ function createWindow(): void {
   }
 }
 
-void app.whenReady().then(() => {
+void app.whenReady().then(async () => {
   // An unpackaged run shows Electron's default icon; set ours on the macOS dock.
   // A packaged build carries the icon in its bundle, so this only applies in dev.
   if (process.platform === "darwin" && !app.isPackaged) {
     const icon = nativeImage.createFromPath(join(here, "../build/icon.png"));
     if (!icon.isEmpty()) app.dock?.setIcon(icon);
   }
-  handleAppProtocol(rendererRoot);
+  // Only the packaged app serves itself: the collector runs in this process and
+  // app:// answers /api. In dev the Vite server proxies /api to the dev historian,
+  // so starting a second collector here would just double-poll the dish.
+  if (!devServerUrl) {
+    await startCollector(rendererRoot);
+    handleAppProtocol(rendererRoot, handleApiRequest);
+  }
   createWindow();
 });
 

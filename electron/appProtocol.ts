@@ -94,7 +94,10 @@ async function serveStatic(rendererRoot: string, pathname: string): Promise<Resp
  * here, everything else is a file from the built renderer at `rendererRoot`.
  * Registered once, after the app is ready.
  */
-export function handleAppProtocol(rendererRoot: string): void {
+export function handleAppProtocol(
+  rendererRoot: string,
+  apiHandler: (request: Request) => Promise<Response>,
+): void {
   protocol.handle(SCHEME, (request) => {
     const url = new URL(request.url);
     const { pathname, search } = url;
@@ -108,8 +111,11 @@ export function handleAppProtocol(rendererRoot: string): void {
     if (pathname.startsWith("/celestrak/")) {
       return proxy(request, CELESTRAK_ORIGIN + pathname.slice("/celestrak".length) + search);
     }
-    // /api (the in-process collector) and /cloud (the signed-in account) are added
-    // as those main-process pieces land.
+    // The collector runs in this process; its /api handler is served in-process.
+    if (pathname.startsWith("/api/")) {
+      return apiHandler(request);
+    }
+    // /cloud (the signed-in account) is added when the cloud sign-in lands.
 
     return serveStatic(rendererRoot, pathname);
   });
