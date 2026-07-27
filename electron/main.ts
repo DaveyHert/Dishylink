@@ -1,17 +1,23 @@
-// The Electron main process — the app's one privileged host. It owns the window
-// today, and (as later steps land) the collector, the dish/router/cloud transport,
-// and the Starlink sign-in. The renderer is sandboxed and reaches this side only
-// through the typed bridge in preload.ts: there is no localhost port, so nothing on
-// the machine but this app can reach the user's dish data or cloud session.
+// The Electron main process — the app's one privileged host. It owns the window,
+// the tray, and the collector (the historian, run in-process). The renderer is
+// sandboxed and reaches this side only through the preload bridge: there is no
+// localhost port, so nothing on the machine but this app can reach the dish data
+// or cloud session.
+//
+// Lifecycle: the app is a background recorder with a window, not a window with a
+// background job. Closing the window releases the renderer but leaves the collector
+// running in the tray; the app quits only when the user chooses Quit.
 
-import { app, BrowserWindow, nativeImage } from "electron";
+import { app, BrowserWindow, Tray, Menu, nativeImage } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { existsSync, writeFileSync } from "node:fs";
 import { registerAppProtocolScheme, handleAppProtocol, APP_ENTRY_URL } from "./appProtocol";
 import { startCollector, handleApiRequest } from "./collector";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const rendererRoot = join(here, "../dist");
+const iconPath = join(here, "../build/icon.png");
 
 // Name the app before anything reads it — it drives the menu-bar title and the
 // per-app data directory. The macOS dock-hover tooltip comes from the bundle
@@ -26,8 +32,11 @@ registerAppProtocolScheme();
 // packaged build, where the renderer is loaded over app:// instead.
 const devServerUrl = process.env.VITE_DEV_SERVER_URL;
 
+let mainWindow: BrowserWindow | null = null;
+let tray: Tray | null = null;
+
 function createWindow(): void {
-  const window = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
     // Below this the dashboard's tiles and charts stop being usable; the app's
@@ -54,14 +63,71 @@ function createWindow(): void {
   });
 
   // Keep the fixed window title above; without this the page's <title> replaces it.
-  window.on("page-title-updated", (event) => event.preventDefault());
+  mainWindow.on("page-title-updated", (event) => event.preventDefault());
+  mainWindow.once("ready-to-show", () => mainWindow?.show());
+  // Closing the window frees the renderer; the collector keeps running in the tray.
+  // Reopening builds a fresh window.
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
 
-  window.once("ready-to-show", () => window.show());
+  void mainWindow.loadURL(devServerUrl ?? APP_ENTRY_URL);
+}
 
-  if (devServerUrl) {
-    void window.loadURL(devServerUrl);
+/** Bring the window forward, building it if the last one was closed. */
+function showWindow(): void {
+  if (mainWindow) {
+    mainWindow.show();
+    mainWindow.focus();
   } else {
-    void window.loadURL(APP_ENTRY_URL);
+    createWindow();
+  }
+}
+
+function createTray(): void {
+  const image = nativeImage.createFromPath(iconPath);
+  tray = new Tray(image.isEmpty() ? image : image.resize({ width: 18, height: 18 }));
+  tray.setToolTip("DishyLink");
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: "Open DishyLink", click: showWindow },
+      { type: "separator" },
+      {
+        label: "Open at Login",
+        type: "checkbox",
+        checked: app.getLoginItemSettings().openAtLogin,
+        // openAsHidden starts it in the background (tray only) at boot.
+        click: (item) =>
+          app.setLoginItemSettings({ openAtLogin: item.checked, openAsHidden: true }),
+      },
+      { type: "separator" },
+      { label: "Quit DishyLink", role: "quit" },
+    ]),
+  );
+  // On Windows/Linux a tray click opens the window; on macOS it shows the menu.
+  tray.on("click", showWindow);
+}
+
+/**
+ * On the first packaged run, start the app with the machine — a background recorder
+ * that only runs when the app is open would miss exactly the outages a user cares
+ * about. The tray's "Open at Login" controls it from then on.
+ *
+ * A dev run is never packaged; it must not leave a login item pointing at
+ * node_modules/electron, so there it only clears any such entry.
+ */
+function configureLoginItem(): void {
+  if (!app.isPackaged) {
+    app.setLoginItemSettings({ openAtLogin: false });
+    return;
+  }
+  const marker = join(app.getPath("userData"), ".setup-done");
+  if (existsSync(marker)) return;
+  app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true });
+  try {
+    writeFileSync(marker, new Date().toISOString());
+  } catch {
+    // Non-fatal: it just means we re-offer the default next launch.
   }
 }
 
@@ -69,7 +135,7 @@ void app.whenReady().then(async () => {
   // An unpackaged run shows Electron's default icon; set ours on the macOS dock.
   // A packaged build carries the icon in its bundle, so this only applies in dev.
   if (process.platform === "darwin" && !app.isPackaged) {
-    const icon = nativeImage.createFromPath(join(here, "../build/icon.png"));
+    const icon = nativeImage.createFromPath(iconPath);
     if (!icon.isEmpty()) app.dock?.setIcon(icon);
   }
   // Only the packaged app serves itself: the collector runs in this process and
@@ -78,16 +144,16 @@ void app.whenReady().then(async () => {
   if (!devServerUrl) {
     await startCollector(rendererRoot);
     handleAppProtocol(rendererRoot, handleApiRequest);
+    configureLoginItem();
   }
-  createWindow();
+  createTray();
+  // A normal launch opens the window; a launch the login item triggered stays in
+  // the background (tray only), so booting the machine doesn't pop a window.
+  if (!app.getLoginItemSettings().wasOpenedAtLogin) createWindow();
 });
 
-// macOS keeps an app running with no windows open until the user quits it; every
-// other platform treats the last window closing as quitting the app.
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
-});
+// The app lives in the tray after its window closes, so background collection keeps
+// running — it quits only via the tray's Quit. Hence no quit on window-all-closed.
+app.on("window-all-closed", () => {});
 
-app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow();
-});
+app.on("activate", showWindow);
