@@ -92,10 +92,12 @@ function createTray(): void {
     { label: "Open DishyLink", click: showWindow },
     { type: "separator" },
     {
-      label: "Open at Login",
+      // A login launch stays in the tray with no window (openAsHidden, plus the
+      // wasOpenedAtLogin check below), so the machine boots straight into background
+      // collection instead of a window the user then has to close.
+      label: "Start at Login",
       type: "checkbox",
       checked: app.getLoginItemSettings().openAtLogin,
-      // openAsHidden starts it in the background (tray only) at boot.
       click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked, openAsHidden: true }),
     },
     { type: "separator" },
