@@ -10,7 +10,7 @@
 
 import { addMinuteBucket, type MinuteBucket } from "@core/energyBuckets";
 import { planDrain, type DishWindow } from "@core/drain";
-import type { SampleCursor } from "@core/telemetry";
+import type { OutageEvent, SampleCursor } from "@core/telemetry";
 
 const EMPTY_CURSOR: SampleCursor = { counter: 0, newestSampleMs: 0 };
 
@@ -20,6 +20,11 @@ export interface HistoryStore {
   commit(deltas: MinuteBucket[], cursor: SampleCursor): Promise<void>;
   /** Buckets whose minute (epoch seconds) falls within [startSec, endSec]. */
   readMinutes(startSec: number, endSec: number): Promise<MinuteBucket[]>;
+  /** Upsert outage episodes keyed by start, so a re-seen one updates rather than
+   *  duplicates — the dish's ring buffer replays the same episodes each drain. */
+  putOutages(events: OutageEvent[]): Promise<void>;
+  /** All recorded outages, newest first. */
+  readOutages(): Promise<OutageEvent[]>;
 }
 
 /** Read the cursor, drain the window past it, and commit — one wake's work. */
@@ -32,8 +37,10 @@ export async function applyDrain(store: HistoryStore, window: DishWindow): Promi
 // --- IndexedDB (service worker) ---
 
 const DB_NAME = "dishylink-history";
+const DB_VERSION = 2;
 const MINUTES = "minutes";
 const META = "meta";
+const OUTAGES = "outages";
 const CURSOR_KEY = "cursor";
 
 function request<T>(req: IDBRequest<T>): Promise<T> {
@@ -53,13 +60,16 @@ function transactionDone(tx: IDBTransaction): Promise<void> {
 
 function openDatabase(name: string): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const open = indexedDB.open(name, 1);
+    const open = indexedDB.open(name, DB_VERSION);
     open.onupgradeneeded = () => {
       const db = open.result;
       // minute is the key, so a re-drained minute updates its row instead of
       // appending a duplicate — the additive merge reads it back before writing.
       if (!db.objectStoreNames.contains(MINUTES)) db.createObjectStore(MINUTES, { keyPath: "minute" });
       if (!db.objectStoreNames.contains(META)) db.createObjectStore(META);
+      // startMs is the key, so an outage the ring buffer replays each drain
+      // updates its row rather than appending a duplicate.
+      if (!db.objectStoreNames.contains(OUTAGES)) db.createObjectStore(OUTAGES, { keyPath: "startMs" });
     };
     open.onsuccess = () => resolve(open.result);
     open.onerror = () => reject(open.error);
@@ -96,12 +106,27 @@ export class IndexedDbHistory implements HistoryStore {
     const tx = this.db.transaction(MINUTES, "readonly");
     return request<MinuteBucket[]>(tx.objectStore(MINUTES).getAll(IDBKeyRange.bound(startSec, endSec)));
   }
+
+  async putOutages(events: OutageEvent[]): Promise<void> {
+    if (events.length === 0) return;
+    const tx = this.db.transaction(OUTAGES, "readwrite");
+    const store = tx.objectStore(OUTAGES);
+    for (const event of events) store.put(event);
+    await transactionDone(tx);
+  }
+
+  async readOutages(): Promise<OutageEvent[]> {
+    const tx = this.db.transaction(OUTAGES, "readonly");
+    const all = await request<OutageEvent[]>(tx.objectStore(OUTAGES).getAll());
+    return all.sort((a, b) => b.startMs - a.startMs);
+  }
 }
 
 // --- In-memory (tests) ---
 
 export class InMemoryHistory implements HistoryStore {
   private readonly minutes = new Map<number, MinuteBucket>();
+  private readonly outages = new Map<number, OutageEvent>();
   private cursor: SampleCursor = EMPTY_CURSOR;
 
   async readCursor(): Promise<SampleCursor> {
@@ -118,5 +143,13 @@ export class InMemoryHistory implements HistoryStore {
     return [...this.minutes.values()]
       .filter((bucket) => bucket.minute >= startSec && bucket.minute <= endSec)
       .sort((a, b) => a.minute - b.minute);
+  }
+
+  async putOutages(events: OutageEvent[]): Promise<void> {
+    for (const event of events) this.outages.set(event.startMs, event);
+  }
+
+  async readOutages(): Promise<OutageEvent[]> {
+    return [...this.outages.values()].sort((a, b) => b.startMs - a.startMs);
   }
 }

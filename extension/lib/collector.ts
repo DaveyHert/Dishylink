@@ -8,7 +8,7 @@
 
 import { DishClient } from "@core/dishClient";
 import { GrpcWebError } from "@core/grpcWeb";
-import { decodeHistoryWindow } from "@core/telemetry";
+import { decodeHistoryWindow, decodeOutageEvents } from "@core/telemetry";
 import { applyDrain, IndexedDbHistory } from "./history";
 import { DISH_HANDLE_URL } from "./endpoints";
 
@@ -26,7 +26,11 @@ export async function drainOnce(): Promise<DrainStatus> {
       DishClient.load("dish", { handleUrl: DISH_HANDLE_URL }),
     ]);
     const history = await client.getHistory(AbortSignal.timeout(DRAIN_TIMEOUT_MS));
-    await applyDrain(store, decodeHistoryWindow(history, Date.now()));
+    const now = Date.now();
+    await applyDrain(store, decodeHistoryWindow(history, now));
+    // Outages ride the same reply — the dish's event log / outage list is in the
+    // history window we already fetched, so recording them costs no extra poll.
+    await store.putOutages(decodeOutageEvents(history));
     return { ok: true, at };
   } catch (error) {
     return { ok: false, at, message: describeDrainError(error) };

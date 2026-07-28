@@ -33,5 +33,9 @@ export async function routeApiRequest(
     return { status: 200, body: summarizeEnergy(buckets, range, now) };
   }
 
+  if (url.pathname === "/api/outages") {
+    return { status: 200, body: { events: await store.readOutages() } };
+  }
+
   return { status: 503, body: { error: `no extension history for ${url.pathname}` } };
 }

@@ -42,6 +42,25 @@ describe("routeApiRequest", () => {
     expect((reply.body as { range: string }).range).toBe("today");
   });
 
+  it("serves recorded outages newest-first for /api/outages", async () => {
+    const store = new InMemoryHistory();
+    await store.putOutages([
+      { startMs: 1_000, durationMs: 5_000, cause: "NO_SCHEDULE", severity: "warning" },
+      { startMs: 9_000, durationMs: 2_000, cause: "OBSTRUCTED", severity: "warning" },
+    ]);
+    // A re-seen episode (same startMs) updates rather than duplicates.
+    await store.putOutages([
+      { startMs: 1_000, durationMs: 7_000, cause: "NO_SCHEDULE", severity: "warning" },
+    ]);
+
+    const reply = await routeApiRequest(store, "/api/outages", NOW);
+
+    expect(reply.status).toBe(200);
+    const { events } = reply.body as { events: Array<{ startMs: number; durationMs: number }> };
+    expect(events.map((e) => e.startMs)).toEqual([9_000, 1_000]);
+    expect(events[1]!.durationMs).toBe(7_000);
+  });
+
   it("answers 503 for feeds the extension does not record yet", async () => {
     const reply = await routeApiRequest(new InMemoryHistory(), "/api/thermal", NOW);
     expect(reply.status).toBe(503);
