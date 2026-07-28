@@ -1,6 +1,8 @@
 import { defineBackground } from "#imports";
 import { browser } from "wxt/browser";
 import { drainOnce } from "../lib/collector";
+import { routeApiRequest } from "../lib/apiRouter";
+import { IndexedDbHistory } from "../lib/history";
 
 // The toolbar icon opens the full dashboard page, never a toolbar-anchored
 // dropdown (the dashboard is chart-heavy and wants room). Two user-selectable
@@ -65,6 +67,17 @@ async function openDashboard(): Promise<void> {
 
 export default defineBackground(() => {
   browser.action.onClicked.addListener(() => void openDashboard());
+
+  // The dashboard page reads recorded history over /api, which no origin serves
+  // inside an extension, so its apiHost binding messages here. Only /api messages
+  // are handled; returning a promise for them (and nothing for anything else)
+  // keeps the response channel open for the async IndexedDB read.
+  browser.runtime.onMessage.addListener((message) => {
+    const request = message as { type?: string; path?: string };
+    if (request?.type !== "api" || typeof request.path !== "string") return false;
+    const { path } = request;
+    return IndexedDbHistory.open().then((store) => routeApiRequest(store, path));
+  });
 
   // Saved bounds are restored on the next open, so the window returns where the
   // user left it. Only the dashboard window's own moves and resizes are tracked.
