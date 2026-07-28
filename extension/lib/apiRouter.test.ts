@@ -81,8 +81,39 @@ describe("routeApiRequest", () => {
     expect(body.history[0]!.dutyCycle).toBe(40); // lowest, not averaged
   });
 
+  it("reconciles alert booleans into open then closed episodes for /api/alerts", async () => {
+    const store = new InMemoryHistory();
+    await store.putAlerts("dish", { thermalThrottle: true }, 1_000);
+    // A second poll with the flag gone (proto3 omits false) closes the episode.
+    await store.putAlerts("dish", {}, 5_000);
+    // A still-open episode on another key stays open.
+    await store.putAlerts("router", { roamingSwitchDetected: true }, 6_000);
+
+    const reply = await routeApiRequest(store, "/api/alerts", new Date(10_000));
+
+    expect(reply.status).toBe(200);
+    const { episodes } = reply.body as {
+      episodes: Array<{ source: string; key: string; startMs: number; endMs: number | null }>;
+    };
+    const throttle = episodes.find((e) => e.key === "thermalThrottle")!;
+    expect(throttle.startMs).toBe(1_000);
+    expect(throttle.endMs).toBe(5_000);
+    expect(episodes.find((e) => e.key === "roamingSwitchDetected")!.endMs).toBeNull();
+  });
+
+  it("serves only thermal keys for /api/thermal, in the source-less shape", async () => {
+    const store = new InMemoryHistory();
+    await store.putAlerts("dish", { thermalThrottle: true, dishWaterDetected: true }, 2_000);
+
+    const reply = await routeApiRequest(store, "/api/thermal", new Date(10_000));
+
+    const { episodes } = reply.body as { episodes: Array<{ alertKey: string }> };
+    expect(episodes).toHaveLength(1);
+    expect(episodes[0]!.alertKey).toBe("thermalThrottle");
+  });
+
   it("answers 503 for feeds the extension does not record yet", async () => {
-    const reply = await routeApiRequest(new InMemoryHistory(), "/api/thermal", NOW);
+    const reply = await routeApiRequest(new InMemoryHistory(), "/api/clients", NOW);
     expect(reply.status).toBe(503);
   });
 });

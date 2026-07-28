@@ -31,8 +31,9 @@ export async function drainOnce(): Promise<DrainStatus> {
     // Outages ride the same reply — the dish's event log / outage list is in the
     // history window we already fetched, so recording them costs no extra poll.
     await store.putOutages(decodeOutageEvents(history));
-    // Router feeds are best-effort: an unreachable (or non-Starlink) router must
-    // not mark the dish drain failed, so its own failure is swallowed here.
+    // Status-derived and router feeds are best-effort: a get_status miss or an
+    // unreachable (or non-Starlink) router must not mark the dish drain failed.
+    await drainDishStatus(store, client).catch(() => {});
     await drainRouterFeeds(store).catch(() => {});
     return { ok: true, at };
   } catch (error) {
@@ -40,12 +41,25 @@ export async function drainOnce(): Promise<DrainStatus> {
   }
 }
 
-/** Poll the router's own feeds. Separate from the dish drain and best-effort:
- *  get_radio_stats is the safe RPC the historian already polls (never get_ping). */
+/** Record the dish's live alert booleans as open/closed episodes. get_status is
+ *  the safe, tiny reply the historian already polls. */
+async function drainDishStatus(store: HistoryStore, dish: DishClient): Promise<void> {
+  const status = await dish.getStatus(AbortSignal.timeout(DRAIN_TIMEOUT_MS));
+  await store.putAlerts("dish", status.alerts ?? {}, Date.now());
+}
+
+/** Poll the router's own feeds — radio temperatures and its alert set. Separate
+ *  from the dish drain and best-effort: get_radio_stats and get_status are the
+ *  safe RPCs the historian already polls (never get_ping). */
 async function drainRouterFeeds(store: HistoryStore): Promise<void> {
   const router = await DishClient.load("router", { handleUrl: ROUTER_HANDLE_URL });
-  const stats = await router.getRadioStats(AbortSignal.timeout(DRAIN_TIMEOUT_MS));
-  await store.putRadio(decodeRadioReadings(stats), Date.now());
+  const [stats, status] = await Promise.all([
+    router.getRadioStats(AbortSignal.timeout(DRAIN_TIMEOUT_MS)),
+    router.getRouterStatus(AbortSignal.timeout(DRAIN_TIMEOUT_MS)),
+  ]);
+  const now = Date.now();
+  await store.putRadio(decodeRadioReadings(stats), now);
+  await store.putAlerts("router", status.alerts ?? {}, now);
 }
 
 function describeDrainError(error: unknown): string {

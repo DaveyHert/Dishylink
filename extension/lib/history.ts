@@ -37,6 +37,21 @@ interface RadioAccumulator {
   dutyMin: number;
 }
 
+/** Which device raised an alert — plus "system" for conditions observed about a
+ *  device (e.g. it not answering) rather than read off it. */
+export type AlertSource = "dish" | "router" | "system";
+
+/** One alert/thermal episode: a boolean flag from open (false→true) to close. */
+export interface AlertEpisode {
+  /** `${source}:${key}:${startMs}`, unique per episode — the store key. */
+  id: string;
+  source: AlertSource;
+  key: string;
+  startMs: number;
+  /** null while the flag is still set. */
+  endMs: number | null;
+}
+
 export interface HistoryStore {
   readCursor(): Promise<SampleCursor>;
   /** Additively merge these minute deltas and advance the cursor, atomically. */
@@ -57,6 +72,10 @@ export interface HistoryStore {
     atMs: number | null;
     history: RadioMinute[];
   }>;
+  /** Reconcile a device's live alert booleans into open/closed episodes. */
+  putAlerts(source: AlertSource, alerts: Record<string, boolean>, nowMs: number): Promise<void>;
+  /** All alert episodes within the retention window, newest first. */
+  readAlerts(nowMs?: number): Promise<AlertEpisode[]>;
 }
 
 /** Average a radio accumulator into its closed-minute reading. */
@@ -67,6 +86,38 @@ function radioMinuteOf(acc: RadioAccumulator): RadioMinute {
     tempC: Math.round((acc.sum / Math.max(acc.count, 1)) * 10) / 10,
     dutyCycle: acc.dutyMin,
   };
+}
+
+const ALERT_RETENTION_MS = 7 * 24 * 3_600_000;
+
+/** Reconcile one device's live alert booleans against its recorded episodes:
+ *  returns the episodes to write — new opens for newly-set flags, closes for
+ *  cleared ones. proto3 omits false keys, so an open key absent from the payload
+ *  has cleared. Pure, so the store just persists what it returns. */
+function reconcileAlerts(
+  source: AlertSource,
+  existing: AlertEpisode[],
+  alerts: Record<string, boolean>,
+  nowMs: number,
+): AlertEpisode[] {
+  const openFor = (key: string) =>
+    existing.find((e) => e.source === source && e.key === key && e.endMs === null);
+  const toPut: AlertEpisode[] = [];
+  for (const [key, active] of Object.entries(alerts)) {
+    if (active === true) {
+      if (!openFor(key))
+        toPut.push({ id: `${source}:${key}:${nowMs}`, source, key, startMs: nowMs, endMs: null });
+    } else {
+      const open = openFor(key);
+      if (open) toPut.push({ ...open, endMs: nowMs });
+    }
+  }
+  // An open key that vanished from the payload entirely has also cleared.
+  for (const episode of existing) {
+    if (episode.source === source && episode.endMs === null && !(episode.key in alerts))
+      toPut.push({ ...episode, endMs: nowMs });
+  }
+  return toPut;
 }
 
 /** Fold one reading into its (minute, band) accumulator — averaged temperature,
@@ -96,11 +147,12 @@ export async function applyDrain(store: HistoryStore, window: DishWindow): Promi
 // --- IndexedDB (service worker) ---
 
 const DB_NAME = "dishylink-history";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const MINUTES = "minutes";
 const META = "meta";
 const OUTAGES = "outages";
 const RADIO = "radio";
+const ALERTS = "alerts";
 const CURSOR_KEY = "cursor";
 const RADIO_CURRENT_KEY = "radioCurrent";
 
@@ -134,6 +186,8 @@ function openDatabase(name: string): Promise<IDBDatabase> {
       // `${minute}:${band}` is the key, so each poll folds into the minute in
       // progress rather than appending — the minute survives a worker teardown.
       if (!db.objectStoreNames.contains(RADIO)) db.createObjectStore(RADIO, { keyPath: "key" });
+      // One row per alert episode, keyed by `${source}:${key}:${startMs}`.
+      if (!db.objectStoreNames.contains(ALERTS)) db.createObjectStore(ALERTS, { keyPath: "id" });
     };
     open.onsuccess = () => resolve(open.result);
     open.onerror = () => reject(open.error);
@@ -212,6 +266,23 @@ export class IndexedDbHistory implements HistoryStore {
       .sort((a, b) => a.minute - b.minute);
     return { current: current?.readings ?? [], atMs: current?.atMs ?? null, history };
   }
+
+  async putAlerts(source: AlertSource, alerts: Record<string, boolean>, nowMs: number): Promise<void> {
+    const tx = this.db.transaction(ALERTS, "readwrite");
+    const store = tx.objectStore(ALERTS);
+    const existing = await request<AlertEpisode[]>(store.getAll());
+    for (const episode of reconcileAlerts(source, existing, alerts, nowMs)) store.put(episode);
+    await transactionDone(tx);
+  }
+
+  async readAlerts(nowMs: number = Date.now()): Promise<AlertEpisode[]> {
+    const tx = this.db.transaction(ALERTS, "readonly");
+    const all = await request<AlertEpisode[]>(tx.objectStore(ALERTS).getAll());
+    const cutoffMs = nowMs - ALERT_RETENTION_MS;
+    return all
+      .filter((e) => e.endMs === null || e.startMs >= cutoffMs)
+      .sort((a, b) => b.startMs - a.startMs);
+  }
 }
 
 // --- In-memory (tests) ---
@@ -221,6 +292,7 @@ export class InMemoryHistory implements HistoryStore {
   private readonly outages = new Map<number, OutageEvent>();
   private readonly radio = new Map<string, RadioAccumulator>();
   private radioCurrent: RadioCurrent | null = null;
+  private readonly alerts = new Map<string, AlertEpisode>();
   private cursor: SampleCursor = EMPTY_CURSOR;
 
   async readCursor(): Promise<SampleCursor> {
@@ -268,5 +340,17 @@ export class InMemoryHistory implements HistoryStore {
       atMs: this.radioCurrent?.atMs ?? null,
       history,
     };
+  }
+
+  async putAlerts(source: AlertSource, alerts: Record<string, boolean>, nowMs: number): Promise<void> {
+    for (const episode of reconcileAlerts(source, [...this.alerts.values()], alerts, nowMs))
+      this.alerts.set(episode.id, episode);
+  }
+
+  async readAlerts(nowMs: number = Date.now()): Promise<AlertEpisode[]> {
+    const cutoffMs = nowMs - ALERT_RETENTION_MS;
+    return [...this.alerts.values()]
+      .filter((e) => e.endMs === null || e.startMs >= cutoffMs)
+      .sort((a, b) => b.startMs - a.startMs);
   }
 }

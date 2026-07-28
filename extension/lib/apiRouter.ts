@@ -13,6 +13,10 @@
 import { energyRangeBounds, RANGES, summarizeEnergy, type Range } from "@core/energySummary";
 import type { HistoryStore } from "./history";
 
+// The alert keys the dish raises for heat; /api/thermal is the alert log narrowed
+// to these. Matches the historian's THERMAL_ALERT_KEYS.
+const THERMAL_ALERT_KEYS = ["thermalThrottle", "thermalShutdown", "powerSupplyThermalThrottle"];
+
 export interface ApiReply {
   status: number;
   body: unknown;
@@ -40,6 +44,19 @@ export async function routeApiRequest(
   if (url.pathname === "/api/radio") {
     const hours = Math.min(24, Math.max(1, Number(url.searchParams.get("hours") ?? 6)));
     return { status: 200, body: await store.readRadio(hours, now.getTime()) };
+  }
+
+  if (url.pathname === "/api/alerts") {
+    return { status: 200, body: { episodes: await store.readAlerts(now.getTime()) } };
+  }
+
+  if (url.pathname === "/api/thermal") {
+    // Thermal is the alert log filtered to the thermal keys, in the source-less
+    // shape the historian's thermal store serves.
+    const episodes = (await store.readAlerts(now.getTime()))
+      .filter((e) => THERMAL_ALERT_KEYS.includes(e.key))
+      .map((e) => ({ alertKey: e.key, startMs: e.startMs, endMs: e.endMs }));
+    return { status: 200, body: { episodes } };
   }
 
   return { status: 503, body: { error: `no extension history for ${url.pathname}` } };
