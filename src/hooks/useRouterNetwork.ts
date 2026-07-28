@@ -8,6 +8,7 @@ import { DishClient, type WifiClientJson, type WifiNetworkConfigJson } from "@co
 import type { ThroughputRates } from "@core/throughputTracker";
 import type { TelemetrySample } from "@core/telemetry";
 import { usageKey, type ClientUsageTotal } from "@core/clientUsage";
+import { apiRequest } from "../lib/apiHost";
 
 // Roster only — names, signal, addresses, link rates. These change on the order
 // of minutes, so there is nothing to gain from asking faster.
@@ -99,7 +100,7 @@ export async function fetchPersistedClientHistory(): Promise<SeededClientHistory
   const history = new Map<string, TelemetrySample[]>();
   let newestSampleMs = 0;
   try {
-    const response = await fetch("/api/clients?hours=6&samples=1", {
+    const response = await apiRequest("/api/clients?hours=6&samples=1", {
       signal: AbortSignal.timeout(4_000),
     });
     if (!response.ok) return { history, newestSampleMs };
@@ -293,7 +294,7 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
           try {
             const since = lastSampleMsRef.current;
             const wantTotals = tailTick++ % TOTALS_EVERY_TICKS === 0;
-            const response = await fetch(
+            const response = await apiRequest(
               `/api/clients?samples=1${wantTotals ? "&totals=1" : ""}${since ? `&since=${since}` : "&hours=6"}`,
               { signal: AbortSignal.timeout(4_000) },
             );

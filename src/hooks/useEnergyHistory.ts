@@ -4,6 +4,7 @@
 // but only exists while `npm run historian` has been running.
 
 import { useEffect, useState } from "react";
+import { apiRequest } from "../lib/apiHost";
 
 export type EnergyRange = "1h" | "6h" | "12h" | "today" | "day" | "week" | "month";
 
@@ -44,7 +45,7 @@ export function useEnergyHistory(range: EnergyRange, active: boolean): EnergyHis
     const load = async () => {
       setLoading(true);
       try {
-        const response = await fetch(`/api/energy?range=${range}`);
+        const response = await apiRequest(`/api/energy?range=${range}`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const summary = (await response.json()) as EnergySummary;
         if (cancelled) return;

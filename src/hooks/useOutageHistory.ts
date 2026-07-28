@@ -7,6 +7,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { canonicalCause, type OutageEvent } from "@core/telemetry";
+import { apiRequest } from "../lib/apiHost";
 
 const REFRESH_MS = 30_000;
 
@@ -38,7 +39,7 @@ export function useOutageHistory(): OutageEvent[] {
     let disposed = false;
     const load = async () => {
       try {
-        const response = await fetch("/api/outages", { signal: AbortSignal.timeout(4_000) });
+        const response = await apiRequest("/api/outages", { signal: AbortSignal.timeout(4_000) });
         if (!response.ok) return;
         const body = (await response.json()) as { events?: OutageEvent[] };
         if (!disposed) setEvents(body.events ?? []);

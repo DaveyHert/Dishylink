@@ -5,6 +5,8 @@
 // packing half lives in the historian (collector/obstructionStore.mts), which is
 // the only writer; this side only ever unpacks what it is served.
 
+import { apiRequest } from "./apiHost";
+
 export const CELL_UNMAPPED = 0;
 export const CELL_CLEAR = 1;
 export const CELL_PARTIAL = 2;
@@ -41,7 +43,7 @@ export function unpackCells(snapshot: ObstructionSnapshot): Uint8Array {
  */
 export async function fetchSnapshots(): Promise<ObstructionSnapshot[] | null> {
   try {
-    const response = await fetch("/api/obstruction/snapshots", {
+    const response = await apiRequest("/api/obstruction/snapshots", {
       signal: AbortSignal.timeout(4_000),
     });
     if (!response.ok) return null;

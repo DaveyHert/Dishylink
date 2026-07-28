@@ -12,6 +12,8 @@
 // Only the web path runs today; the other two light up automatically once those
 // targets exist, with no change here.
 
+import { apiRequest } from "./apiHost";
+
 export interface SelfIdentity {
   /** Lowercased IPv4/IPv6 address(es) of this device's active interface(s). */
   ips: string[];
@@ -78,7 +80,7 @@ async function fromExtension(): Promise<SelfIdentity | null> {
 
 async function fromWhoami(signal?: AbortSignal): Promise<SelfIdentity | null> {
   try {
-    const response = await fetch("/api/whoami", { signal });
+    const response = await apiRequest("/api/whoami", { signal });
     if (!response.ok) return null;
     // Remote viewer → { ips: [callerIp] }. Same-host viewer → this host's own
     // interface ips + macs (see the historian's /api/whoami).

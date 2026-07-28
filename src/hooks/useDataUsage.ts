@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from "react";
 import type { EnergyRange } from "./useEnergyHistory";
+import { apiRequest } from "../lib/apiHost";
 
 export interface UsageBucket {
   t: number;
@@ -33,7 +34,7 @@ export function useDataUsage(range: EnergyRange, active: boolean) {
 
     const load = async () => {
       try {
-        const response = await fetch(`/api/usage?range=${range}`);
+        const response = await apiRequest(`/api/usage?range=${range}`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const summary = (await response.json()) as UsageSummary;
         if (cancelled) return;

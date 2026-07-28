@@ -13,6 +13,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { OutageEvent } from "@core/telemetry";
+import { apiRequest } from "../lib/apiHost";
 
 interface ThermalAlertSpec {
   /** Key on `alerts`, as emitted by the protobuf JSON mapping. */
@@ -82,7 +83,7 @@ export function useThermalEvents(): OutageEvent[] {
     let disposed = false;
     const load = async () => {
       try {
-        const response = await fetch("/api/thermal", { signal: AbortSignal.timeout(4_000) });
+        const response = await apiRequest("/api/thermal", { signal: AbortSignal.timeout(4_000) });
         if (!response.ok) return;
         const body = (await response.json()) as { episodes?: ThermalEpisodeJson[] };
         if (!disposed) setEpisodes(body.episodes ?? []);

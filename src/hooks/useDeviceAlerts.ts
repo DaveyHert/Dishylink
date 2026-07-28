@@ -28,6 +28,7 @@ import {
 } from "../lib/dishAlerts";
 import { sendNotification } from "../lib/notifications";
 import { playAlertSound } from "../lib/alertSound";
+import { apiRequest } from "../lib/apiHost";
 
 const HISTORY_POLL_MS = 30_000;
 
@@ -193,7 +194,7 @@ export function useDeviceAlerts(
     let disposed = false;
     const load = async () => {
       try {
-        const response = await fetch("/api/alerts", { signal: AbortSignal.timeout(4_000) });
+        const response = await apiRequest("/api/alerts", { signal: AbortSignal.timeout(4_000) });
         if (!response.ok) throw new Error(`status ${response.status}`);
         const body = (await response.json()) as { episodes?: AlertEpisodeJson[] };
         if (disposed) return;

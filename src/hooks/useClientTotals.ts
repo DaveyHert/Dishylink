@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { usageKey, type ClientUsageTotal } from "@core/clientUsage";
+import { apiRequest } from "../lib/apiHost";
 
 const REFRESH_MS = 10_000;
 
@@ -29,7 +30,7 @@ export function useClientTotals(active: boolean) {
 
   const load = useCallback(async () => {
     try {
-      const response = await fetch("/api/clients/totals");
+      const response = await apiRequest("/api/clients/totals");
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const payload = (await response.json()) as { totals?: ClientUsageTotal[] };
       setTotals(payload.totals ?? []);
@@ -64,7 +65,7 @@ export function useClientTotals(active: boolean) {
       );
       try {
         checkWrite(
-          await fetch(`/api/clients/totals?client=${encodeURIComponent(key)}`, {
+          await apiRequest(`/api/clients/totals?client=${encodeURIComponent(key)}`, {
             method: "DELETE",
           }),
         );
@@ -88,7 +89,7 @@ export function useClientTotals(active: boolean) {
       );
       try {
         checkWrite(
-          await fetch(`/api/clients/totals/reset?client=${encodeURIComponent(key)}`, {
+          await apiRequest(`/api/clients/totals/reset?client=${encodeURIComponent(key)}`, {
             method: "POST",
           }),
         );
@@ -102,7 +103,7 @@ export function useClientTotals(active: boolean) {
   const clearAll = useCallback(async () => {
     setTotals([]);
     try {
-      checkWrite(await fetch("/api/clients/totals", { method: "DELETE" }));
+      checkWrite(await apiRequest("/api/clients/totals", { method: "DELETE" }));
     } finally {
       await load();
     }

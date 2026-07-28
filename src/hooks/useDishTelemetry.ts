@@ -11,6 +11,7 @@ import {
 } from "@core/dishClient";
 import { GrpcWebError } from "@core/grpcWeb";
 import { subscribeRouterStatus } from "../lib/routerStatusFeed";
+import { apiRequest } from "../lib/apiHost";
 import {
   TelemetryAccumulator,
   decodeOutageEvents,
@@ -28,7 +29,7 @@ import {
  */
 async function fetchPersistedSamples(): Promise<TelemetrySample[]> {
   try {
-    const response = await fetch("/api/samples?minutes=360", {
+    const response = await apiRequest("/api/samples?minutes=360", {
       signal: AbortSignal.timeout(4_000),
     });
     if (!response.ok) return [];

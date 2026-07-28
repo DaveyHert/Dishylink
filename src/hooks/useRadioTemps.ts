@@ -8,6 +8,7 @@
 // cool it. One without the other is half the story.
 
 import { useEffect, useState } from "react";
+import { apiRequest } from "../lib/apiHost";
 
 export interface RadioReading {
   /** "RF_2GHZ" | "RF_5GHZ" | "RF_5GHZ_HIGH". */
@@ -46,7 +47,7 @@ export function useRadioTemps(active: boolean, hours = 6): RadioTemps {
 
     const load = async () => {
       try {
-        const response = await fetch(`/api/radio?hours=${hours}`, {
+        const response = await apiRequest(`/api/radio?hours=${hours}`, {
           signal: AbortSignal.timeout(4_000),
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
