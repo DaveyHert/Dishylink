@@ -112,6 +112,18 @@ describe("routeApiRequest", () => {
     expect(episodes[0]!.alertKey).toBe("thermalThrottle");
   });
 
+  it("serves obstruction snapshots oldest-first for the scrubber", async () => {
+    const store = new InMemoryHistory();
+    await store.putObstruction({ takenAtMs: 9_000, gridSize: 4, packedCells: "b" });
+    await store.putObstruction({ takenAtMs: 3_000, gridSize: 4, packedCells: "a" });
+
+    const reply = await routeApiRequest(store, "/api/obstruction/snapshots", new Date(10_000));
+
+    expect(reply.status).toBe(200);
+    const { snapshots } = reply.body as { snapshots: Array<{ takenAtMs: number }> };
+    expect(snapshots.map((s) => s.takenAtMs)).toEqual([3_000, 9_000]);
+  });
+
   it("answers 503 for feeds the extension does not record yet", async () => {
     const reply = await routeApiRequest(new InMemoryHistory(), "/api/clients", NOW);
     expect(reply.status).toBe(503);

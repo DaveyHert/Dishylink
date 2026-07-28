@@ -37,6 +37,15 @@ interface RadioAccumulator {
   dutyMin: number;
 }
 
+/** One hourly obstruction-map snapshot for the time-lapse, cells packed 2 bits
+ *  each as base64 — the shape the client's unpack path reads. */
+export interface ObstructionSnapshot {
+  takenAtMs: number;
+  gridSize: number;
+  packedCells: string;
+  maxThetaDeg?: number;
+}
+
 /** Which device raised an alert — plus "system" for conditions observed about a
  *  device (e.g. it not answering) rather than read off it. */
 export type AlertSource = "dish" | "router" | "system";
@@ -76,7 +85,13 @@ export interface HistoryStore {
   putAlerts(source: AlertSource, alerts: Record<string, boolean>, nowMs: number): Promise<void>;
   /** All alert episodes within the retention window, newest first. */
   readAlerts(nowMs?: number): Promise<AlertEpisode[]>;
+  /** Append an hourly obstruction snapshot, dropping any past retention. */
+  putObstruction(snapshot: ObstructionSnapshot): Promise<void>;
+  /** Snapshots within retention, oldest first — the order the scrubber expects. */
+  readObstructionSnapshots(nowMs?: number): Promise<ObstructionSnapshot[]>;
 }
+
+const OBSTRUCTION_RETENTION_MS = 7 * 24 * 3_600_000;
 
 /** Average a radio accumulator into its closed-minute reading. */
 function radioMinuteOf(acc: RadioAccumulator): RadioMinute {
@@ -147,12 +162,13 @@ export async function applyDrain(store: HistoryStore, window: DishWindow): Promi
 // --- IndexedDB (service worker) ---
 
 const DB_NAME = "dishylink-history";
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 const MINUTES = "minutes";
 const META = "meta";
 const OUTAGES = "outages";
 const RADIO = "radio";
 const ALERTS = "alerts";
+const OBSTRUCTION = "obstruction";
 const CURSOR_KEY = "cursor";
 const RADIO_CURRENT_KEY = "radioCurrent";
 
@@ -188,6 +204,9 @@ function openDatabase(name: string): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(RADIO)) db.createObjectStore(RADIO, { keyPath: "key" });
       // One row per alert episode, keyed by `${source}:${key}:${startMs}`.
       if (!db.objectStoreNames.contains(ALERTS)) db.createObjectStore(ALERTS, { keyPath: "id" });
+      // One row per hourly snapshot, keyed by capture time.
+      if (!db.objectStoreNames.contains(OBSTRUCTION))
+        db.createObjectStore(OBSTRUCTION, { keyPath: "takenAtMs" });
     };
     open.onsuccess = () => resolve(open.result);
     open.onerror = () => reject(open.error);
@@ -283,6 +302,23 @@ export class IndexedDbHistory implements HistoryStore {
       .filter((e) => e.endMs === null || e.startMs >= cutoffMs)
       .sort((a, b) => b.startMs - a.startMs);
   }
+
+  async putObstruction(snapshot: ObstructionSnapshot): Promise<void> {
+    const tx = this.db.transaction(OBSTRUCTION, "readwrite");
+    const store = tx.objectStore(OBSTRUCTION);
+    store.put(snapshot);
+    // Prune anything past the retention window on the same write.
+    const cutoff = snapshot.takenAtMs - OBSTRUCTION_RETENTION_MS;
+    store.delete(IDBKeyRange.upperBound(cutoff, true));
+    await transactionDone(tx);
+  }
+
+  async readObstructionSnapshots(nowMs: number = Date.now()): Promise<ObstructionSnapshot[]> {
+    const tx = this.db.transaction(OBSTRUCTION, "readonly");
+    const all = await request<ObstructionSnapshot[]>(tx.objectStore(OBSTRUCTION).getAll());
+    const cutoff = nowMs - OBSTRUCTION_RETENTION_MS;
+    return all.filter((s) => s.takenAtMs >= cutoff).sort((a, b) => a.takenAtMs - b.takenAtMs);
+  }
 }
 
 // --- In-memory (tests) ---
@@ -293,6 +329,7 @@ export class InMemoryHistory implements HistoryStore {
   private readonly radio = new Map<string, RadioAccumulator>();
   private radioCurrent: RadioCurrent | null = null;
   private readonly alerts = new Map<string, AlertEpisode>();
+  private readonly obstruction = new Map<number, ObstructionSnapshot>();
   private cursor: SampleCursor = EMPTY_CURSOR;
 
   async readCursor(): Promise<SampleCursor> {
@@ -352,5 +389,18 @@ export class InMemoryHistory implements HistoryStore {
     return [...this.alerts.values()]
       .filter((e) => e.endMs === null || e.startMs >= cutoffMs)
       .sort((a, b) => b.startMs - a.startMs);
+  }
+
+  async putObstruction(snapshot: ObstructionSnapshot): Promise<void> {
+    this.obstruction.set(snapshot.takenAtMs, snapshot);
+    const cutoff = snapshot.takenAtMs - OBSTRUCTION_RETENTION_MS;
+    for (const [at] of this.obstruction) if (at < cutoff) this.obstruction.delete(at);
+  }
+
+  async readObstructionSnapshots(nowMs: number = Date.now()): Promise<ObstructionSnapshot[]> {
+    const cutoff = nowMs - OBSTRUCTION_RETENTION_MS;
+    return [...this.obstruction.values()]
+      .filter((s) => s.takenAtMs >= cutoff)
+      .sort((a, b) => a.takenAtMs - b.takenAtMs);
   }
 }

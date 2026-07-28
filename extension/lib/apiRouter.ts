@@ -59,5 +59,9 @@ export async function routeApiRequest(
     return { status: 200, body: { episodes } };
   }
 
+  if (url.pathname === "/api/obstruction/snapshots") {
+    return { status: 200, body: { snapshots: await store.readObstructionSnapshots(now.getTime()) } };
+  }
+
   return { status: 503, body: { error: `no extension history for ${url.pathname}` } };
 }

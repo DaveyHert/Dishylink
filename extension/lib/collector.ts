@@ -10,9 +10,11 @@ import { DishClient } from "@core/dishClient";
 import { GrpcWebError } from "@core/grpcWeb";
 import { decodeHistoryWindow, decodeOutageEvents, decodeRadioReadings } from "@core/telemetry";
 import { applyDrain, IndexedDbHistory, type HistoryStore } from "./history";
+import { packObstructionCells } from "./obstruction";
 import { DISH_HANDLE_URL, ROUTER_HANDLE_URL } from "./endpoints";
 
 const DRAIN_TIMEOUT_MS = 8_000;
+const OBSTRUCTION_INTERVAL_MS = 3_600_000; // one snapshot an hour, as the historian records
 
 export type DrainStatus =
   | { ok: true; at: number }
@@ -34,6 +36,7 @@ export async function drainOnce(): Promise<DrainStatus> {
     // Status-derived and router feeds are best-effort: a get_status miss or an
     // unreachable (or non-Starlink) router must not mark the dish drain failed.
     await drainDishStatus(store, client).catch(() => {});
+    await drainObstruction(store, client).catch(() => {});
     await drainRouterFeeds(store).catch(() => {});
     return { ok: true, at };
   } catch (error) {
@@ -46,6 +49,22 @@ export async function drainOnce(): Promise<DrainStatus> {
 async function drainDishStatus(store: HistoryStore, dish: DishClient): Promise<void> {
   const status = await dish.getStatus(AbortSignal.timeout(DRAIN_TIMEOUT_MS));
   await store.putAlerts("dish", status.alerts ?? {}, Date.now());
+}
+
+/** Record an hourly obstruction-map snapshot for the time-lapse. Checked every
+ *  tick but only fetched when an hour has passed, so it costs a poll once an hour. */
+async function drainObstruction(store: HistoryStore, dish: DishClient): Promise<void> {
+  const snapshots = await store.readObstructionSnapshots();
+  const newest = snapshots[snapshots.length - 1];
+  if (newest && Date.now() - newest.takenAtMs < OBSTRUCTION_INTERVAL_MS) return;
+  const map = await dish.getObstructionMap(AbortSignal.timeout(DRAIN_TIMEOUT_MS));
+  if (!map.snr?.length || !map.numRows || map.numRows !== map.numCols) return;
+  await store.putObstruction({
+    takenAtMs: Date.now(),
+    gridSize: map.numRows,
+    packedCells: packObstructionCells(map.snr),
+    maxThetaDeg: map.maxThetaDeg,
+  });
 }
 
 /** Poll the router's own feeds — radio temperatures and its alert set. Separate
