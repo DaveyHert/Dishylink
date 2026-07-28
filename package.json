@@ -22,6 +22,7 @@
     "historian": "tsx collector/historian.mts",
     "seed:desktop": "node scripts/seed-desktop.mjs",
     "typecheck": "tsc -b",
+    "typecheck:extension": "wxt prepare && tsc --noEmit -p tsconfig.extension.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

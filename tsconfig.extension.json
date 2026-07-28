@@ -1,0 +1,15 @@
+// Typechecks the extension host against WXT's generated config (which supplies the
+// #imports / browser types and the DOM lib the service worker and manager need),
+// but scoped to extension/ and realigned to the repo's strictness: WXT defaults to
+// noUncheckedIndexedAccess, which the rest of the codebase does not use, and omits
+// the JSX setting its own Vite build applies. Run via `npm run typecheck:extension`
+// after `wxt prepare` has generated .wxt/.
+{
+  "extends": "./.wxt/tsconfig.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "noUncheckedIndexedAccess": false
+  },
+  "include": ["extension/**/*", ".wxt/wxt.d.ts"],
+  "exclude": ["**/node_modules", ".output"]
+}

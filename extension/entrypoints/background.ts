@@ -41,7 +41,7 @@ async function openManagerWindow(): Promise<void> {
     url: browser.runtime.getURL(MANAGER_PATH),
     ...bounds,
   });
-  managerWindowId = created.id;
+  managerWindowId = created?.id;
 }
 
 async function openManagerTab(): Promise<void> {
@@ -75,7 +75,9 @@ export default defineBackground(() => {
       });
     });
   };
-  browser.windows.onBoundsChanged?.addListener((win) => rememberBounds(win.id));
+  browser.windows.onBoundsChanged?.addListener((win) => {
+    if (win.id !== undefined) rememberBounds(win.id);
+  });
   browser.windows.onRemoved.addListener((windowId) => {
     if (windowId === managerWindowId) managerWindowId = undefined;
   });

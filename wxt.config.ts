@@ -10,8 +10,14 @@ import { defineConfig } from "wxt";
 export default defineConfig({
   srcDir: "extension",
   modules: ["@wxt-dev/module-react"],
-  // satellite.js is a wasm build; its worker needs es-module output for top-level await.
-  vite: () => ({ worker: { format: "es" } }),
+  vite: () => ({
+    // satellite.js is a wasm build; its worker needs es-module output for top-level await.
+    worker: { format: "es" },
+    // Scope dependency pre-bundling to the extension's own pages. Left to its
+    // default, Vite globs every index.html at the repo root — including the web
+    // app's and a stale dist/ build — and the scan errors on their web-only imports.
+    optimizeDeps: { entries: ["extension/entrypoints/**/*.html"] },
+  }),
   manifest: {
     name: "DishyLink",
     description: "Live dashboard and history recorder for a Starlink kit (unofficial).",
@@ -36,7 +42,11 @@ export default defineConfig({
     },
     // No default_popup, so chrome.action.onClicked fires and the background opens
     // the full manager page — a chart-heavy dashboard wants room, not a dropdown.
-    action: {},
+    // default_icon is set explicitly rather than left to the icons fallback.
+    action: {
+      default_title: "DishyLink",
+      default_icon: { "16": "icon/16.png", "32": "icon/32.png", "48": "icon/48.png", "128": "icon/128.png" },
+    },
   },
   alias: {
     "@core": "core",
