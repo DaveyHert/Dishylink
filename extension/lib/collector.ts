@@ -10,10 +10,8 @@ import { DishClient } from "@core/dishClient";
 import { GrpcWebError } from "@core/grpcWeb";
 import { decodeHistoryWindow } from "@core/telemetry";
 import { applyDrain, IndexedDbHistory } from "./history";
+import { DISH_HANDLE_URL } from "./endpoints";
 
-// The dish's grpc-web endpoint, reached directly — host permissions exempt the
-// extension from the CORS and Local Network Access limits a web page would hit.
-const DISH_HANDLE_URL = "http://192.168.100.1:9201/SpaceX.API.Device.Device/Handle";
 const DRAIN_TIMEOUT_MS = 8_000;
 
 export type DrainStatus =

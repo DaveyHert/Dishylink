@@ -19,9 +19,26 @@ import {
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { grpcWebUnaryCall } from "./grpcWeb";
 
-// Same Device service on both boxes; the schema protoset is identical.
+// Same Device service on both boxes; the schema protoset is identical. The
+// defaults are the dev/Electron same-origin proxy paths; a host that reaches the
+// boxes directly (the extension, whose host permissions allow it) rebinds them.
 const DISH_HANDLE_URL = "/dishy/SpaceX.API.Device.Device/Handle";
 const ROUTER_HANDLE_URL = "/router/SpaceX.API.Device.Device/Handle";
+
+interface DishHost {
+  dishHandleUrl?: string;
+  routerHandleUrl?: string;
+  protosetUrl?: string;
+}
+
+let dishHost: DishHost = {};
+
+/** Called once by a host entry point, before the UI renders. Leaving a box's URL
+ *  unset keeps its default proxy path — for the extension that path 404s against
+ *  its own origin, so an unconfigured box is simply never reached. */
+export function setDishHost(binding: DishHost): void {
+  dishHost = binding;
+}
 
 /** The router's LAN address. */
 export const ROUTER_LAN_ADDRESS = "192.168.1.1";
@@ -406,7 +423,9 @@ export class DishClient {
     target: "dish" | "router" = "dish",
     options: { handleUrl?: string; protosetUrl?: string } = {},
   ): Promise<DishClient> {
-    const protosetResponse = await fetch(options.protosetUrl ?? "/dish.protoset");
+    const protosetResponse = await fetch(
+      options.protosetUrl ?? dishHost.protosetUrl ?? "/dish.protoset",
+    );
     const protosetBytes = new Uint8Array(await protosetResponse.arrayBuffer());
     const fileDescriptorSet = fromBinary(FileDescriptorSetSchema, protosetBytes);
     const registry = createFileRegistry(fileDescriptorSet);
@@ -414,8 +433,9 @@ export class DishClient {
     const responseSchema = registry.getMessage("SpaceX.API.Device.Response");
     if (!requestSchema || !responseSchema)
       throw new Error("Device Request/Response missing from dish.protoset");
+    const hostDefault = target === "dish" ? dishHost.dishHandleUrl : dishHost.routerHandleUrl;
     const handleUrl =
-      options.handleUrl ?? (target === "dish" ? DISH_HANDLE_URL : ROUTER_HANDLE_URL);
+      options.handleUrl ?? hostDefault ?? (target === "dish" ? DISH_HANDLE_URL : ROUTER_HANDLE_URL);
     return new DishClient(handleUrl, requestSchema, responseSchema, registry);
   }
 
