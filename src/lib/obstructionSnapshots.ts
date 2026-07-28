@@ -2,7 +2,7 @@
 //
 // Each cell is quantized to 2 bits (unmapped / clear / partial / obstructed) and
 // packed 4 cells per byte, so a 123×123 grid rides in ~5 KB of base64. The
-// packing half lives in the historian (server/obstructionStore.mts), which is
+// packing half lives in the historian (collector/obstructionStore.mts), which is
 // the only writer; this side only ever unpacks what it is served.
 
 export const CELL_UNMAPPED = 0;

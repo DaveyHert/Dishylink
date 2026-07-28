@@ -54,7 +54,7 @@ export default defineConfig(({ command }) => ({
         test: {
           name: "node",
           environment: "node",
-          include: ["src/**/*.test.ts", "server/**/*.test.mts", "dev/**/*.test.mts"],
+          include: ["src/**/*.test.ts", "collector/**/*.test.mts", "dev/**/*.test.mts"],
         },
       },
       // Component tests in real Chromium, not jsdom: they render canvas and WebGL
@@ -118,7 +118,7 @@ export default defineConfig(({ command }) => ({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/celestrak/, ""),
       },
-      // Long-term energy totals from the local historian service (server/).
+      // Long-term energy totals from the local historian service (collector/).
       // xfwd adds x-forwarded-for so /api/whoami sees the browser's LAN IP, not
       // this proxy's loopback address.
       "/api": {

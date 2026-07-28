@@ -1,4 +1,4 @@
-// Copies the developer's own collected history (server/data) into the packaged
+// Copies the developer's own collected history (collector/data) into the packaged
 // DishyLink app's per-user data directory, so a local build opens with real data.
 // A fresh install starts empty by design; this is a developer convenience, not part
 // of the shipped app. Quit DishyLink first — the collector must not be writing to
@@ -10,7 +10,7 @@ import { cpSync, mkdirSync, readdirSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const source = join(process.cwd(), "server", "data");
+const source = join(process.cwd(), "collector", "data");
 if (!existsSync(source)) {
   console.error(`no source data at ${source}`);
   process.exit(1);

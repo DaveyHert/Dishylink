@@ -16,7 +16,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "historian": "tsx server/historian.mts",
+    "historian": "tsx collector/historian.mts",
     "seed:desktop": "node scripts/seed-desktop.mjs",
     "typecheck": "tsc -b",
     "lint": "eslint .",

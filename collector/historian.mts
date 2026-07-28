@@ -10,9 +10,20 @@
 // kWh. Short gaps (≤15 min) are backfilled losslessly from the ring buffer on
 // the next poll.
 //
-// Run: npm run historian   (foreground; see server/README for always-on setup)
+// Run: npm run historian   (foreground; see collector/README for always-on setup)
 
-import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+  writeSync,
+} from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { networkInterfaces } from "node:os";
 import { join, resolve } from "node:path";
@@ -42,9 +53,9 @@ import { ObstructionStore, packCells } from "./obstructionStore.mts";
 
 const DISH_URL =
   process.env.DISH_URL ?? "http://192.168.100.1:9201/SpaceX.API.Device.Device/Handle";
-// Where the collector reads and writes. Defaults to the repo's server/data for the
-// dev process; a host (the Electron app) points it at its own per-user data dir.
-const DATA_DIR = process.env.HISTORIAN_DATA_DIR ?? resolve("server/data");
+// Where the collector reads and writes. Defaults to the repo's collector/data for
+// the dev process; a host (the Electron app) points it at its own per-user data dir.
+const DATA_DIR = process.env.HISTORIAN_DATA_DIR ?? resolve("collector/data");
 const PROTOSET_PATH = process.env.HISTORIAN_PROTOSET ?? resolve("public/dish.protoset");
 const DATA_FILE = join(DATA_DIR, "energy.ndjson");
 const SAMPLES_SNAPSHOT_FILE = join(DATA_DIR, "samples.json");
@@ -56,6 +67,7 @@ const CLIENT_SAMPLES_FILE = join(DATA_DIR, "client-samples.json");
 const CLIENT_TOTALS_FILE = join(DATA_DIR, "client-totals.json");
 const ALERTS_FILE = join(DATA_DIR, "alerts.ndjson");
 const OBSTRUCTION_FILE = join(DATA_DIR, "obstruction.ndjson");
+const LOCK_FILE = join(DATA_DIR, "historian.lock");
 const PORT = Number(process.env.HISTORIAN_PORT ?? 8088);
 const POLL_MS = 5_000;
 /**
@@ -1167,6 +1179,62 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
   response.statusCode = 404;
   response.end("not found");
 }
+
+// A single collector must own a data dir: two writing the same files duplicate
+// appended rows and clobber each other's snapshots. The lock is keyed to the data
+// dir, not the HTTP port — the embedded host never opens a port, so the port never
+// guarded it. The pidfile is reclaimed when its recorded owner is gone, so a crash
+// (which cannot run the release) does not wedge the next start.
+function claimDataDir(): void {
+  mkdirSync(DATA_DIR, { recursive: true });
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const fd = openSync(LOCK_FILE, "wx");
+      writeSync(fd, String(process.pid));
+      closeSync(fd);
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      const owner = Number(readFileSync(LOCK_FILE, "utf8").trim());
+      if (owner && owner !== process.pid && processAlive(owner)) {
+        console.error(
+          `[historian] another collector (pid ${owner}) already owns ${DATA_DIR} — refusing to start a second writer`,
+        );
+        process.exit(1);
+      }
+      // The recorded owner is gone; drop its stale lock and race for it again.
+      try {
+        unlinkSync(LOCK_FILE);
+      } catch {
+        // Another starter reclaimed it first; the next attempt finds it held.
+      }
+    }
+  }
+  console.error(`[historian] could not claim ${DATA_DIR} — refusing to start`);
+  process.exit(1);
+}
+
+// Signal 0 probes for the process without delivering anything: ESRCH means it is
+// gone, EPERM means it is alive but owned by another user.
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+function releaseDataDir(): void {
+  try {
+    if (Number(readFileSync(LOCK_FILE, "utf8").trim()) === process.pid) unlinkSync(LOCK_FILE);
+  } catch {
+    // Nothing to release, or the lock is no longer ours to remove.
+  }
+}
+
+claimDataDir();
+process.on("exit", releaseDataDir);
 
 // The dev process serves the collector over loopback HTTP. An embedded host (the
 // Electron app) sets HISTORIAN_EMBED and calls handleRequest directly instead, so

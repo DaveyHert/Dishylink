@@ -4,7 +4,7 @@ dist-electron
 release
 .DS_Store
 
-server/data
+collector/data
 
 # Vitest browser mode writes failure screenshots next to the test file, and
 # attachments (diffs, traces) under .vitest-attachments. Diagnostic, not source.

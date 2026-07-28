@@ -10,7 +10,7 @@ dish (≈15 min ring buffer) nor the browser tab (≤6 h, wiped on reload) retai
   grpc-web transport (`src/lib/grpcWeb.ts`) and decoder (`src/lib/telemetry.ts`)
   so the two never drift.
 - Folds new per-second power readings into per-minute energy buckets and appends
-  each completed minute to `server/data/energy.ndjson` (one JSON line per
+  each completed minute to `collector/data/energy.ndjson` (one JSON line per
   minute: `{ minute, wattSeconds, samples }`).
 - Serves totals over HTTP on `:8088` — the dev server proxies `/api` to it.
 
@@ -35,7 +35,7 @@ npm run historian
 Always-on (survives logout, relaunches after sleep/crash) via launchd:
 
 ```
-cp server/com.dishboard.historian.plist ~/Library/LaunchAgents/
+cp collector/com.dishboard.historian.plist ~/Library/LaunchAgents/
 launchctl load ~/Library/LaunchAgents/com.dishboard.historian.plist
 ```
 

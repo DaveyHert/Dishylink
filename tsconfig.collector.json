@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.server.tsbuildinfo",
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.collector.tsbuildinfo",
     "target": "ES2023",
     // DOM is here for fetch/Response types only — the historian shares
     // src/lib/grpcWeb.ts with the browser. Bundler resolution matches how tsx
@@ -19,5 +19,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["server"]
+  "include": ["collector"]
 }

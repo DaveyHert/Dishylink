@@ -4,11 +4,11 @@
   logout and (re)launches it after sleep/crash.
 
   Install:
-    cp server/com.dishboard.historian.plist ~/Library/LaunchAgents/
+    cp collector/com.dishboard.historian.plist ~/Library/LaunchAgents/
     launchctl load  ~/Library/LaunchAgents/com.dishboard.historian.plist
   Stop / uninstall:
     launchctl unload ~/Library/LaunchAgents/com.dishboard.historian.plist
-  Logs: server/data/historian.out.log  /  historian.err.log
+  Logs: collector/data/historian.out.log  /  historian.err.log
 
   Paths below are absolute for this machine; update them if the repo moves.
 -->
@@ -21,7 +21,7 @@
   <array>
     <string>/Users/daveyhert/.nvm/versions/node/v22.19.0/bin/node</string>
     <string>/Users/daveyhert/Desktop/projects/starlink/node_modules/tsx/dist/cli.mjs</string>
-    <string>/Users/daveyhert/Desktop/projects/starlink/server/historian.mts</string>
+    <string>/Users/daveyhert/Desktop/projects/starlink/collector/historian.mts</string>
   </array>
 
   <key>WorkingDirectory</key>
@@ -33,8 +33,8 @@
   <true/>
 
   <key>StandardOutPath</key>
-  <string>/Users/daveyhert/Desktop/projects/starlink/server/data/historian.out.log</string>
+  <string>/Users/daveyhert/Desktop/projects/starlink/collector/data/historian.out.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/daveyhert/Desktop/projects/starlink/server/data/historian.err.log</string>
+  <string>/Users/daveyhert/Desktop/projects/starlink/collector/data/historian.err.log</string>
 </dict>
 </plist>

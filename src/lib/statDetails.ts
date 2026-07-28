@@ -31,7 +31,7 @@ export const LATENCY_SERIES: ChartSeries[] = [
 // Router → internet ping success, from get_status's popPingDropRate5m: the
 // router's own rolling five-minute measure of its pings to the PoP, riding the
 // status reply every poller already fetches. Never sourced from get_ping —
-// that RPC rebooted the router at every cadence tried (see server/historian.mts).
+// that RPC rebooted the router at every cadence tried (see collector/historian.mts).
 //
 // Averaged, NOT min-bucketed like the dish's series: the value is already a
 // five-minute mean, so min-bucketing would smear the window's worst moment

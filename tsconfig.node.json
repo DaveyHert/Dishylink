@@ -3,7 +3,7 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
     "target": "ES2023",
     // DOM for fetch/Request/Response/BodyInit types only — the Electron main and
-    // the historian it embeds share those with the browser (as tsconfig.server does).
+    // the historian it embeds share those with the browser (as tsconfig.collector does).
     "lib": ["ES2023", "DOM"],
     "module": "ESNext",
     "skipLibCheck": true,

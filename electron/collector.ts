@@ -22,7 +22,7 @@ export async function startCollector(rendererRoot: string): Promise<void> {
   // The protoset ships beside the renderer bundle; point the historian at it
   // rather than its dev-tree default under public/.
   process.env.HISTORIAN_PROTOSET = join(rendererRoot, "dish.protoset");
-  const historian = await import("../server/historian.mts");
+  const historian = await import("../collector/historian.mts");
   handleRequest = historian.handleRequest;
 }
 
