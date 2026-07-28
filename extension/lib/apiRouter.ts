@@ -37,5 +37,10 @@ export async function routeApiRequest(
     return { status: 200, body: { events: await store.readOutages() } };
   }
 
+  if (url.pathname === "/api/radio") {
+    const hours = Math.min(24, Math.max(1, Number(url.searchParams.get("hours") ?? 6)));
+    return { status: 200, body: await store.readRadio(hours, now.getTime()) };
+  }
+
   return { status: 503, body: { error: `no extension history for ${url.pathname}` } };
 }

@@ -10,9 +10,32 @@
 
 import { addMinuteBucket, type MinuteBucket } from "@core/energyBuckets";
 import { planDrain, type DishWindow } from "@core/drain";
-import type { OutageEvent, SampleCursor } from "@core/telemetry";
+import type { OutageEvent, RadioStatReading, SampleCursor } from "@core/telemetry";
 
 const EMPTY_CURSOR: SampleCursor = { counter: 0, newestSampleMs: 0 };
+
+/** One closed minute of a radio's temperature (averaged) and its lowest duty
+ *  cycle that minute — the shape /api/radio serves as history. */
+export interface RadioMinute extends RadioStatReading {
+  minute: number;
+}
+
+/** The latest live radio readings, so /api/radio can answer `current` too. */
+export interface RadioCurrent {
+  readings: RadioStatReading[];
+  atMs: number;
+}
+
+/** Per-(minute, band) accumulator, upserted each poll so a torn-down worker never
+ *  loses the minute in progress; the average and duty-cycle floor are computed on read. */
+interface RadioAccumulator {
+  key: string;
+  minute: number;
+  band: string;
+  sum: number;
+  count: number;
+  dutyMin: number;
+}
 
 export interface HistoryStore {
   readCursor(): Promise<SampleCursor>;
@@ -25,6 +48,42 @@ export interface HistoryStore {
   putOutages(events: OutageEvent[]): Promise<void>;
   /** All recorded outages, newest first. */
   readOutages(): Promise<OutageEvent[]>;
+  /** Fold a radio poll into the per-minute accumulators and remember it as the
+   *  current live reading. */
+  putRadio(readings: RadioStatReading[], nowMs: number): Promise<void>;
+  /** The current readings plus per-minute history over the last `hours`. */
+  readRadio(hours: number, nowMs?: number): Promise<{
+    current: RadioStatReading[];
+    atMs: number | null;
+    history: RadioMinute[];
+  }>;
+}
+
+/** Average a radio accumulator into its closed-minute reading. */
+function radioMinuteOf(acc: RadioAccumulator): RadioMinute {
+  return {
+    minute: acc.minute,
+    band: acc.band,
+    tempC: Math.round((acc.sum / Math.max(acc.count, 1)) * 10) / 10,
+    dutyCycle: acc.dutyMin,
+  };
+}
+
+/** Fold one reading into its (minute, band) accumulator — averaged temperature,
+ *  lowest duty cycle, so a brief airtime cut is remembered rather than smoothed. */
+function foldRadio(existing: RadioAccumulator | undefined, reading: RadioStatReading, minute: number): RadioAccumulator {
+  const acc = existing ?? {
+    key: `${minute}:${reading.band}`,
+    minute,
+    band: reading.band,
+    sum: 0,
+    count: 0,
+    dutyMin: reading.dutyCycle,
+  };
+  acc.sum += reading.tempC;
+  acc.count += 1;
+  acc.dutyMin = Math.min(acc.dutyMin, reading.dutyCycle);
+  return acc;
 }
 
 /** Read the cursor, drain the window past it, and commit — one wake's work. */
@@ -37,11 +96,13 @@ export async function applyDrain(store: HistoryStore, window: DishWindow): Promi
 // --- IndexedDB (service worker) ---
 
 const DB_NAME = "dishylink-history";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const MINUTES = "minutes";
 const META = "meta";
 const OUTAGES = "outages";
+const RADIO = "radio";
 const CURSOR_KEY = "cursor";
+const RADIO_CURRENT_KEY = "radioCurrent";
 
 function request<T>(req: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -70,6 +131,9 @@ function openDatabase(name: string): Promise<IDBDatabase> {
       // startMs is the key, so an outage the ring buffer replays each drain
       // updates its row rather than appending a duplicate.
       if (!db.objectStoreNames.contains(OUTAGES)) db.createObjectStore(OUTAGES, { keyPath: "startMs" });
+      // `${minute}:${band}` is the key, so each poll folds into the minute in
+      // progress rather than appending — the minute survives a worker teardown.
+      if (!db.objectStoreNames.contains(RADIO)) db.createObjectStore(RADIO, { keyPath: "key" });
     };
     open.onsuccess = () => resolve(open.result);
     open.onerror = () => reject(open.error);
@@ -120,6 +184,34 @@ export class IndexedDbHistory implements HistoryStore {
     const all = await request<OutageEvent[]>(tx.objectStore(OUTAGES).getAll());
     return all.sort((a, b) => b.startMs - a.startMs);
   }
+
+  async putRadio(readings: RadioStatReading[], nowMs: number): Promise<void> {
+    if (readings.length === 0) return;
+    const minute = Math.floor(nowMs / 60_000) * 60;
+    const tx = this.db.transaction([RADIO, META], "readwrite");
+    const store = tx.objectStore(RADIO);
+    for (const reading of readings) {
+      const key = `${minute}:${reading.band}`;
+      const existing = await request<RadioAccumulator | undefined>(store.get(key));
+      store.put(foldRadio(existing, reading, minute));
+    }
+    tx.objectStore(META).put({ readings, atMs: nowMs } satisfies RadioCurrent, RADIO_CURRENT_KEY);
+    await transactionDone(tx);
+  }
+
+  async readRadio(hours: number, nowMs: number = Date.now()) {
+    const cutoffSec = Math.floor(nowMs / 1000) - hours * 3_600;
+    const tx = this.db.transaction([RADIO, META], "readonly");
+    const accumulators = await request<RadioAccumulator[]>(tx.objectStore(RADIO).getAll());
+    const current = await request<RadioCurrent | undefined>(
+      tx.objectStore(META).get(RADIO_CURRENT_KEY),
+    );
+    const history = accumulators
+      .filter((acc) => acc.minute >= cutoffSec)
+      .map(radioMinuteOf)
+      .sort((a, b) => a.minute - b.minute);
+    return { current: current?.readings ?? [], atMs: current?.atMs ?? null, history };
+  }
 }
 
 // --- In-memory (tests) ---
@@ -127,6 +219,8 @@ export class IndexedDbHistory implements HistoryStore {
 export class InMemoryHistory implements HistoryStore {
   private readonly minutes = new Map<number, MinuteBucket>();
   private readonly outages = new Map<number, OutageEvent>();
+  private readonly radio = new Map<string, RadioAccumulator>();
+  private radioCurrent: RadioCurrent | null = null;
   private cursor: SampleCursor = EMPTY_CURSOR;
 
   async readCursor(): Promise<SampleCursor> {
@@ -151,5 +245,28 @@ export class InMemoryHistory implements HistoryStore {
 
   async readOutages(): Promise<OutageEvent[]> {
     return [...this.outages.values()].sort((a, b) => b.startMs - a.startMs);
+  }
+
+  async putRadio(readings: RadioStatReading[], nowMs: number): Promise<void> {
+    if (readings.length === 0) return;
+    const minute = Math.floor(nowMs / 60_000) * 60;
+    for (const reading of readings) {
+      const key = `${minute}:${reading.band}`;
+      this.radio.set(key, foldRadio(this.radio.get(key), reading, minute));
+    }
+    this.radioCurrent = { readings, atMs: nowMs };
+  }
+
+  async readRadio(hours: number, nowMs: number = Date.now()) {
+    const cutoffSec = Math.floor(nowMs / 1000) - hours * 3_600;
+    const history = [...this.radio.values()]
+      .filter((acc) => acc.minute >= cutoffSec)
+      .map(radioMinuteOf)
+      .sort((a, b) => a.minute - b.minute);
+    return {
+      current: this.radioCurrent?.readings ?? [],
+      atMs: this.radioCurrent?.atMs ?? null,
+      history,
+    };
   }
 }

@@ -8,9 +8,9 @@
 
 import { DishClient } from "@core/dishClient";
 import { GrpcWebError } from "@core/grpcWeb";
-import { decodeHistoryWindow, decodeOutageEvents } from "@core/telemetry";
-import { applyDrain, IndexedDbHistory } from "./history";
-import { DISH_HANDLE_URL } from "./endpoints";
+import { decodeHistoryWindow, decodeOutageEvents, decodeRadioReadings } from "@core/telemetry";
+import { applyDrain, IndexedDbHistory, type HistoryStore } from "./history";
+import { DISH_HANDLE_URL, ROUTER_HANDLE_URL } from "./endpoints";
 
 const DRAIN_TIMEOUT_MS = 8_000;
 
@@ -31,10 +31,21 @@ export async function drainOnce(): Promise<DrainStatus> {
     // Outages ride the same reply — the dish's event log / outage list is in the
     // history window we already fetched, so recording them costs no extra poll.
     await store.putOutages(decodeOutageEvents(history));
+    // Router feeds are best-effort: an unreachable (or non-Starlink) router must
+    // not mark the dish drain failed, so its own failure is swallowed here.
+    await drainRouterFeeds(store).catch(() => {});
     return { ok: true, at };
   } catch (error) {
     return { ok: false, at, message: describeDrainError(error) };
   }
+}
+
+/** Poll the router's own feeds. Separate from the dish drain and best-effort:
+ *  get_radio_stats is the safe RPC the historian already polls (never get_ping). */
+async function drainRouterFeeds(store: HistoryStore): Promise<void> {
+  const router = await DishClient.load("router", { handleUrl: ROUTER_HANDLE_URL });
+  const stats = await router.getRadioStats(AbortSignal.timeout(DRAIN_TIMEOUT_MS));
+  await store.putRadio(decodeRadioReadings(stats), Date.now());
 }
 
 function describeDrainError(error: unknown): string {

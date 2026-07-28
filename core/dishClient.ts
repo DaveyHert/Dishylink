@@ -59,6 +59,7 @@ const REQUEST_FIELD = {
   dishStow: 2002,
   dishGetObstructionMap: 2008,
   wifiGetClients: 3002,
+  getRadioStats: 1036,
   getDiagnostics: 6000,
   dishGetConfig: 2011,
   wifiGetConfig: 3009,
@@ -355,6 +356,7 @@ interface DishResponseJson {
   getLocation?: DishLocationJson;
   dishGetObstructionMap?: DishObstructionMapJson;
   wifiGetClients?: { clients?: WifiClientJson[] };
+  getRadioStats?: RadioStatsJson;
   dishGetConfig?: { dishConfig?: DishConfigJson & Record<string, unknown> };
   dishGetDiagnostics?: DishDiagnosticsJson;
   wifiGetConfig?: { wifiConfig?: WifiNetworkConfigJson };
@@ -379,6 +381,15 @@ export interface WifiStatusJson {
    *  app's cloud debug dump (`5M`) — verified by probe on this firmware. */
   popPingDropRate5m?: number;
   ipv4WanAddress?: string;
+}
+
+/** The router's per-radio Wi-Fi stats — the only real temperatures on this LAN.
+ *  Only `temp2` is populated on current firmware; `temp` is absent. */
+export interface RadioStatsJson {
+  radioStats?: Array<{
+    band?: string;
+    thermalStatus?: { temp?: number; temp2?: number; dutyCycle?: number };
+  }>;
 }
 
 // ---------- request encoding ----------
@@ -496,6 +507,12 @@ export class DishClient {
     return (
       (await this.call(REQUEST_FIELD.wifiGetClients, abortSignal)).wifiGetClients?.clients ?? []
     );
+  }
+
+  /** Per-radio Wi-Fi stats — meaningful on the ROUTER target. The only real
+   *  temperatures anything on this network reports; the dish answers Unimplemented. */
+  async getRadioStats(abortSignal?: AbortSignal): Promise<RadioStatsJson> {
+    return (await this.call(REQUEST_FIELD.getRadioStats, abortSignal)).getRadioStats ?? {};
   }
 
   /** Reboot this device (dish or router). Drops connectivity for a few minutes. */

@@ -390,6 +390,36 @@ export function readRouterPingSuccessPercent(dropRate5M: number | undefined): nu
     : null;
 }
 
+/** One radio's Wi-Fi temperature and the airtime it is allowed. `temp2` is the
+ *  only populated sensor on current firmware; `dutyCycle` falls as the chip is
+ *  cooled, so a rising temp beside a falling duty cycle is heat throttling. */
+export interface RadioStatReading {
+  band: string;
+  tempC: number;
+  dutyCycle: number;
+}
+
+/** Decode the router's get_radio_stats reply into per-radio readings, dropping
+ *  radios that report no usable temperature. Shape-typed so it needs no import. */
+export function decodeRadioReadings(stats: {
+  radioStats?: Array<{
+    band?: string;
+    thermalStatus?: { temp?: number; temp2?: number; dutyCycle?: number };
+  }>;
+}): RadioStatReading[] {
+  const readings: RadioStatReading[] = [];
+  for (const radio of stats.radioStats ?? []) {
+    const tempC = radio.thermalStatus?.temp2 ?? radio.thermalStatus?.temp;
+    if (tempC === undefined || !Number.isFinite(tempC)) continue;
+    readings.push({
+      band: radio.band ?? "unknown",
+      tempC,
+      dutyCycle: radio.thermalStatus?.dutyCycle ?? 100,
+    });
+  }
+  return readings;
+}
+
 /**
  * A position in the dish's since-boot sample counter — how far a consumer has
  * already read the ring buffer. Small and copyable so it can be held in memory
