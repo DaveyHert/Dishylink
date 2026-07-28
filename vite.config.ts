@@ -54,7 +54,12 @@ export default defineConfig(({ command }) => ({
         test: {
           name: "node",
           environment: "node",
-          include: ["src/**/*.test.ts", "collector/**/*.test.mts", "dev/**/*.test.mts"],
+          include: [
+            "src/**/*.test.ts",
+            "collector/**/*.test.mts",
+            "dev/**/*.test.mts",
+            "extension/**/*.test.ts",
+          ],
         },
       },
       // Component tests in real Chromium, not jsdom: they render canvas and WebGL

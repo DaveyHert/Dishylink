@@ -17,16 +17,12 @@ import {
   readJsonLines,
   writeJsonLinesAtomically,
 } from "./jsonLinesFile.mts";
-import type { TelemetrySample } from "../core/telemetry.ts";
+import { foldSamplesToMinutes, type MinuteBucket } from "../core/energyBuckets.ts";
 
-export interface MinuteBucket {
-  minute: number;
-  wattSeconds: number;
-  samples: number;
-  /** Downlink/uplink volume in bits (absent on rows written before data-usage tracking). */
-  dlBits?: number;
-  ulBits?: number;
-}
+// The fold primitive and the minute-bucket shape are shared with the extension,
+// so they live in core; re-exported here because this store and the historian
+// have always reached for them by this name.
+export { foldSamplesToMinutes, type MinuteBucket };
 
 /** One archived calendar month, folded from that month's minutes. */
 export interface MonthBucket {
@@ -37,28 +33,6 @@ export interface MonthBucket {
   samples: number;
   dlBits: number;
   ulBits: number;
-}
-
-/** Group per-second samples into per-minute energy+traffic buckets. Each sample ≈ 1s. */
-export function foldSamplesToMinutes(samples: TelemetrySample[]): Map<number, MinuteBucket> {
-  const buckets = new Map<number, MinuteBucket>();
-  for (const sample of samples) {
-    const minute = Math.floor(sample.timestampMs / 60_000) * 60;
-    const bucket = buckets.get(minute) ?? {
-      minute,
-      wattSeconds: 0,
-      samples: 0,
-      dlBits: 0,
-      ulBits: 0,
-    };
-    bucket.wattSeconds += sample.powerW ?? 0;
-    // per-second sample: bps over one second ≈ bits transferred
-    bucket.dlBits = (bucket.dlBits ?? 0) + (sample.downlinkBps ?? 0);
-    bucket.ulBits = (bucket.ulBits ?? 0) + (sample.uplinkBps ?? 0);
-    bucket.samples += 1;
-    buckets.set(minute, bucket);
-  }
-  return buckets;
 }
 
 /** Local start of the current calendar year, epoch seconds. */
