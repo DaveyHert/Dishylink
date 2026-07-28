@@ -7,7 +7,16 @@
 
 import * as satelliteJs from "satellite.js";
 
-const TLE_URL = "/celestrak/NORAD/elements/supplemental/sup-gp.php?FILE=starlink&FORMAT=tle";
+// CelesTrak sends no CORS headers, so the dev server and desktop app fetch it
+// through a same-origin proxy prefix. A host that reaches it directly — the
+// extension, whose host permissions cover celestrak.org — rebinds the base.
+const TLE_PATH = "/NORAD/elements/supplemental/sup-gp.php?FILE=starlink&FORMAT=tle";
+let tleBaseUrl = "/celestrak";
+
+/** Called once by a host entry point that reaches celestrak.org directly. */
+export function setSatelliteHost(baseUrl: string): void {
+  tleBaseUrl = baseUrl;
+}
 const TLE_CACHE_KEY = "dishboard-starlink-tles";
 const TLE_MAX_AGE_MS = 6 * 3_600_000;
 const COARSE_ELEVATION_FLOOR_DEG = -12; // keep sats about to rise
@@ -155,7 +164,7 @@ export async function loadStarlinkTles(): Promise<TleRecord[]> {
 
   if (!tleText) {
     try {
-      const tleResponse = await fetch(TLE_URL);
+      const tleResponse = await fetch(tleBaseUrl + TLE_PATH);
       if (!tleResponse.ok) {
         throw new EphemerisError("source", `TLE fetch failed: HTTP ${tleResponse.status}`);
       }
