@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "wxt";
 
 // srcDir is the shared app tree so WXT's built-in `@`/`~` aliases point at ./src,
@@ -22,6 +23,10 @@ export default defineConfig({
   // hundreds of app symbols into scope (#imports still works for defineBackground).
   imports: false,
   vite: () => ({
+    // Tailwind processes index.css's utility classes; without it the extension
+    // ships the shared app's markup with none of its styling — the same plugin the
+    // web build runs in vite.config.ts. (@wxt-dev/module-react adds React itself.)
+    plugins: [tailwindcss()],
     // satellite.js is a wasm build; its worker needs es-module output for top-level await.
     worker: { format: "es" },
     // Scope dependency pre-bundling to the extension's own pages. Left to its
