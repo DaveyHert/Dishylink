@@ -2,13 +2,13 @@ import { defineBackground } from "#imports";
 import { browser } from "wxt/browser";
 import { drainOnce } from "../lib/collector";
 
-// The toolbar icon opens the full manager page, never a toolbar-anchored dropdown
-// (the dashboard is chart-heavy and wants room). Two user-selectable surfaces:
-// a chromeless standalone window (default) or an ordinary tab. With no
+// The toolbar icon opens the full dashboard page, never a toolbar-anchored
+// dropdown (the dashboard is chart-heavy and wants room). Two user-selectable
+// surfaces: a chromeless standalone window (default) or an ordinary tab. With no
 // default_popup in the manifest, action.onClicked fires and branches here.
-const MANAGER_PATH = "/manager.html";
+const DASHBOARD_PATH = "/dashboard.html";
 const SURFACE_KEY = "surface";
-const WINDOW_BOUNDS_KEY = "managerWindowBounds";
+const WINDOW_BOUNDS_KEY = "dashboardWindowBounds";
 const LAST_DRAIN_KEY = "lastDrain";
 
 type Surface = "window" | "tab";
@@ -16,38 +16,38 @@ type Bounds = { top: number; left: number; width: number; height: number };
 
 const DEFAULT_BOUNDS: Bounds = { top: 80, left: 120, width: 1200, height: 800 };
 
-// The single open manager window, so a second click focuses it instead of
+// The single open dashboard window, so a second click focuses it instead of
 // opening another. Held in memory; the browser clears the worker's memory on
 // teardown, but a stale id is re-validated against browser.windows before use.
-let managerWindowId: number | undefined;
+let dashboardWindowId: number | undefined;
 
 async function readSurface(): Promise<Surface> {
   const stored = await browser.storage.local.get(SURFACE_KEY);
   return stored[SURFACE_KEY] === "tab" ? "tab" : "window";
 }
 
-async function openManagerWindow(): Promise<void> {
-  if (managerWindowId !== undefined) {
+async function openDashboardWindow(): Promise<void> {
+  if (dashboardWindowId !== undefined) {
     try {
-      await browser.windows.update(managerWindowId, { focused: true });
+      await browser.windows.update(dashboardWindowId, { focused: true });
       return;
     } catch {
       // The remembered window was closed; fall through and open a fresh one.
-      managerWindowId = undefined;
+      dashboardWindowId = undefined;
     }
   }
   const stored = await browser.storage.local.get(WINDOW_BOUNDS_KEY);
   const bounds = (stored[WINDOW_BOUNDS_KEY] as Bounds | undefined) ?? DEFAULT_BOUNDS;
   const created = await browser.windows.create({
     type: "popup",
-    url: browser.runtime.getURL(MANAGER_PATH),
+    url: browser.runtime.getURL(DASHBOARD_PATH),
     ...bounds,
   });
-  managerWindowId = created?.id;
+  dashboardWindowId = created?.id;
 }
 
-async function openManagerTab(): Promise<void> {
-  const url = browser.runtime.getURL(MANAGER_PATH);
+async function openDashboardTab(): Promise<void> {
+  const url = browser.runtime.getURL(DASHBOARD_PATH);
   const existing = await browser.tabs.query({ url });
   if (existing[0]?.id !== undefined) {
     await browser.tabs.update(existing[0].id, { active: true });
@@ -58,18 +58,18 @@ async function openManagerTab(): Promise<void> {
   await browser.tabs.create({ url });
 }
 
-async function openManager(): Promise<void> {
-  if ((await readSurface()) === "tab") await openManagerTab();
-  else await openManagerWindow();
+async function openDashboard(): Promise<void> {
+  if ((await readSurface()) === "tab") await openDashboardTab();
+  else await openDashboardWindow();
 }
 
 export default defineBackground(() => {
-  browser.action.onClicked.addListener(() => void openManager());
+  browser.action.onClicked.addListener(() => void openDashboard());
 
   // Saved bounds are restored on the next open, so the window returns where the
-  // user left it. Only the manager window's own moves and resizes are tracked.
+  // user left it. Only the dashboard window's own moves and resizes are tracked.
   const rememberBounds = (windowId: number) => {
-    if (windowId !== managerWindowId) return;
+    if (windowId !== dashboardWindowId) return;
     void browser.windows.get(windowId).then((win) => {
       if (win.top == null || win.left == null || win.width == null || win.height == null) return;
       void browser.storage.local.set({
@@ -81,13 +81,13 @@ export default defineBackground(() => {
     if (win.id !== undefined) rememberBounds(win.id);
   });
   browser.windows.onRemoved.addListener((windowId) => {
-    if (windowId === managerWindowId) managerWindowId = undefined;
+    if (windowId === dashboardWindowId) dashboardWindowId = undefined;
   });
 
   // The drain runs off a chrome.alarms tick so it survives service-worker
   // teardown — the alarm re-wakes the worker, which reads the persisted cursor
   // and drains only what the dish has added since. The last tick's outcome is
-  // stored so the manager can show whether collection is currently reaching the
+  // stored so the dashboard can show whether collection is currently reaching the
   // dish. One minute is the alarm floor and is ample against a 15-minute buffer.
   const runDrain = async () => {
     const status = await drainOnce();

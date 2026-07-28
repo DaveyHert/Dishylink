@@ -41,7 +41,7 @@ export default defineConfig({
       extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';",
     },
     // No default_popup, so chrome.action.onClicked fires and the background opens
-    // the full manager page — a chart-heavy dashboard wants room, not a dropdown.
+    // the full dashboard page — a chart-heavy dashboard wants room, not a dropdown.
     // default_icon is set explicitly rather than left to the icons fallback.
     action: {
       default_title: "DishyLink",
