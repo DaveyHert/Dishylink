@@ -1,0 +1,38 @@
+# Unsigned Mac build. The renderer (dist/) and the fully bundled main + preload +
+# historian (dist-electron/) are self-contained — every third-party dependency is
+# inlined at build time, so no node_modules ships. Signing (Developer ID) is
+# deferred to a paid Apple account and is config-only when it lands (PLAN.md phase
+# 5); identity:null tells electron-builder to skip signing rather than hunt for a
+# certificate and fail.
+appId: com.dishboard.dishylink
+productName: DishyLink
+copyright: © 2026 daveyhert
+
+# Ad-hoc sign the built .app so macOS will post notifications (an unsigned build
+# fails the notification call outright). Free, no Apple account — see the hook.
+# identity:null below stops electron-builder hunting for a Developer ID cert; the
+# hook does the ad-hoc signing afterward with the correct bundle identifier.
+afterPack: scripts/afterPack.cjs
+
+directories:
+  output: release
+  buildResources: build
+
+# Only the built app ships. build/icon.png is named explicitly because main.ts
+# loads the tray/dock icon from ../build/icon.png at runtime, so it has to sit
+# inside the asar; being the buildResources dir would otherwise keep it out.
+# electron-builder bundles production node_modules by default, but vite bundles
+# every runtime dependency into dist-electron/, so the dependency tree is dead
+# weight in the asar — excluding it drops the package from ~46 MB to ~4 MB.
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - build/icon.png
+  - package.json
+  - "!node_modules/**/*"
+
+mac:
+  target: dmg
+  icon: build/icon.png
+  category: public.app-category.utilities
+  identity: null
