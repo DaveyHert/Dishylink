@@ -1,5 +1,6 @@
 import { defineBackground } from "#imports";
 import { browser } from "wxt/browser";
+import { drainOnce } from "../lib/collector";
 
 // The toolbar icon opens the full manager page, never a toolbar-anchored dropdown
 // (the dashboard is chart-heavy and wants room). Two user-selectable surfaces:
@@ -8,6 +9,7 @@ import { browser } from "wxt/browser";
 const MANAGER_PATH = "/manager.html";
 const SURFACE_KEY = "surface";
 const WINDOW_BOUNDS_KEY = "managerWindowBounds";
+const LAST_DRAIN_KEY = "lastDrain";
 
 type Surface = "window" | "tab";
 type Bounds = { top: number; left: number; width: number; height: number };
@@ -83,12 +85,19 @@ export default defineBackground(() => {
   });
 
   // The drain runs off a chrome.alarms tick so it survives service-worker
-  // teardown — the alarm re-wakes the worker. The tick's handler (poll the dish
-  // through core/, drain past the persisted cursor, upsert IndexedDB) lands next.
+  // teardown — the alarm re-wakes the worker, which reads the persisted cursor
+  // and drains only what the dish has added since. The last tick's outcome is
+  // stored so the manager can show whether collection is currently reaching the
+  // dish. One minute is the alarm floor and is ample against a 15-minute buffer.
+  const runDrain = async () => {
+    const status = await drainOnce();
+    await browser.storage.local.set({ [LAST_DRAIN_KEY]: status });
+  };
   browser.alarms.create("drain", { periodInMinutes: 1 });
   browser.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === "drain") {
-      // Drain binding pending — see extension/lib (task 3).
-    }
+    if (alarm.name === "drain") void runDrain();
   });
+  // A worker that just started (install, browser launch, or wake) drains at once
+  // rather than idling until the first alarm a minute later.
+  void runDrain();
 });

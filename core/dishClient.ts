@@ -394,9 +394,19 @@ export class DishClient {
     private readonly registry: Registry,
   ) {}
 
-  /** Load the descriptor set dumped from the dish's reflection service. */
-  static async load(target: "dish" | "router" = "dish"): Promise<DishClient> {
-    const protosetResponse = await fetch("/dish.protoset");
+  /**
+   * Load the descriptor set dumped from the dish's reflection service.
+   *
+   * The default handle URLs are the dev/Electron proxy paths; a host that reaches
+   * the dish directly overrides them. The extension does: its service worker has
+   * no proxy, so it passes the absolute `192.168.100.1:9201` grpc-web endpoint,
+   * which its host permissions allow it to fetch cross-origin.
+   */
+  static async load(
+    target: "dish" | "router" = "dish",
+    options: { handleUrl?: string; protosetUrl?: string } = {},
+  ): Promise<DishClient> {
+    const protosetResponse = await fetch(options.protosetUrl ?? "/dish.protoset");
     const protosetBytes = new Uint8Array(await protosetResponse.arrayBuffer());
     const fileDescriptorSet = fromBinary(FileDescriptorSetSchema, protosetBytes);
     const registry = createFileRegistry(fileDescriptorSet);
@@ -404,12 +414,9 @@ export class DishClient {
     const responseSchema = registry.getMessage("SpaceX.API.Device.Response");
     if (!requestSchema || !responseSchema)
       throw new Error("Device Request/Response missing from dish.protoset");
-    return new DishClient(
-      target === "dish" ? DISH_HANDLE_URL : ROUTER_HANDLE_URL,
-      requestSchema,
-      responseSchema,
-      registry,
-    );
+    const handleUrl =
+      options.handleUrl ?? (target === "dish" ? DISH_HANDLE_URL : ROUTER_HANDLE_URL);
+    return new DishClient(handleUrl, requestSchema, responseSchema, registry);
   }
 
   private async call(

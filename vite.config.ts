@@ -1,7 +1,7 @@
 import path from "node:path";
 // vitest's defineConfig, so the `test` block below is typed. It is a superset of
 // vite's — the dev/build config is unaffected.
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 import { playwright } from "@vitest/browser-playwright";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -60,6 +60,9 @@ export default defineConfig(({ command }) => ({
             "dev/**/*.test.mts",
             "extension/**/*.test.ts",
           ],
+          // Extension store tests that need real IndexedDB run in the browser
+          // project below, not this Node one.
+          exclude: [...configDefaults.exclude, "extension/**/*.browser.test.ts"],
         },
       },
       // Component tests in real Chromium, not jsdom: they render canvas and WebGL
@@ -69,7 +72,7 @@ export default defineConfig(({ command }) => ({
         extends: true,
         test: {
           name: "browser",
-          include: ["src/**/*.test.tsx"],
+          include: ["src/**/*.test.tsx", "extension/**/*.browser.test.ts"],
           setupFiles: ["./src/test-setup.ts"],
           browser: {
             enabled: true,
