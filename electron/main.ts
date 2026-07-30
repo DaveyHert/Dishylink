@@ -13,8 +13,10 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { existsSync, writeFileSync } from "node:fs";
 import { registerAppProtocolScheme, handleAppProtocol, APP_ENTRY_URL } from "./appProtocol";
-import { startCollector, handleApiRequest } from "./collector";
+import { startCollector, handleApiRequest, onAlertTransitions } from "./collector";
 import { startCloud, handleCloudRequest, signIn } from "./cloud";
+import { preferences, setPreference } from "./preferences";
+import { describeTransition, NotificationThrottle } from "../core/alertNotification";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const rendererRoot = join(here, "../dist");
@@ -42,8 +44,8 @@ function createWindow(): void {
     height: 980,
     // Below this the dashboard's tiles and charts stop being usable; the app's
     // responsive layout still adapts down to it.
-    minWidth: 700,
-    minHeight: 600,
+    minWidth: 800,
+    minHeight: 700,
     // The desktop window keeps this fixed title; the shared page <title> is the
     // neutral "Starlink Companion (Unofficial)" that the browser and extension use.
     title: "DishyLink — Starlink Companion Desktop App (Unofficial)",
@@ -60,6 +62,12 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // Let the alert chime start without a prior click. A login launch can open
+      // this window focused but untouched; with the default policy its
+      // AudioContext stays suspended until a gesture, so an alert arriving first
+      // would be silent — and since main routes an in-front alert to this chime
+      // rather than an OS banner, nothing at all would sound.
+      autoplayPolicy: "no-user-gesture-required",
     },
   });
 
@@ -85,6 +93,13 @@ function showWindow(): void {
   }
 }
 
+/** Whether the window is the surface the user is actually looking at right now.
+ *  A minimized window still "has focus" but shows no banner, so it counts as away
+ *  — an alert then belongs on the OS notification, not the in-window chime. */
+function windowIsForeground(): boolean {
+  return mainWindow !== null && mainWindow.isFocused() && !mainWindow.isMinimized();
+}
+
 function createTray(): void {
   const image = nativeImage.createFromPath(iconPath);
   tray = new Tray(image.isEmpty() ? image : image.resize({ width: 18, height: 18 }));
@@ -92,6 +107,26 @@ function createTray(): void {
   const menu = Menu.buildFromTemplate([
     { label: "Open DishyLink", click: showWindow },
     { type: "separator" },
+    {
+      // Alerting is what the app does when nobody is looking at it, so it has to
+      // be switchable from the only surface that exists when nobody is: this
+      // menu. Requiring someone to open a window to control the thing that runs
+      // without one is the inversion this whole path exists to avoid.
+      label: "Notify Me About Alerts",
+      type: "checkbox",
+      checked: preferences().notifications === true,
+      click: (item) => {
+        setPreference("notifications", item.checked);
+        // Enabling posts one immediately: on macOS the first notification is
+        // what raises the permission prompt, and it doubles as proof the channel
+        // works rather than leaving a tick box that may be announcing nothing.
+        if (item.checked)
+          void postNotification(
+            "Notifications on",
+            "DishyLink will alert you about Starlink outages.",
+          ).catch(() => {});
+      },
+    },
     {
       // A login launch stays in the tray with no window (openAsHidden, plus the
       // wasOpenedAtLogin check below), so booting the machine starts background
@@ -199,33 +234,92 @@ function undeliverableReason(): string {
     : "Native notifications need the installed DishyLink app; a dev run can’t post them.";
 }
 
-function registerNotificationHandler(): void {
-  ipcMain.handle("notify", async (_event, { title, body }: { title: string; body: string }) => {
-    if (!Notification.isSupported()) return { delivered: false, reason: undeliverableReason() };
-    const notification = new Notification({ title, body });
-    notification.on("click", showWindow);
-    // Whether it actually reached the user, not merely that we asked — and why
-    // not when it didn't, since only here is the packaged-vs-unsigned distinction
-    // known. The renderer needs the truth so its toggle cannot report itself on
-    // while nothing is being delivered.
-    return new Promise<{ delivered: boolean; reason?: string }>((resolve) => {
-      let settled = false;
-      const settle = (delivered: boolean) => {
-        if (settled) return;
-        settled = true;
-        resolve(
-          delivered ? { delivered: true } : { delivered: false, reason: undeliverableReason() },
-        );
-      };
-      notification.on("show", () => settle(true));
-      notification.on("failed", () => settle(false));
-      notification.show();
-      // Not every platform emits `show`; assume success rather than disable a
-      // working channel over a missing event.
-      setTimeout(() => settle(true), 1_500);
-    });
+/**
+ * Post one notification and report whether the OS took it.
+ *
+ * No custom sound is attached: macOS will not play an app-bundled sound file
+ * through a notification (only its own system sounds), so a name here was ignored
+ * and the default played regardless. The default is what rides here now, governed
+ * — as it should be — by the per-app Notifications and Focus settings. The
+ * distinctive per-severity chime is the renderer's job (see useDeviceAlerts), and
+ * only while the window is in front; this posts nothing in that case.
+ */
+function postNotification(
+  title: string,
+  body: string,
+): Promise<{ delivered: boolean; reason?: string }> {
+  if (!Notification.isSupported())
+    return Promise.resolve({ delivered: false, reason: undeliverableReason() });
+  const notification = new Notification({ title, body });
+  notification.on("click", showWindow);
+  // Whether it actually reached the user, not merely that we asked — and why
+  // not when it didn't, since only here is the packaged-vs-unsigned distinction
+  // known. The renderer needs the truth so its toggle cannot report itself on
+  // while nothing is being delivered.
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (delivered: boolean) => {
+      if (settled) return;
+      settled = true;
+      resolve(delivered ? { delivered: true } : { delivered: false, reason: undeliverableReason() });
+    };
+    notification.on("show", () => settle(true));
+    notification.on("failed", () => settle(false));
+    notification.show();
+    // Not every platform emits `show`; assume success rather than disable a
+    // working channel over a missing event.
+    setTimeout(() => settle(true), 1_500);
   });
 }
+
+/**
+ * Announce what the recorder finds, with or without a window.
+ *
+ * This is the whole reason the app runs a recorder rather than a dashboard: the
+ * dish going offline at 3am is exactly the event nobody is watching for. The
+ * renderer used to own this, so closing the window silently switched alerting
+ * off — the alerts kept being detected and recorded, and simply told nobody.
+ *
+ * The sound follows where the user is. With the window in front, the renderer
+ * sounds its own chime (see the alert effect in useDeviceAlerts) — governed by the
+ * app's sound control, not this notifications preference — so this process posts
+ * nothing, and an OS banner never lands over an app already on screen.
+ * Backgrounded or closed, this posts the OS notification, its sound left to the
+ * per-app Notifications and Focus settings where it belongs.
+ */
+function startAlertNotifications(): void {
+  const throttle = new NotificationThrottle();
+  onAlertTransitions((transitions) => {
+    // Only an explicit yes. An unseeded preference is unknown, not consent.
+    if (preferences().notifications !== true) return;
+    for (const transition of transitions) {
+      const notification = describeTransition(transition);
+      if (!notification) continue;
+      // Stamped from the reading, so a flapping link is rate-limited by when the
+      // device said so rather than by when this loop got round to it.
+      if (!throttle.allow(notification.key, transition.atMs)) continue;
+      // In front of the user → the window sounds its own chime; its renderer owns
+      // the in-app alert sound, governed by the sound control alone. The OS
+      // notification is only for when the window is away.
+      if (windowIsForeground()) continue;
+      void postNotification(notification.title, notification.body).catch(() => {});
+    }
+  });
+}
+
+function registerNotificationHandler(): void {
+  ipcMain.handle("notify", (_event, { title, body }: { title: string; body: string }) =>
+    postNotification(title, body),
+  );
+  // The preference lives here because the recorder in this process is what reads
+  // it; the renderer's toggle is a view onto it, not its owner.
+  ipcMain.handle("notifications-enabled", () => preferences().notifications);
+  ipcMain.handle("set-notifications-enabled", (_event, enabled: boolean) => {
+    setPreference("notifications", enabled === true);
+    return preferences().notifications;
+  });
+}
+
 
 void app.whenReady().then(async () => {
   // An unpackaged run shows Electron's default icon; set ours on the macOS dock.
@@ -247,6 +341,9 @@ void app.whenReady().then(async () => {
     await startCollector(rendererRoot);
     handleAppProtocol(rendererRoot, handleApiRequest, handleCloudRequest);
     configureLoginItem();
+    // Bound to the recorder that was just started, so alerting begins with the
+    // app rather than with a window. A login launch opens no window at all.
+    startAlertNotifications();
   }
   // Registered for dev and packaged runs alike: notifications are the app's
   // alerting channel, not a packaging feature.

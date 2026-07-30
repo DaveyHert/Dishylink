@@ -19,25 +19,18 @@ export interface RadioReading {
   dutyCycle: number;
 }
 
-export interface RadioMinute extends RadioReading {
-  /** Epoch seconds at the minute's start. */
-  minute: number;
-}
-
 export interface RadioTemps {
   current: RadioReading[];
   atMs: number | null;
-  history: RadioMinute[];
   unavailable: boolean;
 }
 
 const REFRESH_MS = 15_000;
 
-export function useRadioTemps(active: boolean, hours = 6): RadioTemps {
+export function useRadioTemps(active: boolean): RadioTemps {
   const [data, setData] = useState<Omit<RadioTemps, "unavailable">>({
     current: [],
     atMs: null,
-    history: [],
   });
   const [unavailable, setUnavailable] = useState(false);
 
@@ -47,7 +40,7 @@ export function useRadioTemps(active: boolean, hours = 6): RadioTemps {
 
     const load = async () => {
       try {
-        const response = await apiRequest(`/api/radio?hours=${hours}`, {
+        const response = await apiRequest("/api/radio", {
           signal: AbortSignal.timeout(4_000),
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -56,7 +49,6 @@ export function useRadioTemps(active: boolean, hours = 6): RadioTemps {
         setData({
           current: payload.current ?? [],
           atMs: payload.atMs ?? null,
-          history: payload.history ?? [],
         });
         setUnavailable(false);
       } catch {
@@ -70,7 +62,7 @@ export function useRadioTemps(active: boolean, hours = 6): RadioTemps {
       cancelled = true;
       window.clearInterval(timerId);
     };
-  }, [active, hours]);
+  }, [active]);
 
   return { ...data, unavailable };
 }

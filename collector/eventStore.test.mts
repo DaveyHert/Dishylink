@@ -35,17 +35,17 @@ function event(startMs: number, overrides: Partial<StoredEvent> = {}): StoredEve
 }
 
 describe("EventStore retention", () => {
-  it("keeps events from within the last 24 hours", () => {
+  it("keeps events from within the last 48 hours", () => {
     const store = new EventStore(file);
-    store.upsert([event(Date.now() - 23 * HOUR_MS)]);
+    store.upsert([event(Date.now() - 47 * HOUR_MS)]);
     expect(store.all()).toHaveLength(1);
   });
 
-  it("drops events older than 24 hours on the next write", () => {
+  it("drops events older than 48 hours on the next write", () => {
     const store = new EventStore(file);
     // The prune runs during flush, so it needs a write to trigger it — an old
     // event alone would sit there until something new arrives.
-    store.upsert([event(Date.now() - 25 * HOUR_MS)]);
+    store.upsert([event(Date.now() - 50 * HOUR_MS)]);
     store.upsert([event(Date.now(), { cause: "EVENT_REASON_OUTAGE_NO_DOWNLINK" })]);
 
     const remaining = store.all();
@@ -67,13 +67,13 @@ describe("EventStore.all enforces the window without a write", () => {
   }
 
   it("hides an aged-out row when nothing has been written since", () => {
-    seedFile([event(Date.now() - 25 * HOUR_MS)]);
+    seedFile([event(Date.now() - 50 * HOUR_MS)]);
     expect(new EventStore(file).all()).toHaveLength(0);
   });
 
   it("hides aged-out rows reloaded from disk, keeping the ones still in window", () => {
     seedFile([
-      event(Date.now() - 25 * HOUR_MS),
+      event(Date.now() - 50 * HOUR_MS),
       event(Date.now() - 2 * HOUR_MS, { cause: "RECENT" }),
     ]);
 

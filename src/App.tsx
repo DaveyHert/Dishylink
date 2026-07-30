@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDishTelemetry } from "./hooks/useDishTelemetry";
+import { useLanPresence } from "./hooks/useLanPresence";
 import { AnimatePresence, motion } from "motion/react";
 import { useSatellites } from "./hooks/useSatellites";
 import { useAccountLocation } from "./hooks/useAccountLocation";
@@ -105,6 +106,11 @@ export default function App() {
     }
     return savedObserver ?? accountObserver;
   }, [dishLla, savedObserver, accountObserver]);
+  // Which account devices this machine can reach directly, so the account
+  // panel's dots read the LAN's last few seconds instead of the cloud's
+  // ~2-minute-old telemetry. Rides polls already running — costs neither device
+  // a request.
+  const lanOnline = useLanPresence(telemetry.status, telemetry.connectionState);
   const satellites = useSatellites(observerLocation, telemetry.obstructionMap);
   useOutageNotifications(telemetry);
   // Live alerts for both devices, and the notifications that go with them, read
@@ -401,7 +407,7 @@ export default function App() {
       )}
       {openSheet === "account" && (
         <DetailsModal title='Starlink account' onClose={() => setOpenSheet(null)} size='wide'>
-          <AccountPanel />
+          <AccountPanel lanOnline={lanOnline} />
         </DetailsModal>
       )}
       {openSheet === "network" && (

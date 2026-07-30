@@ -4,13 +4,14 @@
 // verified against the reflected WifiClient schema), so this is a client-side
 // match: resolve our own address(es), then find the matching client entry.
 //
-// Three backends, feature-detected, each degrading to the next when its runtime
+// Two backends, feature-detected, each degrading to the next when its runtime
 // API isn't present:
-//   • Electron  — a preload bridge exposes os.networkInterfaces()  (ip + mac)
-//   • Extension — chrome.system.network.getNetworkInterfaces()     (ip only)
-//   • Web       — the historian echoes the caller's IP at /api/whoami (ip only)
-// Only the web path runs today; the other two light up automatically once those
-// targets exist, with no change here.
+//   • Electron — a preload bridge exposes os.networkInterfaces()      (ip + mac)
+//   • Web      — the historian echoes the caller's IP at /api/whoami   (ip only)
+// A browser extension has no route to its own LAN address — chrome.system.network
+// is packaged-app-only, and WebRTC returns mDNS-masked .local candidates that
+// match no client — so under the extension this resolves to nothing and the list
+// simply shows no "This device" row.
 
 import { apiRequest } from "./apiHost";
 
@@ -47,32 +48,12 @@ function clean(ips: (string | undefined)[]): string[] {
 interface ElectronBridge {
   getSelfIdentity?: () => Promise<{ ips?: string[]; macs?: string[] }>;
 }
-interface ChromeNetwork {
-  system?: {
-    network?: {
-      getNetworkInterfaces?: (callback: (list: { address: string }[]) => void) => void;
-    };
-  };
-}
-
 async function fromElectron(): Promise<SelfIdentity | null> {
   const bridge = (globalThis as { electronAPI?: ElectronBridge }).electronAPI;
   if (!bridge?.getSelfIdentity) return null;
   try {
     const id = await bridge.getSelfIdentity();
     return { ips: clean(id.ips ?? []), macs: (id.macs ?? []).map((mac) => mac.toLowerCase()) };
-  } catch {
-    return null;
-  }
-}
-
-async function fromExtension(): Promise<SelfIdentity | null> {
-  const getInterfaces = (globalThis as { chrome?: ChromeNetwork }).chrome?.system?.network
-    ?.getNetworkInterfaces;
-  if (!getInterfaces) return null;
-  try {
-    const list = await new Promise<{ address: string }[]>((resolve) => getInterfaces(resolve));
-    return { ips: clean(list.map((iface) => iface.address)), macs: [] };
   } catch {
     return null;
   }
@@ -96,7 +77,7 @@ async function fromWhoami(signal?: AbortSignal): Promise<SelfIdentity | null> {
 /** Resolve the viewer's addresses via the first backend that answers. Never
  *  rejects — an unresolved identity is `EMPTY`, which matches no client. */
 export async function resolveSelfIdentity(signal?: AbortSignal): Promise<SelfIdentity> {
-  return (await fromElectron()) ?? (await fromExtension()) ?? (await fromWhoami(signal)) ?? EMPTY;
+  return (await fromElectron()) ?? (await fromWhoami(signal)) ?? EMPTY;
 }
 
 /** True when this client entry is the device viewing the dashboard. MAC wins

@@ -36,12 +36,24 @@ export default defineConfig({
   }),
   manifest: {
     name: "DishyLink",
-    description: "Live dashboard and history recorder for a Starlink kit (unofficial).",
+    description: "The unofficial desktop companion app to monitor and manage your Starlink kit.",
     // A background service worker fetching 192.168.100.1 hit a Chromium Local
     // Network Access bug fixed only in 144; below it the drain silently collects
     // nothing, which is an unreproducible bug report. Excludes Chrome 142–143.
     minimum_chrome_version: "144",
-    permissions: ["alarms", "storage", "cookies"],
+    // declarativeNetRequestWithHostAccess lets the worker attach the browser's own
+    // starlink.com cookies to its cloud fetches: a cross-site service-worker fetch
+    // has them withheld by SameSite even with credentials, so the Cookie header is
+    // set at the network layer instead — scoped to the worker's own requests.
+    // "notifications" is what lets the drain tick tell the user the dish went
+    // offline while no dashboard is open — the extension's only alerting path.
+    permissions: [
+      "alarms",
+      "storage",
+      "cookies",
+      "notifications",
+      "declarativeNetRequestWithHostAccess",
+    ],
     // Host permissions are what exempt the extension from the Local Network Access
     // prompt a plain web page now faces — the exemption is what makes it viable.
     // Match patterns ignore port, so these cover the dish's :9201 and router's :9000.

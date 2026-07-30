@@ -34,12 +34,17 @@ export interface DeviceItem {
 export function buildDeviceList(
   terminals: CloudTerminal[],
   deviceTelemetry: Record<string, DeviceTelemetry>,
+  /** Cloud DeviceIds answering on this LAN — see lanPresence. Devices in here
+   *  are judged live rather than by the cloud's ~2-minute-old telemetry; an
+   *  empty set (away from the network) simply leaves every dot to the cloud. */
+  lanOnline: ReadonlySet<string> = new Set(),
 ): DeviceItem[] {
   const active: DeviceItem[] = [];
   const inactive: DeviceItem[] = [];
   terminals.forEach((terminal, terminalIndex) => {
-    const tel = deviceTelemetry[dishTelemetryId(terminal)];
-    const status = dishStatus(terminal, tel);
+    const dishId = dishTelemetryId(terminal);
+    const tel = deviceTelemetry[dishId];
+    const status = dishStatus(terminal, tel, lanOnline.has(dishId));
     const groupInactive = status === "inactive";
     const bucket = groupInactive ? inactive : active;
     bucket.push({
@@ -54,13 +59,13 @@ export function buildDeviceList(
       tel,
     });
     const routerItems: DeviceItem[] = (terminal.routers ?? []).map((router, routerIndex) => {
-      const rtel = deviceTelemetry[routerTelemetryId(router.routerId)] as
-        RouterTelemetry | undefined;
+      const routerId = routerTelemetryId(router.routerId);
+      const rtel = deviceTelemetry[routerId] as RouterTelemetry | undefined;
       return {
         key: router.routerId ?? `router-${terminalIndex}-${routerIndex}`,
         kind: "router",
         name: routerDisplayName(router.routerId, rtel),
-        status: routerStatus(rtel, groupInactive),
+        status: routerStatus(rtel, groupInactive, lanOnline.has(routerId)),
         groupInactive,
         router,
         tel: rtel,

@@ -1,8 +1,11 @@
 // The alert store is the recording path, and it runs against a live setup where
-// every alert is false — so nothing here can be confirmed by eye. These pin the
-// edge logic that the panel's History depends on: episodes open on a rising
-// flag, close on a falling one, and — the subtle case — close when a key simply
-// vanishes from the payload, because proto3 JSON omits false.
+// every alert is false — so nothing here can be confirmed by eye. These pin what
+// the store itself owns: an episode spans one open to one close, a repeated open
+// does not start a second, the two devices stay apart on a key they share, and
+// the log survives a reload.
+//
+// Deciding *when* an episode opens is core/alertEngine's job and is pinned in
+// core/alertEngine.test.ts. Nothing here should reason about device booleans.
 
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -23,74 +26,79 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-describe("AlertStore.ingest", () => {
-  // Recent, so closed episodes stay inside the 7-day retention window.
+describe("AlertStore episodes", () => {
+  // Recent, so closed episodes stay inside the retention window.
   const now = Date.now();
 
-  it("opens an episode on a rising flag and closes it on a falling one", () => {
+  it("records an episode from its open to its close", () => {
     const store = new AlertStore(file);
-    store.ingest("dish", { dishWaterDetected: true }, now);
+    store.open("dish", "dishWaterDetected", now);
     expect(store.isOpen("dish", "dishWaterDetected")).toBe(true);
-    const open = store.all().find((e) => e.key === "dishWaterDetected")!;
-    expect(open).toMatchObject({ source: "dish", startMs: now, endMs: null });
+    expect(store.all().find((e) => e.key === "dishWaterDetected")).toMatchObject({
+      source: "dish",
+      startMs: now,
+      endMs: null,
+    });
 
-    store.ingest("dish", { dishWaterDetected: false }, now + 1_000);
+    store.close("dish", "dishWaterDetected", now + 1_000);
     expect(store.isOpen("dish", "dishWaterDetected")).toBe(false);
     expect(store.all().find((e) => e.key === "dishWaterDetected")!.endMs).toBe(now + 1_000);
   });
 
-  it("closes an open episode when the key vanishes from the payload (proto3 drops false)", () => {
+  it("does not start a second episode while one is already open", () => {
+    // The engine only reports an edge once, but a restart replays what it
+    // restored — an episode already open must absorb that rather than fork.
     const store = new AlertStore(file);
-    store.ingest("dish", { thermalThrottle: true }, now);
-    expect(store.isOpen("dish", "thermalThrottle")).toBe(true);
-
-    // The dish is healthy again: the whole alerts object comes back empty.
-    store.ingest("dish", {}, now + 2_000);
-    expect(store.isOpen("dish", "thermalThrottle")).toBe(false);
-    expect(store.all()[0].endMs).toBe(now + 2_000);
-  });
-
-  it("does not duplicate an episode while a flag stays set", () => {
-    const store = new AlertStore(file);
-    store.ingest("dish", { motorsStuck: true }, 1_000);
-    store.ingest("dish", { motorsStuck: true }, 2_000);
-    store.ingest("dish", { motorsStuck: true }, 3_000);
+    store.open("dish", "motorsStuck", 1_000);
+    store.open("dish", "motorsStuck", 2_000);
+    store.open("dish", "motorsStuck", 3_000);
     const open = store.all().filter((e) => e.key === "motorsStuck" && e.endMs === null);
     expect(open).toHaveLength(1);
     expect(open[0].startMs).toBe(1_000);
   });
 
-  it("keeps the dish and router apart for an overlapping key like thermalThrottle", () => {
+  it("ignores a close for an episode that was never open", () => {
     const store = new AlertStore(file);
-    store.ingest("dish", { thermalThrottle: true }, 1_000);
-    store.ingest("router", { thermalThrottle: true }, 1_000);
-    expect(store.isOpen("dish", "thermalThrottle")).toBe(true);
-    expect(store.isOpen("router", "thermalThrottle")).toBe(true);
+    store.close("dish", "motorsStuck", 1_000);
+    expect(store.all()).toHaveLength(0);
+  });
 
-    // Clearing the dish must not touch the router's still-open episode.
-    store.ingest("dish", {}, 2_000);
+  it("keeps the dish and router apart on a key they share", () => {
+    const store = new AlertStore(file);
+    store.open("dish", "thermalThrottle", 1_000);
+    store.open("router", "thermalThrottle", 1_000);
+
+    // Closing the dish's must not touch the router's still-open episode.
+    store.close("dish", "thermalThrottle", 2_000);
     expect(store.isOpen("dish", "thermalThrottle")).toBe(false);
     expect(store.isOpen("router", "thermalThrottle")).toBe(true);
   });
 
-  it("leaves other sources untouched when one device is ingested", () => {
-    const store = new AlertStore(file);
-    store.ingest("router", { poeFuseBlown: true }, 1_000);
-    // A dish poll arrives; the router's open episode must survive it.
-    store.ingest("dish", { dishWaterDetected: true }, 1_500);
-    expect(store.isOpen("router", "poeFuseBlown")).toBe(true);
-    expect(store.isOpen("dish", "dishWaterDetected")).toBe(true);
-  });
-
   it("survives a full open/close cycle across a reload from disk", () => {
     const first = new AlertStore(file);
-    first.ingest("dish", { noEthernetLink: true }, now);
-    first.ingest("dish", { noEthernetLink: false }, now + 2_000);
+    first.open("dish", "noEthernetLink", now);
+    first.close("dish", "noEthernetLink", now + 2_000);
 
     expect(existsSync(file)).toBe(true);
     const reloaded = new AlertStore(file);
-    const episode = reloaded.all().find((e) => e.key === "noEthernetLink")!;
-    expect(episode).toMatchObject({ source: "dish", startMs: now, endMs: now + 2_000 });
+    expect(reloaded.all().find((e) => e.key === "noEthernetLink")).toMatchObject({
+      source: "dish",
+      startMs: now,
+      endMs: now + 2_000,
+    });
+  });
+
+  it("reports its open episodes so an engine can be restored from them", () => {
+    const store = new AlertStore(file);
+    store.open("dish", "dishWaterDetected", now);
+    store.open("router", "poeFuseBlown", now);
+    store.close("router", "poeFuseBlown", now + 1_000);
+
+    const stillOpen = store
+      .all()
+      .filter((episode) => episode.endMs === null)
+      .map((episode) => `${episode.source}:${episode.key}`);
+    expect(stillOpen).toEqual(["dish:dishWaterDetected"]);
   });
 });
 
@@ -112,13 +120,13 @@ describe("AlertStore retention", () => {
     endMs,
   });
 
-  it("serves a closed episode from inside the 7-day window", () => {
-    seedFile([closed(Date.now() - 6 * DAY_MS, Date.now() - 6 * DAY_MS + 1000)]);
+  it("serves a closed episode from inside the 48-hour window", () => {
+    seedFile([closed(Date.now() - DAY_MS, Date.now() - DAY_MS + 1000)]);
     expect(new AlertStore(file).all()).toHaveLength(1);
   });
 
-  it("hides a closed episode older than 7 days, with nothing written since", () => {
-    seedFile([closed(Date.now() - 8 * DAY_MS, Date.now() - 8 * DAY_MS + 1000)]);
+  it("hides a closed episode older than 48 hours, with nothing written since", () => {
+    seedFile([closed(Date.now() - 3 * DAY_MS, Date.now() - 3 * DAY_MS + 1000)]);
     expect(new AlertStore(file).all()).toHaveLength(0);
   });
 

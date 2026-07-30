@@ -15,3 +15,12 @@ collector/data
 
 # Local Starlink account session for the dev cloud proxy (never commit).
 .starlink-cookie
+
+# Rasterized from build/icon.svg by scripts/make-icon.mjs. The SVG is the only
+# committed form of the mark.
+build/icon.icns
+build/icon.png
+
+# Rendered from the tones in src/lib/alertSound.ts by scripts/make-alert-sounds.mjs,
+# so the chime the tray plays cannot drift from the one the dashboard synthesises.
+build/sounds/

@@ -97,3 +97,44 @@ describe("IndexedDbHistory across a simulated teardown", () => {
     expect(await totalWattSeconds(name)).toBe(360);
   });
 });
+
+// The client stores prune by a lexical range delete over a fixed-width epoch
+// prefix; a width mismatch would sort the bound past every key and silently wipe
+// or keep the whole store. Only real IndexedDB orders strings the way the delete
+// assumes, so the in-memory store (numeric compares) cannot catch this — it has
+// to run here. Each reads back with a window far wider than retention, so what
+// returns is what physically survived the prune, not what a read filter hides.
+describe("IndexedDbHistory client-row pruning", () => {
+  const NOW = 1_785_000_000_000;
+
+  it("prunes client-minute rows past the 6h window and keeps the rest", async () => {
+    const store = await IndexedDbHistory.open(await freshStoreName());
+    const fresh = Math.floor(NOW / 60_000) * 60;
+    const stale = fresh - 7 * 3_600; // 7h earlier — outside 6h
+    await store.putClientMinutes(
+      [
+        { minute: stale, key: "1", macAddress: "aa", downMbps: 0, upMbps: 0, rxBytes: 0, txBytes: 0 },
+        { minute: fresh, key: "1", macAddress: "aa", downMbps: 5, upMbps: 1, rxBytes: 0, txBytes: 0 },
+      ],
+      NOW,
+    );
+    const survived = await store.readClientMinutes(10_000, undefined, NOW);
+    expect(survived.map((r) => r.minute)).toEqual([fresh]);
+  });
+
+  it("prunes raw samples past the window and keeps newer ones", async () => {
+    const store = await IndexedDbHistory.open(await freshStoreName());
+    const stale = NOW - 30 * 60_000; // 30min old — outside the 20min window
+    const fresh = NOW - 60_000;
+    await store.putClientSamples(
+      [
+        { key: "1", macAddress: "aa", atMs: stale, downMbps: 0, upMbps: 0 },
+        { key: "1", macAddress: "aa", atMs: fresh, downMbps: 9, upMbps: 2 },
+      ],
+      NOW,
+    );
+    // Read floored below the stale sample, so a survivor would still show.
+    const survived = await store.readClientSamples(0, undefined, stale);
+    expect(survived.map((s) => s.atMs)).toEqual([fresh]);
+  });
+});

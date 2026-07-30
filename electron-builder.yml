@@ -31,8 +31,28 @@ files:
   - package.json
   - "!node_modules/**/*"
 
+# Two per-arch DMGs rather than one universal build. Without an explicit arch list
+# electron-builder packages only the host arch, and an arm64-only app will not
+# launch on an Intel Mac at all — Rosetta translates x64 → arm64, never the other
+# way. Separate targets beat `arch: [universal]` for two reasons: universal adds an
+# @electron/universal merge after per-arch packing, which the afterPack hook above
+# would have already ad-hoc signed (signature mismatch at merge time); and the
+# Electron framework is ~273 MB of the ~279 MB app, so a universal build roughly
+# doubles the download for every user instead of ~120 MB each. Nothing here is
+# compiled per-arch — vite inlines every dependency and the tree has no native
+# modules — so x64 costs only the x64 Electron download at build time.
 mac:
-  target: dmg
-  icon: build/icon.png
+  # Both DMGs name their arch. electron-builder omits the suffix for x64 on its
+  # own, which leaves the Intel build as plain DishyLink-<version>.dmg — unlabelled
+  # next to an explicit arm64 file, so it reads as the one to grab by default and
+  # lands Intel binaries on Apple Silicon machines.
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+  # Prebuilt by scripts/make-icon.mjs, not converted here — electron-builder's own
+  # ICNS writer corrupts the 16/32/48 px slices, which is what Finder list views and
+  # the Get Info header draw. See that script for the detail.
+  icon: build/icon.icns
   category: public.app-category.utilities
   identity: null

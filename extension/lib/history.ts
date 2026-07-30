@@ -10,31 +10,43 @@
 
 import { addMinuteBucket, type MinuteBucket } from "@core/energyBuckets";
 import { planDrain, type DishWindow } from "@core/drain";
-import type { OutageEvent, RadioStatReading, SampleCursor } from "@core/telemetry";
+import type { AlertTransition } from "@core/alertEngine";
+import type { OutageEvent, RadioStatReading, SampleCursor, TelemetrySample } from "@core/telemetry";
+import type { Snapshot as TotalsSnapshot } from "@core/clientTotals";
+
+/** One device's aggregated throughput for a closed minute — the row /api/clients
+ *  serves as `history` behind the 6-hour chart. Recorded once a minute by the
+ *  drain from the router's own 1-minute average, so `downMbps`/`upMbps` already
+ *  are that minute's rate; the byte counters ride along for the odometer's seed. */
+export interface ClientMinuteRow {
+  /** Epoch seconds at the minute's start. */
+  minute: number;
+  /** Device key: the router's clientId (or MAC when it reports none). */
+  key: string;
+  macAddress: string;
+  name?: string;
+  downMbps: number;
+  upMbps: number;
+  rxBytes: number;
+  txBytes: number;
+}
+
+/** One raw 1 Hz sample behind the 15-minute detail chart — written by the open
+ *  dashboard, which polls the router far faster than the once-a-minute drain can. */
+export interface ClientSampleRow {
+  key: string;
+  macAddress: string;
+  atMs: number;
+  downMbps: number;
+  upMbps: number;
+}
 
 const EMPTY_CURSOR: SampleCursor = { counter: 0, newestSampleMs: 0 };
 
-/** One closed minute of a radio's temperature (averaged) and its lowest duty
- *  cycle that minute — the shape /api/radio serves as history. */
-export interface RadioMinute extends RadioStatReading {
-  minute: number;
-}
-
-/** The latest live radio readings, so /api/radio can answer `current` too. */
+/** The latest live radio readings, so /api/radio can answer `current`. */
 export interface RadioCurrent {
   readings: RadioStatReading[];
   atMs: number;
-}
-
-/** Per-(minute, band) accumulator, upserted each poll so a torn-down worker never
- *  loses the minute in progress; the average and duty-cycle floor are computed on read. */
-interface RadioAccumulator {
-  key: string;
-  minute: number;
-  band: string;
-  sum: number;
-  count: number;
-  dutyMin: number;
 }
 
 /** One hourly obstruction-map snapshot for the time-lapse, cells packed 2 bits
@@ -68,88 +80,90 @@ export interface HistoryStore {
   /** Buckets whose minute (epoch seconds) falls within [startSec, endSec]. */
   readMinutes(startSec: number, endSec: number): Promise<MinuteBucket[]>;
   /** Upsert outage episodes keyed by start, so a re-seen one updates rather than
-   *  duplicates — the dish's ring buffer replays the same episodes each drain. */
-  putOutages(events: OutageEvent[]): Promise<void>;
-  /** All recorded outages, newest first. */
-  readOutages(): Promise<OutageEvent[]>;
-  /** Fold a radio poll into the per-minute accumulators and remember it as the
-   *  current live reading. */
+   *  duplicates — the dish's ring buffer replays the same episodes each drain —
+   *  and drop any past the retention window on the same write. */
+  putOutages(events: OutageEvent[], nowMs?: number): Promise<void>;
+  /** Outages within the retention window, newest first. */
+  readOutages(nowMs?: number): Promise<OutageEvent[]>;
+  /** Remember the latest radio poll as the current live reading. */
   putRadio(readings: RadioStatReading[], nowMs: number): Promise<void>;
-  /** The current readings plus per-minute history over the last `hours`. */
-  readRadio(hours: number, nowMs?: number): Promise<{
-    current: RadioStatReading[];
-    atMs: number | null;
-    history: RadioMinute[];
-  }>;
-  /** Reconcile a device's live alert booleans into open/closed episodes. */
-  putAlerts(source: AlertSource, alerts: Record<string, boolean>, nowMs: number): Promise<void>;
+  /** The current readings and when they were read. */
+  readRadio(): Promise<{ current: RadioStatReading[]; atMs: number | null }>;
+  /** Write down the transitions core/alertEngine reported: an episode opens for
+   *  each alert that started firing, closes for each that stopped. This store
+   *  records edges, it does not look for them — every host runs the same engine
+   *  over the same readings, and a store with its own opinion would be a second
+   *  one. */
+  applyAlertTransitions(transitions: AlertTransition[], nowMs: number): Promise<void>;
   /** All alert episodes within the retention window, newest first. */
   readAlerts(nowMs?: number): Promise<AlertEpisode[]>;
   /** Append an hourly obstruction snapshot, dropping any past retention. */
   putObstruction(snapshot: ObstructionSnapshot): Promise<void>;
   /** Snapshots within retention, oldest first — the order the scrubber expects. */
   readObstructionSnapshots(nowMs?: number): Promise<ObstructionSnapshot[]>;
+  /** Record this drain's per-device minute rows, dropping any past the 6h window. */
+  putClientMinutes(rows: ClientMinuteRow[], nowMs?: number): Promise<void>;
+  /** Per-device minute rows within the last `hours`, oldest first; one device by key. */
+  readClientMinutes(hours: number, key?: string, nowMs?: number): Promise<ClientMinuteRow[]>;
+  /** Append raw 1 Hz samples (from the open dashboard), dropping any past the window. */
+  putClientSamples(rows: ClientSampleRow[], nowMs?: number): Promise<void>;
+  /** Raw samples newer than `sinceMs` (0 = the whole window), oldest first; one device. */
+  readClientSamples(sinceMs?: number, key?: string, nowMs?: number): Promise<ClientSampleRow[]>;
+  /** The odometer's persisted state, or null before its first write. */
+  readTotalsSnapshot(): Promise<TotalsSnapshot | null>;
+  /** Persist the odometer's state so the next drain resumes it across teardown. */
+  writeTotalsSnapshot(snapshot: TotalsSnapshot): Promise<void>;
+  /** Retain the dish's raw 1 Hz telemetry samples, dropping any past the window.
+   *  Keyed by timestamp, so a re-drained overlap updates rather than duplicates. */
+  putSamples(samples: TelemetrySample[], nowMs?: number): Promise<void>;
+  /** Raw samples from the last `minutes`, oldest first — the main charts' backfill. */
+  readSamples(minutes: number, nowMs?: number): Promise<TelemetrySample[]>;
 }
 
 const OBSTRUCTION_RETENTION_MS = 7 * 24 * 3_600_000;
 
-/** Average a radio accumulator into its closed-minute reading. */
-function radioMinuteOf(acc: RadioAccumulator): RadioMinute {
-  return {
-    minute: acc.minute,
-    band: acc.band,
-    tempC: Math.round((acc.sum / Math.max(acc.count, 1)) * 10) / 10,
-    dutyCycle: acc.dutyMin,
-  };
-}
+// Alerts, thermal (a filtered view of alerts), and outages all share one
+// 48-hour window — the "recently" the events panel reads.
+const ALERT_RETENTION_MS = 48 * 3_600_000;
+const OUTAGE_RETENTION_MS = 48 * 3_600_000;
 
-const ALERT_RETENTION_MS = 7 * 24 * 3_600_000;
+// Per-device minute rows back the 6h chart, the longest per-device view. Raw
+// samples back only the 15-minute detail chart, so a shorter window holds them —
+// wide enough that the chart opens filled from a recently-open dashboard.
+const CLIENT_MINUTE_RETENTION_MS = 6 * 3_600_000;
+const CLIENT_SAMPLE_RETENTION_MS = 20 * 60_000;
 
-/** Reconcile one device's live alert booleans against its recorded episodes:
- *  returns the episodes to write — new opens for newly-set flags, closes for
- *  cleared ones. proto3 omits false keys, so an open key absent from the payload
- *  has cleared. Pure, so the store just persists what it returns. */
-function reconcileAlerts(
-  source: AlertSource,
+// The dish's raw 1 Hz window, six hours deep — the span the main charts request
+// to backfill on reload (/api/samples?minutes=360).
+const SAMPLE_RETENTION_MS = 6 * 3_600_000;
+
+/** The episodes a batch of transitions produces, against what is already on
+ *  record. Pure, so both stores persist the same thing. An open that is already
+ *  open and a close for nothing open are both no-ops: the engine only reports an
+ *  edge once, but a worker restored from disk may replay one. */
+function episodesForTransitions(
   existing: AlertEpisode[],
-  alerts: Record<string, boolean>,
-  nowMs: number,
+  transitions: AlertTransition[],
 ): AlertEpisode[] {
-  const openFor = (key: string) =>
-    existing.find((e) => e.source === source && e.key === key && e.endMs === null);
   const toPut: AlertEpisode[] = [];
-  for (const [key, active] of Object.entries(alerts)) {
-    if (active === true) {
-      if (!openFor(key))
-        toPut.push({ id: `${source}:${key}:${nowMs}`, source, key, startMs: nowMs, endMs: null });
-    } else {
-      const open = openFor(key);
-      if (open) toPut.push({ ...open, endMs: nowMs });
+  for (const transition of transitions) {
+    const open = [...existing, ...toPut].find(
+      (e) => e.source === transition.source && e.key === transition.key && e.endMs === null,
+    );
+    if (transition.kind === "fired") {
+      if (!open)
+        toPut.push({
+          id: `${transition.source}:${transition.key}:${transition.atMs}`,
+          source: transition.source,
+          key: transition.key,
+          startMs: transition.atMs,
+          endMs: null,
+        });
+    } else if (open) {
+      toPut.push({ ...open, endMs: transition.atMs });
     }
   }
-  // An open key that vanished from the payload entirely has also cleared.
-  for (const episode of existing) {
-    if (episode.source === source && episode.endMs === null && !(episode.key in alerts))
-      toPut.push({ ...episode, endMs: nowMs });
-  }
   return toPut;
-}
-
-/** Fold one reading into its (minute, band) accumulator — averaged temperature,
- *  lowest duty cycle, so a brief airtime cut is remembered rather than smoothed. */
-function foldRadio(existing: RadioAccumulator | undefined, reading: RadioStatReading, minute: number): RadioAccumulator {
-  const acc = existing ?? {
-    key: `${minute}:${reading.band}`,
-    minute,
-    band: reading.band,
-    sum: 0,
-    count: 0,
-    dutyMin: reading.dutyCycle,
-  };
-  acc.sum += reading.tempC;
-  acc.count += 1;
-  acc.dutyMin = Math.min(acc.dutyMin, reading.dutyCycle);
-  return acc;
 }
 
 /** Read the cursor, drain the window past it, and commit — one wake's work. */
@@ -162,15 +176,19 @@ export async function applyDrain(store: HistoryStore, window: DishWindow): Promi
 // --- IndexedDB (service worker) ---
 
 const DB_NAME = "dishylink-history";
-const DB_VERSION = 5;
+const DB_VERSION = 7;
 const MINUTES = "minutes";
 const META = "meta";
 const OUTAGES = "outages";
 const RADIO = "radio";
 const ALERTS = "alerts";
 const OBSTRUCTION = "obstruction";
+const SAMPLES = "samples";
+const CLIENT_MINUTES = "clientMinutes";
+const CLIENT_SAMPLES = "clientSamples";
 const CURSOR_KEY = "cursor";
 const RADIO_CURRENT_KEY = "radioCurrent";
+const CLIENT_TOTALS_KEY = "clientTotals";
 
 function request<T>(req: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -199,14 +217,28 @@ function openDatabase(name: string): Promise<IDBDatabase> {
       // startMs is the key, so an outage the ring buffer replays each drain
       // updates its row rather than appending a duplicate.
       if (!db.objectStoreNames.contains(OUTAGES)) db.createObjectStore(OUTAGES, { keyPath: "startMs" });
-      // `${minute}:${band}` is the key, so each poll folds into the minute in
-      // progress rather than appending — the minute survives a worker teardown.
-      if (!db.objectStoreNames.contains(RADIO)) db.createObjectStore(RADIO, { keyPath: "key" });
+      // Radio is shown live only and keeps no history, so its store is dropped
+      // here; guarded so a fresh profile that never had it still upgrades cleanly.
+      if (db.objectStoreNames.contains(RADIO)) db.deleteObjectStore(RADIO);
       // One row per alert episode, keyed by `${source}:${key}:${startMs}`.
       if (!db.objectStoreNames.contains(ALERTS)) db.createObjectStore(ALERTS, { keyPath: "id" });
       // One row per hourly snapshot, keyed by capture time.
       if (!db.objectStoreNames.contains(OBSTRUCTION))
         db.createObjectStore(OBSTRUCTION, { keyPath: "takenAtMs" });
+      // Raw dish samples keyed by timestamp, so a re-drained overlap of the dish's
+      // ring updates its row rather than duplicating; the numeric key ranges for
+      // the window prune and the backfill read.
+      if (!db.objectStoreNames.contains(SAMPLES))
+        db.createObjectStore(SAMPLES, { keyPath: "timestampMs" });
+      // Keyed by `id` = a zero-free fixed-width epoch prefix + the device key
+      // (`${minute}:${key}`, `${atMs}:${key}`). Epoch seconds are 10 digits and
+      // ms 13 through year 2286, so lexical order is chronological order — one
+      // range delete prunes the window, and a `since` read is a lower bound, with
+      // no secondary index to maintain. A re-drained minute updates its own row.
+      if (!db.objectStoreNames.contains(CLIENT_MINUTES))
+        db.createObjectStore(CLIENT_MINUTES, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(CLIENT_SAMPLES))
+        db.createObjectStore(CLIENT_SAMPLES, { keyPath: "id" });
     };
     open.onsuccess = () => resolve(open.result);
     open.onerror = () => reject(open.error);
@@ -244,53 +276,45 @@ export class IndexedDbHistory implements HistoryStore {
     return request<MinuteBucket[]>(tx.objectStore(MINUTES).getAll(IDBKeyRange.bound(startSec, endSec)));
   }
 
-  async putOutages(events: OutageEvent[]): Promise<void> {
-    if (events.length === 0) return;
+  async putOutages(events: OutageEvent[], nowMs: number = Date.now()): Promise<void> {
     const tx = this.db.transaction(OUTAGES, "readwrite");
     const store = tx.objectStore(OUTAGES);
     for (const event of events) store.put(event);
+    // startMs is the key, so a single ranged delete drops everything older.
+    store.delete(IDBKeyRange.upperBound(nowMs - OUTAGE_RETENTION_MS, true));
     await transactionDone(tx);
   }
 
-  async readOutages(): Promise<OutageEvent[]> {
+  async readOutages(nowMs: number = Date.now()): Promise<OutageEvent[]> {
     const tx = this.db.transaction(OUTAGES, "readonly");
     const all = await request<OutageEvent[]>(tx.objectStore(OUTAGES).getAll());
-    return all.sort((a, b) => b.startMs - a.startMs);
+    const cutoff = nowMs - OUTAGE_RETENTION_MS;
+    return all.filter((e) => e.startMs >= cutoff).sort((a, b) => b.startMs - a.startMs);
   }
 
   async putRadio(readings: RadioStatReading[], nowMs: number): Promise<void> {
     if (readings.length === 0) return;
-    const minute = Math.floor(nowMs / 60_000) * 60;
-    const tx = this.db.transaction([RADIO, META], "readwrite");
-    const store = tx.objectStore(RADIO);
-    for (const reading of readings) {
-      const key = `${minute}:${reading.band}`;
-      const existing = await request<RadioAccumulator | undefined>(store.get(key));
-      store.put(foldRadio(existing, reading, minute));
-    }
+    const tx = this.db.transaction(META, "readwrite");
     tx.objectStore(META).put({ readings, atMs: nowMs } satisfies RadioCurrent, RADIO_CURRENT_KEY);
     await transactionDone(tx);
   }
 
-  async readRadio(hours: number, nowMs: number = Date.now()) {
-    const cutoffSec = Math.floor(nowMs / 1000) - hours * 3_600;
-    const tx = this.db.transaction([RADIO, META], "readonly");
-    const accumulators = await request<RadioAccumulator[]>(tx.objectStore(RADIO).getAll());
+  async readRadio() {
+    const tx = this.db.transaction(META, "readonly");
     const current = await request<RadioCurrent | undefined>(
       tx.objectStore(META).get(RADIO_CURRENT_KEY),
     );
-    const history = accumulators
-      .filter((acc) => acc.minute >= cutoffSec)
-      .map(radioMinuteOf)
-      .sort((a, b) => a.minute - b.minute);
-    return { current: current?.readings ?? [], atMs: current?.atMs ?? null, history };
+    return { current: current?.readings ?? [], atMs: current?.atMs ?? null };
   }
 
-  async putAlerts(source: AlertSource, alerts: Record<string, boolean>, nowMs: number): Promise<void> {
+  async applyAlertTransitions(transitions: AlertTransition[], nowMs: number): Promise<void> {
     const tx = this.db.transaction(ALERTS, "readwrite");
     const store = tx.objectStore(ALERTS);
     const existing = await request<AlertEpisode[]>(store.getAll());
-    for (const episode of reconcileAlerts(source, existing, alerts, nowMs)) store.put(episode);
+    for (const episode of episodesForTransitions(existing, transitions)) store.put(episode);
+    // Drop closed episodes past the window; an open one is kept however old.
+    const cutoff = nowMs - ALERT_RETENTION_MS;
+    for (const e of existing) if (e.endMs !== null && e.startMs < cutoff) store.delete(e.id);
     await transactionDone(tx);
   }
 
@@ -319,6 +343,92 @@ export class IndexedDbHistory implements HistoryStore {
     const cutoff = nowMs - OBSTRUCTION_RETENTION_MS;
     return all.filter((s) => s.takenAtMs >= cutoff).sort((a, b) => a.takenAtMs - b.takenAtMs);
   }
+
+  async putClientMinutes(rows: ClientMinuteRow[], nowMs: number = Date.now()): Promise<void> {
+    const tx = this.db.transaction(CLIENT_MINUTES, "readwrite");
+    const store = tx.objectStore(CLIENT_MINUTES);
+    for (const row of rows) store.put({ id: `${row.minute}:${row.key}`, ...row });
+    const cutoffMinute = Math.floor((nowMs - CLIENT_MINUTE_RETENTION_MS) / 1000);
+    store.delete(IDBKeyRange.upperBound(`${cutoffMinute}:`, true));
+    await transactionDone(tx);
+  }
+
+  async readClientMinutes(
+    hours: number,
+    key?: string,
+    nowMs: number = Date.now(),
+  ): Promise<ClientMinuteRow[]> {
+    const cutoff = Math.floor(nowMs / 1000) - hours * 3_600;
+    const tx = this.db.transaction(CLIENT_MINUTES, "readonly");
+    const rows = await request<(ClientMinuteRow & { id: string })[]>(
+      tx.objectStore(CLIENT_MINUTES).getAll(IDBKeyRange.lowerBound(`${cutoff}:`)),
+    );
+    return rows
+      .filter((r) => r.minute >= cutoff && (!key || r.key === key))
+      .map(withoutId)
+      .sort((a, b) => a.minute - b.minute);
+  }
+
+  async putClientSamples(rows: ClientSampleRow[], nowMs: number = Date.now()): Promise<void> {
+    const tx = this.db.transaction(CLIENT_SAMPLES, "readwrite");
+    const store = tx.objectStore(CLIENT_SAMPLES);
+    for (const row of rows) store.put({ id: `${row.atMs}:${row.key}`, ...row });
+    store.delete(IDBKeyRange.upperBound(`${nowMs - CLIENT_SAMPLE_RETENTION_MS}:`, true));
+    await transactionDone(tx);
+  }
+
+  async readClientSamples(
+    sinceMs: number = 0,
+    key?: string,
+    nowMs: number = Date.now(),
+  ): Promise<ClientSampleRow[]> {
+    const floor = Math.max(sinceMs, nowMs - CLIENT_SAMPLE_RETENTION_MS);
+    const tx = this.db.transaction(CLIENT_SAMPLES, "readonly");
+    const rows = await request<(ClientSampleRow & { id: string })[]>(
+      tx.objectStore(CLIENT_SAMPLES).getAll(IDBKeyRange.lowerBound(`${floor}:`)),
+    );
+    return rows
+      .filter((r) => r.atMs > sinceMs && (!key || r.key === key))
+      .map(withoutId)
+      .sort((a, b) => a.atMs - b.atMs);
+  }
+
+  async readTotalsSnapshot(): Promise<TotalsSnapshot | null> {
+    const tx = this.db.transaction(META, "readonly");
+    const snap = await request<TotalsSnapshot | undefined>(
+      tx.objectStore(META).get(CLIENT_TOTALS_KEY),
+    );
+    return snap ?? null;
+  }
+
+  async writeTotalsSnapshot(snapshot: TotalsSnapshot): Promise<void> {
+    const tx = this.db.transaction(META, "readwrite");
+    tx.objectStore(META).put(snapshot, CLIENT_TOTALS_KEY);
+    await transactionDone(tx);
+  }
+
+  async putSamples(samples: TelemetrySample[], nowMs: number = Date.now()): Promise<void> {
+    const tx = this.db.transaction(SAMPLES, "readwrite");
+    const store = tx.objectStore(SAMPLES);
+    for (const sample of samples) store.put(sample);
+    store.delete(IDBKeyRange.upperBound(nowMs - SAMPLE_RETENTION_MS, true));
+    await transactionDone(tx);
+  }
+
+  async readSamples(minutes: number, nowMs: number = Date.now()): Promise<TelemetrySample[]> {
+    const floor = nowMs - minutes * 60_000;
+    const tx = this.db.transaction(SAMPLES, "readonly");
+    const rows = await request<TelemetrySample[]>(
+      tx.objectStore(SAMPLES).getAll(IDBKeyRange.lowerBound(floor)),
+    );
+    return rows.sort((a, b) => a.timestampMs - b.timestampMs);
+  }
+}
+
+/** Drop the storage-only `id` prefix from a stored client row. */
+function withoutId<T>(row: T & { id: string }): T {
+  const { id: _, ...rest } = row;
+  return rest as unknown as T;
 }
 
 // --- In-memory (tests) ---
@@ -326,10 +436,13 @@ export class IndexedDbHistory implements HistoryStore {
 export class InMemoryHistory implements HistoryStore {
   private readonly minutes = new Map<number, MinuteBucket>();
   private readonly outages = new Map<number, OutageEvent>();
-  private readonly radio = new Map<string, RadioAccumulator>();
   private radioCurrent: RadioCurrent | null = null;
   private readonly alerts = new Map<string, AlertEpisode>();
   private readonly obstruction = new Map<number, ObstructionSnapshot>();
+  private readonly clientMinutes = new Map<string, ClientMinuteRow>();
+  private readonly clientSamples = new Map<string, ClientSampleRow>();
+  private readonly samples = new Map<number, TelemetrySample>();
+  private totalsSnapshot: TotalsSnapshot | null = null;
   private cursor: SampleCursor = EMPTY_CURSOR;
 
   async readCursor(): Promise<SampleCursor> {
@@ -348,40 +461,36 @@ export class InMemoryHistory implements HistoryStore {
       .sort((a, b) => a.minute - b.minute);
   }
 
-  async putOutages(events: OutageEvent[]): Promise<void> {
+  async putOutages(events: OutageEvent[], nowMs: number = Date.now()): Promise<void> {
     for (const event of events) this.outages.set(event.startMs, event);
+    const cutoff = nowMs - OUTAGE_RETENTION_MS;
+    for (const [startMs] of this.outages) if (startMs < cutoff) this.outages.delete(startMs);
   }
 
-  async readOutages(): Promise<OutageEvent[]> {
-    return [...this.outages.values()].sort((a, b) => b.startMs - a.startMs);
+  async readOutages(nowMs: number = Date.now()): Promise<OutageEvent[]> {
+    const cutoff = nowMs - OUTAGE_RETENTION_MS;
+    return [...this.outages.values()]
+      .filter((e) => e.startMs >= cutoff)
+      .sort((a, b) => b.startMs - a.startMs);
   }
 
   async putRadio(readings: RadioStatReading[], nowMs: number): Promise<void> {
     if (readings.length === 0) return;
-    const minute = Math.floor(nowMs / 60_000) * 60;
-    for (const reading of readings) {
-      const key = `${minute}:${reading.band}`;
-      this.radio.set(key, foldRadio(this.radio.get(key), reading, minute));
-    }
     this.radioCurrent = { readings, atMs: nowMs };
   }
 
-  async readRadio(hours: number, nowMs: number = Date.now()) {
-    const cutoffSec = Math.floor(nowMs / 1000) - hours * 3_600;
-    const history = [...this.radio.values()]
-      .filter((acc) => acc.minute >= cutoffSec)
-      .map(radioMinuteOf)
-      .sort((a, b) => a.minute - b.minute);
+  async readRadio() {
     return {
       current: this.radioCurrent?.readings ?? [],
       atMs: this.radioCurrent?.atMs ?? null,
-      history,
     };
   }
 
-  async putAlerts(source: AlertSource, alerts: Record<string, boolean>, nowMs: number): Promise<void> {
-    for (const episode of reconcileAlerts(source, [...this.alerts.values()], alerts, nowMs))
+  async applyAlertTransitions(transitions: AlertTransition[], nowMs: number): Promise<void> {
+    for (const episode of episodesForTransitions([...this.alerts.values()], transitions))
       this.alerts.set(episode.id, episode);
+    const cutoff = nowMs - ALERT_RETENTION_MS;
+    for (const [id, e] of this.alerts) if (e.endMs !== null && e.startMs < cutoff) this.alerts.delete(id);
   }
 
   async readAlerts(nowMs: number = Date.now()): Promise<AlertEpisode[]> {
@@ -402,5 +511,60 @@ export class InMemoryHistory implements HistoryStore {
     return [...this.obstruction.values()]
       .filter((s) => s.takenAtMs >= cutoff)
       .sort((a, b) => a.takenAtMs - b.takenAtMs);
+  }
+
+  async putClientMinutes(rows: ClientMinuteRow[], nowMs: number = Date.now()): Promise<void> {
+    for (const row of rows) this.clientMinutes.set(`${row.minute}:${row.key}`, row);
+    const cutoff = Math.floor((nowMs - CLIENT_MINUTE_RETENTION_MS) / 1000);
+    for (const [id, row] of this.clientMinutes) if (row.minute < cutoff) this.clientMinutes.delete(id);
+  }
+
+  async readClientMinutes(
+    hours: number,
+    key?: string,
+    nowMs: number = Date.now(),
+  ): Promise<ClientMinuteRow[]> {
+    const cutoff = Math.floor(nowMs / 1000) - hours * 3_600;
+    return [...this.clientMinutes.values()]
+      .filter((r) => r.minute >= cutoff && (!key || r.key === key))
+      .sort((a, b) => a.minute - b.minute);
+  }
+
+  async putClientSamples(rows: ClientSampleRow[], nowMs: number = Date.now()): Promise<void> {
+    for (const row of rows) this.clientSamples.set(`${row.atMs}:${row.key}`, row);
+    const cutoff = nowMs - CLIENT_SAMPLE_RETENTION_MS;
+    for (const [id, row] of this.clientSamples) if (row.atMs < cutoff) this.clientSamples.delete(id);
+  }
+
+  async readClientSamples(
+    sinceMs: number = 0,
+    key?: string,
+    nowMs: number = Date.now(),
+  ): Promise<ClientSampleRow[]> {
+    const floor = Math.max(sinceMs, nowMs - CLIENT_SAMPLE_RETENTION_MS);
+    return [...this.clientSamples.values()]
+      .filter((r) => r.atMs > sinceMs && r.atMs >= floor && (!key || r.key === key))
+      .sort((a, b) => a.atMs - b.atMs);
+  }
+
+  async readTotalsSnapshot(): Promise<TotalsSnapshot | null> {
+    return this.totalsSnapshot;
+  }
+
+  async writeTotalsSnapshot(snapshot: TotalsSnapshot): Promise<void> {
+    this.totalsSnapshot = snapshot;
+  }
+
+  async putSamples(samples: TelemetrySample[], nowMs: number = Date.now()): Promise<void> {
+    for (const sample of samples) this.samples.set(sample.timestampMs, sample);
+    const cutoff = nowMs - SAMPLE_RETENTION_MS;
+    for (const [ts] of this.samples) if (ts < cutoff) this.samples.delete(ts);
+  }
+
+  async readSamples(minutes: number, nowMs: number = Date.now()): Promise<TelemetrySample[]> {
+    const floor = nowMs - minutes * 60_000;
+    return [...this.samples.values()]
+      .filter((s) => s.timestampMs >= floor)
+      .sort((a, b) => a.timestampMs - b.timestampMs);
   }
 }

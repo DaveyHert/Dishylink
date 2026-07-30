@@ -56,6 +56,8 @@ export default defineConfig(({ command }) => ({
           environment: "node",
           include: [
             "src/**/*.test.ts",
+            "core/**/*.test.ts",
+            "cloud/**/*.test.ts",
             "collector/**/*.test.mts",
             "dev/**/*.test.mts",
             "extension/**/*.test.ts",

@@ -45,8 +45,8 @@ describe("ThermalStore.all", () => {
     seedFile([
       {
         alertKey: "thermalThrottle",
-        startMs: Date.now() - 26 * HOUR_MS,
-        endMs: Date.now() - 25 * HOUR_MS,
+        startMs: Date.now() - 50 * HOUR_MS,
+        endMs: Date.now() - 49 * HOUR_MS,
       },
     ]);
     expect(new ThermalStore(file).all()).toHaveLength(0);

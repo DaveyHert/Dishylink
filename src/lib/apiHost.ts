@@ -27,3 +27,26 @@ export function setApiHost(binding: { transport: ApiTransport }): void {
 export function apiRequest(path: string, init?: RequestInit): Promise<Response> {
   return transport(path, init);
 }
+
+/**
+ * Whether the recorder runs inside the process that answers /api.
+ *
+ * It matters because "the history recorder is down" is only a condition that can
+ * exist across a boundary. In a browser tab the recorder is a separate service
+ * that really can die while the page keeps running, and saying so is useful. In
+ * the desktop app it runs in the main process, which is also what serves /api
+ * and owns this window — if it had died there would be nothing left to ask, and
+ * nothing to display the answer. A request that fails there means the app was
+ * briefly busy, not that recording has stopped, and reporting it as a warning
+ * teaches the user to distrust a panel that is otherwise telling the truth.
+ */
+let recorderInProcess = false;
+
+/** Declared once by a host whose own process runs the recorder. */
+export function setRecorderInProcess(value: boolean): void {
+  recorderInProcess = value;
+}
+
+export function recorderRunsInHostProcess(): boolean {
+  return recorderInProcess;
+}

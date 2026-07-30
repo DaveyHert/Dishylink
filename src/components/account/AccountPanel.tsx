@@ -16,7 +16,7 @@ import { ConnectAccount } from "../shared/ConnectAccount";
 import { Card, Field } from "./accountChrome";
 import { DevicesSection } from "./DevicesSection";
 
-export function AccountPanel() {
+export function AccountPanel({ lanOnline }: { lanOnline: ReadonlySet<string> }) {
   const { data, status, reload } = useCloudAccount(true);
 
   if (status === "not-connected") {
@@ -118,7 +118,11 @@ export function AccountPanel() {
           </span>
         }
       >
-        <DevicesSection terminals={terminals} deviceTelemetry={data.deviceTelemetry ?? {}} />
+        <DevicesSection
+          terminals={terminals}
+          deviceTelemetry={data.deviceTelemetry ?? {}}
+          lanOnline={lanOnline}
+        />
       </Card>
     </div>
   );

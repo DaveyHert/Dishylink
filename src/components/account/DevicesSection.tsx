@@ -92,13 +92,15 @@ function DeviceDetail({ item }: { item: DeviceItem }) {
 export function DevicesSection({
   terminals,
   deviceTelemetry,
+  lanOnline,
 }: {
   terminals: CloudTerminal[];
   deviceTelemetry: Record<string, DeviceTelemetry>;
+  lanOnline: ReadonlySet<string>;
 }) {
   const items = useMemo(
-    () => buildDeviceList(terminals, deviceTelemetry),
-    [terminals, deviceTelemetry],
+    () => buildDeviceList(terminals, deviceTelemetry, lanOnline),
+    [terminals, deviceTelemetry, lanOnline],
   );
   const [selectedKey, setSelectedKey] = useState<string | undefined>(items[0]?.key);
   const selected = items.find((i) => i.key === selectedKey) ?? items[0];

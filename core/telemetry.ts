@@ -369,6 +369,30 @@ export interface RouterReadings {
  * consumer of `popPingLatencyMs` — the historian and the browser must agree on
  * what counts as a reading, or the persisted series and the live edge diverge.
  */
+/**
+ * How many consecutive fully-dropping samples make an outage rather than a blip.
+ *
+ * The dish reports one sample a second and a single dropped second is ordinary —
+ * a satellite handover does it. Eight in a row is the link being down, and at the
+ * dish's own cadence that is eight seconds, fast enough to be worth interrupting
+ * someone for and slow enough not to fire on a handover.
+ */
+export const OUTAGE_SAMPLE_RUN = 8;
+
+/**
+ * Whether the Starlink side is down right now: the dish is answering us, and
+ * every recent sample says none of its pings to the point of presence came back.
+ *
+ * Shared so the recorder and a browser tab call the same thing an outage. Two
+ * implementations of "how many dropped seconds is an outage" is how the tray and
+ * the panel end up disagreeing about whether the link is down.
+ */
+export function isStarlinkOutage(samples: readonly { dropRate: number }[]): boolean {
+  const recent = samples.slice(-OUTAGE_SAMPLE_RUN);
+  if (recent.length < OUTAGE_SAMPLE_RUN) return false;
+  return recent.every((sample) => sample.dropRate >= 1);
+}
+
 export function readRouterLatencyMs(value: number | undefined): number | null {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 }

@@ -2,13 +2,18 @@
 //
 // Both devices report alerts as live booleans and keep no history: once a flag
 // clears, the episode is gone. Water detected at 3am that dried by breakfast
-// left no trace anywhere. The historian watches the false→true and true→false
-// edges on every key and records them here, so the notification panel can show
-// what happened while nobody was looking.
+// left no trace anywhere. core/alertEngine spots the false→true and true→false
+// edges and this writes them down, so the notification panel can show what
+// happened while nobody was looking.
+//
+// It records transitions, it does not find them. Every host runs the same engine
+// over the same readings, so a store that decided for itself when an episode
+// began would be a second opinion — and the two would disagree, as this one and
+// the browser already did about the dish's latched noEthernetLink flag.
 //
 // Deliberately key-agnostic: whatever boolean the firmware sends gets recorded,
 // so an alert added by a future firmware is captured without a code change. The
-// UI maps keys to human wording (src/lib/dishAlerts.ts); unknown keys still
+// UI maps keys to human wording (core/alertDefinitions.ts); unknown keys still
 // surface rather than being silently dropped.
 //
 // Episodes are few and small (a healthy setup produces none for weeks) and an
@@ -36,10 +41,10 @@ export interface AlertEpisode {
   endMs: number | null;
 }
 
-// 7 days. Longer than the events panel's 24h because alerts answer a different
-// question — "has this dish been flagging water ingress / thermal trouble
-// lately?" is a pattern over days, not a list of what happened last night.
-const RETENTION_MS = 7 * 24 * 3_600_000;
+// 48 hours, one window shared with the event and thermal logs it sits beside,
+// so "has this dish been flagging water ingress / thermal trouble lately?" reads
+// over the same span everywhere.
+const RETENTION_MS = 48 * 3_600_000;
 
 export class AlertStore {
   private episodes: AlertEpisode[] = [];
@@ -94,20 +99,4 @@ export class AlertStore {
     this.flush();
   }
 
-  /**
-   * Reconcile one device's live alert booleans against the log: open episodes
-   * for newly-set flags, close ones that cleared. `alerts` omits false keys
-   * (proto3), so anything open and absent has cleared.
-   */
-  ingest(source: AlertSource, alerts: Record<string, boolean>, nowMs: number): void {
-    for (const [key, isActive] of Object.entries(alerts)) {
-      if (isActive === true) this.open(source, key, nowMs);
-      else this.close(source, key, nowMs);
-    }
-    // Keys that vanished entirely from the payload have also cleared.
-    for (const episode of this.all()) {
-      if (episode.source !== source || episode.endMs !== null) continue;
-      if (!(episode.key in alerts)) this.close(source, episode.key, nowMs);
-    }
-  }
 }

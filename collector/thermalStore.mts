@@ -24,10 +24,9 @@ export interface ThermalEpisode {
   endMs: number | null;
 }
 
-// 24 hours, matching the event store: both feed the same "Events & outages"
-// panel, and a panel that is a day deep for outages and a month deep for
-// throttles is worse than either window chosen on its own.
-const RETENTION_MS = 24 * 3_600_000;
+// 48 hours, matching the event store: both feed the same "Events & outages"
+// panel, and it stays coherent when the two are kept to one window.
+const RETENTION_MS = 48 * 3_600_000;
 
 export class ThermalStore {
   private episodes: ThermalEpisode[] = [];

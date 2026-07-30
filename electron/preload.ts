@@ -37,4 +37,13 @@ contextBridge.exposeInMainWorld("dishlink", {
   // origin. Every run routes through main, so dev behaves as the packaged app does.
   notify: (title: string, body: string): Promise<{ delivered: boolean; reason?: string }> =>
     ipcRenderer.invoke("notify", { title, body }),
+  // Whether alerts should be announced. Owned by main because main is what
+  // announces them: the recorder there finds an alert whether or not a window
+  // exists, so a preference kept in this window's localStorage would be
+  // unreadable at exactly the moment it is needed.
+  // null when nobody has chosen yet — the window seeds it from what it holds, so
+  // a preference set in a build that kept it in localStorage is not lost.
+  notificationsEnabled: (): Promise<boolean | null> => ipcRenderer.invoke("notifications-enabled"),
+  setNotificationsEnabled: (enabled: boolean): Promise<boolean> =>
+    ipcRenderer.invoke("set-notifications-enabled", enabled),
 });

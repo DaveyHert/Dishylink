@@ -1,4 +1,4 @@
-// One catalogue for every alert the dish and router report.
+// Every alert the dish and router can raise, defined once.
 //
 // Both devices send alerts as bare booleans, and proto3 JSON drops false — so an
 // absent key means "fine", never "unknown". Each entry therefore carries both
@@ -7,7 +7,10 @@
 // healthy", "Mast is near vertical", "Not heating") so the two read alike.
 //
 // This is the source of truth for the notification panel, the status list, and
-// which alerts are worth a desktop notification.
+// which alerts are worth a desktop notification. It lives in core/ because every
+// host needs it: the wording and the `notify` flag decide what each of them puts
+// in front of the user, and keeping them somewhere only the browser could read
+// is what tied alerting to an open window.
 
 export type AlertSeverity = "critical" | "warning" | "advisory";
 
@@ -278,7 +281,7 @@ export const ROUTER_ALERTS: AlertSpec[] = [
   {
     key: "installPending",
     ok: "Install complete",
-    firing: "Router install is still pending",
+    firing: "Router software install is pending",
     severity: "advisory",
   },
   {
@@ -317,7 +320,87 @@ export interface AlertState extends AlertSpec {
   source: AlertSource;
 }
 
-/** Fold a device's raw alert booleans against its catalogue. Absent = clear. */
+/**
+ * Conditions a host observes ABOUT a device rather than reads OFF one: a device
+ * not answering can never appear in that device's own alert payload, because the
+ * payload is what failed to arrive.
+ *
+ * Declared once, and used for both faces — the live alert and the history label.
+ * They were two separate literals carrying the same wording, which is a rename
+ * away from history and the alert panel describing the same event differently.
+ *
+ * A device that has stopped answering is critical and is raised the instant it
+ * happens. Nothing here waits to see whether it recovers: a delay would mean the
+ * top bar showing "dish unreachable" while the alert panel still said "no active
+ * alerts", and the whole point of an alert is that it arrives when the thing
+ * goes wrong, not once it has been wrong for a while.
+ */
+export const SYSTEM_ALERTS = {
+  dishUnreachable: {
+    key: "dishUnreachable",
+    ok: "Dish is answering",
+    firing: "Dish isn’t answering",
+    advice:
+      "Check that the dish has power and that its cable to the router is seated at both ends.",
+    severity: "critical",
+    notify: true,
+  },
+  routerUnreachable: {
+    key: "routerUnreachable",
+    ok: "Router is answering",
+    firing: "Router isn’t answering",
+    severity: "warning",
+    notify: true,
+  },
+  // The satellite side is down while the hardware here is fine — the dish is
+  // powered and answering, its pings to the point of presence are not coming
+  // back. It is a condition ABOUT the link rather than a flag either device
+  // raises, so like unreachability it can never appear in a device's own alert
+  // payload; something has to watch the drop rate and say so.
+  starlinkOutage: {
+    key: "starlinkOutage",
+    ok: "Pings to the Starlink network are succeeding again",
+    firing: "The dish is reachable, but pings to the Starlink network are failing",
+    advice:
+      "Nothing on your side is wrong. Heavy weather or a gap in satellite coverage will clear on its own.",
+    severity: "critical",
+    notify: true,
+  },
+  // Recorded by the recorder about itself: a boot that finds its heartbeat
+  // stale logs the gap, so History can say "not recorded" instead of implying
+  // "nothing happened". Never fires live — historianDown covers the present.
+  recorderOff: {
+    key: "recorderOff",
+    ok: "Recording ran continuously",
+    firing: "Recording was off — anything in this gap went unrecorded",
+    severity: "advisory",
+  },
+  // The historian being down is itself an alert: recording has silently stopped.
+  // Only a host that reaches the historian across a boundary can observe it —
+  // the desktop app runs it in-process, where its absence means the app is gone.
+  historianDown: {
+    key: "historianDown",
+    ok: "History recorder running",
+    firing: "History recorder is down — live alerts still work, but nothing is being recorded",
+    severity: "warning",
+    notify: true,
+  },
+} satisfies Record<string, AlertSpec>;
+
+/** A system definition as a firing alert. One definition, both faces. */
+export function firingSystemAlert(spec: AlertSpec): AlertState {
+  return { ...spec, source: "system", active: true };
+}
+
+/** Every definition, keyed "source:key" — the lookup history uses to put an
+ *  alert's wording on a recorded episode. */
+export const SPEC_BY_SOURCE_KEY = new Map<string, AlertSpec>([
+  ...DISH_ALERTS.map((spec) => [`dish:${spec.key}`, spec] as const),
+  ...ROUTER_ALERTS.map((spec) => [`router:${spec.key}`, spec] as const),
+  ...Object.values(SYSTEM_ALERTS).map((spec) => [`system:${spec.key}`, spec] as const),
+]);
+
+/** Fold a device's raw alert booleans against its definitions. Absent = clear. */
 export function resolveAlerts(
   specs: AlertSpec[],
   alerts: Record<string, boolean> | undefined,

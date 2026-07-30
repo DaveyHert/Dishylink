@@ -4,14 +4,17 @@
 // get_status, and the Starlink app reads them straight off each device. So does
 // this: dish alerts come from the telemetry poll already running (2s); router
 // alerts from a light get_status poll this hook runs itself (5s). Neither goes
-// through the historian — the thing whose job is to warn you must not depend on
-// a background process that can die. Notifications fire from this live diff too,
-// for every notifiable alert on both devices: one place decides what is worth
-// interrupting someone for, so no alert can be watched without being notifiable.
+// through the historian — a page must be able to show the truth about the
+// hardware even when the recorder is down, and the recorder's own health is
+// surfaced here as an alert rather than depended on.
 //
-// The historian is only a historian. It records episodes so an alert that came
-// and went while no browser was open still shows up under History — and its own
-// health is surfaced as an alert (a dead-man's switch), never as a dependency.
+// This displays alerts, and announces them through announceAlert: the in-app
+// chime whenever its own window is in front, and — only in a plain browser tab —
+// the OS notification when it is not. A host with its own always-on process (the
+// desktop main, the extension worker) owns that away-notification, posting it
+// itself and holding it back while a window is in front — see hostAnnouncesAlerts.
+// Whether an alert is worth interrupting someone for is neither decision: `notify`
+// on the definition in core/alertDefinitions.ts is, so every host agrees about it.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DishStatusJson } from "@core/dishClient";
@@ -20,15 +23,16 @@ import type { DishConnectionState } from "./useDishTelemetry";
 import {
   DISH_ALERTS,
   ROUTER_ALERTS,
+  SPEC_BY_SOURCE_KEY,
+  SYSTEM_ALERTS,
+  firingSystemAlert,
   resolveAlerts,
   sortBySeverity,
-  type AlertSpec,
   type AlertSource,
   type AlertState,
-} from "../lib/dishAlerts";
-import { sendNotification } from "../lib/notifications";
-import { playAlertSound } from "../lib/alertSound";
-import { apiRequest } from "../lib/apiHost";
+} from "@core/alertDefinitions";
+import { announceAlert } from "../lib/notifications";
+import { apiRequest, recorderRunsInHostProcess } from "../lib/apiHost";
 
 const HISTORY_POLL_MS = 30_000;
 
@@ -45,7 +49,7 @@ export interface AlertHistoryEntry {
   key: string;
   startMs: number;
   endMs: number | null;
-  /** Catalogue wording, or a humanised raw key if the firmware added one we don't know. */
+  /** Wording from the definitions, or a humanised raw key if the firmware added one we don't know. */
   label: string;
   severity: AlertState["severity"];
 }
@@ -72,7 +76,7 @@ function useFirstSeen(active: AlertState[]): Map<string, number> {
 export interface DeviceAlerts {
   /** Everything firing right now, worst first — includes a synthetic historian-down alert. */
   active: AlertState[];
-  /** Every check on both devices, clear and firing, in catalogue order — the Status list. */
+  /** Every check on both devices, clear and firing, in definition order — the Status list. */
   statusList: AlertState[];
   /** Past episodes from the historian, newest first. Empty when the historian is down. */
   history: AlertHistoryEntry[];
@@ -88,73 +92,11 @@ export interface DeviceAlerts {
   firstSeen: Map<string, number>;
 }
 
-/**
- * Conditions the app observes ABOUT a device rather than reads OFF one: a device
- * not answering can never appear in that device's own alert payload, because the
- * payload is what failed to arrive.
- *
- * Declared once, and used for both faces — the live alert and the history label.
- * They were two separate literals carrying the same wording, which is a rename
- * away from history and the alert panel describing the same event differently.
- *
- * A device that has stopped answering is critical and is raised the instant it
- * happens. Nothing here waits to see whether it recovers: a delay would mean the
- * top bar showing "dish unreachable" while this panel still said "no active
- * alerts", and the whole point of an alert is that it arrives when the thing
- * goes wrong, not once it has been wrong for a while.
- */
-const SYSTEM_ALERTS = {
-  dishUnreachable: {
-    key: "dishUnreachable",
-    ok: "Dish is answering",
-    firing: "Dish isn’t answering",
-    advice:
-      "Check that the dish has power and that its cable to the router is seated at both ends.",
-    severity: "critical",
-    notify: true,
-  },
-  routerUnreachable: {
-    key: "routerUnreachable",
-    ok: "Router is answering",
-    firing: "Router isn’t answering",
-    severity: "warning",
-    notify: true,
-  },
-  // Recorded by the recorder about itself: a boot that finds its heartbeat
-  // stale logs the gap, so History can say "not recorded" instead of implying
-  // "nothing happened". Never fires live — historianDown covers the present.
-  recorderOff: {
-    key: "recorderOff",
-    ok: "Recording ran continuously",
-    firing: "Recording was off — anything in this gap went unrecorded",
-    severity: "advisory",
-  },
-  // The historian being down is itself an alert: recording has silently stopped.
-  historianDown: {
-    key: "historianDown",
-    ok: "History recorder running",
-    firing: "History recorder is down — live alerts still work, but nothing is being recorded",
-    severity: "warning",
-    notify: true,
-  },
-} satisfies Record<string, AlertSpec>;
-
-/** A system spec as a live, firing alert. One definition, both faces. */
-function firingSystemAlert(spec: AlertSpec): AlertState {
-  return { ...spec, source: "system", active: true };
-}
-
-const SPEC_BY_SOURCE_KEY = new Map<string, AlertSpec>([
-  ...DISH_ALERTS.map((spec) => [`dish:${spec.key}`, spec] as const),
-  ...ROUTER_ALERTS.map((spec) => [`router:${spec.key}`, spec] as const),
-  ...Object.values(SYSTEM_ALERTS).map((spec) => [`system:${spec.key}`, spec] as const),
-]);
-
 const DISH_UNREACHABLE = firingSystemAlert(SYSTEM_ALERTS.dishUnreachable);
 const ROUTER_UNREACHABLE = firingSystemAlert(SYSTEM_ALERTS.routerUnreachable);
 const HISTORIAN_DOWN = firingSystemAlert(SYSTEM_ALERTS.historianDown);
 
-/** "dishWaterDetected" -> "dish water detected", for a key no catalogue knows. */
+/** "dishWaterDetected" -> "dish water detected", for a key the definitions do not cover. */
 function humanizeKey(key: string): string {
   return key
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
@@ -192,17 +134,30 @@ export function useDeviceAlerts(
   // an alert, not a failure to surface.
   useEffect(() => {
     let disposed = false;
+    // "Recording has stopped" is a claim about a service, not about one request.
+    // A single failure is a blip — a request that timed out against a busy
+    // process, a reply that arrived malformed — and raising a warning off it
+    // means the panel cries wolf on the one page whose whole job is to be
+    // believed. Two in a row is a service that is actually not answering.
+    let consecutiveFailures = 0;
     const load = async () => {
       try {
         const response = await apiRequest("/api/alerts", { signal: AbortSignal.timeout(4_000) });
         if (!response.ok) throw new Error(`status ${response.status}`);
         const body = (await response.json()) as { episodes?: AlertEpisodeJson[] };
         if (disposed) return;
+        consecutiveFailures = 0;
         setEpisodes(body.episodes ?? []);
         setHistorianUp(true);
-      } catch {
-        // Only a failure to connect at all means it is down.
-        if (!disposed) setHistorianUp(false);
+      } catch (error) {
+        consecutiveFailures += 1;
+        // Named, because the three things this catches — a timeout against a
+        // busy process, a non-2xx, a malformed body — are not the same fault and
+        // guessing between them after the fact is not possible.
+        console.warn(
+          `[alerts] /api/alerts failed (${consecutiveFailures} in a row): ${(error as Error).message}`,
+        );
+        if (!disposed && consecutiveFailures >= 2) setHistorianUp(false);
       }
     };
     void load();
@@ -213,7 +168,7 @@ export function useDeviceAlerts(
     };
   }, []);
 
-  // Every check on both devices, clear and firing, in catalogue order — the
+  // Every check on both devices, clear and firing, in definition order — the
   // Status list. `active` is just the firing subset, plus the historian-down
   // synthetic, sorted worst-first for the notifications view.
   const statusList = useMemo<AlertState[]>(() => {
@@ -246,33 +201,38 @@ export function useDeviceAlerts(
     const system = [
       ...(dishReachable ? [] : [DISH_UNREACHABLE]),
       ...(routerReachable === false ? [ROUTER_UNREACHABLE] : []),
-      ...(historianUp === false ? [HISTORIAN_DOWN] : []),
+      // Never on a host that runs the recorder in its own process: there the
+      // thing that would be down is the thing asking, so the alert can only ever
+      // be a false alarm about a request that was slow.
+      ...(historianUp === false && !recorderRunsInHostProcess() ? [HISTORIAN_DOWN] : []),
     ];
     return sortBySeverity([...firing, ...system]);
   }, [statusList, dishReachable, routerReachable, historianUp]);
 
-  // Fire a notification when an alert opens or clears. Seeded lazily so an alert
-  // already firing when the app opens still gets announced once.
+  // Announce an alert opening or clearing. Seeded lazily so an alert already
+  // firing when the app opens still gets announced once.
+  //
+  // announceAlert routes by where the user is: the in-app chime when this window
+  // is in front (the sound control alone governs it), the OS notification when it
+  // is not. On a host with its own always-on process — the desktop main, the
+  // extension worker — that process posts the away-notification itself, so this
+  // effect only ever sounds the chime for the window it lives in; there is no
+  // double, because the host suppresses its own notification while the window is
+  // in front.
   const previousActiveRef = useRef<Map<string, AlertState> | null>(null);
   useEffect(() => {
     const current = new Map(active.map((a) => [`${a.source}:${a.key}`, a]));
     const previous = previousActiveRef.current;
     if (previous !== null) {
-      // The chime is the app's own alert channel and stands alone — it fires
-      // whether or not browser notifications are enabled. The notification is
-      // optional escalation on top. Each keeps its own per-alert throttle, so
-      // disabling or blocking one never silences the other.
       for (const [id, alert] of current) {
         if (alert.notify && !previous.has(id)) {
-          playAlertSound(alert.severity, false, `alert-${id}`);
-          sendNotification(`alert-${id}`, alertTitle(alert.source, false), alert.firing);
+          announceAlert(alert.severity, false, `alert-${id}`, alertTitle(alert.source, false), alert.firing);
         }
       }
       for (const [id, alert] of previous) {
         if (alert.notify && !current.has(id)) {
           // Distinct key so the clear is not swallowed by the onset's throttle.
-          playAlertSound(alert.severity, true, `alert-${id}-cleared`);
-          sendNotification(`alert-${id}-cleared`, alertTitle(alert.source, true), alert.ok);
+          announceAlert(alert.severity, true, `alert-${id}-cleared`, alertTitle(alert.source, true), alert.ok);
         }
       }
     }

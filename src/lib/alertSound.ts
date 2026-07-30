@@ -11,7 +11,7 @@
 // created and resumed inside the notifications toggle click (`unlockAlertSound`)
 // and merely reused afterwards.
 
-import type { AlertSeverity } from "./dishAlerts";
+import type { AlertSeverity } from "@core/alertDefinitions";
 
 const ENABLED_STORAGE_KEY = "dishboard-alert-sound";
 

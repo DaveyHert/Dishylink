@@ -34,22 +34,28 @@ import {
   decodeHistoryWindow,
   decodeOutageEvents,
   decodeWifiHistoryEvents,
+  isStarlinkOutage,
   readRouterLatencyMs,
   readRouterPingSuccessPercent,
   TelemetryAccumulator,
+  type RadioStatReading,
   type TelemetrySample,
 } from "../core/telemetry.ts";
 import { EnergyStore, foldSamplesToMinutes, type MinuteBucket } from "./energyStore.mts";
 import { energyRangeBounds, RANGES, summarizeEnergy, type Range } from "../core/energySummary.ts";
 import { ThermalStore } from "./thermalStore.mts";
 import { EventStore } from "./eventStore.mts";
-import { RadioStore, type RadioReading } from "./radioStore.mts";
 import { ClientStore, type ClientReading } from "./clientStore.mts";
 import { ClientWindow } from "./clientWindow.mts";
 import { ClientTotalsStore } from "./clientTotals.mts";
 import { ThroughputTracker } from "../core/throughputTracker.ts";
 import { usageKey } from "../core/clientUsage.ts";
 import { AlertStore } from "./alertStore.mts";
+import {
+  AlertEngine,
+  type AlertObservation,
+  type AlertTransition,
+} from "../core/alertEngine.ts";
 import { ObstructionStore, packCells } from "./obstructionStore.mts";
 
 const DISH_URL =
@@ -62,7 +68,6 @@ const DATA_FILE = join(DATA_DIR, "energy.ndjson");
 const SAMPLES_SNAPSHOT_FILE = join(DATA_DIR, "samples.json");
 const THERMAL_FILE = join(DATA_DIR, "thermal.ndjson");
 const EVENTS_FILE = join(DATA_DIR, "events.ndjson");
-const RADIO_FILE = join(DATA_DIR, "radio.ndjson");
 const CLIENTS_FILE = join(DATA_DIR, "clients.ndjson");
 const CLIENT_SAMPLES_FILE = join(DATA_DIR, "client-samples.json");
 const CLIENT_TOTALS_FILE = join(DATA_DIR, "client-totals.json");
@@ -198,11 +203,19 @@ async function getWifiHistory(): Promise<{ eventLog?: { events?: unknown[] } }> 
  * `toJson` omits false fields, so an alert key is absent unless it is true —
  * `=== true` is the check, and absence means clear.
  */
-async function getStatusAlerts(): Promise<Record<string, boolean>> {
+async function getStatusAlerts(): Promise<{
+  alerts: Record<string, boolean>;
+  ethSpeedMbps?: number;
+}> {
   const json = (await deviceCall(DISH_URL, GET_STATUS_FIELD)) as {
-    dishGetStatus?: { alerts?: Record<string, boolean> };
+    dishGetStatus?: { alerts?: Record<string, boolean>; ethSpeedMbps?: number };
   };
-  return json.dishGetStatus?.alerts ?? {};
+  return {
+    alerts: json.dishGetStatus?.alerts ?? {},
+    // Carried alongside the flags because one of them contradicts it: the engine
+    // needs the negotiated speed to tell a real dead link from a latched flag.
+    ethSpeedMbps: json.dishGetStatus?.ethSpeedMbps,
+  };
 }
 
 /**
@@ -252,7 +265,7 @@ let latestRouterPingSuccessPercent: number | null = null;
  * the schema's `temp` stays absent on this firmware — so read that and fall
  * back rather than assume.
  */
-async function getRadioReadings(): Promise<RadioReading[]> {
+async function getRadioReadings(): Promise<RadioStatReading[]> {
   const json = (await deviceCall(ROUTER_URL, GET_RADIO_STATS_FIELD)) as {
     getRadioStats?: {
       radioStats?: Array<{
@@ -261,7 +274,7 @@ async function getRadioReadings(): Promise<RadioReading[]> {
       }>;
     };
   };
-  const readings: RadioReading[] = [];
+  const readings: RadioStatReading[] = [];
   for (const radio of json.getRadioStats?.radioStats ?? []) {
     const tempC = radio.thermalStatus?.temp2 ?? radio.thermalStatus?.temp;
     if (tempC === undefined || !Number.isFinite(tempC)) continue;
@@ -405,12 +418,70 @@ const store = new EnergyStore(DATA_FILE);
 const COMPACT_EVERY_MS = 24 * 3_600_000;
 const thermalStore = new ThermalStore(THERMAL_FILE);
 const eventStore = new EventStore(EVENTS_FILE);
-const radioStore = new RadioStore(RADIO_FILE);
 const obstructionStore = new ObstructionStore(OBSTRUCTION_FILE);
 const clientStore = new ClientStore(CLIENTS_FILE);
 const clientWindow = new ClientWindow(CLIENT_SAMPLES_FILE);
 const alertStore = new AlertStore(ALERTS_FILE);
-let latestRadio: { readings: RadioReading[]; atMs: number } | null = null;
+
+/**
+ * Decides what changed; this file only writes it down and passes it on. Seeded
+ * from the episodes still open on disk so a restart does not read every ongoing
+ * alert as new — a recorder that restarts nightly would otherwise re-announce
+ * water in the dish every night until someone dried it.
+ */
+const alertEngine = new AlertEngine(
+  alertStore
+    .all()
+    .filter((episode) => episode.endMs === null)
+    .map((episode) => ({ source: episode.source, key: episode.key })),
+);
+
+/**
+ * Told about every alert transition as it happens.
+ *
+ * The recorder's own job ends at writing the episode down: it has no user in
+ * front of it, and in the launchd deployment there is nobody to tell. A host
+ * that does have someone — the desktop app, which runs this in its main process
+ * — subscribes here and puts the alert on screen. That is what lets a dish going
+ * offline reach the user with no window open, which is the entire point of
+ * running a recorder rather than a dashboard.
+ */
+const alertListeners = new Set<(transitions: AlertTransition[]) => void>();
+
+export function onAlertTransitions(
+  listener: (transitions: AlertTransition[]) => void,
+): () => void {
+  alertListeners.add(listener);
+  return () => {
+    alertListeners.delete(listener);
+  };
+}
+
+/** Persist a cycle's transitions, then hand them to whoever is listening. */
+function recordAlertTransitions(transitions: AlertTransition[]): void {
+  if (transitions.length === 0) return;
+  for (const transition of transitions) {
+    const { source, key, atMs, kind } = transition;
+    if (kind === "fired") alertStore.open(source, key, atMs);
+    else alertStore.close(source, key, atMs);
+    // The service's diary. It runs unattended under launchd with no window and
+    // no operator, so "did it see the outage?" is answerable only from what it
+    // wrote down. Every transition is logged, not a chosen few: the three heat
+    // keys used to be the only ones announced here, which is why a dish going
+    // unreachable left no trace in the log it was recorded in.
+    console.log(`[historian] alert ${kind}: ${source}:${key}`);
+    // The thermal log is the alert log narrowed to the three heat keys. Driven
+    // off the same transitions rather than its own comparison, so it can never
+    // disagree with the alert log about when the dish got hot.
+    if (source === "dish" && THERMAL_ALERT_KEYS.includes(key)) {
+      if (kind === "fired") thermalStore.open(key, atMs);
+      else thermalStore.close(key, atMs);
+    }
+  }
+  for (const listener of alertListeners) listener(transitions);
+}
+
+let latestRadio: { readings: RadioStatReading[]; atMs: number } | null = null;
 // The minutes seen but not yet finalized (the in-progress minute at the head of
 // the ring buffer), each replaced every poll with the authoritative recompute
 // from the buffer. RAM-only on purpose: it is rebuilt from the dish's 15-minute
@@ -542,31 +613,20 @@ async function pollObstruction(): Promise<void> {
  * seconds before it opened.
  */
 async function pollAlerts(): Promise<void> {
+  const observation: AlertObservation = {};
   try {
-    const dishAlerts = await getStatusAlerts();
-    const now = Date.now();
-    for (const alertKey of THERMAL_ALERT_KEYS) {
-      const isActive = dishAlerts[alertKey] === true;
-      const wasActive = thermalStore.isOpen(alertKey);
-      if (isActive && !wasActive) {
-        thermalStore.open(alertKey, now);
-        console.log(`[historian] thermal alert ON: ${alertKey}`);
-      }
-      if (!isActive && wasActive) {
-        thermalStore.close(alertKey, now);
-        console.log(`[historian] thermal alert cleared: ${alertKey}`);
-      }
-    }
-    alertStore.ingest("dish", dishAlerts, now);
-    // The dish answered, so it is reachable. Recorded as an alert in its own
-    // right: the 20 keys above only exist inside a reply, so the one condition
-    // that silences them all can never be one of them.
-    alertStore.close("system", "dishUnreachable", now);
+    const dishStatus = await getStatusAlerts();
+    observation.dish = {
+      alerts: dishStatus.alerts,
+      ethSpeedMbps: dishStatus.ethSpeedMbps,
+      atMs: Date.now(),
+    };
   } catch {
-    // No reply. Leave the dish's own episodes open — an unreachable dish means
-    // no reading, not a cleared alert — and record the unreachability itself so
-    // it survives in history instead of only being a console warning.
-    alertStore.open("system", "dishUnreachable", Date.now());
+    // No reply. A null alert set is the engine's "asked and got nothing", which
+    // holds the dish's own episodes open — an unreachable dish means no reading,
+    // not a cleared alert — and raises the unreachability itself, so it survives
+    // in history instead of only being a console warning.
+    observation.dish = { alerts: null, atMs: Date.now() };
   }
   try {
     // One status reply, two consumers: the alert set, and the ping the sample
@@ -574,15 +634,22 @@ async function pollAlerts(): Promise<void> {
     const routerStatus = await getRouterStatus();
     latestRouterLatencyMs = readRouterLatencyMs(routerStatus.popPingLatencyMs);
     latestRouterPingSuccessPercent = readRouterPingSuccessPercent(routerStatus.popPingDropRate5m);
-    const routerNow = Date.now();
-    alertStore.ingest("router", routerStatus.alerts ?? {}, routerNow);
-    alertStore.close("system", "routerUnreachable", routerNow);
+    observation.router = { alerts: routerStatus.alerts ?? {}, atMs: Date.now() };
   } catch {
     // router unreachable (or bypass mode) — leave its open episodes open
     latestRouterLatencyMs = null;
     latestRouterPingSuccessPercent = null;
-    alertStore.open("system", "routerUnreachable", Date.now());
+    observation.router = { alerts: null, atMs: Date.now() };
   }
+  // The satellite side, judged from the samples the previous cycle appended.
+  // Neither device flags this — the dish answers perfectly while none of its
+  // pings come back — so nothing raises it unless something watches for it, and
+  // in the tray this process is the only something there is.
+  observation.system = {
+    alerts: { starlinkOutage: isStarlinkOutage(latestSamples) },
+    atMs: Date.now(),
+  };
+  recordAlertTransitions(alertEngine.update(observation));
 }
 
 /**
@@ -595,7 +662,6 @@ async function pollRadio(): Promise<void> {
     const readings = await getRadioReadings();
     if (readings.length === 0) return;
     latestRadio = { readings, atMs: Date.now() };
-    radioStore.ingest(readings, Date.now());
   } catch {
     // router unreachable (or not a Starlink router) — leave the last reading be
   }
@@ -856,13 +922,11 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
     return;
   }
   if (url.pathname === "/api/radio") {
-    const hours = Math.min(24, Math.max(1, Number(url.searchParams.get("hours") ?? 6)));
     response.setHeader("Content-Type", "application/json");
     response.end(
       JSON.stringify({
         current: latestRadio?.readings ?? [],
         atMs: latestRadio?.atMs ?? null,
-        history: radioStore.history(hours),
       }),
     );
     return;
@@ -1116,9 +1180,6 @@ setInterval(() => {
   const folded = store.compact();
   if (folded > 0)
     console.log(`[historian] folded ${folded} minute(s) from past years into monthly summaries`);
-  const radioDropped = radioStore.compact();
-  if (radioDropped > 0)
-    console.log(`[historian] compacted radio log, dropped ${radioDropped} old row(s)`);
 }, COMPACT_EVERY_MS);
 // The per-device log keeps only six hours, so it cannot wait for the daily sweep.
 setInterval(() => {

@@ -109,7 +109,7 @@ export function TopBar({
           ))}
         </nav>
       </div>
-      <div className='flex flex-1 flex-wrap items-center justify-end gap-3'>
+      <div className='flex flex-none flex-wrap items-center justify-end gap-3'>
         <div className='flex items-center gap-2.5'>
           <span className={statusItem}>
             <span className={`${statusDot} ${CONNECTION_DOT[connectionState]}`} />

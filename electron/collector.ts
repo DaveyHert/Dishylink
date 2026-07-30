@@ -8,8 +8,12 @@ import { app } from "electron";
 import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
+import type { AlertTransition } from "../core/alertEngine";
+
 type NodeHandler = (request: IncomingMessage, response: ServerResponse) => void;
+type AlertListener = (transitions: AlertTransition[]) => void;
 let handleRequest: NodeHandler | null = null;
+let subscribeToAlerts: ((listener: AlertListener) => () => void) | null = null;
 
 /**
  * Start the historian in this process. It is configured through the same env the
@@ -24,6 +28,19 @@ export async function startCollector(rendererRoot: string): Promise<void> {
   process.env.HISTORIAN_PROTOSET = join(rendererRoot, "dish.protoset");
   const historian = await import("../collector/historian.mts");
   handleRequest = historian.handleRequest;
+  subscribeToAlerts = historian.onAlertTransitions;
+}
+
+/**
+ * Watch the recorder's alert transitions.
+ *
+ * This is what lets the app tell someone the dish went offline while no window
+ * exists. The recorder polls both devices every 5s in this process and the
+ * engine it drives reports every edge; nothing here depends on a renderer being
+ * alive to notice one.
+ */
+export function onAlertTransitions(listener: AlertListener): () => void {
+  return subscribeToAlerts?.(listener) ?? (() => {});
 }
 
 /**

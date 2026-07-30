@@ -141,6 +141,14 @@ export interface DishStatusJson {
   softwareUpdateState?: string;
   alignmentStats?: DishAlignmentStatsJson;
   connectedRouters?: string[];
+  /** Routers the dish is currently talking to, keyed by the same DeviceId the
+   *  cloud telemetry uses ("Router-<hex>"), with the dish's own view of when it
+   *  last heard from each. The account panel reads this so a mesh node — which
+   *  has no LAN address of its own to poll — still gets a live dot rather than
+   *  waiting on the cloud's ~2-minute upload cycle. A node that is down is
+   *  dropped from the map entirely (verified 2026-07-29: a mesh unit dark for
+   *  2.7 days was absent while the controller was listed). */
+  downstreamRouters?: Record<string, { role?: string; lastSeen?: string }>;
   dlBandwidthRestrictedReason?: string;
   ulBandwidthRestrictedReason?: string;
   isSnrAboveNoiseFloor?: boolean;

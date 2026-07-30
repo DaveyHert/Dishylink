@@ -1,9 +1,9 @@
-// The alert catalogue has to match what the devices actually send.
+// The alert definitions have to match what the devices actually send.
 //
 // Every entry is matched against the live payload by key (`alerts[key] === true`),
 // so a key that does not exist on the wire renders as permanently healthy — a
 // green tick that can never fire. Nothing catches that by eye, because a working
-// dish reports every alert false. These tests pin the catalogue against the
+// dish reports every alert false. These tests pin the definitions against the
 // protoset we decode with, so a firmware rename or a new alert fails here rather
 // than silently going missing from the panel.
 
@@ -18,7 +18,7 @@ import {
   resolveAlerts,
   sortBySeverity,
   type AlertSpec,
-} from "./dishAlerts";
+} from "./alertDefinitions";
 
 const registry = createFileRegistry(
   fromBinary(FileDescriptorSetSchema, readFileSync(resolve("public/dish.protoset"))),
@@ -34,20 +34,20 @@ function wireKeys(typeName: string): string[] {
 describe.each([
   ["dish", "SpaceX.API.Device.DishAlerts", DISH_ALERTS],
   ["router", "SpaceX.API.Device.WifiAlerts", ROUTER_ALERTS],
-] as const)("%s alert catalogue", (_label, typeName, catalogue: AlertSpec[]) => {
+] as const)("%s alert definitions", (_label, typeName, definitions: AlertSpec[]) => {
   const keys = wireKeys(typeName);
 
   it("has no key the device never sends (would render permanently healthy)", () => {
-    expect(catalogue.map((spec) => spec.key).filter((key) => !keys.includes(key))).toEqual([]);
+    expect(definitions.map((spec) => spec.key).filter((key) => !keys.includes(key))).toEqual([]);
   });
 
   it("covers every alert the device can send", () => {
-    const covered = catalogue.map((spec) => spec.key);
+    const covered = definitions.map((spec) => spec.key);
     expect(keys.filter((key) => !covered.includes(key))).toEqual([]);
   });
 
   it("gives every alert both a clear and a firing phrasing", () => {
-    for (const spec of catalogue) {
+    for (const spec of definitions) {
       expect(spec.ok, `${spec.key} clear wording`).toBeTruthy();
       expect(spec.firing, `${spec.key} firing wording`).toBeTruthy();
       expect(spec.ok).not.toBe(spec.firing);
@@ -55,8 +55,8 @@ describe.each([
   });
 
   it("has unique keys", () => {
-    const keysInCatalogue = catalogue.map((spec) => spec.key);
-    expect(new Set(keysInCatalogue).size).toBe(keysInCatalogue.length);
+    const keysInDefinitions = definitions.map((spec) => spec.key);
+    expect(new Set(keysInDefinitions).size).toBe(keysInDefinitions.length);
   });
 });
 

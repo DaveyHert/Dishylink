@@ -1,7 +1,7 @@
 // Severity vocabulary and the time wording the alert rows use. Pure — the tabs
 // all phrase an alert the same way because they read it from here.
 
-import type { AlertSeverity, AlertSource } from "../../lib/dishAlerts";
+import type { AlertSeverity, AlertSource } from "@core/alertDefinitions";
 
 export const SEVERITY_COLOR: Record<AlertSeverity, string> = {
   critical: "var(--status-critical)",

@@ -30,11 +30,10 @@ export interface StoredEvent {
   severity: "advisory" | "warning" | "critical";
 }
 
-// 24 hours. Sized to what the UI actually reads: the longest chart window that
-// shades outage bands is 6H, and the event log is a "what happened recently"
-// panel, not an archive. Kept at a day rather than 6H so the log still covers
-// overnight — you come back in the morning and last night is still there.
-const RETENTION_MS = 24 * 3_600_000;
+// 48 hours. The event log is a "what happened recently" panel, not an archive;
+// two days keeps it deep enough that a couple of nights back is still there
+// while sharing one window with the alert and thermal logs beside it.
+const RETENTION_MS = 48 * 3_600_000;
 
 /** Same outage seen again across polls: the dish restates it with a longer
  *  duration. Keyed on the canonical cause token (not the raw/label spelling) so

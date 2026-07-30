@@ -17,7 +17,6 @@ import {
   type ObserverLocation,
   type SatelliteSky,
 } from "../lib/satellites";
-import { sendNotification } from "../lib/notifications";
 
 const COARSE_PASS_MS = 60_000;
 const STATS_UPDATE_MS = 1_000;
@@ -99,7 +98,6 @@ export function useSatellites(
   const trackerRef = useRef<StarlinkTracker | null>(null);
   const obstructionMapRef = useRef(obstructionMap);
   obstructionMapRef.current = obstructionMap;
-  const previousCandidateRef = useRef<string | null>(null);
 
   const latitude = observerLocation?.latitudeDeg;
   const longitude = observerLocation?.longitudeDeg;
@@ -134,18 +132,6 @@ export function useSatellites(
         const updateStats = () => {
           const inView = tracker.finePass();
           const servingCandidate = pickServingCandidate(inView, obstructionMapRef.current);
-          if (
-            previousCandidateRef.current !== null &&
-            servingCandidate &&
-            servingCandidate.name !== previousCandidateRef.current
-          ) {
-            sendNotification(
-              "handoff",
-              "Likely serving satellite changed",
-              `${servingCandidate.name} is now the best unobstructed satellite over your dish.`,
-            );
-          }
-          previousCandidateRef.current = servingCandidate?.name ?? previousCandidateRef.current;
           setStats((previousStats) => ({
             ...previousStats,
             inViewCount: inView.length,

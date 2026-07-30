@@ -3,7 +3,7 @@
 // History is what is over, Status is what every check currently says.
 
 import type { AlertHistoryEntry, DeviceAlerts } from "../../hooks/useDeviceAlerts";
-import type { AlertSource, AlertState } from "../../lib/dishAlerts";
+import type { AlertSource, AlertState } from "@core/alertDefinitions";
 import { EmptyState } from "../ui/empty-state";
 import { AlertRow } from "./AlertRow";
 import {
