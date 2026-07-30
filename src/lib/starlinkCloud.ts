@@ -99,21 +99,52 @@ export interface CloudAccount {
 
 export type DeviceStatus = "online" | "offline" | "inactive";
 
-// Devices upload every ~15-45s and the cache serves snapshots ~27s old
-// (measured 2026-07-21), so one minute of silence already means missed uploads.
-const FRESH_MS = 60 * 1000;
+// How long a device may go unheard-of in the cloud before its dot goes red.
+//
+// This is a staleness threshold, NOT a poll interval: polling the cache more
+// often does not make a device report sooner. Devices upload to Starlink on
+// their own ~2-minute schedule, so the age of the newest row sawtooths from 0
+// up to the upload interval and resets. Any threshold below that interval
+// therefore reds a perfectly healthy device for the back half of every cycle.
+//
+// Measured 2026-07-29 over one 109s window, per device, via /cloud/telemetry:
+// the dish's row advanced 105s and the router's 120s — each emitted exactly one
+// new row, with UtcTimestampNs and Uptime advancing in lockstep with wall clock.
+// So the cadence is ~2 minutes, not the ~15-45s an earlier note here assumed.
+// Five minutes clears that cadence plus jitter and tolerates one missed upload
+// before crying wolf.
+//
+// The payload carries no connection-state field to read instead — the legend is
+// 16 columns for a dish and 42 for a router, and none of them is online/offline
+// (dumped 2026-07-29). Freshness is the only signal the cloud offers, which is
+// why devices reachable on this LAN are judged by lanOnline below instead.
+const FRESH_MS = 5 * 60 * 1000;
 const INACTIVE_MS = 30 * 24 * 60 * 60 * 1000; // not connected in a month = decommissioned
 
 /** Full telemetry key for a dish/router as the feed reports it. */
 export const dishTelemetryId = (terminal: CloudTerminal) => `ut${terminal.userTerminalId ?? ""}`;
 export const routerTelemetryId = (routerId: string | undefined) => `Router-${routerId ?? ""}`;
 
+/** True when this machine is talking to the device over the LAN right now.
+ *
+ *  Answering is proof of life, so it settles the dot on its own — no waiting on
+ *  the cloud's ~2-minute upload cycle. Silence proves nothing, though: a dish
+ *  that is down and a dish we are simply away from both fail to answer
+ *  identically, so a false value never means "offline", only "no opinion", and
+ *  the cloud's freshness decides. That keeps the panel correct on someone
+ *  else's network, where nothing local answers and the cloud is all there is. */
+type LanOnline = boolean;
+
 /** Three states, like the portal's dot: gray (inactive — long gone), red
  *  (offline — should be up but its telemetry went stale), green (online). */
 export function dishStatus(
   terminal: CloudTerminal,
   tel: DeviceTelemetry | undefined,
+  lanOnline: LanOnline = false,
 ): DeviceStatus {
+  // Checked ahead of lastConnected because a device on the LAN is by definition
+  // still in service, whatever the account's records say about it.
+  if (lanOnline) return "online";
   const last = terminal.lastConnected ? new Date(terminal.lastConnected).getTime() : 0;
   if (last && Date.now() - last > INACTIVE_MS) return "inactive";
   if (tel && Date.now() - tel.timestampMs < FRESH_MS) return "online";
@@ -123,7 +154,9 @@ export function dishStatus(
 export function routerStatus(
   tel: DeviceTelemetry | undefined,
   parentInactive = false,
+  lanOnline: LanOnline = false,
 ): DeviceStatus {
+  if (lanOnline) return "online";
   // A router under a decommissioned dish is inactive too — not a red "offline"
   // alarm under a gray dish.
   if (parentInactive) return "inactive";

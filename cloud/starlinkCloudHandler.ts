@@ -34,6 +34,11 @@ export interface CloudHandlerOptions {
   readCookie?: () => string | null;
   writeCookie?: (cookie: string) => void;
   clearCookie?: () => void;
+  /** How long to let a just-installed session settle before the one retry. On the
+   *  extension the cookie rides a declarativeNetRequest rule, and a rule set
+   *  microseconds earlier is not reliably applied to the very next worker fetch;
+   *  the pause gives it a beat to take. Injected so tests retry without waiting. */
+  retryDelayMs?: number;
 }
 
 /** The durable half of the session — without it a token refresh can't happen, so
@@ -115,6 +120,7 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
   const readCookie = options.readCookie ?? (() => null);
   const writeCookie = options.writeCookie ?? (() => {});
   const clearCookie = options.clearCookie ?? (() => {});
+  const retryDelayMs = options.retryDelayMs ?? 150;
 
   let cachedCookie: string | null = null;
   let cachedAt = 0;
@@ -161,19 +167,27 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
     return refreshInFlight;
   }
 
-  /** Run a sequence of cloud calls with a valid token; if the short-lived token
-   *  aged out mid-flight (401), force one refresh and retry once before giving
-   *  up. A truly dead session makes the forced refresh throw. */
+  /** Run a sequence of cloud calls with a valid token, healing one transient
+   *  session miss. A SessionExpiredError is raised both when the short-lived token
+   *  ages out mid-flight and when the session cookie has not yet reached this
+   *  fetch — the extension delivers it via a rule that lands a beat after it is
+   *  set, so a just-connected account or a just-woken worker misses the first
+   *  auth/user. The recovery is the same for both: pause, force one fresh refresh,
+   *  and try once more. A genuinely dead session throws again on that retry and
+   *  surfaces as not-connected. The initial refresh is inside the retry because
+   *  that first auth/user is exactly where the late cookie bites. */
   async function withFreshCookie<T>(run: (cookie: string) => Promise<T>): Promise<T> {
-    const cookie = await freshCookie();
-    if (!cookie) throw new SessionExpiredError();
+    const attempt = async (force: boolean): Promise<T> => {
+      const cookie = await freshCookie(force);
+      if (!cookie) throw new SessionExpiredError();
+      return run(cookie);
+    };
     try {
-      return await run(cookie);
+      return await attempt(false);
     } catch (error) {
       if (!(error instanceof SessionExpiredError)) throw error;
-      const retried = await freshCookie(true);
-      if (!retried) throw new SessionExpiredError();
-      return await run(retried);
+      if (retryDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+      return attempt(true);
     }
   }
 
@@ -205,6 +219,26 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
     return response.json();
   }
 
+  /** Identity is optional to the account panel — a dead session must still leave
+   *  plan and address readable — but a transient miss while a just-connected
+   *  session settles should heal rather than leave Name/Email blank until a manual
+   *  reload. A session miss retries once behind a forced token refresh, the same
+   *  recovery withFreshCookie gives the calls that aren't wrapped here; only a
+   *  genuine failure degrades to null. Hosts that rotate their token out of band
+   *  (the extension re-reads the cookie jar the auth call repopulates) finish this
+   *  heal on their own follow-up read. */
+  async function resilientIdentity(cookie: string): Promise<unknown | null> {
+    try {
+      return await fetchIdentity(cookie);
+    } catch (error) {
+      if (!(error instanceof SessionExpiredError)) return null;
+      if (retryDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+      const refreshed = await freshCookie(true).catch(() => null);
+      if (!refreshed) return null;
+      return fetchIdentity(refreshed).catch(() => null);
+    }
+  }
+
   /** Resolve the account number + primary service line the UI hangs everything
    *  off. Cached briefly so /cloud/account and /cloud/usage don't each re-list. */
   async function resolveIds(cookie: string): Promise<{ acc: string; sl: string }> {
@@ -230,7 +264,7 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
         const body = await withFreshCookie(async (cookie) => {
           const { acc, sl } = await resolveIds(cookie);
           const [identity, serviceLine, telemetry] = await Promise.all([
-            fetchIdentity(cookie).catch(() => null),
+            resilientIdentity(cookie),
             apiGet(`/webagg/v2/accounts/service-line/${sl}`, cookie),
             apiPost("/device-data/cache/v1/telemetry", cookie, { accountNumber: acc }).catch(
               () => null,

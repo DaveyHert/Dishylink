@@ -13,6 +13,9 @@ import {
 const now = Date.now();
 const fresh: DeviceTelemetry = { kind: "router", timestampMs: now - 30_000 }; // 30s old — the cache's typical serving age
 const stale: DeviceTelemetry = { kind: "router", timestampMs: now - 6 * 60 * 60 * 1000 }; // 6h old
+// Late in a healthy device's ~2-minute upload cycle: nothing is wrong, its next
+// report is simply not due yet. Measured cadence 2026-07-29 was 105-120s.
+const midCycle: DeviceTelemetry = { kind: "router", timestampMs: now - 110_000 };
 
 describe("routerStatus", () => {
   it("is online when telemetry is fresh", () => {
@@ -21,10 +24,32 @@ describe("routerStatus", () => {
   it("is offline when telemetry is stale", () => {
     expect(routerStatus(stale)).toBe("offline");
   });
+  it("stays online late in the upload cycle, when no report is due yet", () => {
+    // The bug this replaced: a 60s threshold against a ~2-minute cadence red-
+    // dotted a healthy device for the back half of every single cycle.
+    expect(routerStatus(midCycle)).toBe("online");
+  });
   it("is inactive under a decommissioned dish, regardless of freshness", () => {
     // fix #4: a router beneath a gray (inactive) dish must not show a red alarm.
     expect(routerStatus(fresh, true)).toBe("inactive");
     expect(routerStatus(undefined, true)).toBe("inactive");
+  });
+});
+
+describe("LAN presence overrides cloud freshness", () => {
+  it("is online when the LAN answers, however stale the cloud is", () => {
+    expect(routerStatus(stale, false, true)).toBe("online");
+    expect(routerStatus(undefined, false, true)).toBe("online");
+  });
+  it("is online when the LAN answers even under a decommissioned dish", () => {
+    // Talking to us is proof it is still in service, whatever the account says.
+    expect(routerStatus(stale, true, true)).toBe("online");
+  });
+  it("falls back to the cloud when the LAN is silent, rather than calling it offline", () => {
+    // Away from the Starlink network nothing local answers, so silence must not
+    // red a dish the cloud can see is fine.
+    expect(routerStatus(fresh, false, false)).toBe("online");
+    expect(routerStatus(stale, false, false)).toBe("offline");
   });
 });
 
@@ -39,6 +64,13 @@ describe("dishStatus", () => {
   });
   it("is offline with recent connection but stale telemetry", () => {
     expect(dishStatus({ lastConnected: recent } as CloudTerminal, stale)).toBe("offline");
+  });
+  it("stays online late in the upload cycle, when no report is due yet", () => {
+    expect(dishStatus({ lastConnected: recent } as CloudTerminal, midCycle)).toBe("online");
+  });
+  it("is online when the LAN answers, outranking both staleness and inactivity", () => {
+    expect(dishStatus({ lastConnected: recent } as CloudTerminal, stale, true)).toBe("online");
+    expect(dishStatus({ lastConnected: longGone } as CloudTerminal, undefined, true)).toBe("online");
   });
 });
 
