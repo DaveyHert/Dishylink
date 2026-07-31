@@ -37,9 +37,9 @@ export default tseslint.config(
   //
   // Coverage is the default on purpose. A config that names each tree has to be
   // extended by hand whenever one is added, and a tree nobody remembers to add is
-  // not reported as uncovered — it is silently unlinted, which is how five of them
-  // went unchecked here. Matching everything means a new tree is linted the day it
-  // appears; the blocks below only refine what applies to it.
+  // not reported as uncovered — it is silently unlinted. Matching everything means
+  // a new tree is linted the day it appears; the blocks below only refine what
+  // applies to it.
   //
   // Node and browser globals together, because the shared trees are imported from
   // both sides: core and the extension's libraries run in a page and in a service

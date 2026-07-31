@@ -21,13 +21,13 @@
 // double. Nothing is lost, but mid-transfer it renders as a dropout to near zero
 // followed by a spike.
 //
-// A previous version treated that as jitter and widened the measurement window
-// to span it, which cancelled the artefact by averaging the pair back together —
-// at the cost of the per-second detail the window exists to show, and on a false
-// premise: the router is not irregular, our sampling was simply unsynchronised
-// to it. So instead we poll several times per step and detect the *edge*. Each
-// observed change is one refresh interval of traffic, whenever it happens to
-// land, and the rate is exact without any smoothing at all.
+// Widening the measurement window to span the pair would cancel the artefact by
+// averaging it back together, at the cost of the per-second detail the window
+// exists to show — and the premise is false: the router is not irregular, only
+// unsynchronised sampling is. So instead we poll several times per step and
+// detect the *edge*. Each observed change is one refresh interval of traffic,
+// whenever it happens to land, and the rate is exact without any smoothing at
+// all.
 
 export interface ByteCounters {
   rxBytes: number;

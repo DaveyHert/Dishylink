@@ -50,9 +50,9 @@ export function SegmentedControl<T extends string>({
   };
 
   if (variant === "glider") {
-    // The original .settings-segment: a 13px pill switch with a glider that
-    // slides to the active tab. Light = ink slab / page text; dark inverts to a
-    // raised surface pill / ink text (not a white slab), so those need `dark:`.
+    // A 13px pill switch with a glider that slides to the active tab. Light =
+    // ink slab / page text; dark inverts to a raised surface pill / ink text
+    // (not a white slab), so those need `dark:`.
     const activeIndex = options.findIndex((option) => option.value === value);
     return (
       <ToggleGroupPrimitive.Root

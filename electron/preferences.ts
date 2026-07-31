@@ -1,10 +1,9 @@
 // The desktop app's own settings, owned by the main process.
 //
-// The notifications preference used to live in renderer localStorage, which
-// exists only while a window does. That was survivable while the renderer was
-// also the thing deciding to notify; now that the recorder in this process makes
-// that call with no window open, a preference the deciding process cannot read
-// is no preference at all.
+// The recorder in this process decides whether to notify with no window open,
+// so a preference stored where only the renderer can read it — localStorage,
+// which exists only while a window does — is no preference at all to the
+// process that needs it.
 //
 // So it lives here, beside the recorder's data, and the renderer reaches it over
 // the preload bridge like anything else it does not own. One file, read once at
@@ -19,13 +18,11 @@ export interface Preferences {
   /**
    * Whether desktop notifications are wanted.
    *
-   * null means never chosen, which is emphatically not the same as chosen-off.
-   * This setting used to live in the window's localStorage, so someone who
-   * turned notifications on in an earlier build has a preference recorded
-   * somewhere this process cannot read. Treating an absent file as "off" would
-   * silently switch alerting off for exactly the people who had asked for it.
-   * The window seeds this from what it holds the first time it loads; until it
-   * does, the answer is unknown rather than no.
+   * null means never chosen, which is emphatically not the same as chosen-off:
+   * treating an absent file as "off" would silently switch alerting off for
+   * someone who had actually asked for it. The window seeds this from what it
+   * holds the first time it loads; until it does, the answer is unknown rather
+   * than no.
    */
   notifications: boolean | null;
 }

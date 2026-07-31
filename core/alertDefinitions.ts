@@ -170,7 +170,7 @@ export const DISH_ALERTS: AlertSpec[] = [
   },
 ];
 
-/** Alerts on the router's get_status. Nothing read these before. */
+/** Alerts on the router's get_status. */
 export const ROUTER_ALERTS: AlertSpec[] = [
   {
     key: "poeFuseBlown",

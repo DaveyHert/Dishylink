@@ -30,7 +30,7 @@ describe("routerStatus", () => {
     expect(routerStatus(midCycle)).toBe("online");
   });
   it("is inactive under a decommissioned dish, regardless of freshness", () => {
-    // fix #4: a router beneath a gray (inactive) dish must not show a red alarm.
+    // A router beneath a gray (inactive) dish must not show a red alarm.
     expect(routerStatus(fresh, true)).toBe("inactive");
     expect(routerStatus(undefined, true)).toBe("inactive");
   });

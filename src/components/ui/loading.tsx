@@ -1,9 +1,5 @@
 // A pending state: a spinner, optionally with a message saying what is pending.
 //
-// Replaces four hand-written text-only notes that each said "…" and spun nothing
-// (.empty-note "contacting the router…", .settings-note "Reading dish configuration…",
-// and friends). Same state, four spellings, no affordance.
-//
 // The message is passed by the caller, never inferred here — "contacting the router"
 // and "waiting for obstruction data" are facts only the caller knows.
 //

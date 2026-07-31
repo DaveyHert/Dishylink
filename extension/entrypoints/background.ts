@@ -262,8 +262,8 @@ export default defineBackground(() => {
   };
   // 0.5 is Chrome's floor for a packed extension — the store build cannot tick
   // faster however this is set, and asking for less only logs a warning. Half a
-  // minute rather than the previous one because the alarm is now what makes an
-  // alert reach anyone: nothing else in the browser is awake to notice.
+  // minute, because the alarm is what makes an alert reach anyone: nothing else
+  // in the browser is awake to notice.
   browser.alarms.create("drain", { periodInMinutes: 0.5 });
   browser.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === "drain") void runDrain();

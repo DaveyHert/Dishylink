@@ -221,8 +221,6 @@ export function useDeviceAlerts(
   }, [dishStatus?.alerts, dishStatus?.ethSpeedMbps, routerAlerts]);
 
   const active = useMemo<AlertState[]>(() => {
-    // An unreachable dish means its 20 checks are a stale snapshot, not "clear":
-    // drop them and raise the unreachability itself instead.
     // A device that isn't answering leaves a stale snapshot, not an all-clear:
     // drop its checks and raise the unreachability itself instead.
     const firing = statusList.filter(

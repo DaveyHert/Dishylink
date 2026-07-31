@@ -1,9 +1,6 @@
 // "There is nothing here" — the third state alongside Loading and Callout tone="error".
 // Distinct from both: nothing is pending, nothing is wrong, there is simply no data.
 //
-// Was two things: .empty-note (OutageLog) and a private Empty inside the alerts menu, which
-// had already drifted apart on padding and weight.
-//
 // Spacing is left to the caller: a card and a popover want different padding.
 //
 // Exact values enforced by empty-state.test.tsx.

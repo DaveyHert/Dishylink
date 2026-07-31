@@ -86,8 +86,8 @@ export function RangeBars({ columns, range, labelWidthPx, heightPx = 96, yAxis }
   const bars = (
     <div className='mt-3 flex items-end gap-[3px]' ref={barsRef} style={{ height: heightPx }}>
       {columns.map((column, index) => (
-        // No native title — it duplicates the hover chip below. `group` so the
-        // tip reveals on column hover (was `.energy-bar-col:hover .energy-bar-tip`).
+        // No native title — it duplicates the hover chip below. `group` reveals
+        // the tip on column hover.
         <div
           key={column.key}
           className='group relative flex h-full min-w-0 flex-1 flex-col items-center justify-end'

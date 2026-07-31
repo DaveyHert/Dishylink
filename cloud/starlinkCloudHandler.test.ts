@@ -2,7 +2,7 @@
 // rides a declarativeNetRequest rule that lands a beat after it is set, so the
 // first auth/user after connect or a worker wake can go out before the cookie is
 // attached and come back 401. That must self-heal into a loaded account, not a
-// hard "not connected" — the one-click sign-in bounce came from it not doing so.
+// hard "not connected".
 
 import { describe, expect, it } from "vitest";
 import { createCloudHandler } from "./starlinkCloudHandler";

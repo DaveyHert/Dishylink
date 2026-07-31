@@ -41,9 +41,9 @@ afterEach(() => {
 
 describe("CloudDataUsage", () => {
   test("shows an empty state — not a forever spinner — when there are no billing cycles", async () => {
-    // A service line whose first cycle hasn't been reported yet. This used to
-    // fall back into the Loading branch (`status === "loading" || !cycle`) and
-    // spin indefinitely with no way out.
+    // A service line whose first cycle hasn't been reported yet must not fall
+    // into the Loading branch (`status === "loading" || !cycle`) and spin
+    // indefinitely.
     stubUsage({ content: { billingCyclesAnnotated: [], servicePlan: {} } });
     render(<CloudDataUsage active />);
 
@@ -56,8 +56,8 @@ describe("CloudDataUsage", () => {
   });
 
   test("survives an envelope with no content instead of crashing the panel", async () => {
-    // Upstream JSON is unvalidated; `data.content.billingCyclesAnnotated` threw a
-    // TypeError on this shape and took the whole sheet down.
+    // Upstream JSON is unvalidated: an envelope missing `content` must fall
+    // through to the empty-state branch, not throw.
     stubUsage({ errors: ["nope"], isValid: false });
     render(<CloudDataUsage active />);
 

@@ -40,9 +40,9 @@ export type DishModel =
  * without it those strings match nothing and fall through to `unknown`, drawing a
  * mast-mounted Performance kit as a Standard on a kickstand.
  *
- * An earlier version of this table also matched `high_perf` and `flat_hp`
- * anywhere in the string; no dish has been observed reporting either, and a dish
- * that did would fall through to `unknown` here rather than being named.
+ * `high_perf` and `flat_hp` are deliberately not matched: no dish has been
+ * observed reporting either, and an unmatched dish falls through to `unknown`
+ * rather than asserting a guess.
  */
 export function resolveDishModel(
   hardwareVersion: string | undefined,

@@ -1,9 +1,6 @@
 // The "What is latency?" block at the foot of a detail panel: a titled, bordered box
-// explaining the metric above it.
-//
-// Was a hairline rule with loose text under it (.detail-explainer). The Starlink iOS
-// app boxes this content, and boxing it is what makes it read as an aside rather than
-// as more panel. Deliberate visual change.
+// explaining the metric above it. Boxing it is what makes it read as an aside
+// rather than as more panel.
 //
 // Distinct from Callout: that is a short advisory with an icon; this is titled
 // educational prose with no icon, and it is always the last thing in a panel.

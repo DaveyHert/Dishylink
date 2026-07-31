@@ -61,7 +61,7 @@ describe("createCloudHandler", () => {
     const { doFetch } = makeFetch({ authStatus: 401 });
     const handler = createCloudHandler({ fetch: doFetch, readCookie: CONNECTED });
     const result = await handler.handle("/cloud/account");
-    expect(result.status).toBe(428); // fix #1: reconnect prompt, not "check your internet"
+    expect(result.status).toBe(428); // reconnect prompt, not "check your internet"
   });
 
   it("serves the account on a valid session", async () => {
@@ -78,7 +78,7 @@ describe("createCloudHandler", () => {
     const { doFetch } = makeFetch({ failDataCallsUntil: { count: 1 } });
     const handler = createCloudHandler({ fetch: doFetch, readCookie: CONNECTED });
     const result = await handler.handle("/cloud/usage"); // usage: one un-caught call, clean retry check
-    expect(result.status).toBe(200); // fix #2
+    expect(result.status).toBe(200);
   });
 
   it("surfaces a genuine upstream failure as 502, not 428", async () => {
@@ -170,7 +170,7 @@ describe("deviceTelemetryFrom", () => {
         values: [["u", 1_700_000_000_000_000, "ut1", 3600]],
       },
     });
-    expect(out.ut1.obstructionPct).toBeUndefined(); // fix #3
+    expect(out.ut1.obstructionPct).toBeUndefined();
     expect(Number.isNaN(out.ut1.obstructionPct as number)).toBe(false);
   });
 });

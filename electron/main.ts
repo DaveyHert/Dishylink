@@ -383,9 +383,10 @@ function postNotification(
  * Announce what the recorder finds, with or without a window.
  *
  * This is the whole reason the app runs a recorder rather than a dashboard: the
- * dish going offline at 3am is exactly the event nobody is watching for. The
- * renderer used to own this, so closing the window silently switched alerting
- * off — the alerts kept being detected and recorded, and simply told nobody.
+ * dish going offline at 3am is exactly the event nobody is watching for. This
+ * must not be owned by the renderer — the recorder detects and records alerts
+ * regardless of a window, so ownership anywhere else would leave them silently
+ * undelivered.
  *
  * The sound follows where the user is. With the window in front, the renderer
  * sounds its own chime (see the alert effect in useDeviceAlerts) — governed by the

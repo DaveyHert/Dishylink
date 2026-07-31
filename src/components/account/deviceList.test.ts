@@ -57,8 +57,8 @@ describe("buildDeviceList status, joined against LAN presence", () => {
   afterEach(() => vi.useRealTimers());
 
   it("greens the dish and controller mid-cycle, and only reds the dead mesh", () => {
-    // The regression this whole change exists for: with a sub-cadence freshness
-    // window these two read offline for the back half of every upload cycle.
+    // With a sub-cadence freshness window, these two would read offline for the
+    // back half of every upload cycle.
     const items = buildDeviceList(terminals, cloudMidCycle);
     expect(statusOf(items, DISH_KEY)).toBe("online");
     expect(statusOf(items, MAIN_ROUTER_KEY)).toBe("online");

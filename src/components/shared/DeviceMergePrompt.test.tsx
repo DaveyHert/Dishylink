@@ -112,7 +112,6 @@ describe("DeviceMergePrompt", () => {
     await waitForText("Combining keeps one device with");
     // The recorder's figure, not one recomputed here: 590 + 47 = 637 GB.
     expect(text()).toContain("637");
-    // The chart fix made this claim true; the copy must state it in this branch.
     expect(text()).toContain("joins their usage history");
   });
 

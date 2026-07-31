@@ -1,10 +1,8 @@
 // The row primitive both tabs are built from, and the device row composed on top
 // of it.
 //
-// NetworkRow was `.netrow` + six child classes, rendered twice. The offline state
-// maps to `disabled:` and `group-disabled:` because an offline row is already a
-// disabled button — `.netrow-offline` was a parallel way of saying the same
-// thing, including a :hover rule whose only job was to cancel the base :hover.
+// An offline row is already a disabled button, so its dimmed look comes from
+// disabled: / group-disabled: rather than a separate offline class.
 
 import type { WifiClientJson } from "@core/dishClient";
 import { matchesSelf } from "../../lib/selfIdentity";

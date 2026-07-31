@@ -5,11 +5,8 @@
 // `.ndjson` extension for the same format — newline-delimited JSON — and keep it,
 // because renaming them would orphan the history the historian has recorded.)
 //
-// That shape was copied into seven stores, and with it eight identical readers
-// and ten copies of the temp-file-then-rename write. The copies had already begun
-// to drift — the same local was `tempPath` in five of them and `temporary` in
-// another — and the duplication is the kind that matters: a torn-write bug fixed
-// in one store would silently leave the other six broken.
+// Duplicating this per store risks the failure mode where a torn-write fix in
+// one store silently leaves the others broken.
 //
 // So the *mechanism* lives here and the *policy* stays with each store. What to
 // retain, when to compact, whether a row is still current — those differ per

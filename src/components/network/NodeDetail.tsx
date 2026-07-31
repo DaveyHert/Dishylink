@@ -87,7 +87,7 @@ export function NodeDetail({
 
       {/* The clients this node is carrying, each drilling into the same device
           detail the Network list opens — a node's device list is a way into a
-          device, not a leaf. Only the count lived here before. */}
+          device, not a leaf. */}
       {node.connected && (
         <div>
           <SectionHeading title='Connected devices' />

@@ -9,7 +9,6 @@ import { motion } from "motion/react";
 import { DataRow } from "./DataRow";
 import type { DeviceFact } from "./deviceFacts";
 
-/** Above this many rows the list is capped to a scroll box by default. */
 const SCROLLABLE_AFTER_ROWS = 8;
 const COLLAPSED_PX = 280;
 

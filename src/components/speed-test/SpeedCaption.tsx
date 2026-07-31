@@ -1,7 +1,7 @@
 // The "Download" / "Upload" line under the big number, shared by the gauge and the
 // beam so the two views can't drift apart. The arrow carries the dashboard's series
-// colour — the same blue and green the throughput charts use — which is now the only
-// thing colouring the phase, since the beam itself reads one colour throughout.
+// colour — the same blue and green the throughput charts use — the only thing
+// colouring the phase, since the beam itself reads one colour throughout.
 //
 // Idle and failed captions ("Ready", "Failed") name no direction, so they get no arrow.
 

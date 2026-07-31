@@ -472,9 +472,9 @@ function recordAlertTransitions(transitions: AlertTransition[]): void {
     else alertStore.close(source, key, atMs);
     // The service's diary. It runs unattended under launchd with no window and
     // no operator, so "did it see the outage?" is answerable only from what it
-    // wrote down. Every transition is logged, not a chosen few: the three heat
-    // keys used to be the only ones announced here, which is why a dish going
-    // unreachable left no trace in the log it was recorded in.
+    // wrote down. Every transition is logged, not a chosen few, so an
+    // unreachable device leaves a trace in the log even though it fires no
+    // heat key.
     console.log(`[historian] alert ${kind}: ${source}:${key}`);
     // The thermal log is the alert log narrowed to the three heat keys. Driven
     // off the same transitions rather than its own comparison, so it can never
@@ -516,8 +516,7 @@ function loadSampleSnapshot(): void {
  * rewritten every minute while running, so its mtime is a heartbeat: a boot
  * that finds it stale means the recorder was off in between. Record the gap
  * itself as an episode, so absence in the History tab reads "not recorded"
- * rather than implying "nothing happened". (2026-07-20: the recorder was off
- * 12:45–16:15 during diagnosis and that window's alerts silently vanished.)
+ * rather than implying "nothing happened".
  */
 function recordRecorderGap(): void {
   if (!existsSync(SAMPLES_SNAPSHOT_FILE)) return;
@@ -692,7 +691,7 @@ async function pollRadio(): Promise<void> {
 let latestClientReadings: ClientReading[] = [];
 // A router that stops answering must not stack a request every poll until the
 // connection budget starves the dish poll — at 200ms this is the poll where
-// overlap would bite first. The guard is `nonOverlapping` at the scheduler now,
+// overlap would bite first. The guard is `nonOverlapping` at the scheduler,
 // the same one every other poll gets.
 async function pollClients(): Promise<void> {
   try {
@@ -767,8 +766,7 @@ function seedClientTotals(nowMs: number): void {
  * cycles running at once against the same stores interleave their observations,
  * which is how the alert log ended up with overlapping episodes. Guarding at the
  * scheduler means a poll cannot be added without the property; the alternative,
- * a boolean each function remembers to check, is the version that gets forgotten
- * (`poll` had no guard at all while the two polls around it did).
+ * a boolean each function remembers to check, is the version that gets forgotten.
  */
 function nonOverlapping(run: () => Promise<void>): () => Promise<void> {
   let inFlight = false;

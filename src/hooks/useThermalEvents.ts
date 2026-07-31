@@ -68,11 +68,6 @@ interface ThermalEpisodeJson {
   endMs: number | null;
 }
 
-// History only: this reads the historian's durable thermal log back for the event
-// list. Live thermal alerting and its notifications belong to useDeviceAlerts,
-// which watches every notifiable alert on both devices off live status.
-// THERMAL_ALERTS maps the historian's stored keys to the event log's wording.
-
 /**
  * Thermal episodes from the historian's durable log, shaped as OutageEvents for
  * the events log. Empty when the historian isn't running.
