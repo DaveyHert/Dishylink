@@ -9,7 +9,13 @@ name: CI
 on:
   push:
     branches: ["**"]
+    # Version tags (v0.1.0, …) are what release the Windows installer — see the
+    # package-win job's `if` below.
+    tags: ["v*"]
   pull_request:
+  # "Run workflow" button in the Actions tab. The only other way to fire the
+  # Windows build without cutting a tag.
+  workflow_dispatch:
 
 # A second push to the same branch makes the first one's answer irrelevant.
 concurrency:
@@ -90,3 +96,25 @@ jobs:
           fi
           echo "$changed"
           echo "$changed" | xargs npx prettier --check --ignore-unknown
+
+  # Packages the unsigned Windows installer. Deliberately not run on every push:
+  # a Windows runner packaging a ~100 MB Electron app is slow and burns free
+  # minutes 2x, and an installer is only wanted when one is being handed out. So
+  # it fires only on a manual "Run workflow" or a pushed v* tag — never on PRs or
+  # ordinary branch pushes. The .exe lands as a downloadable run artifact.
+  package-win:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run pack:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dishylink-windows-installer
+          path: release/*.exe
+          if-no-files-found: error

@@ -56,3 +56,22 @@ mac:
   icon: build/icon.icns
   category: public.app-category.utilities
   identity: null
+
+# Unsigned Windows build. There is no ad-hoc equivalent to reach for here and none
+# is needed: unlike macOS (whose notification API refuses to fire from an unsigned
+# app — see afterPack.cjs), Windows posts notifications from unsigned apps fine.
+# A code-signing cert is a few hundred a year (PLAN.md's accepted sleeper cost), so
+# until that lands the installer is unsigned and Windows SmartScreen shows a one-off
+# "unknown publisher" prompt on first run — click through and it installs normally.
+win:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  target:
+    # nsis is the standard assisted installer .exe. Only x64 — Windows on ARM is a
+    # rounding error and the dev/test box is x64.
+    - target: nsis
+      arch: [x64]
+  # The runtime PNG doubles as the packaging icon. electron-builder converts it to a
+  # multi-resolution .ico itself; only its *ICNS* writer is the buggy one that forced
+  # the prebuilt-icns dance on macOS above — its ICO writer is fine, so no per-format
+  # icon script is needed on this side.
+  icon: build/icon.png
