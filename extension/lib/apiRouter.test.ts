@@ -232,6 +232,115 @@ describe("routeApiRequest", () => {
     expect((after.body as { totals: unknown[] }).totals).toEqual([]);
   });
 
+  // The extension is a standalone recorder, so a split record has to be answerable
+  // here too — not only on the desktop. Same core, but its own route and its own
+  // snapshot write, either of which could be missing without the core noticing.
+  /** A store holding one device forked into an idle and a live bucket, both named
+   *  alike — what a private-MAC rotation leaves behind. */
+  async function forkedStore(): Promise<InMemoryHistory> {
+    const store = new InMemoryHistory();
+    const t = NOW.getTime();
+    const odometer = new ClientTotalsCore(90_000);
+    const older = odometer.notePoll([{ clientId: 1, macAddress: "aa" }]);
+    odometer.observe(1, "aa", 0, 0, t - 36 * 3_600_000, "Laptop", older);
+    odometer.observe(1, "aa", 500, 100, t - 36 * 3_600_000 + 1_000, "Laptop", older);
+    const newer = odometer.notePoll([{ clientId: 2, macAddress: "bb" }]);
+    odometer.observe(2, "bb", 0, 0, t - 1_000, "Laptop", newer);
+    odometer.observe(2, "bb", 40, 10, t, "Laptop", newer);
+    await store.writeTotalsSnapshot(odometer.toSnapshot());
+    return store;
+  }
+
+  it("offers the split record as a candidate on GET /api/clients/totals", async () => {
+    const read = await routeApiRequest(await forkedStore(), "/api/clients/totals", NOW);
+    const { totals, mergeCandidates } = read.body as {
+      totals: Array<{ clientId?: number }>;
+      mergeCandidates: Array<{ fromKey: string; toKey: string; foldsBytes: boolean }>;
+    };
+    expect(mergeCandidates).toHaveLength(1);
+    expect(mergeCandidates[0]!.fromKey).toBe("1");
+    expect(mergeCandidates[0]!.toKey).toBe("2");
+    expect(mergeCandidates[0]!.foldsBytes).toBe(true);
+    // Every candidate names a row in the same reply, or the prompt cannot render.
+    const keys = totals.map((t) => String(t.clientId));
+    expect(keys).toContain("1");
+    expect(keys).toContain("2");
+  });
+
+  it("merges the two buckets via POST /api/clients/totals/merge", async () => {
+    const store = await forkedStore();
+    const merged = await routeApiRequest(
+      store,
+      "/api/clients/totals/merge?from=1&to=2",
+      NOW,
+      "POST",
+    );
+    expect(merged.body).toEqual({ merged: true });
+    const after = await routeApiRequest(store, "/api/clients/totals", NOW);
+    const { totals, mergeCandidates } = after.body as {
+      totals: Array<{ clientId?: number; rxBytes: number; txBytes: number }>;
+      mergeCandidates: unknown[];
+    };
+    expect(totals).toHaveLength(1);
+    expect(totals[0]!.clientId).toBe(2);
+    expect(totals[0]!.rxBytes).toBe(540); // 500 carried over + 40 measured
+    expect(totals[0]!.txBytes).toBe(110);
+    expect(mergeCandidates).toEqual([]); // answered, so no longer asked
+  });
+
+  it("carries a merged device's chart history onto the surviving identity", async () => {
+    const store = await forkedStore();
+    const t = NOW.getTime();
+    const minute = Math.floor(t / 60_000) * 60;
+    // Throughput recorded under the old identity (1), then the new one (2).
+    await store.putClientMinutes(
+      [
+        { minute: minute - 120, key: "1", macAddress: "aa", downMbps: 5, upMbps: 1, rxBytes: 0, txBytes: 0 },
+        { minute: minute - 60, key: "2", macAddress: "bb", downMbps: 8, upMbps: 2, rxBytes: 0, txBytes: 0 },
+      ],
+      t,
+    );
+    await routeApiRequest(store, "/api/clients/totals/merge?from=1&to=2", NOW, "POST");
+
+    const reply = await routeApiRequest(store, "/api/clients?client=2&hours=6", NOW);
+    const { history } = reply.body as { history: Array<{ key: string; downMbps: number }> };
+    // The old-identity row (5) now answers to device 2, beside its own (8), instead
+    // of being stranded under a key no device reports — the total merged, so does this.
+    expect(history.map((r) => r.key)).toEqual(["2", "2"]);
+    expect(history.map((r) => r.downMbps)).toEqual([5, 8]);
+  });
+
+  it("records 'different devices' via the same route, and stops offering the pair", async () => {
+    const store = await forkedStore();
+    const rejected = await routeApiRequest(
+      store,
+      "/api/clients/totals/merge?from=1&to=2&distinct=1",
+      NOW,
+      "POST",
+    );
+    expect(rejected.body).toEqual({ rejected: true });
+    const after = await routeApiRequest(store, "/api/clients/totals", NOW);
+    const { totals, mergeCandidates } = after.body as {
+      totals: unknown[];
+      mergeCandidates: unknown[];
+    };
+    expect(totals).toHaveLength(2); // a rejection keeps both records
+    expect(mergeCandidates).toEqual([]);
+  });
+
+  it("refuses a merge naming a record it does not hold", async () => {
+    const store = await forkedStore();
+    const merged = await routeApiRequest(
+      store,
+      "/api/clients/totals/merge?from=1&to=absent",
+      NOW,
+      "POST",
+    );
+    expect(merged.body).toEqual({ merged: false });
+    const after = await routeApiRequest(store, "/api/clients/totals", NOW);
+    expect((after.body as { totals: unknown[] }).totals).toHaveLength(2);
+  });
+
   it("stores posted 1 Hz client samples that a since-tail read then returns", async () => {
     const store = new InMemoryHistory();
     const t = NOW.getTime();

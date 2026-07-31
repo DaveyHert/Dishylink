@@ -234,7 +234,16 @@ async function recordClients(store: HistoryStore, clients: WifiClientJson[], now
     identified.map((c) => ({ clientId: c.clientId, macAddress: c.macAddress ?? "" })),
   );
   for (const c of identified)
-    odometer.observe(c.clientId, c.macAddress ?? "", rxOf(c), txOf(c), now, c.givenName ?? c.name, liveKeys);
+    odometer.observe(
+      c.clientId,
+      c.macAddress ?? "",
+      rxOf(c),
+      txOf(c),
+      now,
+      c.givenName ?? c.name,
+      liveKeys,
+      c.captiveClientId,
+    );
   odometer.compact(now);
   await store.writeTotalsSnapshot(odometer.toSnapshot());
 }

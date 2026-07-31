@@ -11,7 +11,8 @@
 // desktop historian isn't running.
 
 import { energyRangeBounds, RANGES, summarizeEnergy, type Range } from "@core/energySummary";
-import { ClientTotalsCore, type ClientTotal } from "@core/clientTotals";
+import { ClientTotalsCore } from "@core/clientTotals";
+import { resolveRows, foldMinuteCollisions } from "@core/clientHistory";
 import type { ClientSampleRow, HistoryStore } from "./history";
 
 // The alert keys the dish raises for heat; /api/thermal is the alert log narrowed
@@ -80,6 +81,21 @@ export async function routeApiRequest(
     return { status: 200, body: { reset } };
   }
 
+  // Join two buckets the router issued separate identities to, or record that they
+  // are different devices. Both answer a question the router's data cannot, and
+  // both are written through at once: an unsaved merge loses a total, an unsaved
+  // rejection asks again on the next refresh.
+  if (url.pathname === "/api/clients/totals/merge" && method === "POST") {
+    const from = url.searchParams.get("from");
+    const to = url.searchParams.get("to");
+    const distinct = url.searchParams.get("distinct") === "1";
+    const odometer = await loadOdometer(store);
+    const applied =
+      from && to ? (distinct ? odometer.rejectMerge(from, to) : odometer.merge(from, to)) : false;
+    if (applied) await store.writeTotalsSnapshot(odometer.toSnapshot());
+    return { status: 200, body: distinct ? { rejected: applied } : { merged: applied } };
+  }
+
   // The monthly usage odometer: read the list, or delete one device's record
   // (?client=) or all of them (no id). Deleting removes the entry; /reset zeroes
   // a device while keeping it listed.
@@ -91,7 +107,17 @@ export async function routeApiRequest(
       await store.writeTotalsSnapshot(odometer.toSnapshot());
       return { status: 200, body: result };
     }
-    return { status: 200, body: { totals: await readTotals(store) } };
+    // Rows and candidates come from one read of one odometer: a candidate naming
+    // a row absent from `totals` cannot be shown, so two reads risk a prompt that
+    // never appears rather than one that is merely stale.
+    const odometer = await loadOdometer(store);
+    return {
+      status: 200,
+      body: {
+        totals: odometer.totals(),
+        mergeCandidates: odometer.mergeCandidates(now.getTime()),
+      },
+    };
   }
 
   // The open dashboard persists its own 1 Hz client samples (the drain is far too
@@ -112,16 +138,37 @@ export async function routeApiRequest(
     const key = url.searchParams.get("client") ?? undefined;
     const wantSamples = url.searchParams.get("samples") === "1";
     const sinceMs = Number(url.searchParams.get("since") ?? 0) || undefined;
+    const wantTotals = url.searchParams.get("totals") === "1" || !sinceMs;
+    // Rows are read unfiltered and resolved through the odometer's aliases before
+    // the device filter, so a merge carries a device's history onto the surviving
+    // identity, the same way it carries the total. The 1 Hz sample tail (`since`,
+    // no totals) carries only live keys, which resolve to themselves, so it skips
+    // the snapshot load entirely rather than reading it every second.
+    const odometer = !sinceMs || wantTotals ? await loadOdometer(store) : undefined;
+    const resolveRowKey = (row: { key?: string }) =>
+      row.key ? (odometer ? odometer.resolveKey(row.key) : row.key) : undefined;
     return {
       status: 200,
       body: {
-        history: sinceMs ? [] : await store.readClientMinutes(hours, key, now.getTime()),
+        history: sinceMs
+          ? []
+          : foldMinuteCollisions(
+              resolveRows(
+                await store.readClientMinutes(hours, undefined, now.getTime()),
+                resolveRowKey,
+                key,
+              ),
+            ),
         ...(wantSamples
-          ? { samples: await store.readClientSamples(sinceMs ?? 0, key, now.getTime()) }
+          ? {
+              samples: resolveRows(
+                await store.readClientSamples(sinceMs ?? 0, undefined, now.getTime()),
+                resolveRowKey,
+                key,
+              ),
+            }
           : {}),
-        ...(url.searchParams.get("totals") === "1" || !sinceMs
-          ? { totals: await readTotals(store, key) }
-          : {}),
+        ...(wantTotals ? { totals: odometer!.totals(key) } : {}),
       },
     };
   }
@@ -136,11 +183,6 @@ async function loadOdometer(store: HistoryStore): Promise<ClientTotalsCore> {
   const snapshot = await store.readTotalsSnapshot();
   if (snapshot) odometer.loadSnapshot(snapshot);
   return odometer;
-}
-
-/** Totals for one device by key, or all. */
-async function readTotals(store: HistoryStore, key?: string): Promise<ClientTotal[]> {
-  return (await loadOdometer(store)).totals(key);
 }
 
 /** Parse a posted sample batch, tolerating a malformed body as an empty write. */
