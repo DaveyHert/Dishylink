@@ -12,26 +12,6 @@ import type { ReactNode } from "react";
 import { useElementWidth, labelStride } from "../../hooks/useElementWidth";
 import type { EnergyRange } from "../../hooks/useEnergyHistory";
 
-export const RANGE_TABS: { label: string; value: EnergyRange }[] = [
-  { label: "1H", value: "1h" },
-  { label: "6H", value: "6h" },
-  { label: "12H", value: "12h" },
-  { label: "Today", value: "today" },
-  { label: "Day", value: "day" },
-  { label: "Week", value: "week" },
-  { label: "Month", value: "month" },
-];
-
-/** Clock time for sub-day ranges, date for day/week, month name for month. */
-export function bucketLabel(epochSeconds: number, range: EnergyRange): string {
-  const date = new Date(epochSeconds * 1000);
-  if (range === "month") return date.toLocaleDateString([], { month: "short" }); // Jul
-  if (range === "day" || range === "week") {
-    return date.toLocaleDateString([], { month: "numeric", day: "numeric" });
-  }
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
 /** Measured render width at 9px IBM Plex Mono: "12:00 AM" = 42px, "7/16" ≈ 30,
  *  "Jul" ≈ 26. True glyph width, deliberately unpadded — a label may sit right up
  *  against its neighbour, since the blank columns the stride skips give it room to

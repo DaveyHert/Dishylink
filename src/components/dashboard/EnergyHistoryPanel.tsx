@@ -8,7 +8,8 @@ import {
   type EnergyRange,
   type EnergyBucket,
 } from "../../hooks/useEnergyHistory";
-import { RANGE_TABS, RangeBars, bucketLabel, type RangeBarColumn } from "../shared/RangeBarChart";
+import { RangeBars, type RangeBarColumn } from "../shared/RangeBarChart";
+import { RANGE_TABS, bucketLabel } from "../shared/rangeTabs";
 import { SegmentedControl } from "../ui/segmented-control";
 import { Callout } from "../ui/callout";
 
