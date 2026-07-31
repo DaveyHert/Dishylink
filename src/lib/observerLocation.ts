@@ -71,13 +71,16 @@ export function parseCoordinateText(coordinateText: string): ObserverLocation | 
  * fine for the sky view, worth refining with exact coordinates.
  */
 export async function requestIpLocation(): Promise<ObserverLocation> {
-  const response = await fetch("https://ipapi.co/json/");
+  const response = await fetch("https://get.geojs.io/v1/ip/geo.json");
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const geo = (await response.json()) as { latitude?: number; longitude?: number };
-  if (typeof geo.latitude !== "number" || typeof geo.longitude !== "number") {
+  const geo = (await response.json()) as { latitude?: string; longitude?: string };
+  // geojs returns the coordinates as strings, and a missing field coerces to NaN.
+  const latitudeDeg = Number(geo.latitude);
+  const longitudeDeg = Number(geo.longitude);
+  if (!Number.isFinite(latitudeDeg) || !Number.isFinite(longitudeDeg)) {
     throw new Error("no coordinates in response");
   }
-  return { latitudeDeg: geo.latitude, longitudeDeg: geo.longitude, altitudeM: 0 };
+  return { latitudeDeg, longitudeDeg, altitudeM: 0 };
 }
 
 /** Resolve via the browser's geolocation permission prompt. */
