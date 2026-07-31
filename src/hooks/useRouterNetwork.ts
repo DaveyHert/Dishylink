@@ -216,6 +216,11 @@ export interface RouterNetwork {
   /** Live per-MAC rate — the newest sample from the historian's window, which
    *  computes it from byte-counter deltas rather than the router's averages. */
   rates: Map<string, ThroughputRates>;
+  /** The rates as they stood when the current roster landed, for ordering a list
+   *  of devices by throughput. Sorting on `rates` would reshuffle the list on
+   *  every 1 Hz tick; this changes only when the roster does, so an order taken
+   *  from it holds until there is a new set of devices to order. */
+  ratesAtRoster: Map<string, ThroughputRates>;
   /** Per-MAC monthly usage total from the historian's odometer — survives the
    *  reconnects that reset the router's own per-client counter. */
   totals: Map<string, ClientUsageTotal>;
@@ -229,6 +234,7 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
     new Map(),
   );
   const [rates, setRates] = useState<Map<string, ThroughputRates>>(new Map());
+  const [ratesAtRoster, setRatesAtRoster] = useState<Map<string, ThroughputRates>>(new Map());
   const [totals, setTotals] = useState<Map<string, ClientUsageTotal>>(new Map());
   const ratesRef = useRef<Map<string, ThroughputRates>>(new Map());
   /** Newest sample already merged, so each tail asks only for what is new. */
@@ -270,6 +276,10 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
             const clientList = await routerClient.getWifiClients(AbortSignal.timeout(4_000));
             if (disposed) return;
             setClients(clientList);
+            // Captured with the roster, not read later: the pair is what an
+            // ordering is taken from, and rates replace their map rather than
+            // mutating it, so this stays the set that arrived with this roster.
+            setRatesAtRoster(ratesRef.current);
             setRouterReachable(true);
           } catch {
             if (!disposed) setRouterReachable(false);
@@ -374,5 +384,14 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
     );
   }, []);
 
-  return { clients, wifiConfig, routerReachable, renameClient, throughputHistory, rates, totals };
+  return {
+    clients,
+    wifiConfig,
+    routerReachable,
+    renameClient,
+    throughputHistory,
+    rates,
+    ratesAtRoster,
+    totals,
+  };
 }
