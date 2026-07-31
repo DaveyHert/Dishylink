@@ -1,0 +1,23 @@
+// Typechecks the extension against WXT's generated config, which supplies the
+// #imports / browser types, the DOM lib the service worker and manager need, and
+// the @core and @/ aliases that resolve into the shared app.
+//
+// It lives in this directory rather than at the repo root so an editor finds it.
+// TypeScript picks a file's project by walking up from the file to the nearest
+// tsconfig.json; with this at the root instead, everything under extension/
+// belonged to no project, fell back to an inferred config with no path aliases,
+// and every @core import read as a missing module in the editor while
+// `npm run typecheck:extension` passed.
+//
+// WXT's defaults are realigned to the rest of the repo: it turns on
+// noUncheckedIndexedAccess, which nothing else here uses, and leaves out the JSX
+// setting its own Vite build applies. Needs `wxt prepare` to have generated .wxt/.
+{
+  "extends": "../.wxt/tsconfig.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "noUncheckedIndexedAccess": false
+  },
+  "include": ["**/*", "../.wxt/wxt.d.ts"],
+  "exclude": ["**/node_modules", "../.output"]
+}
