@@ -28,6 +28,11 @@ import { ROUTER_HANDLE_URL } from "./endpoints";
 // screen, so it is lighter than the historian's identical poll that never stops.
 const POLL_MS = 200;
 const POLL_TIMEOUT_MS = 4_000;
+// Record at 1 Hz, not every poll. The tracker holds an exact rate between counter
+// edges, so writing on every 200 ms poll would quintuple the store and the page↔
+// worker messaging for no extra resolution — the historian records at 1 Hz for the
+// same reason (CLIENTS_RECORD_MS).
+const RECORD_MS = 1_000;
 
 /** The 15s average, read finitely — the fallback rate when a delta is not yet
  *  measurable (a first sighting, a gap). 15s not 1m, matching the historian: the
@@ -81,22 +86,24 @@ export function buildSamples(
 
 /**
  * Start sampling client throughput while the dashboard is open, and return a
- * stop function. Polls only while the page is visible — a hidden tab needs no
- * live series and should not poll the router — and never overlaps its own poll.
+ * stop function. Runs only while the page is visible — a hidden tab needs no live
+ * series and should not poll the router. Polling runs at 5 Hz to catch each
+ * counter edge and never overlaps itself; recording is a separate 1 Hz beat.
  */
 export function startClientSampler(): () => void {
   const tracker = new ThroughputTracker();
   const router = DishClient.load("router", { handleUrl: ROUTER_HANDLE_URL });
   let inFlight = false;
+  let latest: ClientSampleRow[] = [];
 
-  const tick = async () => {
+  // Poll fast so the tracker catches every counter edge as it lands; the samples
+  // it returns already carry an exact rate, held steady between edges.
+  const poll = async () => {
     if (inFlight || document.visibilityState !== "visible") return;
     inFlight = true;
     try {
       const clients = await (await router).getWifiClients(AbortSignal.timeout(POLL_TIMEOUT_MS));
-      const samples = buildSamples(clients, tracker, Date.now());
-      if (samples.length > 0)
-        await apiRequest("/api/clients/samples", { method: "POST", body: JSON.stringify(samples) });
+      latest = buildSamples(clients, tracker, Date.now());
     } catch {
       // Router briefly unreachable, or the page went away mid-poll: the next
       // tick retries, and an edge missed across the gap is re-based, not invented.
@@ -105,7 +112,24 @@ export function startClientSampler(): () => void {
     }
   };
 
-  const id = window.setInterval(() => void tick(), POLL_MS);
-  void tick();
-  return () => window.clearInterval(id);
+  // Persist the newest poll once a second. Clearing after a send means a stalled
+  // poll records nothing, rather than re-storing a stale rate under a new second.
+  const record = async () => {
+    if (latest.length === 0 || document.visibilityState !== "visible") return;
+    const batch = latest;
+    latest = [];
+    try {
+      await apiRequest("/api/clients/samples", { method: "POST", body: JSON.stringify(batch) });
+    } catch {
+      // A dropped POST is not re-queued; the next second sends a fresh sample.
+    }
+  };
+
+  const pollId = window.setInterval(() => void poll(), POLL_MS);
+  const recordId = window.setInterval(() => void record(), RECORD_MS);
+  void poll();
+  return () => {
+    window.clearInterval(pollId);
+    window.clearInterval(recordId);
+  };
 }
