@@ -21,7 +21,7 @@ const LAST_DRAIN_KEY = "lastDrain";
 type Surface = "window" | "tab";
 type Bounds = { top: number; left: number; width: number; height: number };
 
-const DEFAULT_BOUNDS: Bounds = { top: 80, left: 120, width: 1200, height: 800 };
+const DEFAULT_BOUNDS: Bounds = { top: 80, left: 120, width: 1320, height: 880 };
 
 // The single open dashboard window, so a second click focuses it instead of
 // opening another. Held in memory; the browser clears the worker's memory on
@@ -159,6 +159,12 @@ const BADGE_COLOR: Record<AlertSeverity, string> = {
   advisory: "#8b8d98",
 };
 
+// Firefox's MV2 build has no `browser.action` — only `browserAction`. WXT's
+// `browser` is a plain passthrough to the native global (no MV2/MV3 API
+// unification), so this codebase has to bridge it: the manifest key becomes
+// `browser_action` for Firefox at build time, but the JS namespace does not.
+const action = browser.action ?? browser.browserAction;
+
 /**
  * Reflect the live alert set onto the toolbar icon — the same count the app's
  * bell shows, so it reads identically inside and out.
@@ -181,11 +187,11 @@ function badgeWorthy(alert: AlertState): boolean {
 
 async function updateBadge(active: AlertState[]): Promise<void> {
   const shown = active.filter(badgeWorthy);
-  await browser.action.setBadgeText({ text: shown.length === 0 ? "" : String(shown.length) });
+  await action.setBadgeText({ text: shown.length === 0 ? "" : String(shown.length) });
   if (shown.length === 0) return;
   // activeAlerts() sorts worst-first, so the head sets the tint.
-  await browser.action.setBadgeBackgroundColor({ color: BADGE_COLOR[shown[0].severity] });
-  await browser.action.setBadgeTextColor?.({ color: "#ffffff" });
+  await action.setBadgeBackgroundColor({ color: BADGE_COLOR[shown[0].severity] });
+  await action.setBadgeTextColor?.({ color: "#ffffff" });
 }
 
 export default defineBackground(() => {
@@ -193,7 +199,7 @@ export default defineBackground(() => {
   // dashboard showing why, the same as clicking one on the desktop.
   browser.notifications.onClicked.addListener(() => void openDashboard());
 
-  browser.action.onClicked.addListener(() => void openDashboard());
+  action.onClicked.addListener(() => void openDashboard());
 
   // The dashboard page reads recorded history over /api, which no origin serves
   // inside an extension, so its apiHost binding messages here. Only /api messages

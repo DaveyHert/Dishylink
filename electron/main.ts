@@ -16,6 +16,7 @@ import {
   nativeImage,
   ipcMain,
   Notification,
+  shell,
   type MenuItem,
 } from "electron";
 import { fileURLToPath } from "node:url";
@@ -415,6 +416,17 @@ function startAlertNotifications(): void {
   });
 }
 
+// Restricted to http(s) so a compromised renderer can't hand this an
+// exotic scheme (file:, or a custom protocol another app registered) and
+// have main open it with the OS's full privileges.
+function registerExternalLinkHandler(): void {
+  ipcMain.on("open-external", (_event, url: string) => {
+    if (/^https?:\/\//.test(url)) {
+      void shell.openExternal(url);
+    }
+  });
+}
+
 function registerNotificationHandler(): void {
   ipcMain.handle("notify", (_event, { title, body }: { title: string; body: string }) =>
     postNotification(title, body),
@@ -459,6 +471,7 @@ void app.whenReady().then(async () => {
   // Registered for dev and packaged runs alike: notifications are the app's
   // alerting channel, not a packaging feature.
   registerNotificationHandler();
+  registerExternalLinkHandler();
   createTray();
   // A normal launch opens the window; a launch the login item triggered stays in
   // the background (tray only), so booting the machine doesn't pop a window.

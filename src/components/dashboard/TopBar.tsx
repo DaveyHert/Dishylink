@@ -8,6 +8,7 @@ import type { DishConnectionState } from "../../hooks/useDishTelemetry";
 import type { DishStatusJson } from "@core/dishClient";
 import { formatUptime } from "../../lib/format";
 import { AlertsMenu } from "../alerts/AlertsMenu";
+import { SupportMenu } from "../shared/SupportMenu";
 import { AppLogo } from "../../assets/icons/AppLogo";
 import type { DeviceAlerts } from "../../hooks/useDeviceAlerts";
 
@@ -93,6 +94,7 @@ export function TopBar({
         >
           {theme === "light" ? <MoonIcon /> : <SunIcon />}
         </button>
+        <SupportMenu />
       </div>
     </header>
   );

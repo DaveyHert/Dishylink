@@ -13,6 +13,10 @@ contextBridge.exposeInMainWorld("dishlink", {
     electron: process.versions.electron,
     chrome: process.versions.chrome,
   },
+  // The renderer has no shell access, so this crosses to main.
+  openExternal: (url: string): void => {
+    ipcRenderer.send("open-external", url);
+  },
   // Opens the Starlink login window in the main process; resolves once the account
   // is connected, or with ok:false if the user closes it.
   signIn: (): Promise<{ ok: boolean; message?: string }> => ipcRenderer.invoke("starlink-signin"),

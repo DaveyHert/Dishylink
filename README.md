@@ -114,8 +114,4 @@ range reports what fraction of it was actually sampled. See
 ## Roadmap
 
 Everything above is local-only by design: your telemetry, your history, your
-storage, never transmitted. The one planned exception is an opt-in,
-anonymous **congestion map** — collective by nature, so it needs a small
-shared service — which is scoped to anonymous writes and public reads only,
-and is not yet built. Licensing/store packaging for the desktop app and
-extension are also still ahead.
+storage, never transmitted.
