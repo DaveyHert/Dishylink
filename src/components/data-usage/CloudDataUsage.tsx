@@ -56,12 +56,16 @@ function CycleBars({ cycle }: { cycle: UsageCycle }) {
   );
 }
 
+const NO_CYCLES: UsageCycle[] = [];
+
 export function CloudDataUsage({ active }: { active: boolean }) {
   const { data, status, reload } = useCloudUsage(active);
   // `content` is optional-chained too: this is unvalidated upstream JSON, and an
   // envelope without it would otherwise throw and take the whole panel down
   // instead of falling through to the error branch below.
-  const cycles = data?.content?.billingCyclesAnnotated ?? [];
+  // One shared empty array for the absent case: a fresh `[]` each render is a new
+  // identity, which would rebuild every memo keyed on it on every render.
+  const cycles = data?.content?.billingCyclesAnnotated ?? NO_CYCLES;
   const plan = data?.content?.servicePlan;
   const [selected, setSelected] = useState<number | null>(null);
 
