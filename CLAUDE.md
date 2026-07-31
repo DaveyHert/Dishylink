@@ -27,10 +27,10 @@ is on the Starlink network itself — changes are verified against real hardware
 
 ## Process facts
 
-- The historian (`server/historian.mts`) is the always-on recording service, run by launchd as
-  `com.dishboard.historian` (renamed from "collector" 2026-07-21). Edits under `server/` need
+- The historian (`collector/historian.mts`) is the always-on recording service, run by launchd as
+  `com.dishboard.historian`. Edits under `collector/` need
   `launchctl kickstart -k gui/$UID/com.dishboard.historian` to take effect; `tsc` and `vitest`
-  pass without it.
+  pass without it. Its recordings live in `collector/data`.
 - "Historian" is the component's name in code, service, and docs. User-facing copy stays plain
   English — "history recorder" or "recording" — because UI readers aren't assumed to know the
   industrial term.
