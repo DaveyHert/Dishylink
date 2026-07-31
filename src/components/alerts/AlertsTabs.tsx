@@ -151,15 +151,6 @@ export function StatusTab({
   );
 }
 
-/** Which pane the menu is showing. */
-export type AlertsTab = "active" | "history" | "status";
-
-export const ALERTS_TABS: { key: AlertsTab; label: string }[] = [
-  { key: "active", label: "Active" },
-  { key: "history", label: "History" },
-  { key: "status", label: "Status" },
-];
-
 /** Props the menu threads straight through to whichever pane is open. */
 export type AlertsTabData = Pick<
   DeviceAlerts,

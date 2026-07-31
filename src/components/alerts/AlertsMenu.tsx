@@ -24,7 +24,8 @@ import {
 } from "../../lib/alertSound";
 import { BellIcon } from "../../assets/icons/BellIcon";
 import { SpeakerIcon } from "../../assets/icons/SpeakerIcon";
-import { ALERTS_TABS, ActiveTab, HistoryTab, StatusTab, type AlertsTab } from "./AlertsTabs";
+import { ActiveTab, HistoryTab, StatusTab } from "./AlertsTabs";
+import { ALERTS_TABS, type AlertsTab } from "./alertsPanelTabs";
 import { SEVERITY_COLOR } from "./alertFormat";
 
 const BTN_RESET = "cursor-pointer appearance-none border-0 bg-transparent p-0 text-inherit";
