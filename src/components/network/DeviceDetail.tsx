@@ -15,7 +15,7 @@ import { DeviceNameEditor, RenameButton } from "./DeviceNameEditor";
 import { DeviceSignalIcon } from "../../assets/icons/DeviceSignalIcon";
 import { DeviceThroughput } from "./DeviceThroughput";
 import { buildDeviceFacts } from "./deviceFacts";
-import { deviceRowSubtitle } from "./NetworkRow";
+import { deviceRowSubtitle } from "./deviceRowSubtitle";
 import { displayName, signalQuality } from "./networkFormat";
 
 export function DeviceDetail({

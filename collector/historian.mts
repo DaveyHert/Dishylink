@@ -47,6 +47,7 @@ import { ThermalStore } from "./thermalStore.mts";
 import { EventStore } from "./eventStore.mts";
 import { ClientStore, type ClientReading } from "./clientStore.mts";
 import { ClientWindow } from "./clientWindow.mts";
+import { resolveRows, foldMinuteCollisions } from "../core/clientHistory.ts";
 import { ClientTotalsStore } from "./clientTotals.mts";
 import { ThroughputTracker } from "../core/throughputTracker.ts";
 import { usageKey } from "../core/clientUsage.ts";
@@ -320,9 +321,13 @@ interface WireClient {
   name?: string;
   givenName?: string;
   role?: string;
-  /** The router's stable per-device id — what its own name store is keyed by,
-   *  and the only thing telling apart two devices sharing a cloned MAC. */
+  /** The router's per-device id — what its own name store is keyed by, and the
+   *  only thing telling apart two devices behind one vendor-masked MAC. Reissued
+   *  with the MAC, so a private-address rotation produces a new one. */
   clientId?: number;
+  /** Per-client hash the router derives from something it does not expose; the
+   *  odometer uses it to recognise a device whose clientId was reissued. */
+  captiveClientId?: string;
   ipAddress?: string;
   rxStats?: WireStats;
   txStats?: WireStats;
@@ -384,6 +389,7 @@ async function getClientReadings(): Promise<ClientReading[]> {
         nowMs,
         client.givenName ?? client.name,
         totalsLiveKeys,
+        client.captiveClientId,
       );
     }
 
@@ -943,6 +949,20 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
     response.end(JSON.stringify({ reset }));
     return;
   }
+  // Join two buckets the router issued separate identities to, or record that they
+  // are different devices. Both are answers the router's data cannot supply, and
+  // both are persisted immediately: an unsaved merge loses a total, an unsaved
+  // rejection asks the same question again on the next refresh.
+  if (url.pathname === "/api/clients/totals/merge" && request.method === "POST") {
+    const from = url.searchParams.get("from");
+    const to = url.searchParams.get("to");
+    const distinct = url.searchParams.get("distinct") === "1";
+    const applied = from && to ? (distinct ? clientTotals.rejectMerge(from, to) : clientTotals.merge(from, to)) : false;
+    if (applied) clientTotals.snapshot();
+    response.setHeader("Content-Type", "application/json");
+    response.end(JSON.stringify(distinct ? { rejected: applied } : { merged: applied }));
+    return;
+  }
   // Per-device monthly usage odometer: read the list, or delete one device's
   // record (?client=) or all of them (no id). Deleting removes the entry; use
   // /reset above to zero a device while keeping it listed.
@@ -961,33 +981,34 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
       }
       return;
     }
-    response.end(JSON.stringify({ totals: clientTotals.totals() }));
+    response.end(
+      JSON.stringify({
+        totals: clientTotals.totals(),
+        // Rides the list both surfaces already poll, so the prompt needs no
+        // request of its own and can never disagree with the rows beside it.
+        mergeCandidates: clientTotals.mergeCandidates(Date.now()),
+      }),
+    );
     return;
   }
   /**
-   * Give every row a device key, and drop the ones no device can claim.
+   * The key a recorded row's device is known by now, or undefined to drop it.
    *
-   * Rows recorded before per-device keying carry only a MAC. On a MAC that only
-   * ever wore one device that is still its own history, and it keeps it — the
-   * point of doing this at all is that a device the masking never affected sees
-   * no break at the moment this shipped. On a MAC that carried a vendor group the
-   * row is the group's summed traffic, which is the bug itself; those go.
+   * A keyed row follows any merge or re-anchor the odometer recorded, so a
+   * device's history stays with it across the same identity reissue its total
+   * does. A row from before per-device keying carries only a MAC: on one that
+   * ever wore a single device that is still its own history and it keeps it, but
+   * on a MAC that carried a vendor group the row is the group's summed traffic —
+   * the bug itself — and belongs to nobody. Memoized, since the legacy lookup
+   * scans every bucket.
    */
-  function attribute<T extends { key?: string; macAddress: string }>(rows: T[]): T[] {
-    const resolved = new Map<string, string | undefined>();
-    const out: T[] = [];
-    for (const row of rows) {
-      if (row.key !== undefined) {
-        out.push(row);
-        continue;
-      }
-      if (!resolved.has(row.macAddress))
-        resolved.set(row.macAddress, clientTotals.resolveLegacyMac(row.macAddress));
-      const key = resolved.get(row.macAddress);
-      if (key !== undefined) out.push({ ...row, key });
-    }
-    return out;
-  }
+  const legacyByMac = new Map<string, string | undefined>();
+  const resolveRowKey = (row: { key?: string; macAddress: string }): string | undefined => {
+    if (row.key !== undefined) return clientTotals.resolveKey(row.key);
+    if (!legacyByMac.has(row.macAddress))
+      legacyByMac.set(row.macAddress, clientTotals.resolveLegacyMac(row.macAddress));
+    return legacyByMac.get(row.macAddress);
+  };
 
   if (url.pathname === "/api/clients") {
     const hours = Math.min(6, Math.max(1, Number(url.searchParams.get("hours") ?? 6)));
@@ -1005,8 +1026,14 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
       JSON.stringify({
         // `since` callers are tailing the live window and already hold the
         // per-minute rows; re-sending 6h of them every second is pure waste.
-        history: sinceMs ? [] : attribute(clientStore.history(hours, client)),
-        ...(wantSamples ? { samples: attribute(clientWindow.samples(client, sinceMs)) } : {}),
+        // Rows are fetched unfiltered and the device filter applied after keys
+        // resolve, so a merge's history reaches the surviving identity too.
+        history: sinceMs
+          ? []
+          : foldMinuteCollisions(resolveRows(clientStore.history(hours), resolveRowKey, client)),
+        ...(wantSamples
+          ? { samples: resolveRows(clientWindow.samples(undefined, sinceMs), resolveRowKey, client) }
+          : {}),
         // Monthly odometer, so the device detail can show a real total that
         // survives the reconnects the router's own counter resets on. Asked for
         // explicitly (or implied by a seed request): the sample tail polls at 1 Hz

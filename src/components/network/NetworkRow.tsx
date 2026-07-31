@@ -10,16 +10,11 @@ import type { WifiClientJson } from "@core/dishClient";
 import { matchesSelf } from "../../lib/selfIdentity";
 import type { SelfIdentity } from "../../lib/selfIdentity";
 import { classifyDevice } from "../../lib/deviceKind";
+import { deviceRowSubtitle } from "./deviceRowSubtitle";
 import { DeviceTypeIcon } from "../../assets/icons/DeviceTypeIcon";
 import { Badge } from "../ui/badge";
 import { DeviceSignalIcon } from "../../assets/icons/DeviceSignalIcon";
-import {
-  bandLabel,
-  clientEntryKey,
-  deviceSubtitle,
-  displayName,
-  signalQuality,
-} from "./networkFormat";
+import { bandLabel, clientEntryKey, displayName, signalQuality } from "./networkFormat";
 
 export function NetworkRow({
   icon,
@@ -83,22 +78,6 @@ export function NetworkRow({
         <span className='flex-none text-[18px] leading-none text-muted-foreground'>›</span>
       )}
     </button>
-  );
-}
-
-/** Subtitle with a leading "This device" for the viewer's own machine, as the
- *  official app shows it ("This device · Apple"). "This device" is brighter and
- *  semibold to stand out from the muted vendor. Drops the "unknown device"
- *  filler so it never reads "This device · unknown device". */
-export function deviceRowSubtitle(client: WifiClientJson, isSelf: boolean): React.ReactNode {
-  const base = deviceSubtitle(client);
-  if (!isSelf) return base;
-  const rest = base === "unknown device" ? "" : ` · ${base}`;
-  return (
-    <>
-      <span className='font-semibold text-foreground/60'>This device</span>
-      {rest}
-    </>
   );
 }
 

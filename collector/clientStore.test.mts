@@ -62,7 +62,10 @@ describe("ClientStore per-device keying", () => {
 
   it("averages and peaks within a device's own minute", () => {
     const store = new ClientStore(file);
-    const now = Date.now();
+    // Anchored inside a minute: the two samples are 1s apart, so a wall-clock
+    // `now` landing near :59 would split them across the boundary and close only
+    // the first — a flake, not the averaging this asserts.
+    const now = Math.floor(Date.now() / MINUTE_MS) * MINUTE_MS + 1_000;
     store.ingest([reading("101", 2)], now);
     store.ingest([reading("101", 8)], now + 1_000);
     closeMinute(store, now);

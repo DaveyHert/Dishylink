@@ -8,7 +8,7 @@
 // shared by a same-vendor group.
 
 import { afterEach, describe, expect, it } from "vitest";
-import { rmSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ClientTotalsStore } from "./clientTotals.mts";
@@ -347,5 +347,365 @@ describe("ClientTotalsStore seed / reset / remove / compact / persistence", () =
       JSON.stringify({ version: 2, totals: [{ macAddress: MAC }], sharedMacs: [] }),
     );
     expect(new ClientTotalsStore(path).totals()).toEqual([]);
+  });
+});
+
+// A device whose MAC changes gets a new clientId with it, so neither the key nor
+// the MAC re-anchor can carry its total over — the two buckets have to be joined
+// on evidence the router does not supply. These assert the join itself: which
+// record survives, when bytes may be added, and that a key from before the merge
+// still finds the device afterwards however many times it has been reissued.
+describe("ClientTotalsStore.merge", () => {
+  const OLD_MAC = "5a:c9:44:XX:XX:XX";
+  const NEW_MAC = "ea:17:b5:XX:XX:XX";
+  const OLD = 13011248;
+  const NEW = 2806438232;
+
+  /** Two buckets for one device, the way a private-MAC rotation leaves them:
+   *  an idle bucket on the abandoned identity and a live one on the new. */
+  function forked(): ClientTotalsStore {
+    const store = tempStore();
+    const idle = T0 - 36 * 3_600_000; // seen a day and a half ago
+    store.observe(OLD, OLD_MAC, 0, 0, idle, "MacBook Pro M1", live(OLD));
+    store.observe(OLD, OLD_MAC, 542_000, 44_000, idle + 1_000, "MacBook Pro M1", live(OLD));
+    store.observe(NEW, NEW_MAC, 0, 0, T0, "MacBook Pro M1", live(NEW));
+    store.observe(NEW, NEW_MAC, 48_000, 3_000, T0 + 1_000, "MacBook Pro M1", live(NEW));
+    return store;
+  }
+
+  it("folds the idle bucket into the live one, keeping the live identity and MAC", () => {
+    const store = forked();
+    expect(store.merge(String(OLD), String(NEW))).toBe(true);
+    expect(store.totals(String(OLD))).toHaveLength(0);
+    const [total] = store.totals(String(NEW));
+    expect(total.rxBytes).toBe(542_000 + 48_000);
+    expect(total.txBytes).toBe(44_000 + 3_000);
+    expect(total.clientId).toBe(NEW);
+    expect(total.macAddress).toBe(NEW_MAC);
+  });
+
+  it("re-baselines, so the reading after a merge adds nothing", () => {
+    const store = forked();
+    store.merge(String(OLD), String(NEW));
+    const merged = store.totals(String(NEW))[0].rxBytes;
+    // A counter well above the survivor's last reading: measured as a delta it
+    // would add 900_000, but the poll after a merge may only re-baseline.
+    store.observe(NEW, NEW_MAC, 948_000, 3_000, T0 + 2_000, "MacBook Pro M1", live(NEW));
+    expect(store.totals(String(NEW))[0].rxBytes).toBe(merged);
+    // The one after it deltas normally against that baseline.
+    store.observe(NEW, NEW_MAC, 948_500, 3_000, T0 + 3_000, "MacBook Pro M1", live(NEW));
+    expect(store.totals(String(NEW))[0].rxBytes).toBe(merged + 500);
+  });
+
+  it("carries identity but not bytes when the buckets cover different months", () => {
+    const store = tempStore();
+    const july = new Date(2026, 6, 20, 12, 0, 0).getTime();
+    const august = new Date(2026, 7, 2, 12, 0, 0).getTime();
+    store.observe(OLD, OLD_MAC, 0, 0, july, "MacBook Pro M1", live(OLD));
+    store.observe(OLD, OLD_MAC, 542_000, 44_000, july + 1_000, "MacBook Pro M1", live(OLD));
+    store.observe(NEW, NEW_MAC, 0, 0, august, "MacBook Pro M1", live(NEW));
+    store.observe(NEW, NEW_MAC, 7_000, 500, august + 1_000, "MacBook Pro M1", live(NEW));
+    const before = store.totals(String(NEW))[0].rxBytes;
+    expect(before).toBe(7_000);
+
+    expect(store.merge(String(OLD), String(NEW))).toBe(true);
+    const [total] = store.totals(String(NEW));
+    expect(total.rxBytes).toBe(7_000); // July's bytes are NOT added to August
+    expect(total.txBytes).toBe(500);
+    expect(store.resolveKey(String(OLD))).toBe(String(NEW)); // identity still carried
+  });
+
+  it("resolves a key from before the merge to the surviving bucket", () => {
+    const store = forked();
+    store.merge(String(OLD), String(NEW));
+    expect(store.resolveKey(String(OLD))).toBe(String(NEW));
+    expect(store.resolveKey(String(NEW))).toBe(String(NEW));
+    expect(store.resolveKey("never-seen")).toBe("never-seen");
+  });
+
+  it("follows a chain, so the oldest key reaches the newest bucket", () => {
+    const store = forked();
+    store.merge(String(OLD), String(NEW));
+    // Rotated again: a third identity, merged onto the second.
+    const THIRD = 77_777;
+    store.observe(THIRD, "12:7a:14:XX:XX:XX", 0, 0, T0 + 10_000, "MacBook Pro M1", live(THIRD));
+    expect(store.merge(String(NEW), String(THIRD))).toBe(true);
+    expect(store.resolveKey(String(OLD))).toBe(String(THIRD));
+    expect(store.resolveKey(String(NEW))).toBe(String(THIRD));
+    expect(store.totals(String(THIRD))[0].rxBytes).toBe(542_000 + 48_000);
+  });
+
+  it("refuses a merge it cannot make sense of", () => {
+    const store = forked();
+    expect(store.merge(String(NEW), String(NEW))).toBe(false);
+    expect(store.merge("absent", String(NEW))).toBe(false);
+    expect(store.merge(String(OLD), "absent")).toBe(false);
+    store.merge(String(OLD), String(NEW));
+    // Already merged: both keys now resolve to one bucket.
+    expect(store.merge(String(OLD), String(NEW))).toBe(false);
+  });
+
+  it("keeps aliases across a restart, and past the source bucket being compacted", () => {
+    const path = tempPath();
+    const first = new ClientTotalsStore(path);
+    const idle = T0 - 36 * 3_600_000;
+    first.observe(OLD, OLD_MAC, 0, 0, idle, "MacBook Pro M1", live(OLD));
+    first.observe(NEW, NEW_MAC, 0, 0, T0, "MacBook Pro M1", live(NEW));
+    first.merge(String(OLD), String(NEW));
+    first.snapshot();
+
+    const reopened = new ClientTotalsStore(path);
+    expect(reopened.resolveKey(String(OLD))).toBe(String(NEW));
+    // compact() prunes buckets by last-seen; the alias is not a bucket.
+    reopened.compact(new Date(2026, 8, 15).getTime());
+    expect(reopened.resolveKey(String(OLD))).toBe(String(NEW));
+  });
+});
+
+// A private-address rotation changes the MAC and the clientId in one step, so
+// neither is any use for recognising the device afterwards. The router's own
+// per-client hash is the one identifier that might not move with them; when it
+// holds, the total carries over with nobody being asked.
+describe("ClientTotalsStore captiveClientId re-anchoring", () => {
+  const OLD_MAC = "5a:c9:44:XX:XX:XX";
+  const NEW_MAC = "ea:17:b5:XX:XX:XX";
+  const CAPTIVE = "58d946a7736f5af5a35f948ba7def8c945a7ade22a9e5a1c32aa9cce79308b70";
+
+  it("carries a total across a MAC and clientId change on a matching hash", () => {
+    const store = tempStore();
+    store.observe(1, OLD_MAC, 0, 0, T0, "MacBook Pro M1", live(1), CAPTIVE);
+    store.observe(1, OLD_MAC, 5_000, 400, T0 + 1_000, "MacBook Pro M1", live(1), CAPTIVE);
+    expect(store.totals("1")[0].rxBytes).toBe(5_000);
+
+    // Rotated: new MAC, new clientId, same hash, and the old key is not live.
+    store.observe(2, NEW_MAC, 100, 10, T0 + 2_000, undefined, live(2), CAPTIVE);
+    expect(store.totals("1")).toHaveLength(0);
+    const [total] = store.totals("2");
+    expect(total.rxBytes).toBe(5_000); // re-baselined, nothing invented
+    expect(total.macAddress).toBe(NEW_MAC); // survivor wears the address in use
+    expect(total.name).toBe("MacBook Pro M1"); // label survives the rename gap
+    expect(store.resolveKey("1")).toBe("2"); // old rows still resolve
+  });
+
+  it("counts forward from the carried total once re-baselined", () => {
+    const store = tempStore();
+    store.observe(1, OLD_MAC, 0, 0, T0, "Mac", live(1), CAPTIVE);
+    store.observe(1, OLD_MAC, 5_000, 0, T0 + 1_000, "Mac", live(1), CAPTIVE);
+    store.observe(2, NEW_MAC, 100, 0, T0 + 2_000, undefined, live(2), CAPTIVE);
+    store.observe(2, NEW_MAC, 700, 0, T0 + 3_000, undefined, live(2), CAPTIVE);
+    expect(store.totals("2")[0].rxBytes).toBe(5_600); // 5_000 + (700 - 100)
+  });
+
+  it("leaves a hash held by two concurrent devices alone", () => {
+    const store = tempStore();
+    const lk = store.notePoll([
+      { clientId: 1, macAddress: OLD_MAC },
+      { clientId: 2, macAddress: NEW_MAC },
+    ]);
+    store.observe(1, OLD_MAC, 0, 0, T0, "A", lk, CAPTIVE);
+    store.observe(2, NEW_MAC, 0, 0, T0, "B", lk, CAPTIVE);
+    // Both live, so a third identity on the same hash cannot claim either.
+    store.observe(3, "aa:aa:aa:XX:XX:XX", 900, 0, T0 + 1_000, undefined, live(1, 2, 3), CAPTIVE);
+    expect(store.totals("3")[0].rxBytes).toBe(0);
+    expect(store.totals("1")).toHaveLength(1);
+    expect(store.totals("2")).toHaveLength(1);
+  });
+
+  it("does not re-anchor a device whose hash the router never sent", () => {
+    const store = tempStore();
+    store.observe(1, OLD_MAC, 0, 0, T0, "Mac", live(1));
+    store.observe(1, OLD_MAC, 5_000, 0, T0 + 1_000, "Mac", live(1));
+    // No hash on either side, and the MAC changed too: nothing to anchor on.
+    store.observe(2, NEW_MAC, 100, 0, T0 + 2_000, undefined, live(2));
+    expect(store.totals("1")).toHaveLength(1);
+    expect(store.totals("2")[0].rxBytes).toBe(0);
+  });
+
+  it("persists the hash, so a restart can still re-anchor on it", () => {
+    const path = tempPath();
+    const first = new ClientTotalsStore(path);
+    first.observe(1, OLD_MAC, 0, 0, T0, "Mac", live(1), CAPTIVE);
+    first.observe(1, OLD_MAC, 5_000, 0, T0 + 1_000, "Mac", live(1), CAPTIVE);
+    first.snapshot();
+
+    const reopened = new ClientTotalsStore(path);
+    reopened.observe(2, NEW_MAC, 100, 0, T0 + 2_000, undefined, live(2), CAPTIVE);
+    expect(reopened.totals("2")[0].rxBytes).toBe(5_000);
+    expect(reopened.resolveKey("1")).toBe("2");
+  });
+});
+
+describe("ClientTotalsStore.mergeCandidates", () => {
+  const OLD_MAC = "5a:c9:44:XX:XX:XX";
+  const NEW_MAC = "ea:17:b5:XX:XX:XX";
+  const IDLE = T0 - 36 * 3_600_000;
+
+  it("pairs an idle bucket with a newer one carrying the same user-given name", () => {
+    const store = tempStore();
+    store.observe(1, OLD_MAC, 0, 0, IDLE, "MacBook Pro M1", live(1));
+    store.observe(1, OLD_MAC, 500, 60, IDLE + 1_000, "MacBook Pro M1", live(1));
+    store.observe(2, NEW_MAC, 0, 0, T0, "MacBook Pro M1", live(2));
+    store.observe(2, NEW_MAC, 40, 5, T0 + 1_000, "MacBook Pro M1", live(2));
+    expect(store.mergeCandidates(T0 + 1_000)).toEqual([
+      {
+        fromKey: "1",
+        toKey: "2",
+        reason: "name",
+        detail: "MacBook Pro M1",
+        // Both buckets are in one month, so the figures add — and the candidate
+        // states the total the prompt will quote.
+        foldsBytes: true,
+        resultRxBytes: 540,
+        resultTxBytes: 65,
+      },
+    ]);
+  });
+
+  it("states that bytes will not fold across a month boundary", () => {
+    const store = tempStore();
+    const july = new Date(2026, 6, 20, 12, 0, 0).getTime();
+    const august = new Date(2026, 7, 2, 12, 0, 0).getTime();
+    store.observe(1, OLD_MAC, 0, 0, july, "MacBook Pro M1", live(1));
+    store.observe(1, OLD_MAC, 500, 60, july + 1_000, "MacBook Pro M1", live(1));
+    store.observe(2, NEW_MAC, 0, 0, august, "MacBook Pro M1", live(2));
+    store.observe(2, NEW_MAC, 40, 5, august + 1_000, "MacBook Pro M1", live(2));
+    const [candidate] = store.mergeCandidates(august + 1_000);
+    expect(candidate.foldsBytes).toBe(false);
+    // The survivor's own August figures, unchanged by the join.
+    expect(candidate.resultRxBytes).toBe(40);
+    expect(candidate.resultTxBytes).toBe(5);
+  });
+
+  it("states an outcome that matches what merge actually produces", () => {
+    const store = tempStore();
+    store.observe(1, OLD_MAC, 0, 0, IDLE, "MacBook Pro M1", live(1));
+    store.observe(1, OLD_MAC, 500, 60, IDLE + 1_000, "MacBook Pro M1", live(1));
+    store.observe(2, NEW_MAC, 0, 0, T0, "MacBook Pro M1", live(2));
+    store.observe(2, NEW_MAC, 40, 5, T0 + 1_000, "MacBook Pro M1", live(2));
+    const [candidate] = store.mergeCandidates(T0 + 1_000);
+    store.merge(candidate.fromKey, candidate.toKey);
+    const [total] = store.totals(candidate.toKey);
+    expect(total.rxBytes).toBe(candidate.resultRxBytes);
+    expect(total.txBytes).toBe(candidate.resultTxBytes);
+  });
+
+  it("proposes nothing for buckets with no name — absent is not evidence", () => {
+    const store = tempStore();
+    store.observe(1, OLD_MAC, 0, 0, IDLE, undefined, live(1));
+    store.observe(2, NEW_MAC, 0, 0, T0, undefined, live(2));
+    store.observe(3, "aa:aa:aa:XX:XX:XX", 0, 0, T0, "   ", live(3));
+    expect(store.mergeCandidates(T0)).toEqual([]);
+  });
+
+  it("proposes nothing while both buckets are still being polled", () => {
+    const store = tempStore();
+    store.observe(1, OLD_MAC, 0, 0, T0 - 1_000, "MacBook Pro M1", live(1));
+    store.observe(2, NEW_MAC, 0, 0, T0, "MacBook Pro M1", live(2));
+    expect(store.mergeCandidates(T0)).toEqual([]);
+  });
+
+  it("proposes both when two idle buckets share a live bucket's name", () => {
+    const store = tempStore();
+    store.observe(1, OLD_MAC, 0, 0, IDLE, "MacBook Pro M1", live(1));
+    store.observe(2, "aa:aa:aa:XX:XX:XX", 0, 0, IDLE + 1_000, "macbook pro m1", live(2));
+    store.observe(3, NEW_MAC, 0, 0, T0, "MacBook Pro M1", live(3));
+    const pairs = store.mergeCandidates(T0).map((c) => `${c.fromKey}->${c.toKey}`);
+    expect(pairs).toContain("1->3");
+    expect(pairs).toContain("2->3");
+  });
+
+  it("stops proposing a pair once it has been merged", () => {
+    const store = tempStore();
+    store.observe(1, OLD_MAC, 0, 0, IDLE, "MacBook Pro M1", live(1));
+    store.observe(2, NEW_MAC, 0, 0, T0, "MacBook Pro M1", live(2));
+    store.merge("1", "2");
+    expect(store.mergeCandidates(T0)).toEqual([]);
+  });
+});
+
+// Two devices a user has named alike are indistinguishable to the odometer, so
+// "these are different" is an answer only the user holds — and one the list would
+// otherwise ask for again on every refresh.
+describe("ClientTotalsStore.rejectMerge", () => {
+  const OLD_MAC = "5a:c9:44:XX:XX:XX";
+  const NEW_MAC = "ea:17:b5:XX:XX:XX";
+  const IDLE = T0 - 36 * 3_600_000;
+
+  function paired(): ClientTotalsStore {
+    const store = tempStore();
+    store.observe(1, OLD_MAC, 0, 0, IDLE, "Floor Lamp", live(1));
+    store.observe(2, NEW_MAC, 0, 0, T0, "Floor Lamp", live(2));
+    return store;
+  }
+
+  it("stops offering a rejected pair", () => {
+    const store = paired();
+    expect(store.mergeCandidates(T0)).toHaveLength(1);
+    expect(store.rejectMerge("1", "2")).toBe(true);
+    expect(store.mergeCandidates(T0)).toEqual([]);
+  });
+
+  it("holds whichever way round it is asked", () => {
+    const store = paired();
+    store.rejectMerge("2", "1");
+    expect(store.mergeCandidates(T0)).toEqual([]);
+  });
+
+  it("keeps both buckets — a rejection is not a delete", () => {
+    const store = paired();
+    store.rejectMerge("1", "2");
+    expect(store.totals("1")).toHaveLength(1);
+    expect(store.totals("2")).toHaveLength(1);
+  });
+
+  it("survives a restart, so the question is asked once", () => {
+    const path = tempPath();
+    const first = new ClientTotalsStore(path);
+    first.observe(1, OLD_MAC, 0, 0, IDLE, "Floor Lamp", live(1));
+    first.observe(2, NEW_MAC, 0, 0, T0, "Floor Lamp", live(2));
+    first.rejectMerge("1", "2");
+    first.snapshot();
+    expect(new ClientTotalsStore(path).mergeCandidates(T0)).toEqual([]);
+  });
+
+  it("still applies after one side is merged onto a newer identity", () => {
+    const store = tempStore();
+    store.observe(1, OLD_MAC, 0, 0, IDLE, "Floor Lamp", live(1));
+    store.observe(2, NEW_MAC, 0, 0, IDLE + 1_000, "Floor Lamp", live(2));
+    store.rejectMerge("1", "2");
+    // Bucket 2's device rotates; its total is merged forward onto key 3.
+    store.observe(3, "12:7a:14:XX:XX:XX", 0, 0, T0, "Floor Lamp", live(3));
+    expect(store.merge("2", "3")).toBe(true);
+    // 1 vs 3 is the same pair of devices as 1 vs 2, so the answer still holds.
+    expect(store.mergeCandidates(T0)).toEqual([]);
+  });
+
+  it("is retired by an explicit merge of the same pair", () => {
+    const store = paired();
+    store.rejectMerge("1", "2");
+    expect(store.merge("1", "2")).toBe(true);
+    expect(store.totals("2")).toHaveLength(1);
+    expect(store.totals("1")).toHaveLength(0);
+    // The retired rejection is not resurrected for a later pair on that key.
+    store.observe(3, "aa:aa:aa:XX:XX:XX", 0, 0, IDLE, "Floor Lamp", live(3));
+    expect(store.mergeCandidates(T0).map((c) => `${c.fromKey}->${c.toKey}`)).toContain("3->2");
+  });
+
+  it("refuses to keep a bucket apart from itself", () => {
+    const store = paired();
+    expect(store.rejectMerge("2", "2")).toBe(false);
+    store.merge("1", "2");
+    expect(store.rejectMerge("1", "2")).toBe(false);
+  });
+
+  it("refuses keys that name no bucket, so nothing junk is persisted", () => {
+    const path = tempPath();
+    const store = new ClientTotalsStore(path);
+    store.observe(1, OLD_MAC, 0, 0, IDLE, "Floor Lamp", live(1));
+    expect(store.rejectMerge("nope", "alsonope")).toBe(false);
+    expect(store.rejectMerge("1", "alsonope")).toBe(false);
+    expect(store.rejectMerge("alsonope", "1")).toBe(false);
+    store.snapshot();
+    expect(JSON.parse(readFileSync(path, "utf8")).rejectedPairs).toEqual([]);
   });
 });

@@ -12,6 +12,7 @@
 
 import { useEffect, useState } from "react";
 import { useClientTotals } from "../../hooks/useClientTotals";
+import { useNow } from "../../hooks/useNow";
 import { usageKey, type ClientUsageTotal } from "@core/clientUsage";
 import { classifyDevice } from "../../lib/deviceKind";
 import { formatBytes, formatRelativeTime } from "../../lib/format";
@@ -20,6 +21,7 @@ import { DeviceTypeIcon } from "../../assets/icons/DeviceTypeIcon";
 import { ResetIcon } from "../../assets/icons/ResetIcon";
 import { CloseIcon } from "../../assets/icons/CloseIcon";
 import { InfoDot } from "../shared/InfoDot";
+import { DeviceMergePrompt } from "../shared/DeviceMergePrompt";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 /** Local `year * 12 + month` — which monthly bucket an instant belongs to. */
@@ -29,7 +31,13 @@ function monthKey(atMs: number): number {
 }
 
 export function DeviceUsageList() {
-  const { totals, unavailable, writeError, reset, remove, clearAll } = useClientTotals(true);
+  const { totals, mergeCandidates, unavailable, writeError, reset, remove, clearAll, answerMerge } =
+    useClientTotals(true);
+  // "Active now" and the month a row belongs to are both judged against the
+  // current time, which moves whether or not anything re-renders. One clock for
+  // the whole list, ticking well inside the two-minute active threshold; a row
+  // reading the time itself would need an interval each.
+  const nowMs = useNow(30_000);
   const [confirmingClear, setConfirmingClear] = useState(false);
   // Vendor lookups need the OUI table; load it once, then re-render.
   const [, setOuiReady] = useState(false);
@@ -107,22 +115,34 @@ export function DeviceUsageList() {
             <DeviceUsageRow
               key={key}
               total={total}
+              nowMs={nowMs}
               onReset={() => void reset(key)}
               onRemove={() => void remove(key)}
             />
           );
         })}
       </div>
+      {/* Below the rows: the question is about two of them, and reads as a
+          footnote to the list rather than a banner over it. */}
+      <DeviceMergePrompt
+        candidates={mergeCandidates}
+        totals={totals ?? []}
+        nowMs={nowMs}
+        onAnswer={(candidate, same) => void answerMerge(candidate, same)}
+      />
     </div>
   );
 }
 
 function DeviceUsageRow({
   total,
+  nowMs,
   onReset,
   onRemove,
 }: {
   total: ClientUsageTotal;
+  /** The list's clock, so every row judges "now" against the same moment. */
+  nowMs: number;
   onReset: () => void;
   onRemove: () => void;
 }) {
@@ -131,13 +151,13 @@ function DeviceUsageRow({
   // The historian touches lastSeen every poll (~5/s) while a device is connected,
   // so anything seen this recently is here now; "Active now" reads clearer than a
   // last-seen of a few seconds. Older stamps mean the device has actually gone.
-  const isActive = Date.now() - total.lastSeenMs < 120_000;
+  const isActive = nowMs - total.lastSeenMs < 120_000;
   const seenLabel = isActive ? "Active now" : formatRelativeTime(total.lastSeenMs);
   // A device the historian has not seen this month still holds last month's
   // bucket, so name the month on the row — otherwise it reads as this month's
   // usage under the heading above.
   const staleMonth =
-    monthKey(total.sinceMs) === monthKey(Date.now())
+    monthKey(total.sinceMs) === monthKey(nowMs)
       ? null
       : new Date(total.sinceMs).toLocaleDateString(undefined, { month: "short" });
   const subParts = [vendor && vendor !== name ? vendor : null, staleMonth, seenLabel].filter(

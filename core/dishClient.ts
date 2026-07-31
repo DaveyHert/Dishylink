@@ -338,8 +338,15 @@ export interface WifiClientJson {
   secondsUntilDhcpLeaseExpires?: number;
   dhcpLeaseActive?: boolean;
   /** Router's internal id for this client — the number the app prints under the
-   *  device name. */
+   *  device name. Reissued whenever the MAC changes, which on a phone or laptop
+   *  using a private Wi-Fi address includes an ordinary rotation. */
   clientId?: number;
+  /** Per-client 32-byte hex the router derives from something it does not expose:
+   *  devices behind one vendor-masked MAC each get a distinct value, so it is not
+   *  a hash of the address we are given. Whether it survives a MAC rotation is
+   *  unproven — recorded so a rotation answers it, and safe to trust on a match
+   *  either way, since a match can at worst mean the same full MAC. */
+  captiveClientId?: string;
   /** Seconds since the client last passed traffic. Omitted (proto3 drops zeros)
    *  while data is flowing, so `undefined` means "active right now". */
   noDataIdleS?: number;

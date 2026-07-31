@@ -19,6 +19,9 @@ import { DeviceDetail } from "./DeviceDetail";
 import { NodeDetail } from "./NodeDetail";
 import { DeviceRow, NetworkRow } from "./NetworkRow";
 import { buildNodeRoster } from "./nodeRoster";
+import { DeviceMergePrompt } from "../shared/DeviceMergePrompt";
+import { useClientTotals } from "../../hooks/useClientTotals";
+import { useNow } from "../../hooks/useNow";
 import { usageKey } from "@core/clientUsage";
 import { clientEntryKey, liveThroughputMbps } from "./networkFormat";
 
@@ -45,6 +48,10 @@ export function NetworkPanel({
   const radio = useRadioTemps(true);
   // The viewer's own address(es), to flag "This device" in the list.
   const self = useSelfIdentity(true);
+  // The odometer's records, for the split-record question below the device list.
+  // The rows themselves come from the router and know nothing about stored totals.
+  const { totals, mergeCandidates, writeError, answerMerge } = useClientTotals(true);
+  const nowMs = useNow(30_000);
 
   const devices = useMemo(
     () => network.clients.filter((client) => !client.role || client.role === "CLIENT"),
@@ -52,17 +59,19 @@ export function NetworkPanel({
   );
   // The viewer's own device pins to the top (like the app), then by throughput.
   //
-  // Deliberately not keyed on `network.rates`: the sort key is live throughput, and
-  // recomputing it on every 1 Hz rate tick reordered the list once a second while
-  // the header promised a 5 s one. The order is decided from whatever rates were
-  // current when the roster last landed, and holds until the next roster.
+  // Ordered on the rates captured with the roster rather than the live ones: the
+  // sort key is throughput, and re-sorting on every 1 Hz rate tick reorders the
+  // list once a second under a header promising 5 s. This holds the order until
+  // there is a new roster to order.
   const sortedDevices = useMemo(() => {
     return [...devices].sort((a, b) => {
       const selfDelta = Number(matchesSelf(b, self)) - Number(matchesSelf(a, self));
       if (selfDelta !== 0) return selfDelta;
-      return liveThroughputMbps(b, network.rates) - liveThroughputMbps(a, network.rates);
+      return (
+        liveThroughputMbps(b, network.ratesAtRoster) - liveThroughputMbps(a, network.ratesAtRoster)
+      );
     });
-  }, [devices, self]);
+  }, [devices, self, network.ratesAtRoster]);
 
   if (network.routerReachable === null) {
     return <Loading message='Contacting the router…' />;
@@ -124,18 +133,35 @@ export function NetworkPanel({
       />
 
       {tab === "devices" && (
-        <ListSection
-          caption={`${devices.length} device${devices.length === 1 ? "" : "s"} · live from the router, refreshed every 5 s`}
-        >
-          {sortedDevices.map((client, index) => (
-            <DeviceRow
-              key={clientEntryKey(client) ?? index}
-              client={client}
-              self={self}
-              onSelect={onSelect}
-            />
-          ))}
-        </ListSection>
+        <>
+          <ListSection
+            caption={`${devices.length} device${devices.length === 1 ? "" : "s"} · live from the router, refreshed every 5 s`}
+          >
+            {sortedDevices.map((client, index) => (
+              <DeviceRow
+                key={clientEntryKey(client) ?? index}
+                client={client}
+                self={self}
+                onSelect={onSelect}
+              />
+            ))}
+          </ListSection>
+          {/* The device list is where a split record is noticed — one name on two
+              entries — so the question belongs here as well as on the usage sheet.
+              Outside ListSection, whose rows scroll within a fixed height: a
+              question placed among them would sit below the fold on a busy network.
+              Both surfaces read the same candidate list, so answering in one closes
+              it in the other on the next refresh. */}
+          <DeviceMergePrompt
+            candidates={mergeCandidates}
+            totals={totals ?? []}
+            nowMs={nowMs}
+            onAnswer={(candidate, same) => void answerMerge(candidate, same)}
+          />
+          {/* A refused write removes the prompt optimistically, so without this the
+              answer would appear to have been taken until the next reload. */}
+          {writeError && <div className='py-2.5 text-[12.5px] text-destructive'>{writeError}</div>}
+        </>
       )}
 
       {tab === "nodes" && (
