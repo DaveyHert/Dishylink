@@ -8,7 +8,7 @@
 
 import { protocol, net } from "electron";
 import { readFile } from "node:fs/promises";
-import { join, extname, normalize } from "node:path";
+import { join, extname, normalize, sep } from "node:path";
 
 const SCHEME = "app";
 const HOST = "bundle";
@@ -76,7 +76,7 @@ async function proxy(request: Request, targetUrl: string): Promise<Response> {
 async function serveStatic(rendererRoot: string, pathname: string): Promise<Response> {
   const requested = pathname === "/" ? "/index.html" : pathname;
   const resolved = normalize(join(rendererRoot, requested));
-  const withinBundle = resolved === rendererRoot || resolved.startsWith(rendererRoot + "/");
+  const withinBundle = resolved === rendererRoot || resolved.startsWith(rendererRoot + sep);
   const filePath = withinBundle ? resolved : join(rendererRoot, "index.html");
   try {
     const body = await readFile(filePath);
