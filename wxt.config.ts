@@ -53,6 +53,11 @@ export default defineConfig({
       "cookies",
       "notifications",
       "declarativeNetRequestWithHostAccess",
+      // Satellite tracking reads the observer's coordinates from the browser (the
+      // "use this device location" option). Declaring it keeps that call from
+      // logging Chrome's "is this permission appropriate?" advisory and spares the
+      // user a per-use prompt.
+      "geolocation",
     ],
     // Host permissions are what exempt the extension from the Local Network Access
     // prompt a plain web page now faces — the exemption is what makes it viable.
