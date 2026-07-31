@@ -302,14 +302,16 @@ function finiteMbps(value: number | "NaN" | undefined): number | null {
 }
 
 /**
- * Point-in-time rate for one direction. The router omits the 1-minute average on
- * clients that have not been associated for a minute, so fall back to the 15s
- * one rather than reporting a device with live traffic as idle — and take the
- * first value that is actually a number, since either may arrive as "NaN".
+ * Point-in-time rate for one direction, the fallback when the exact byte-delta
+ * rate is unavailable. The 15s average is preferred over the 1-minute one: the
+ * shorter window sits closer to the current rate, and txStats carries no 1m field
+ * at all — preferring 1m would smooth download over 60s while upload rode a 15s
+ * window on the same chart. The 1m average is only a further fallback, and the
+ * "NaN" string the router emits on quiet clients is rejected either way.
  */
 export function throughputMbps(stats: WifiClientStatsJson | undefined): number {
   return (
-    finiteMbps(stats?.throughputMbpsLast1mAvg) ?? finiteMbps(stats?.throughputMbpsLast15sAvg) ?? 0
+    finiteMbps(stats?.throughputMbpsLast15sAvg) ?? finiteMbps(stats?.throughputMbpsLast1mAvg) ?? 0
   );
 }
 
