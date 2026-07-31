@@ -5,38 +5,49 @@
 // behind one door because everything upstream — useDeviceAlerts, the outage
 // notifications — should only have to know that a notification was requested.
 //
-// The split matters because permission works differently in each. A browser tab
-// must ask, and the user can refuse. The desktop window loads over app://, where
-// asking is not something that can succeed: a sandboxed renderer on a custom
-// origin never reaches `Notification.permission === "granted"`. Treating the web
-// rule as universal is what left the desktop app unable to notify and its
-// "Enable notifications" control unable to ever read as on, whatever it was
-// clicked.
+// Where the state lives differs, and that is what shapes this file. A host with
+// its own always-on process owns it: the desktop main process and the extension's
+// background worker each announce alerts with no window open, so a preference
+// this window kept to itself would be unreadable exactly when it mattered. This
+// module holds what such a host last reported and is told when that changes; the
+// controls read it synchronously and re-render on the change. A plain browser tab
+// has no such process, and there this module's own reading of localStorage and
+// the page's permission is the whole of it.
 //
-// On the host the question is therefore not "were we given permission" but "did
-// one actually arrive", which only the OS can answer: macOS accepts a request
-// from an app it has no notification registration for and drops it silently.
-// Enabling posts a real notification and believes the delivery result, so the
-// control cannot read as on while nothing is reaching the user. An unsigned dev
-// run is the case that always fails this — notifications land in the packaged,
-// signed app, and the toggle now says so instead of pretending otherwise.
+// Permission also differs, and only the tab has any. A sandboxed renderer on the
+// app:// origin never reaches `Notification.permission === "granted"`, so the
+// desktop app asks the OS through its host instead and learns the answer the only
+// way macOS gives it: by posting one and seeing whether it arrived. The OS accepts
+// a request from an app it holds no notification registration for and drops it
+// silently, so an attempt is the only test. An unsigned dev run always fails it —
+// notifications land in the packaged, signed app — and the reason is reported
+// beside the control rather than left as a switch that appears to do nothing.
 
 import { unlockAlertSound, playAlertSound } from "./alertSound";
 import type { AlertSeverity } from "@core/alertDefinitions";
+import {
+  notificationsRequested,
+  notificationsProblem,
+  NOTIFICATIONS_ON_CONFIRMATION,
+  type NotificationState,
+} from "@core/alertNotification";
 
 const ENABLED_STORAGE_KEY = "dishboard-notifications";
 const THROTTLE_MS = 60_000;
 
 const lastSentAtByKind = new Map<string, number>();
 
-/** The desktop host's notification bridge, when running inside the app. Reports
- *  whether the OS delivered, and why not when it didn't — the packaged-vs-unsigned
- *  reason the main process alone can tell. */
+/** The always-on host's notification bridge, when running inside one. It owns the
+ *  state, posts the OS notification, and reports both back — including why a post
+ *  failed, which only a process talking to the OS directly can tell. */
 interface NotificationHost {
   notify(title: string, body: string): Promise<{ delivered: boolean; reason?: string }>;
-  /** null when the host has no stored choice yet. */
-  notificationsEnabled(): Promise<boolean | null>;
-  setNotificationsEnabled(enabled: boolean): Promise<boolean>;
+  notificationState(): Promise<NotificationState>;
+  /** Records the request. The reply carries the state as it stands after it. */
+  setNotificationsWanted(wanted: boolean): Promise<NotificationState>;
+  /** Reports every later change, so this window follows the host rather than its
+   *  own last write. Returns an unsubscribe. */
+  onNotificationState(listener: (state: NotificationState) => void): () => void;
 }
 
 // A host registered by its own entry point, for hosts that don't inject a global
@@ -46,7 +57,7 @@ interface NotificationHost {
 let registeredHost: NotificationHost | null = null;
 
 /** Declared once by a host whose own always-on process posts OS notifications and
- *  owns the notification preference — the desktop main process, or the extension's
+ *  owns the notification state — the desktop main process, or the extension's
  *  background worker via a bridge. Makes hostAnnouncesAlerts() true: a backgrounded
  *  window leaves the away-notification to that process, and a window in front
  *  sounds its own chime. */
@@ -61,36 +72,82 @@ function notificationHost(): NotificationHost | null {
 }
 
 /**
- * The host's stored preference, mirrored here so the synchronous checks below
- * can answer without awaiting.
+ * Notifications as this window currently understands them, and the one thing the
+ * controls render from.
  *
- * On the desktop the preference belongs to the main process — that is where the
- * recorder decides to announce an alert, with or without a window. This window
- * only reflects it, and must load it before rendering a control that claims to
- * show its state.
+ * Starts as an unanswered request so nothing claims to know the setting before
+ * the host has said: `wanted: null` is "not yet told", which the controls show as
+ * off but replace as soon as the host reports — a first paint that corrects
+ * itself, rather than a wrong answer that persists.
  */
-let hostPreference: boolean | null = null;
+let state: NotificationState = { wanted: null, deliverable: true };
+const stateListeners = new Set<() => void>();
+
+function setState(next: NotificationState): void {
+  state = next;
+  for (const listener of stateListeners) listener();
+}
+
+/** Subscribe to the notification state; returns an unsubscribe. Paired with
+ *  notificationsOn and notificationsBlockedReason, which read the snapshot. */
+export function subscribeToNotifications(listener: () => void): () => void {
+  stateListeners.add(listener);
+  return () => {
+    stateListeners.delete(listener);
+  };
+}
+
+function webNotificationsSupported(): boolean {
+  return typeof Notification !== "undefined";
+}
+
+/** The state of a plain browser tab, which keeps the request in localStorage and
+ *  takes delivery straight from the page's permission — the one host where
+ *  whether notifications can arrive is knowable without posting one. */
+function webState(): NotificationState {
+  const wanted = localStorage.getItem(ENABLED_STORAGE_KEY) === "on";
+  if (!webNotificationsSupported())
+    return { wanted, deliverable: false, reason: "This browser doesn’t support notifications." };
+  if (Notification.permission === "granted") return { wanted, deliverable: true };
+  // A standing refusal and a dismissed prompt are different problems: only the
+  // first is a setting to go and change, and naming it otherwise sends the user
+  // to a switch they never touched.
+  return {
+    wanted,
+    deliverable: false,
+    reason:
+      Notification.permission === "denied"
+        ? "Notifications are blocked for this page in your browser settings."
+        : "Notifications weren’t enabled.",
+  };
+}
 
 /**
- * Mirror the host's preference into this window, seeding it if the host has
- * none. A no-op in a browser tab, where localStorage is already the whole answer.
+ * Bind this window to wherever the notification state lives, and seed it.
  *
- * The seeding is the upgrade path. This setting used to live only in
- * localStorage, so a user who had already turned notifications on has that
- * recorded here and nowhere the recorder can see it. Reading an unset host as
- * "off" would switch alerting off for precisely the people who wanted it, and
- * they would have no reason to go looking at a toggle they already set.
+ * The subscription is taken before the first read so a change arriving during it
+ * is not missed. On a host that has never been asked, the answer is seeded from
+ * this window's localStorage: the setting is read from that key in a plain tab,
+ * so someone who turned notifications on there has it recorded nowhere the
+ * always-on process can see. Reading an unset host as "off" would switch alerting
+ * off for precisely the people who asked for it, and leave them no reason to go
+ * looking at a control they had already set.
  */
-export async function loadNotificationPreference(): Promise<void> {
+export async function bindNotifications(): Promise<void> {
   const host = notificationHost();
-  if (host === null) return;
-  const stored = await host.notificationsEnabled().catch(() => false);
-  if (stored !== null) {
-    hostPreference = stored;
+  if (host === null) {
+    setState(webState());
+    return;
+  }
+  host.onNotificationState(setState);
+  const reported = await host.notificationState().catch(() => null);
+  if (reported === null) return;
+  if (reported.wanted !== null) {
+    setState(reported);
     return;
   }
   const wanted = localStorage.getItem(ENABLED_STORAGE_KEY) === "on";
-  hostPreference = await host.setNotificationsEnabled(wanted).catch(() => false);
+  setState(await host.setNotificationsWanted(wanted).catch(() => reported));
 }
 
 /**
@@ -107,107 +164,80 @@ export function hostAnnouncesAlerts(): boolean {
   return notificationHost() !== null;
 }
 
-function webNotificationsSupported(): boolean {
-  return typeof Notification !== "undefined";
-}
-
 export function notificationsSupported(): boolean {
   return notificationHost() !== null || webNotificationsSupported();
 }
 
-function preferenceIsOn(): boolean {
-  if (notificationHost() !== null) return hostPreference === true;
-  return localStorage.getItem(ENABLED_STORAGE_KEY) === "on";
+/** Whether the control reads as on: the request, not whether the last one landed
+ *  — see notificationsRequested for why those are answered separately. */
+export function notificationsOn(): boolean {
+  return notificationsRequested(state);
 }
 
-export function notificationsEnabled(): boolean {
-  if (!preferenceIsOn()) return false;
-  // On the host the preference is the whole answer: there is no renderer
-  // permission to consult, and consulting one would always say no.
+/** Why nothing is arriving despite being asked for, to show beside the control.
+ *  Null when there is nothing to explain. */
+export function notificationsBlockedReason(): string | null {
+  return notificationsProblem(state);
+}
+
+/** Whether this window may post one right now. A host is always worth trying —
+ *  the attempt is what reveals whether the channel works — but a tab that has not
+ *  been granted permission cannot post at all. */
+function canSendNotification(): boolean {
+  if (!notificationsRequested(state)) return false;
   if (notificationHost() !== null) return true;
   return webNotificationsSupported() && Notification.permission === "granted";
 }
 
-export interface NotificationToggleResult {
-  /** Whether notifications are on once this toggle settles. */
-  enabled: boolean;
-  /** A line to show the user when an enable attempt was refused, so the control
-   *  explains itself rather than reading as a dead click. Absent on success and
-   *  on a plain turn-off. */
-  blockedReason?: string;
-}
+/**
+ * Turn notifications on or off.
+ *
+ * Enabling posts the confirmation, which doubles as the probe: on macOS the first
+ * notification is what raises the permission prompt, and its outcome is what tells
+ * the host whether the channel works. The resulting state arrives through the
+ * subscription, so there is nothing to return — the controls are already reading
+ * it.
+ */
+export async function toggleNotifications(): Promise<void> {
+  if (!notificationsSupported()) return;
+  const wanted = !notificationsOn();
+  const host = notificationHost();
+  localStorage.setItem(ENABLED_STORAGE_KEY, wanted ? "on" : "off");
 
-/** Toggle notifications; resolves to the state, plus why if an enable failed. */
-export async function toggleNotifications(): Promise<NotificationToggleResult> {
-  if (!notificationsSupported()) return { enabled: false };
-  if (notificationsEnabled()) {
-    localStorage.setItem(ENABLED_STORAGE_KEY, "off");
-    // Turning it off has to reach the recorder too, or the app keeps announcing
-    // alerts from the tray after the user switched them off in the window.
-    const host = notificationHost();
-    if (host !== null) hostPreference = await host.setNotificationsEnabled(false).catch(() => false);
-    return { enabled: false };
+  if (!wanted) {
+    // Turning it off has to reach the always-on process too, or it keeps
+    // announcing alerts after the user switched them off in the window.
+    if (host !== null) setState(await host.setNotificationsWanted(false).catch(() => state));
+    else setState(webState());
+    return;
   }
+
   // Browsers only let audio start from a user gesture, and this toggle is the
   // one we get — open the context here so later alerts can actually chime.
   unlockAlertSound();
 
-  const confirmBody = "DishyLink will alert you about Starlink outages.";
-  // Sound the chime once on enable, so its volume is a known quantity before it
-  // arrives unannounced during an outage.
-  const enabled = (): NotificationToggleResult => {
-    localStorage.setItem(ENABLED_STORAGE_KEY, "on");
-    playAlertSound("advisory");
-    return { enabled: true };
-  };
-  const refused = (blockedReason: string): NotificationToggleResult => {
-    localStorage.setItem(ENABLED_STORAGE_KEY, "off");
-    return { enabled: false, blockedReason };
-  };
-  /** Record the answer where the recorder can read it, and mirror back what it
-   *  actually stored. A failed write settles to off: the recorder is what sends
-   *  notifications, so a window claiming they are on while that process has them
-   *  off is the one state this control must never show. */
-  const persistToHost = async (host: NotificationHost, on: boolean): Promise<boolean> => {
-    hostPreference = await host.setNotificationsEnabled(on).catch(() => false);
-    return hostPreference;
-  };
-
-  const host = notificationHost();
   if (host !== null) {
-    // The confirmation doubles as the probe: the host posts it and reports back
-    // whether the OS delivered, and why not when it didn't. That reason is the
-    // packaged-vs-unsigned truth only the main process holds — an unsigned dev
-    // run is refused however the Settings toggle reads. Turning the control on
-    // off the back of "we asked" is how it ends up saying "Notifications on"
-    // while nothing ever appears.
-    const result = await host
-      .notify("Notifications on", confirmBody)
-      .catch(() => ({ delivered: false }) as { delivered: boolean; reason?: string });
-    // The stored answer, not the probe's — if the write failed, the recorder
-    // still has them off, and this control has to say so.
-    const stored = await persistToHost(host, result.delivered);
-    return stored ? enabled() : refused(result.reason ?? "Notifications couldn’t be enabled.");
+    setState(await host.setNotificationsWanted(true).catch(() => state));
+    await host
+      .notify(NOTIFICATIONS_ON_CONFIRMATION.title, NOTIFICATIONS_ON_CONFIRMATION.body)
+      .catch(() => {});
+    // Sound the chime once, so its volume is a known quantity before it arrives
+    // unannounced during an outage. Skipped when the confirmation could not be
+    // delivered: nothing about this channel is working, and a chime would suggest
+    // otherwise.
+    if (notificationsBlockedReason() === null) playAlertSound("advisory");
+    return;
   }
 
-  // Browser: ask, and tell a standing refusal apart from a dismissed prompt. Only
-  // "denied" is blocked; a dismissed prompt is neither on nor a settings problem,
-  // and calling it "blocked" points the user at a switch they never touched.
-  const permission = await Notification.requestPermission();
-  if (permission === "granted") {
-    // The host sent its confirmation as the probe; the browser still owes one.
-    sendNotification("test", "Notifications on", confirmBody);
-    return enabled();
-  }
-  return refused(
-    permission === "denied"
-      ? "Notifications are blocked for this page in your browser settings."
-      : "Notifications weren’t enabled.",
-  );
+  await Notification.requestPermission();
+  setState(webState());
+  if (notificationsBlockedReason() !== null) return;
+  sendNotification("test", NOTIFICATIONS_ON_CONFIRMATION.title, NOTIFICATIONS_ON_CONFIRMATION.body);
+  playAlertSound("advisory");
 }
 
 export function sendNotification(kind: string, title: string, body: string): void {
-  if (!notificationsEnabled()) return;
+  if (!canSendNotification()) return;
   const lastSentAt = lastSentAtByKind.get(kind) ?? 0;
   if (Date.now() - lastSentAt < THROTTLE_MS) return;
   lastSentAtByKind.set(kind, Date.now());
@@ -226,7 +256,9 @@ export function sendNotification(kind: string, title: string, body: string): voi
  *  The in-app chime plays only when it is — you are here to hear it — and the OS
  *  notification is left for when it is not. */
 export function windowIsForeground(): boolean {
-  return typeof document !== "undefined" && document.visibilityState === "visible" && document.hasFocus();
+  return (
+    typeof document !== "undefined" && document.visibilityState === "visible" && document.hasFocus()
+  );
 }
 
 /**

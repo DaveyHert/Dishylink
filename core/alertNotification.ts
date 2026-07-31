@@ -29,6 +29,67 @@ export interface AlertNotification {
   cleared: boolean;
 }
 
+/**
+ * Where notifications stand on this host: what the user asked for, and whether
+ * the channel can actually reach them.
+ *
+ * Two facts, kept apart, because they answer to different things: the request is
+ * the user's and persists, the channel's health is the OS's and changes under
+ * the app. A single flag for both cannot be written by one without overwriting
+ * the other's meaning. Kept separate, "is it on" is one derived rule
+ * (`notificationsRequested`) that every surface applies to the same pair.
+ */
+export interface NotificationState {
+  /**
+   * Whether the user wants alerts announced. Only ever the request itself: a
+   * channel that cannot deliver does not erase the answer, so a preference set
+   * where notifications are refused still stands once they work.
+   *
+   * null means never asked, which is not the same as declined — see the
+   * preference's own seeding note in the desktop host.
+   */
+  wanted: boolean | null;
+  /** Whether the last attempt reached the user, so a control never claims to be
+   *  on while nothing is arriving. Assumed true until an attempt says otherwise;
+   *  nothing has failed yet, and refusing a working channel is the worse guess. */
+  deliverable: boolean;
+  /** Why nothing is arriving, phrased for the person looking at the control.
+   *  Absent whenever `deliverable`. */
+  reason?: string;
+}
+
+/**
+ * Whether a control reads as on. The request alone, deliberately.
+ *
+ * A control shows what the user asked for, so that clicking it always changes
+ * the answer. Folding delivery in would make an undeliverable channel read as
+ * off, and then a click could only ever re-request — leaving no way to withdraw
+ * a request that is already failing. Delivery is reported alongside instead, by
+ * notificationsProblem.
+ */
+export function notificationsRequested(state: NotificationState): boolean {
+  return state.wanted === true;
+}
+
+/**
+ * What to say beside the control, or null when there is nothing to say.
+ *
+ * Only worth raising once notifications have been asked for: a channel that
+ * cannot deliver is not a problem to someone who wants nothing delivered.
+ */
+export function notificationsProblem(state: NotificationState): string | null {
+  if (state.wanted !== true || state.deliverable) return null;
+  return state.reason ?? null;
+}
+
+/** The notification sent when the user switches them on: proof the channel works,
+ *  and on macOS what raises the permission prompt. Shared so the tray and the
+ *  alerts panel confirm in the same words. */
+export const NOTIFICATIONS_ON_CONFIRMATION = {
+  title: "Notifications on",
+  body: "DishyLink will alert you about Starlink outages.",
+};
+
 function deviceName(source: AlertTransition["source"]): string {
   if (source === "dish") return "Dish";
   if (source === "router") return "Router";

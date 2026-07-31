@@ -5,6 +5,8 @@
 // by handing the renderer raw Node, IPC, or Electron objects.
 
 import { contextBridge, ipcRenderer } from "electron";
+import type { NotificationState } from "../core/alertNotification";
+import { NOTIFICATION_STATE_CHANNEL } from "./ipc";
 
 contextBridge.exposeInMainWorld("dishlink", {
   versions: {
@@ -37,13 +39,24 @@ contextBridge.exposeInMainWorld("dishlink", {
   // origin. Every run routes through main, so dev behaves as the packaged app does.
   notify: (title: string, body: string): Promise<{ delivered: boolean; reason?: string }> =>
     ipcRenderer.invoke("notify", { title, body }),
-  // Whether alerts should be announced. Owned by main because main is what
-  // announces them: the recorder there finds an alert whether or not a window
-  // exists, so a preference kept in this window's localStorage would be
-  // unreadable at exactly the moment it is needed.
-  // null when nobody has chosen yet — the window seeds it from what it holds, so
-  // a preference set in a build that kept it in localStorage is not lost.
-  notificationsEnabled: (): Promise<boolean | null> => ipcRenderer.invoke("notifications-enabled"),
-  setNotificationsEnabled: (enabled: boolean): Promise<boolean> =>
-    ipcRenderer.invoke("set-notifications-enabled", enabled),
+  // Whether alerts should be announced, and whether they can be. Owned by main
+  // because main is what announces them: the recorder there finds an alert
+  // whether or not a window exists, so a preference kept in this window's
+  // localStorage would be unreadable at exactly the moment it is needed.
+  notificationState: (): Promise<NotificationState> => ipcRenderer.invoke("get-notification-state"),
+  // Records the request only. Whether it can be delivered is main's to observe,
+  // and comes back in the state.
+  setNotificationsWanted: (wanted: boolean): Promise<NotificationState> =>
+    ipcRenderer.invoke("set-notifications-wanted", wanted),
+  // The same state whenever it changes, including once per page load. The tray
+  // can turn notifications on while this window is open, and the OS can stop
+  // delivering them, so a window that only asked at startup would sit on an
+  // answer that has since moved.
+  onNotificationState: (listener: (state: NotificationState) => void): (() => void) => {
+    const handler = (_event: unknown, state: NotificationState): void => listener(state);
+    ipcRenderer.on(NOTIFICATION_STATE_CHANNEL, handler);
+    return () => {
+      ipcRenderer.off(NOTIFICATION_STATE_CHANNEL, handler);
+    };
+  },
 });

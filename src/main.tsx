@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App.tsx";
 import { setCloudHost } from "./lib/cloudHost.ts";
-import { loadNotificationPreference } from "./lib/notifications.ts";
+import { bindNotifications } from "./lib/notifications.ts";
 import { setRecorderInProcess } from "./lib/apiHost.ts";
 
 // The Electron preload exposes window.dishlink. Marking the root lets the desktop
@@ -22,14 +22,17 @@ if (desktop) {
     transport: ({ path, method, body }) => desktop.cloud({ path, method, body }),
     signIn: desktop.signIn,
   });
-  // Whether alerts are announced is the main process's to know — it announces
-  // them from the tray with no window open. Mirrored in before render so the
-  // alerts panel's toggle shows the real state rather than defaulting to off.
-  void loadNotificationPreference();
   // The recorder runs in the same process that serves /api here, so it cannot be
   // down while this window is asking — see recorderRunsInHostProcess.
   setRecorderInProcess(true);
 }
+
+// Bound for every host, desktop or plain tab, since each keeps the notification
+// state somewhere different. Not awaited: the desktop's answer crosses the bridge,
+// and main pushes it again as this page finishes loading, so the alerts panel is
+// either right on its first paint or corrected in the same beat. A tab needs no
+// round trip at all — it reads its own storage here, before render.
+void bindNotifications();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

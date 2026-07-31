@@ -8,15 +8,32 @@
 // background job. Closing the window releases the renderer but leaves the collector
 // running in the tray; the app quits only when the user chooses Quit.
 
-import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, Notification } from "electron";
+import {
+  app,
+  BrowserWindow,
+  Tray,
+  Menu,
+  nativeImage,
+  ipcMain,
+  Notification,
+  type MenuItem,
+} from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { existsSync, writeFileSync } from "node:fs";
 import { registerAppProtocolScheme, handleAppProtocol, APP_ENTRY_URL } from "./appProtocol";
 import { startCollector, handleApiRequest, onAlertTransitions } from "./collector";
 import { startCloud, handleCloudRequest, signIn } from "./cloud";
-import { preferences, setPreference } from "./preferences";
-import { describeTransition, NotificationThrottle } from "../core/alertNotification";
+import { preferences, setPreference, onPreferencesChanged } from "./preferences";
+import {
+  describeTransition,
+  NotificationThrottle,
+  notificationsRequested,
+  notificationsProblem,
+  NOTIFICATIONS_ON_CONFIRMATION,
+  type NotificationState,
+} from "../core/alertNotification";
+import { NOTIFICATION_STATE_CHANNEL } from "./ipc";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const rendererRoot = join(here, "../dist");
@@ -37,6 +54,29 @@ const devServerUrl = process.env.VITE_DEV_SERVER_URL;
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
+
+const NOTIFY_ITEM_ID = "notify-alerts";
+const NOTIFY_REASON_ITEM_ID = "notify-alerts-reason";
+
+/** The tray's notification items, updated in place as the state changes. */
+let notifyItem: MenuItem | null = null;
+let notifyReasonItem: MenuItem | null = null;
+
+/**
+ * Why the last notification failed to reach the user, or null while they are
+ * arriving.
+ *
+ * Learned by posting, because on macOS that is the only thing that answers:
+ * the OS accepts a request from an app it has no registration for and drops it
+ * silently, so nothing short of an attempt distinguishes a working channel from
+ * a mute one. Every attempt updates this — the recorder's alerts as much as a
+ * confirmation — so it reflects the channel as last observed rather than as
+ * last asked about.
+ *
+ * Starts null: nothing has failed yet, and starting from "broken" would hide a
+ * working channel behind a warning until something happened to clear it.
+ */
+let notificationFailureReason: string | null = null;
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -73,6 +113,11 @@ function createWindow(): void {
 
   // Keep the fixed window title above; without this the page's <title> replaces it.
   mainWindow.on("page-title-updated", (event) => event.preventDefault());
+  // A window opens knowing nothing about the notification state, and asking for it
+  // costs a round trip its first render cannot wait for. Pushing it as the page
+  // finishes loading means the control's first paint is either already right or
+  // corrected in the same beat, without holding up the paint to find out.
+  mainWindow.webContents.on("did-finish-load", publishNotificationState);
   mainWindow.once("ready-to-show", () => mainWindow?.show());
   // Closing the window frees the renderer; the collector keeps running in the tray.
   // Reopening builds a fresh window.
@@ -112,20 +157,36 @@ function createTray(): void {
       // be switchable from the only surface that exists when nobody is: this
       // menu. Requiring someone to open a window to control the thing that runs
       // without one is the inversion this whole path exists to avoid.
+      id: NOTIFY_ITEM_ID,
       label: "Notify Me About Alerts",
       type: "checkbox",
-      checked: preferences().notifications === true,
+      // The opening value only. A checkbox item keeps its own `checked` from here
+      // on, toggling itself on each click, so every later value is written by
+      // publishNotificationState rather than read back from the preference.
+      checked: notificationsRequested(notificationState()),
       click: (item) => {
+        // Only the request is recorded — the same field, with the same meaning,
+        // as the window's own control writes. What the post below discovers about
+        // the channel shows up in the line underneath, never in this tick.
         setPreference("notifications", item.checked);
         // Enabling posts one immediately: on macOS the first notification is
         // what raises the permission prompt, and it doubles as proof the channel
         // works rather than leaving a tick box that may be announcing nothing.
         if (item.checked)
           void postNotification(
-            "Notifications on",
-            "DishyLink will alert you about Starlink outages.",
+            NOTIFICATIONS_ON_CONFIRMATION.title,
+            NOTIFICATIONS_ON_CONFIRMATION.body,
           ).catch(() => {});
       },
+    },
+    {
+      // Why the tick above refused to stay on, in the menu that offered it — the
+      // same sentence the alerts panel shows, so neither surface leaves a dead
+      // click unexplained. Hidden while notifications are arriving normally.
+      id: NOTIFY_REASON_ITEM_ID,
+      label: "",
+      enabled: false,
+      visible: false,
     },
     {
       // A login launch stays in the tray with no window (openAsHidden, plus the
@@ -139,6 +200,11 @@ function createTray(): void {
     { type: "separator" },
     { label: "Quit DishyLink", role: "quit" },
   ]);
+  // Held so the notification items can be updated in place. Rebuilding the menu
+  // to refresh a checkmark would drop the popped-up instance the user may be
+  // looking at; these two are the only items whose state changes after build.
+  notifyItem = menu.getMenuItemById(NOTIFY_ITEM_ID);
+  notifyReasonItem = menu.getMenuItemById(NOTIFY_REASON_ITEM_ID);
   // Left click opens the app; right click shows the menu. Attaching the menu with
   // setContextMenu would make a left click open the menu too (macOS), so it is
   // popped up on right click instead.
@@ -234,34 +300,75 @@ function undeliverableReason(): string {
     : "Native notifications need the installed DishyLink app; a dev run can’t post them.";
 }
 
+/** Where notifications stand: the stored request, plus the channel as last
+ *  observed. The one answer every surface renders, so none of them keeps its own. */
+function notificationState(): NotificationState {
+  const wanted = preferences().notifications;
+  return notificationFailureReason === null
+    ? { wanted, deliverable: true }
+    : { wanted, deliverable: false, reason: notificationFailureReason };
+}
+
+/**
+ * Write the current state to every surface that shows it: the tray items here,
+ * and the window's control over the bridge.
+ *
+ * The single writer, called on every change — a preference write, or an attempt
+ * that told us something new about the channel. Neither surface reads the state
+ * for itself, so neither can be showing a different answer than the other.
+ */
+function publishNotificationState(): void {
+  const state = notificationState();
+  if (notifyItem !== null) notifyItem.checked = notificationsRequested(state);
+  if (notifyReasonItem !== null) {
+    const problem = notificationsProblem(state);
+    notifyReasonItem.visible = problem !== null;
+    notifyReasonItem.label = problem ?? "";
+  }
+  mainWindow?.webContents.send(NOTIFICATION_STATE_CHANNEL, state);
+}
+
+/** Record what an attempt proved about the channel, and show it if that changed. */
+function recordDelivery(delivered: boolean): void {
+  const reason = delivered ? null : undeliverableReason();
+  if (reason === notificationFailureReason) return;
+  notificationFailureReason = reason;
+  publishNotificationState();
+}
+
 /**
  * Post one notification and report whether the OS took it.
  *
  * No custom sound is attached: macOS will not play an app-bundled sound file
- * through a notification (only its own system sounds), so a name here was ignored
- * and the default played regardless. The default is what rides here now, governed
- * — as it should be — by the per-app Notifications and Focus settings. The
- * distinctive per-severity chime is the renderer's job (see useDeviceAlerts), and
- * only while the window is in front; this posts nothing in that case.
+ * through a notification (only its own system sounds), so a name here is ignored
+ * and the default plays regardless. The default is what rides here, governed — as
+ * it should be — by the per-app Notifications and Focus settings. The distinctive
+ * per-severity chime is the renderer's job (see useDeviceAlerts), and only while
+ * the window is in front; this posts nothing in that case.
  */
 function postNotification(
   title: string,
   body: string,
 ): Promise<{ delivered: boolean; reason?: string }> {
-  if (!Notification.isSupported())
+  if (!Notification.isSupported()) {
+    recordDelivery(false);
     return Promise.resolve({ delivered: false, reason: undeliverableReason() });
+  }
   const notification = new Notification({ title, body });
   notification.on("click", showWindow);
   // Whether it actually reached the user, not merely that we asked — and why
   // not when it didn't, since only here is the packaged-vs-unsigned distinction
-  // known. The renderer needs the truth so its toggle cannot report itself on
-  // while nothing is being delivered.
+  // known. Every attempt reports back, so the channel's state is refreshed by
+  // ordinary alerts and not only by someone pressing a toggle.
   return new Promise((resolve) => {
     let settled = false;
     const settle = (delivered: boolean) => {
       if (settled) return;
       settled = true;
-      resolve(delivered ? { delivered: true } : { delivered: false, reason: undeliverableReason() });
+      recordDelivery(delivered);
+      resolve(
+        delivered ? { delivered: true } : { delivered: false, reason: undeliverableReason() },
+      );
     };
     notification.on("show", () => settle(true));
     notification.on("failed", () => settle(false));
@@ -311,15 +418,18 @@ function registerNotificationHandler(): void {
   ipcMain.handle("notify", (_event, { title, body }: { title: string; body: string }) =>
     postNotification(title, body),
   );
-  // The preference lives here because the recorder in this process is what reads
-  // it; the renderer's toggle is a view onto it, not its owner.
-  ipcMain.handle("notifications-enabled", () => preferences().notifications);
-  ipcMain.handle("set-notifications-enabled", (_event, enabled: boolean) => {
-    setPreference("notifications", enabled === true);
-    return preferences().notifications;
+  // The state lives here because the recorder in this process is what acts on it:
+  // it announces an alert with no window open. The window's control sets the
+  // request and displays what comes back, and owns neither.
+  ipcMain.handle("get-notification-state", () => notificationState());
+  ipcMain.handle("set-notifications-wanted", (_event, wanted: boolean) => {
+    setPreference("notifications", wanted === true);
+    return notificationState();
   });
+  // Both surfaces follow the preference from one place. A write from either of
+  // them arrives here.
+  onPreferencesChanged(publishNotificationState);
 }
-
 
 void app.whenReady().then(async () => {
   // An unpackaged run shows Electron's default icon; set ours on the macOS dock.

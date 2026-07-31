@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { AlertEngine } from "./alertEngine";
-import { NotificationThrottle, describeTransition } from "./alertNotification";
+import {
+  NotificationThrottle,
+  describeTransition,
+  notificationsProblem,
+  notificationsRequested,
+} from "./alertNotification";
 
 const NOW = 1_700_000_000_000;
 
@@ -83,5 +88,37 @@ describe("NotificationThrottle", () => {
     throttle.allow("a", NOW);
     throttle.allow("a", NOW + 30_000);
     expect(throttle.allow("a", NOW + 60_000)).toBe(true);
+  });
+});
+
+describe("notificationsRequested", () => {
+  it("reads as on from the request alone, so an undeliverable channel stays switchable off", () => {
+    expect(notificationsRequested({ wanted: true, deliverable: false, reason: "no" })).toBe(true);
+  });
+
+  it("reads as off before the host has reported, rather than guessing on", () => {
+    expect(notificationsRequested({ wanted: null, deliverable: true })).toBe(false);
+  });
+
+  it("reads as off when notifications were declined", () => {
+    expect(notificationsRequested({ wanted: false, deliverable: true })).toBe(false);
+  });
+});
+
+describe("notificationsProblem", () => {
+  it("explains a request that cannot be delivered", () => {
+    expect(notificationsProblem({ wanted: true, deliverable: false, reason: "unsigned" })).toBe(
+      "unsigned",
+    );
+  });
+
+  it("stays quiet while notifications are arriving", () => {
+    expect(notificationsProblem({ wanted: true, deliverable: true })).toBeNull();
+  });
+
+  it("stays quiet about a broken channel nobody asked to use", () => {
+    expect(
+      notificationsProblem({ wanted: false, deliverable: false, reason: "unsigned" }),
+    ).toBeNull();
   });
 });

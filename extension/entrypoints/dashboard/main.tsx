@@ -4,7 +4,7 @@ import "@/index.css";
 import App from "@/App";
 import { setApiHost } from "@/lib/apiHost";
 import { setCloudHost } from "@/lib/cloudHost";
-import { loadNotificationPreference, setNotificationHost } from "@/lib/notifications";
+import { bindNotifications, setNotificationHost } from "@/lib/notifications";
 import { setDishHost } from "@core/dishClient";
 import { setSatelliteHost } from "@/lib/satellites";
 import { extensionApiTransport } from "../../lib/apiTransport";
@@ -49,11 +49,12 @@ const stopClientSampler = startClientSampler();
 window.addEventListener("pagehide", stopClientSampler);
 
 // Read the worker's stored on/off state before the first render, so the alerts
-// panel's toggle shows what is actually set rather than flashing off: App reads
-// the preference synchronously at mount, and chrome.storage is an async read the
-// desktop's in-process bridge is not. The read is quick and always settles (it
-// swallows its own failure), so waiting on it only for the initial paint is safe.
-loadNotificationPreference().finally(() => {
+// panel's toggle shows what is actually set rather than flashing off. Awaited here
+// where the desktop does not bother: chrome.storage is an async read with nothing
+// pushing the answer in afterwards, so this is the only chance to have it before
+// the first paint. The read is quick and always settles (it swallows its own
+// failure), so waiting on it is safe.
+bindNotifications().finally(() => {
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
       <App />

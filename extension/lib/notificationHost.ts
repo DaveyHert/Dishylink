@@ -13,6 +13,7 @@
 // take the exact same path.
 
 import { browser } from "wxt/browser";
+import type { NotificationState } from "@core/alertNotification";
 
 /** Where the on/off preference lives — read by the worker before every announce,
  *  written by the toggle here. Shared with the background entry. */
@@ -26,21 +27,53 @@ export interface NotifyResult {
   reason?: string;
 }
 
+/** Why the last notification failed to reach the user, or null while they are
+ *  arriving. Held here rather than in storage: it describes this browser session's
+ *  channel, not a setting, and a stale one read at startup would be a warning
+ *  about something that may since have started working. */
+let notificationFailureReason: string | null = null;
+
+async function storedRequest(): Promise<boolean | null> {
+  const stored = await browser.storage.local.get(NOTIFICATIONS_ENABLED_KEY);
+  return NOTIFICATIONS_ENABLED_KEY in stored ? stored[NOTIFICATIONS_ENABLED_KEY] === true : null;
+}
+
+function stateFrom(wanted: boolean | null): NotificationState {
+  return notificationFailureReason === null
+    ? { wanted, deliverable: true }
+    : { wanted, deliverable: false, reason: notificationFailureReason };
+}
+
 export const extensionNotificationHost = {
   async notify(title: string, body: string): Promise<NotifyResult> {
     const result = (await browser.runtime.sendMessage({ type: "notify", title, body })) as
-      | NotifyResult
-      | undefined;
-    return result ?? { delivered: false, reason: "The background worker didn’t answer." };
+      NotifyResult | undefined;
+    const answered = result ?? {
+      delivered: false,
+      reason: "The background worker didn’t answer.",
+    };
+    notificationFailureReason = answered.delivered ? null : (answered.reason ?? null);
+    return answered;
   },
-  /** null when the user has made no choice yet, so the UI can seed from the old
-   *  localStorage flag the way the desktop seeds from its own. */
-  async notificationsEnabled(): Promise<boolean | null> {
-    const stored = await browser.storage.local.get(NOTIFICATIONS_ENABLED_KEY);
-    return NOTIFICATIONS_ENABLED_KEY in stored ? stored[NOTIFICATIONS_ENABLED_KEY] === true : null;
+  /** `wanted: null` when the user has made no choice yet, so the dashboard can seed
+   *  it from the old localStorage flag the way the desktop seeds from its own. */
+  async notificationState(): Promise<NotificationState> {
+    return stateFrom(await storedRequest());
   },
-  async setNotificationsEnabled(enabled: boolean): Promise<boolean> {
-    await browser.storage.local.set({ [NOTIFICATIONS_ENABLED_KEY]: enabled });
-    return enabled;
+  async setNotificationsWanted(wanted: boolean): Promise<NotificationState> {
+    await browser.storage.local.set({ [NOTIFICATIONS_ENABLED_KEY]: wanted });
+    return stateFrom(wanted);
+  },
+  /** Follows the stored request, which is what a second dashboard tab changes when
+   *  it toggles the same setting. The worker only reads it, so writes seen here are
+   *  always another page's — or this one's own, harmlessly repeating what it just set. */
+  onNotificationState(listener: (state: NotificationState) => void): () => void {
+    const handler = (changes: Record<string, { newValue?: unknown }>, area: string): void => {
+      if (area !== "local" || !(NOTIFICATIONS_ENABLED_KEY in changes)) return;
+      const next = changes[NOTIFICATIONS_ENABLED_KEY].newValue;
+      listener(stateFrom(next === undefined ? null : next === true));
+    };
+    browser.storage.onChanged.addListener(handler);
+    return () => browser.storage.onChanged.removeListener(handler);
   },
 };

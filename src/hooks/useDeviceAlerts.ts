@@ -16,7 +16,7 @@
 // Whether an alert is worth interrupting someone for is neither decision: `notify`
 // on the definition in core/alertDefinitions.ts is, so every host agrees about it.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { DishStatusJson } from "@core/dishClient";
 import { subscribeRouterStatus } from "../lib/routerStatusFeed";
 import type { DishConnectionState } from "./useDishTelemetry";
@@ -54,25 +54,6 @@ export interface AlertHistoryEntry {
   severity: AlertState["severity"];
 }
 
-/** When this tab first saw an alert firing. The devices send bare booleans and
- *  the client-raised ones (dish unreachable, recorder down) have no episode at
- *  all, so for those this is the only start time that exists. It is honestly
- *  "since you opened the app", not "since it began" — worded as "seen". */
-function useFirstSeen(active: AlertState[]): Map<string, number> {
-  const firstSeenRef = useRef(new Map<string, number>());
-  const ids = active.map((a) => `${a.source}:${a.key}`).join("|");
-  return useMemo(() => {
-    const now = Date.now();
-    const current = new Set(active.map((a) => `${a.source}:${a.key}`));
-    for (const id of current) if (!firstSeenRef.current.has(id)) firstSeenRef.current.set(id, now);
-    // Forget cleared alerts, so a recurrence is timed from its new onset.
-    for (const id of [...firstSeenRef.current.keys()])
-      if (!current.has(id)) firstSeenRef.current.delete(id);
-    return new Map(firstSeenRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ids]);
-}
-
 export interface DeviceAlerts {
   /** Everything firing right now, worst first — includes a synthetic historian-down alert. */
   active: AlertState[];
@@ -95,6 +76,52 @@ export interface DeviceAlerts {
 const DISH_UNREACHABLE = firingSystemAlert(SYSTEM_ALERTS.dishUnreachable);
 const ROUTER_UNREACHABLE = firingSystemAlert(SYSTEM_ALERTS.routerUnreachable);
 const HISTORIAN_DOWN = firingSystemAlert(SYSTEM_ALERTS.historianDown);
+
+/**
+ * A log of when each alert was first seen firing, held outside React's render.
+ *
+ * Written from the transitions effect, read through useSyncExternalStore. A
+ * first-seen stamp records that a moment happened, and a render is not a moment —
+ * it can run twice or be thrown away — so the write belongs to the effect.
+ *
+ * Scoped to one hook instance: every mount starts from an empty log.
+ */
+function createFirstSeenLog() {
+  let seen = new Map<string, number>();
+  const listeners = new Set<() => void>();
+  return {
+    subscribe(listener: () => void): () => void {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    /** The same map until something changes: useSyncExternalStore compares by
+     *  identity, and a fresh map every read would re-render on every poll. */
+    snapshot: (): Map<string, number> => seen,
+    /** Stamp anything newly firing, and forget anything cleared so a recurrence is
+     *  timed from its new onset. Silent when neither happened. */
+    observe(activeIds: Iterable<string>): void {
+      const current = new Set(activeIds);
+      const next = new Map(seen);
+      let changed = false;
+      const seenAt = Date.now();
+      for (const id of current)
+        if (!next.has(id)) {
+          next.set(id, seenAt);
+          changed = true;
+        }
+      for (const id of seen.keys())
+        if (!current.has(id)) {
+          next.delete(id);
+          changed = true;
+        }
+      if (!changed) return;
+      seen = next;
+      for (const listener of listeners) listener();
+    },
+  };
+}
 
 /** "dishWaterDetected" -> "dish water detected", for a key the definitions do not cover. */
 function humanizeKey(key: string): string {
@@ -119,6 +146,12 @@ export function useDeviceAlerts(
   const [routerReachable, setRouterReachable] = useState<boolean | null>(null);
   const [episodes, setEpisodes] = useState<AlertEpisodeJson[]>([]);
   const [historianUp, setHistorianUp] = useState<boolean | null>(null);
+  // When this tab first saw each alert firing. The devices send bare booleans and
+  // the client-raised ones (dish unreachable, recorder down) have no episode at
+  // all, so for those this is the only start time that exists. It is honestly
+  // "since you opened the app", not "since it began" — worded as "seen".
+  const [firstSeenLog] = useState(createFirstSeenLog);
+  const firstSeen = useSyncExternalStore(firstSeenLog.subscribe, firstSeenLog.snapshot);
 
   // Live router alerts, off the app's one shared router get_status poll. On
   // failure the last known alerts stand rather than reporting everything clear;
@@ -226,18 +259,32 @@ export function useDeviceAlerts(
     if (previous !== null) {
       for (const [id, alert] of current) {
         if (alert.notify && !previous.has(id)) {
-          announceAlert(alert.severity, false, `alert-${id}`, alertTitle(alert.source, false), alert.firing);
+          announceAlert(
+            alert.severity,
+            false,
+            `alert-${id}`,
+            alertTitle(alert.source, false),
+            alert.firing,
+          );
         }
       }
       for (const [id, alert] of previous) {
         if (alert.notify && !current.has(id)) {
           // Distinct key so the clear is not swallowed by the onset's throttle.
-          announceAlert(alert.severity, true, `alert-${id}-cleared`, alertTitle(alert.source, true), alert.ok);
+          announceAlert(
+            alert.severity,
+            true,
+            `alert-${id}-cleared`,
+            alertTitle(alert.source, true),
+            alert.ok,
+          );
         }
       }
     }
     previousActiveRef.current = current;
-  }, [active]);
+
+    firstSeenLog.observe(current.keys());
+  }, [active, firstSeenLog]);
 
   const history = useMemo<AlertHistoryEntry[]>(() => {
     return episodes.map((episode) => {
@@ -254,8 +301,6 @@ export function useDeviceAlerts(
       };
     });
   }, [episodes]);
-
-  const firstSeen = useFirstSeen(active);
 
   return { active, statusList, history, routerReachable, historianUp, dishReachable, firstSeen };
 }
