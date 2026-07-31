@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useDishTelemetry } from "./hooks/useDishTelemetry";
 import { useLanPresence } from "./hooks/useLanPresence";
 import { AnimatePresence, motion } from "motion/react";
@@ -9,11 +9,18 @@ import { useOutageNotifications } from "./hooks/useOutageNotifications";
 import { useThermalEvents } from "./hooks/useThermalEvents";
 import { useDeviceAlerts } from "./hooks/useDeviceAlerts";
 import { useOutageHistory, mergeOutages } from "./hooks/useOutageHistory";
-import { notificationsEnabled, toggleNotifications } from "./lib/notifications";
+import {
+  notificationsOn as readNotificationsOn,
+  notificationsBlockedReason as readNotificationsBlockedReason,
+  subscribeToNotifications,
+  toggleNotifications,
+} from "./lib/notifications";
 import { armAlertSoundOnFirstGesture } from "./lib/alertSound";
 import { TopBar } from "./components/dashboard/TopBar";
+import { AppToolbar, type ToolbarItemId } from "./components/toolbar/AppToolbar";
 import { StatTile } from "./components/dashboard/StatTile";
-import { TelemetryChart, windowTail } from "./components/shared/TelemetryChart";
+import { TelemetryChart } from "./components/shared/TelemetryChart";
+import { windowTail } from "./lib/telemetryWindow";
 import { ObstructionCard } from "./components/obstruction/ObstructionCard";
 import { SatelliteView } from "./components/satellite/SatelliteView";
 import { OutageLog } from "./components/alerts/OutageLog";
@@ -48,7 +55,7 @@ import type { ObserverLocation } from "./lib/satellites";
 import { TooltipProvider } from "./components/ui/tooltip";
 
 type ThemeName = "light" | "dark";
-type SheetName =
+type PanelName =
   "speedtest" | "alignment" | "datausage" | "network" | "account" | "settings" | "terminal";
 
 const WINDOW_CHOICES: { label: string; minutes: number }[] = [
@@ -74,19 +81,26 @@ export default function App() {
     () => (localStorage.getItem("dishboard-theme") as ThemeName) ?? "dark",
   );
   const [windowMinutes, setWindowMinutes] = useState(15);
-  const [notificationsOn, setNotificationsOn] = useState(notificationsEnabled);
-  // Why an enable attempt was refused, shown beside the toggle. Null whenever
-  // notifications are on or off for an ordinary reason.
-  const [notificationsBlockedReason, setNotificationsBlockedReason] = useState<string | null>(null);
+  // Read from the notifications module rather than held here, because this window
+  // is not the only thing that changes it: the desktop tray switches notifications
+  // on and off with no window involved. Subscribing is what keeps this control and
+  // that one showing the same answer.
+  const notificationsOn = useSyncExternalStore(subscribeToNotifications, readNotificationsOn);
+  // Why nothing is arriving despite being asked for, shown beside the toggle so it
+  // explains itself instead of reading as a dead click.
+  const notificationsBlockedReason = useSyncExternalStore(
+    subscribeToNotifications,
+    readNotificationsBlockedReason,
+  );
   const [openDetailId, setOpenDetailId] = useState<string | null>(null);
-  const [openSheet, setOpenSheet] = useState<SheetName | null>(null);
+  const [openPanel, setOpenPanel] = useState<PanelName | null>(null);
   // Full-viewport surface: the dashboard behind it is unmounted, not just covered,
   // so its dome canvas and per-frame draw loop stop while it cannot be seen.
-  // Carried in the URL fragment rather than in `openSheet` — it is a place you
+  // Carried in the URL fragment rather than in `openPanel` — it is a place you
   // can be, so the back button should leave it and a reload should return to it.
   const [skyViewOpen, setSkyViewOpen] = useHashRoute("satellite");
-  // Which device/node the Network sheet is drilled into — owned here so the
-  // sheet header can carry the back chevron beside its title.
+  // Which device/node the Network panel is drilled into — owned here so the
+  // panel header can carry the back chevron beside its title.
   const [networkSelectedKey, setNetworkSelectedKey] = useState<string | null>(null);
   const [savedObserver, setSavedObserver] = useState<ObserverLocation | null>(loadSavedLocation);
   // Tracked apart from `savedObserver === null`, which cannot tell "never set
@@ -125,7 +139,19 @@ export default function App() {
     [telemetry.outageEvents, persistedOutages],
   );
   // Router polling runs only while a router-backed surface is open.
-  const routerNetwork = useRouterNetwork(openSheet === "network" || openSheet === "settings");
+  const routerNetwork = useRouterNetwork(openPanel === "network" || openPanel === "settings");
+
+  // The toolbar's destinations: five open a panel over the dashboard; the sky
+  // view is a place of its own, so it leaves the panels and routes to the
+  // full-viewport surface instead.
+  const openNav = (id: ToolbarItemId) => {
+    if (id === "satellite") {
+      setOpenPanel(null);
+      setSkyViewOpen(true);
+    } else {
+      setOpenPanel(id);
+    }
+  };
 
   // Browsers only let audio start after a gesture; take the first one going.
   useEffect(() => armAlertSoundOnFirstGesture(), []);
@@ -138,8 +164,9 @@ export default function App() {
   const { status, samples } = telemetry;
 
   // One clock for the tiles and the chart windows alike, so a figure and the
-  // chart beneath it always describe the same instant.
-  const { nowMs, livePowerW, averagePowerW, recentPingSuccessPercent, sparklines } =
+  // chart beneath it describe the same instant — except power, whose figure and
+  // chart both settle instead on the 5s boundary (`powerWindowEndMs`).
+  const { nowMs, livePowerW, powerWindowEndMs, averagePowerW, recentPingSuccessPercent, sparklines } =
     useLiveReadings(samples);
 
   const liveDownlink = formatThroughput(status?.downlinkThroughputBps ?? 0);
@@ -150,15 +177,23 @@ export default function App() {
     () => windowTail(samples, windowMinutes, nowMs),
     [samples, windowMinutes, nowMs],
   );
+  // The power chart's window ends on the 5s boundary, so its trim is anchored
+  // there too: a live floor would keep dropping samples still inside the frozen
+  // window, marching the left edge every second under an otherwise still chart.
+  const powerChartSamples = useMemo(
+    () => windowTail(samples, windowMinutes, powerWindowEndMs),
+    [samples, windowMinutes, powerWindowEndMs],
+  );
   const statDetails = useMemo(
     () =>
       buildStatDetails({
         status,
         currentPowerW: livePowerW,
+        powerWindowEndMs,
         recentPingSuccessPercent,
         outageEvents,
       }),
-    [status, livePowerW, recentPingSuccessPercent, outageEvents],
+    [status, livePowerW, powerWindowEndMs, recentPingSuccessPercent, outageEvents],
   );
   const openDetail = openDetailId ? statDetails[openDetailId] : null;
 
@@ -187,23 +222,9 @@ export default function App() {
               deviceAlerts={deviceAlerts}
               notificationsOn={notificationsOn}
               notificationsBlockedReason={notificationsBlockedReason}
-              onToggleNotifications={() => {
-                toggleNotifications().then((result) => {
-                  setNotificationsOn(result.enabled);
-                  setNotificationsBlockedReason(result.blockedReason ?? null);
-                });
-              }}
-              onOpenSpeedTest={() => setOpenSheet("speedtest")}
-              onOpenAlignment={() => setOpenSheet("alignment")}
-              onOpenDataUsage={() => setOpenSheet("datausage")}
-              onOpenNetwork={() => setOpenSheet("network")}
-              onOpenAccount={() => setOpenSheet("account")}
-              onOpenSettings={() => setOpenSheet("settings")}
-              onOpenSatellite={() => {
-                setOpenSheet(null);
-                setSkyViewOpen(true);
-              }}
+              onToggleNotifications={() => void toggleNotifications()}
             />
+            <AppToolbar activeId={openPanel} onSelect={openNav} />
             {showSearchingHero ? (
               <SearchingHero />
             ) : (
@@ -334,10 +355,11 @@ export default function App() {
                     meta={`≈ ${((averagePowerW * 24) / 1000).toFixed(2)} kWh/day at recent draw`}
                   >
                     <TelemetryChart
-                      samples={chartSamples}
+                      samples={powerChartSamples}
                       series={POWER_SERIES}
                       windowMinutes={windowMinutes}
                       formatValue={(value) => `${value.toFixed(0)} W`}
+                      windowEndMs={powerWindowEndMs}
                       height={160}
                     />
                   </SectionCard>
@@ -353,7 +375,7 @@ export default function App() {
                     <DishTerminalCard
                       status={status}
                       stale={telemetry.connectionState !== "online"}
-                      onExpand={() => setOpenSheet("terminal")}
+                      onExpand={() => setOpenPanel("terminal")}
                     />
                   ) : (
                     <SectionCard
@@ -381,8 +403,8 @@ export default function App() {
           <StatDetailPanel detail={openDetail} samples={samples} />
         </DetailsModal>
       )}
-      {openSheet === "terminal" && status && (
-        <DetailsModal title='Starlink Dish Terminal' onClose={() => setOpenSheet(null)} size='xxl'>
+      {openPanel === "terminal" && status && (
+        <DetailsModal title='Starlink Dish Terminal' onClose={() => setOpenPanel(null)} size='xxl'>
           <DishTerminalCard
             status={status}
             stale={telemetry.connectionState !== "online"}
@@ -390,32 +412,32 @@ export default function App() {
           />
         </DetailsModal>
       )}
-      {openSheet === "speedtest" && (
-        <DetailsModal title='Speed test' onClose={() => setOpenSheet(null)}>
+      {openPanel === "speedtest" && (
+        <DetailsModal title='Speed test' onClose={() => setOpenPanel(null)}>
           <SpeedTestPanel samples={samples} status={status} />
         </DetailsModal>
       )}
-      {openSheet === "alignment" && status && (
-        <DetailsModal title='Alignment' onClose={() => setOpenSheet(null)} size='wide'>
+      {openPanel === "alignment" && status && (
+        <DetailsModal title='Alignment' onClose={() => setOpenPanel(null)} size='wide'>
           <AlignmentPanel status={status} onOpenSkyView={() => setSkyViewOpen(true)} />
         </DetailsModal>
       )}
-      {openSheet === "datausage" && (
-        <DetailsModal title='Data usage' onClose={() => setOpenSheet(null)} size='wide'>
+      {openPanel === "datausage" && (
+        <DetailsModal title='Data usage' onClose={() => setOpenPanel(null)} size='wide'>
           <DataUsagePanel />
         </DetailsModal>
       )}
-      {openSheet === "account" && (
-        <DetailsModal title='Starlink account' onClose={() => setOpenSheet(null)} size='wide'>
+      {openPanel === "account" && (
+        <DetailsModal title='Starlink account' onClose={() => setOpenPanel(null)} size='wide'>
           <AccountPanel lanOnline={lanOnline} />
         </DetailsModal>
       )}
-      {openSheet === "network" && (
+      {openPanel === "network" && (
         <DetailsModal
           title='Network'
           onBack={networkSelectedKey ? () => setNetworkSelectedKey(null) : undefined}
           onClose={() => {
-            setOpenSheet(null);
+            setOpenPanel(null);
             setNetworkSelectedKey(null);
           }}
           size='wide'
@@ -428,8 +450,8 @@ export default function App() {
         </DetailsModal>
       )}
       <SettingsModal
-        open={openSheet === "settings"}
-        onClose={() => setOpenSheet(null)}
+        open={openPanel === "settings"}
+        onClose={() => setOpenPanel(null)}
         status={status}
         hardwareVersion={
           telemetry.deviceInfo?.hardwareVersion ?? status?.deviceInfo?.hardwareVersion
