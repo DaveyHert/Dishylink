@@ -4,7 +4,7 @@
 // current one — a tile reading 100% ping success with the dish unreachable.
 
 import { describe, it, expect } from "vitest";
-import { latestReading, recentAverage, sparklineFrom, hasRecentReadings } from "./readings";
+import { powerBucketMean, recentAverage, sparklineFrom, hasRecentReadings } from "./readings";
 import type { TelemetrySample } from "@core/telemetry";
 
 const NOW = 1_784_400_000_000;
@@ -42,21 +42,46 @@ describe("recentAverage", () => {
   });
 });
 
-describe("latestReading", () => {
-  it("reports the newest reading while the dish is answering", () => {
-    expect(latestReading(readings(NOW, 10, 25), (s) => s.powerW, NOW)).toBe(25);
+describe("powerBucketMean", () => {
+  // NOW sits on a 5s boundary, so the last completed bucket is [NOW-5s, NOW).
+
+  it("averages the last completed 5-second bucket", () => {
+    expect(powerBucketMean(readings(NOW, 30, 40), NOW)).toBe(40);
   });
 
-  it("reports nothing once the newest reading is seconds stale", () => {
-    const stale = readings(NOW - 60_000, 10, 25);
-    expect(latestReading(stale, (s) => s.powerW, NOW)).toBe(0);
+  it("dilutes a spike into the bucket mean rather than showing it raw", () => {
+    // One 100W second among four 40W seconds: (4·40 + 100) / 5 = 52.
+    const spiky = readings(NOW, 30, 40);
+    spiky[spiky.length - 2].powerW = 100; // NOW-1000, inside the completed bucket
+    expect(powerBucketMean(spiky, NOW)).toBe(52);
   });
 
-  it("still looks back a few seconds for a real value", () => {
-    // A dropped ring entry decodes as 0; the one before it is the live reading.
-    const samples = readings(NOW, 4, 25);
-    samples[samples.length - 1].powerW = 0;
-    expect(latestReading(samples, (s) => s.powerW, NOW)).toBe(25);
+  it("holds steady within a bucket and steps at the boundary", () => {
+    // Two full buckets: the older reads 20W, the newer 40W.
+    const twoBuckets = readings(NOW, 30, 0).map((sample) => ({
+      ...sample,
+      powerW: sample.timestampMs < NOW - 5_000 ? 20 : 40,
+    }));
+    expect(powerBucketMean(twoBuckets, NOW - 1)).toBe(20); // still in the older bucket
+    expect(powerBucketMean(twoBuckets, NOW)).toBe(40); // boundary crossed
+  });
+
+  it("skips a dropped ring entry rather than averaging its zero in", () => {
+    const gappy = readings(NOW, 30, 40);
+    gappy[gappy.length - 2].powerW = 0; // NOW-1000, a decoded gap
+    expect(powerBucketMean(gappy, NOW)).toBe(40);
+  });
+
+  it("reaches back to the last bucket with a reading when the latest is empty", () => {
+    // The dish just returned from a gap: its freshest sample sits at NOW-6s, so
+    // the latest completed bucket [NOW-5s, NOW) is empty while [NOW-10s, NOW-5s)
+    // holds real draws. The figure shows those rather than flashing 0 W.
+    expect(powerBucketMean(readings(NOW - 6_000, 30, 40), NOW)).toBe(40);
+  });
+
+  it("reads zero once nothing in the last minute holds a reading", () => {
+    // Data ends 90s ago — past the fallback reach, so the dish is genuinely quiet.
+    expect(powerBucketMean(readings(NOW - 90_000, 30, 40), NOW)).toBe(0);
   });
 });
 

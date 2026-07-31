@@ -8,9 +8,10 @@
 
 import type { TelemetrySample } from "@core/telemetry";
 
-const LIVE_READING_MS = 5_000;
 const RECENT_AVERAGE_MS = 60_000;
 const SPARKLINE_MS = 90_000;
+const POWER_BUCKET_MEAN_MS = 5_000;
+const POWER_BUCKET_FALLBACK_MS = 60_000;
 
 /**
  * Whether the last minute holds any reading at all.
@@ -27,40 +28,96 @@ export function hasRecentReadings(samples: TelemetrySample[], nowMs: number): bo
   return newest !== undefined && newest.timestampMs >= nowMs - RECENT_AVERAGE_MS;
 }
 
-/** The last 90 seconds of a series, for the spark line on a stat tile. */
+/**
+ * The last 90 seconds of a series, for the spark line on a stat tile.
+ *
+ * `windowEndMs` caps the newest edge: a live tile leaves it open (the default),
+ * so the trace runs to the freshest sample. A tile whose figure is quantized to a
+ * bucket boundary passes the boundary here too, so the trace's newest point steps
+ * with the figure instead of creeping ahead of it every second.
+ */
 export function sparklineFrom(
   samples: TelemetrySample[],
   getValue: (sample: TelemetrySample) => number | null,
   nowMs: number,
+  windowEndMs = Infinity,
 ) {
   const floorMs = nowMs - SPARKLINE_MS;
   let firstVisible = samples.length;
   while (firstVisible > 0 && samples[firstVisible - 1].timestampMs >= floorMs) firstVisible--;
-  return samples.slice(firstVisible).map(getValue);
+  let lastVisible = samples.length;
+  while (lastVisible > firstVisible && samples[lastVisible - 1].timestampMs >= windowEndMs)
+    lastVisible--;
+  return samples.slice(firstVisible, lastVisible).map(getValue);
 }
 
 /**
- * What the dish is doing this second, for a tile that reports a live figure.
- *
- * Reads from the sample ring because power is absent from `get_status` — the
- * throughput and latency tiles can take their live value from the status reply,
- * power cannot. The ring is one sample per second with its newest entry pinned
- * to now, so its tail is the current reading.
- *
- * A missing ring entry decodes as 0 (decodeHistoryWindow), so a few seconds are
- * searched for a real one rather than reporting a dropped second as no draw.
+ * The end of the latest completed 5-second bucket: the wall-clock boundary the
+ * power figure, its spark line, and its charts all settle on, so they step in
+ * lockstep every 5s rather than each drifting on its own clock. Equivalently the
+ * start of the still-open bucket, which is why samples at or after it are excluded
+ * everywhere this anchors — that bucket is not done.
  */
-export function latestReading(
+export function powerBucketEndMs(nowMs: number, bucketMs = POWER_BUCKET_MEAN_MS): number {
+  return Math.floor(nowMs / bucketMs) * bucketMs;
+}
+
+/**
+ * Mean of the positive draws in the half-open window `[startMs, endMs)`, or
+ * `null` when the window holds no real reading. A dropped ring entry decodes as 0
+ * (decodeHistoryWindow), so non-positive samples are skipped rather than dragging
+ * the mean down; a window with only those, or none at all, reads as empty.
+ */
+function powerMeanInWindow(
   samples: TelemetrySample[],
-  getValue: (sample: TelemetrySample) => number | null,
-  nowMs: number,
-): number {
-  const floorMs = nowMs - LIVE_READING_MS;
+  startMs: number,
+  endMs: number,
+): number | null {
+  let sum = 0;
+  let count = 0;
   for (let index = samples.length - 1; index >= 0; index--) {
     const sample = samples[index];
-    if (sample.timestampMs < floorMs) break;
-    const value = getValue(sample);
-    if (value !== null && value > 0) return value;
+    if (sample.timestampMs < startMs) break;
+    if (sample.timestampMs >= endMs) continue;
+    const powerW = sample.powerW;
+    if (powerW !== null && powerW > 0) {
+      sum += powerW;
+      count++;
+    }
+  }
+  return count === 0 ? null : sum / count;
+}
+
+/**
+ * The settled current draw: the mean of the last completed 5-second bucket,
+ * aligned to wall-clock boundaries.
+ *
+ * The per-second draw is spiky as the dish heats itself and shifts load, so the
+ * figure is bucketed — held steady across each 5s window and stepped at the
+ * boundary. The cut is aligned to the clock rather than a trailing 5s from now,
+ * so the value stays fixed within a bucket instead of re-averaging every second.
+ *
+ * When the latest completed bucket holds nothing — as in the few seconds after
+ * the dish returns from a gap, its first fresh sample still sitting in the open
+ * bucket — the figure reaches back through earlier completed buckets to the most
+ * recent one that has a reading, so it holds the last real draw instead of
+ * flashing 0 W. The reach is bounded: once nothing in the last minute has a
+ * reading, the dish is genuinely quiet and the figure settles to 0.
+ */
+export function powerBucketMean(
+  samples: TelemetrySample[],
+  nowMs: number,
+  bucketMs = POWER_BUCKET_MEAN_MS,
+): number {
+  const latestBucketEndMs = powerBucketEndMs(nowMs, bucketMs);
+  const oldestBucketEndMs = latestBucketEndMs - POWER_BUCKET_FALLBACK_MS;
+  for (
+    let bucketEndMs = latestBucketEndMs;
+    bucketEndMs > oldestBucketEndMs;
+    bucketEndMs -= bucketMs
+  ) {
+    const mean = powerMeanInWindow(samples, bucketEndMs - bucketMs, bucketEndMs);
+    if (mean !== null) return mean;
   }
   return 0;
 }
