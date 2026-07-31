@@ -48,6 +48,12 @@ interface TelemetryChartProps {
    *  up. The default hugs the data; raise it for jittery series (per-device
    *  throughput) where a full frame reads as alarming rather than busy. */
   headroom?: number;
+  /** Freezes the window's newest edge on a fixed instant instead of the live
+   *  clock. A series whose figure is quantized to a boundary (power, to a 5s
+   *  bucket) passes that boundary here so the whole plot — points, axis labels,
+   *  right edge — steps with the figure rather than sliding every second. Left
+   *  unset, the window ends on the ticking clock as before. */
+  windowEndMs?: number;
 }
 
 interface BucketPoint {
@@ -122,27 +128,6 @@ function niceCeiling(rawMax: number): number {
   return magnitude * 10;
 }
 
-/** The tail of a series the chart would actually draw for `windowMinutes`.
- *  Callers holding long buffers (the dish keeps 6h, per-device history 6h) pass
- *  this so the chart isn't handed points its own window filter drops. Mirrors
- *  the windowEndMs/windowStartMs pair below, so the two stay in step.
- *
- *  `nowMs` is required rather than defaulted to Date.now(): callers memoize this,
- *  and a clock read hidden inside a useMemo is a window that stops advancing as
- *  soon as its other deps go quiet. Pass the ticking value from useNow, so the
- *  memo lists it as a dependency and recomputes with it. */
-export function windowTail(
-  samples: TelemetrySample[],
-  windowMinutes: number,
-  nowMs: number,
-): TelemetrySample[] {
-  if (samples.length === 0) return samples;
-  const startMs = nowMs - windowMinutes * 60_000;
-  const firstVisible = samples.findIndex((sample) => sample.timestampMs >= startMs);
-  if (firstVisible === -1) return [];
-  return firstVisible === 0 ? samples : samples.slice(firstVisible);
-}
-
 export function TelemetryChart({
   samples,
   series,
@@ -155,6 +140,7 @@ export function TelemetryChart({
   minGapMs = MIN_GAP_MS,
   maxValue,
   headroom = 1.08,
+  windowEndMs: windowEndOverrideMs,
 }: TelemetryChartProps) {
   const [containerRef, containerWidth] = useElementWidth();
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
@@ -168,14 +154,24 @@ export function TelemetryChart({
   // of line and ten of empty right edge, which is the true picture. Anchoring to
   // the newest sample instead would keep the chart looking full by quietly
   // showing an older fifteen minutes under a live label.
-  const windowEndMs = useNow();
+  // The clock still ticks the chart on every render (an outage must keep growing
+  // its unmeasured right edge even while nothing arrives); an override only pins
+  // where the window ends. Called unconditionally — a hook cannot be skipped.
+  const tickingNowMs = useNow();
+  const windowEndMs = windowEndOverrideMs ?? tickingNowMs;
   const windowStartMs = windowEndMs - windowMinutes * 60_000;
 
   const { buckets, bucketSpanMs } = useMemo<{
     buckets: BucketPoint[];
     bucketSpanMs: number;
   }>(() => {
-    const visibleSamples = samples.filter((sample) => sample.timestampMs >= windowStartMs);
+    // Half-open [start, end): with a frozen end, samples past the boundary would
+    // otherwise clamp into the last bucket and creep its mean every second,
+    // defeating the freeze. On the live clock nothing is newer than now, so this
+    // excludes only a sample landing exactly on it — no effect on those charts.
+    const visibleSamples = samples.filter(
+      (sample) => sample.timestampMs >= windowStartMs && sample.timestampMs < windowEndMs,
+    );
     if (visibleSamples.length === 0) return { buckets: [], bucketSpanMs: 0 };
     const bucketCount = Math.min(Math.max(Math.floor(plotWidth / 2), 30), visibleSamples.length);
     const bucketSpanMs = (windowEndMs - windowStartMs) / bucketCount;
@@ -215,7 +211,7 @@ export function TelemetryChart({
         populated[index].timestampMs - populated[index - 1].timestampMs > gapThresholdMs;
     }
     return { buckets: populated, bucketSpanMs };
-  }, [samples, series, windowStartMs, windowEndMs, plotWidth]);
+  }, [samples, series, windowStartMs, windowEndMs, plotWidth, minGapMs]);
 
   // Ceiling and gridlines come out of ONE derivation: the ceiling is a whole
   // number of tick steps, so the top gridline is always the ceiling. Choosing

@@ -5,7 +5,8 @@
 
 import { expect, describe, test } from "vitest";
 import { render } from "vitest-browser-react";
-import { TelemetryChart, windowTail } from "./TelemetryChart";
+import { TelemetryChart } from "./TelemetryChart";
+import { windowTail } from "../../lib/telemetryWindow";
 import { LATENCY_SERIES } from "../../lib/statDetails";
 import type { OutageEvent, TelemetrySample } from "@core/telemetry";
 

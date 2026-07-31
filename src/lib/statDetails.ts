@@ -166,6 +166,9 @@ export function coverageNote(slice: TelemetrySample[], windowMinutes: number): s
 export interface StatDetailInputs {
   status: DishStatusJson | null;
   currentPowerW: number;
+  /** The 5s bucket boundary the power figure settled on, so the sheet's power
+   *  chart freezes its window on the same instant and steps with the tile. */
+  powerWindowEndMs: number;
   /** Pings answered over the last minute, as a percentage, matching the tile's
    *  own readout. Success rather than the drop rate it derives from: a minute
    *  with no readings in it averages to zero drops, and zero drops reads as 100%
@@ -182,6 +185,7 @@ export interface StatDetailInputs {
 export function buildStatDetails({
   status,
   currentPowerW,
+  powerWindowEndMs,
   recentPingSuccessPercent,
   outageEvents,
 }: StatDetailInputs): Record<string, StatDetail> {
@@ -248,6 +252,7 @@ export function buildStatDetails({
         "Power draw is how much electricity the Starlink terminal is using. It rises under heavy load and when the dish heats itself to melt snow or ice.",
       showWindowEnergy: true,
       showEnergyHistory: true,
+      chartWindowEndMs: powerWindowEndMs,
     },
   };
 }

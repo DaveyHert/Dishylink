@@ -7,7 +7,8 @@
 // dashboard's window behind it.
 
 import { useMemo, useState } from "react";
-import { TelemetryChart, windowTail, type ChartSeries } from "../shared/TelemetryChart";
+import { TelemetryChart, type ChartSeries } from "../shared/TelemetryChart";
+import { windowTail } from "../../lib/telemetryWindow";
 import { LatencyHistogram } from "./LatencyHistogram";
 import { EnergyHistoryPanel } from "./EnergyHistoryPanel";
 import { averageOf, energyKWh, coverageNote } from "../../lib/statDetails";
@@ -63,6 +64,10 @@ export interface StatDetail {
   showWindowEnergy?: boolean;
   /** Show the persistent day/week/month energy section (Power detail only). */
   showEnergyHistory?: boolean;
+  /** Freezes the chart's newest edge on a fixed instant (Power detail only, the
+   *  5s bucket boundary), so the sheet's chart steps in lockstep with the tile
+   *  and the dashboard chart instead of sliding every second. */
+  chartWindowEndMs?: number;
   /** Window the sheet opens on (defaults to 1H). */
   defaultWindowMinutes?: number;
 }
@@ -101,6 +106,13 @@ export function StatDetailPanel({ detail, samples }: StatDetailPanelProps) {
     () => windowTail(samples, windowMinutes, nowMs),
     [samples, windowMinutes, nowMs],
   );
+  // The power sheet freezes its chart on the 5s boundary, so that chart trims to
+  // the same instant — otherwise a live floor drops samples still inside the
+  // frozen window and creeps its left edge every second. The figures and energy
+  // below keep `windowed` (cut to now), so their math is untouched.
+  const chartWindowed = detail.chartWindowEndMs
+    ? windowTail(samples, windowMinutes, detail.chartWindowEndMs)
+    : windowed;
   const averageValue = useMemo(
     () => averageOf(windowed, getSeriesValue),
     [windowed, getSeriesValue],
@@ -184,13 +196,14 @@ export function StatDetailPanel({ detail, samples }: StatDetailPanelProps) {
       />
 
       <TelemetryChart
-        samples={windowed}
+        samples={chartWindowed}
         series={detail.series}
         windowMinutes={windowMinutes}
         formatValue={detail.formatValue}
         formatTick={detail.formatTick}
         outageEvents={detail.outageEvents}
         maxValue={detail.maxValue}
+        windowEndMs={detail.chartWindowEndMs}
         height={220}
       />
 
