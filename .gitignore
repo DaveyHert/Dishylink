@@ -8,8 +8,6 @@ release
 
 collector/data
 
-# Vitest browser mode writes failure screenshots next to the test file, and
-# attachments (diffs, traces) under .vitest-attachments. Diagnostic, not source.
 **/__screenshots__/
 .vitest-attachments/
 
@@ -19,8 +17,7 @@ collector/data
 # Claude Code's local settings/session state — machine-specific, not shared config.
 .claude/
 
-# Rasterized from build/icon.svg by scripts/make-icon.mjs. The SVG is the only
-# committed form of the mark.
+# Rasterized from build/icon.svg by scripts/make-icon.mjs. The SVG is the only committed form of the mark.
 build/icon.icns
 build/icon.png
 
