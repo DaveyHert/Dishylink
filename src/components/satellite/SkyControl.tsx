@@ -8,7 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 const roundControl =
   "inline-flex h-[30px] w-[30px] cursor-pointer items-center justify-center rounded-full " +
-  "border border-[#8b97a82e] bg-[#0a0e16b8] text-[13px] text-[#8b97a8] backdrop-blur-sm hover:text-[#c7d0dc] " +
+  "border border-[#8b97a82e] bg-[#000] text-[13px] text-[#8b97a8] backdrop-blur-sm hover:text-[#c7d0dc] " +
   "aria-pressed:border-[#c7d0dc59] aria-pressed:bg-[#161f2ecc] aria-pressed:text-[#e6ebf2]";
 
 /** One of the round controls over the sky. The label is both the tooltip and the
