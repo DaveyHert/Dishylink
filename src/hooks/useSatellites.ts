@@ -27,6 +27,21 @@ const RETRY_DELAYS_MS = [5_000, 15_000, 60_000, 300_000];
 
 export type SatelliteFeedState = "location-needed" | "loading" | "active" | "error";
 
+/**
+ * How far the ephemeris load has got, and which location it was for.
+ *
+ * Keyed by location so moving the observer reads as a fresh load on the next
+ * render, rather than needing an effect to reset the phase first — which would
+ * leave a frame claiming the old location's satellites are this one's.
+ */
+interface EphemerisLoad {
+  locationKey: string;
+  state: "loading" | "active" | "error";
+  reason: EphemerisFailure | null;
+}
+
+const LOADING: EphemerisLoad = { locationKey: "", state: "loading", reason: null };
+
 export interface SatelliteStats {
   inViewCount: number;
   serviceableCount: number;
@@ -92,27 +107,34 @@ export function useSatellites(
   observerLocation: ObserverLocation | null,
   obstructionMap: DishObstructionMapJson | null,
 ): SatelliteFeed {
-  const [feedState, setFeedState] = useState<SatelliteFeedState>("location-needed");
-  const [errorReason, setErrorReason] = useState<EphemerisFailure | null>(null);
   const [stats, setStats] = useState<SatelliteStats>(EMPTY_STATS);
+  const [load, setLoad] = useState<EphemerisLoad>(LOADING);
   const trackerRef = useRef<StarlinkTracker | null>(null);
+  // What the stats interval reads the current obstruction map from, so a new map
+  // does not restart the tracker. Written after commit rather than while
+  // rendering, which React may repeat or discard.
   const obstructionMapRef = useRef(obstructionMap);
-  obstructionMapRef.current = obstructionMap;
+  useEffect(() => {
+    obstructionMapRef.current = obstructionMap;
+  }, [obstructionMap]);
 
   const latitude = observerLocation?.latitudeDeg;
   const longitude = observerLocation?.longitudeDeg;
   const altitude = observerLocation?.altitudeM ?? 0;
 
+  // Without somewhere to stand there is nothing to compute, so that answer comes
+  // from the arguments rather than being stored and kept in step.
+  const hasLocation = latitude !== undefined && longitude !== undefined;
+  const locationKey = hasLocation ? `${latitude},${longitude},${altitude}` : "";
+  const current = load.locationKey === locationKey ? load : LOADING;
+  const feedState: SatelliteFeedState = hasLocation ? current.state : "location-needed";
+  const errorReason = current.reason;
+
   useEffect(() => {
-    if (latitude === undefined || longitude === undefined) {
-      setFeedState("location-needed");
-      return;
-    }
+    if (!hasLocation) return;
     let disposed = false;
     const timerIds: number[] = [];
     const retryIds: number[] = [];
-    setFeedState("loading");
-    setErrorReason(null);
 
     const start = async (attempt: number) => {
       try {
@@ -126,8 +148,7 @@ export function useSatellites(
         await tracker.coarsePass();
         if (disposed) return;
         trackerRef.current = tracker;
-        setFeedState("active");
-        setErrorReason(null);
+        setLoad({ locationKey, state: "active", reason: null });
 
         const updateStats = () => {
           const inView = tracker.finePass();
@@ -160,8 +181,11 @@ export function useSatellites(
         );
       } catch (error) {
         if (disposed) return;
-        setFeedState("error");
-        setErrorReason(error instanceof EphemerisError ? error.reason : "source");
+        setLoad({
+          locationKey,
+          state: "error",
+          reason: error instanceof EphemerisError ? error.reason : "source",
+        });
         // Keep trying rather than parking here until the user reloads: the
         // usual cause is the source being briefly slow or unreachable, which
         // resolves on its own.
@@ -181,7 +205,7 @@ export function useSatellites(
       retryIds.forEach((retryId) => window.clearTimeout(retryId));
       trackerRef.current = null;
     };
-  }, [latitude, longitude, altitude]);
+  }, [hasLocation, latitude, longitude, altitude, locationKey]);
 
   const sampleSky = useCallback(() => trackerRef.current?.finePass() ?? [], []);
 

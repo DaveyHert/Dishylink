@@ -10,8 +10,14 @@ import { useEffect, useRef, useState } from "react";
 export function useEasedValue(target: number, factor = 0.14, snapKey?: unknown): number {
   const [displayed, setDisplayed] = useState(target);
   const displayedRef = useRef(target);
+  // Where the frame loop below reads the goal from. Held in a ref so a new target
+  // does not restart the loop, and updated here rather than while rendering, which
+  // React may repeat or discard. Declared before the effects that read it so they
+  // see the current target in the same commit.
   const targetRef = useRef(target);
-  targetRef.current = target;
+  useEffect(() => {
+    targetRef.current = target;
+  }, [target]);
 
   const firstSnap = useRef(true);
   useEffect(() => {

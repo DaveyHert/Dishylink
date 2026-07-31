@@ -87,8 +87,18 @@ export function SatelliteView({
   // exists — which can happen after the first render, when the dish's GPS arrives.
   // Keyed on the has-location boolean, so a GPS refresh mid-edit does not fold it.
   const hasLocation = observerLocation !== null;
-  const [changingLocation, setChangingLocation] = useState(!hasLocation);
-  useEffect(() => setChangingLocation(!hasLocation), [hasLocation]);
+  // Whether the picker is open is the user's to say, but only for the location
+  // they said it about: the choice carries the has-location it was made under, so
+  // gaining or losing a location falls back to the default for the new one
+  // instead of keeping a decision that was about the old one.
+  const [pickerChoice, setPickerChoice] = useState<{ hasLocation: boolean; open: boolean } | null>(
+    null,
+  );
+  const changingLocation =
+    pickerChoice !== null && pickerChoice.hasLocation === hasLocation
+      ? pickerChoice.open
+      : !hasLocation;
+  const setChangingLocation = (open: boolean) => setPickerChoice({ hasLocation, open });
   const snapshots = useObstructionSnapshots();
   const [scrubIndex, setScrubIndex] = useState<number | null>(null); // null = live
 
@@ -114,7 +124,9 @@ export function SatelliteView({
   // status poll, so depending on it directly would tear the scene down and stand
   // a new one up roughly once a second — hence the ref plus a boolean trigger.
   const surveyRef = useRef(survey);
-  surveyRef.current = survey;
+  useEffect(() => {
+    surveyRef.current = survey;
+  }, [survey]);
   const hasSurvey = survey !== null;
 
   useEffect(() => {
@@ -280,7 +292,7 @@ export function SatelliteView({
               <button
                 type='button'
                 className={siteAction}
-                onClick={() => setChangingLocation((open) => !open)}
+                onClick={() => setChangingLocation(!changingLocation)}
               >
                 {site ? "change" : "set"}
               </button>

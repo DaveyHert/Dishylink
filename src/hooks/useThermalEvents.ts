@@ -12,6 +12,7 @@
 // firmware answers with Unimplemented. The flags are the whole signal.
 
 import { useEffect, useMemo, useState } from "react";
+import { useNow } from "./useNow";
 import type { OutageEvent } from "@core/telemetry";
 import { apiRequest } from "../lib/apiHost";
 
@@ -78,6 +79,12 @@ interface ThermalEpisodeJson {
  */
 export function useThermalEvents(): OutageEvent[] {
   const [episodes, setEpisodes] = useState<ThermalEpisodeJson[]>([]);
+  // An episode still running has no end, so its duration is measured against now
+  // and grows while it runs. Taken from the ticking clock so it actually advances
+  // on screen; read straight from Date.now() it would sit at whatever it was when
+  // something unrelated last caused a render. Durations show seconds, so it ticks
+  // every second.
+  const nowMs = useNow();
 
   useEffect(() => {
     let disposed = false;
@@ -100,7 +107,6 @@ export function useThermalEvents(): OutageEvent[] {
   }, []);
 
   return useMemo(() => {
-    const nowMs = Date.now();
     return episodes.flatMap((episode) => {
       const spec = SPEC_BY_ALERT_KEY.get(episode.alertKey);
       if (!spec) return [];
@@ -114,5 +120,5 @@ export function useThermalEvents(): OutageEvent[] {
         },
       ];
     });
-  }, [episodes]);
+  }, [episodes, nowMs]);
 }

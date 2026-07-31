@@ -114,7 +114,9 @@ export function SpeedBeam({ value, mode, caption, testActive = false, dishModel 
   // rides along for the same reason: swapping kit moves the beam's foot, and
   // naming it as a dependency of the loop would restart the orbit to do it.
   const stateRef = useRef({ testActive, mode, origin });
-  stateRef.current = { testActive, mode, origin };
+  useEffect(() => {
+    stateRef.current = { testActive, mode, origin };
+  }, [testActive, mode, origin]);
 
   const paint = useCallback(
     (

@@ -17,10 +17,16 @@ export interface DishSettingsState {
 
 export function useDishSettings(active: boolean): DishSettingsState {
   const [config, setConfig] = useState<(DishConfigJson & Record<string, unknown>) | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const clientRef = useRef<Promise<DishClient> | null>(null);
+
+  // Open with nothing to show and nothing gone wrong means the read is still out.
+  // Derived rather than set at the top of the effect below, so opening the modal
+  // does not spend a render announcing that it is about to start. Reopening keeps
+  // the config already read and refreshes it underneath, instead of blanking to a
+  // spinner for a value it still holds.
+  const loading = active && config === null && error === null;
 
   const loadConfig = useCallback(async () => {
     clientRef.current ??= DishClient.load("dish");
@@ -31,14 +37,14 @@ export function useDishSettings(active: boolean): DishSettingsState {
   useEffect(() => {
     if (!active) return;
     let disposed = false;
-    setLoading(true);
-    setError(null);
     loadConfig()
+      // Clears a previous failure only once a read has actually succeeded, so a
+      // reopen after an error keeps showing it until there is something better.
+      .then(() => !disposed && setError(null))
       .catch(
         (loadError) =>
           !disposed && setError(`Couldn't read dish config: ${(loadError as Error).message}`),
-      )
-      .finally(() => !disposed && setLoading(false));
+      );
     return () => {
       disposed = true;
     };

@@ -52,9 +52,13 @@ export function ObstructionDome({
 
   const survey = useMemo(() => liveSurvey(obstructionMap, status), [obstructionMap, status]);
   // `survey` is a new object on every status poll, so building on it directly
-  // would tear the scene down and stand a new one up about once a second.
+  // would tear the scene down and stand a new one up about once a second. The
+  // scene reads it from here instead, updated after commit rather than while
+  // rendering, which React may repeat or discard.
   const surveyRef = useRef(survey);
-  surveyRef.current = survey;
+  useEffect(() => {
+    surveyRef.current = survey;
+  }, [survey]);
   const hasSurvey = survey !== null;
 
   useEffect(() => {
