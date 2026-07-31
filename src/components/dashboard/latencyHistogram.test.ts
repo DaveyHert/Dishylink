@@ -2,7 +2,7 @@
 // overflow bar that keeps every spike instead of dropping it off the axis.
 
 import { describe, it, expect } from "vitest";
-import { binLatencies, BIN_COUNT } from "./LatencyHistogram";
+import { binLatencies, BIN_COUNT } from "../../lib/latencyBins";
 
 describe("binLatencies", () => {
   it("returns all-zero bins for no samples rather than NaN", () => {
