@@ -60,6 +60,7 @@ export default defineConfig(({ command }) => ({
             "cloud/**/*.test.ts",
             "collector/**/*.test.mts",
             "dev/**/*.test.mts",
+            "electron/**/*.test.ts",
             "extension/**/*.test.ts",
           ],
           // Extension store tests that need real IndexedDB run in the browser

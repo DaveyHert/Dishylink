@@ -9,3 +9,8 @@
 /** Carries a NotificationState whenever it changes, plus once per window load so
  *  a fresh renderer starts from the real state instead of a guess. */
 export const NOTIFICATION_STATE_CHANNEL = "notification-state";
+
+/** Carries the throughput-readout preference whenever it changes, so a window
+ *  that is open when the tray checkbox toggles it re-renders its own switch to
+ *  match rather than sitting on a stale value. macOS and Windows only. */
+export const MENUBAR_THROUGHPUT_CHANNEL = "menubar-throughput";

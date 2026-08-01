@@ -53,25 +53,35 @@ export function SegmentedControl<T extends string>({
     // A 13px pill switch with a glider that slides to the active tab. Light =
     // ink slab / page text; dark inverts to a raised surface pill / ink text
     // (not a white slab), so those need `dark:`.
+    //
+    // Sized for any column count: the track pads 3px on every side, leaving
+    // `100% - 6px` split into N equal columns, so a glider that wide (and moved a
+    // whole column-width per index) lands exactly on each tab. Grid template and
+    // glider geometry go inline because the counts are runtime values Tailwind's
+    // JIT can't see.
     const activeIndex = options.findIndex((option) => option.value === value);
     return (
       <ToggleGroupPrimitive.Root
         {...commonRootProps}
+        style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
         className={cn(
-          // Sizes to its content (equal columns so the glider stays 50%), with the
-          // padding living on the items — not a fixed track width that squeezes labels.
-          "relative mx-auto grid w-fit grid-cols-2 rounded-[999px] p-[3px]",
+          "relative mx-auto grid w-fit rounded-[999px] p-[3px]",
           "bg-[color-mix(in_srgb,var(--ink)_7%,var(--surface))] dark:bg-[color-mix(in_srgb,var(--ink)_7%,transparent)]",
           className,
         )}
       >
         <span
           aria-hidden='true'
+          style={{
+            width: `calc((100% - 6px) / ${options.length})`,
+            // Clamp: an unmatched value indexes to -1, which would slide the glider
+            // a full column off the left of the pill; fall back to the first tab.
+            transform: `translateX(${Math.max(0, activeIndex) * 100}%)`,
+          }}
           className={cn(
-            "pointer-events-none absolute inset-y-[3px] left-[3px] w-[calc(50%-3px)] rounded-[999px] bg-[var(--ink)]",
+            "pointer-events-none absolute inset-y-[3px] left-[3px] rounded-[999px] bg-[var(--ink)]",
             "transition-transform duration-[220ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
             "dark:bg-[var(--surface)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.15)]",
-            activeIndex === 1 && "translate-x-full",
           )}
         />
         {options.map((option) => (

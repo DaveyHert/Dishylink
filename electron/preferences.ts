@@ -25,9 +25,20 @@ export interface Preferences {
    * than no.
    */
   notifications: boolean | null;
+
+  /**
+   * Whether the live ↓/↑ throughput readout is shown — in the macOS menu bar
+   * beside the tray icon, or on the Windows taskbar. One preference, whichever
+   * surface the host has. A desktop-only display choice with no history anywhere
+   * else, so unlike `notifications` it is a plain boolean: off is a real default,
+   * not an unanswered question, and there is no older store to migrate a value
+   * from. (The stored key keeps this name even though the readout isn't menu-bar
+   * only — renaming it would orphan the value in existing settings files.)
+   */
+  menuBarThroughput: boolean;
 }
 
-const DEFAULTS: Preferences = { notifications: null };
+const DEFAULTS: Preferences = { notifications: null, menuBarThroughput: false };
 
 let cached: Preferences | null = null;
 
@@ -45,6 +56,8 @@ export function preferences(): Preferences {
     cached = {
       ...DEFAULTS,
       notifications: typeof parsed.notifications === "boolean" ? parsed.notifications : null,
+      menuBarThroughput:
+        typeof parsed.menuBarThroughput === "boolean" ? parsed.menuBarThroughput : false,
     };
   } catch {
     // No file yet, or unreadable. Either way the defaults are the answer.

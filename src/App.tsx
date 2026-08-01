@@ -163,11 +163,27 @@ export default function App() {
 
   const { status, samples } = telemetry;
 
+  // Forward the live throughput to the desktop readout — the macOS menu bar or the
+  // Windows taskbar strip — so it shows the same number this dashboard does. A
+  // no-op in the browser and the extension, where the bridge is absent.
+  useEffect(() => {
+    window.dishlink?.reportThroughput?.(
+      status?.downlinkThroughputBps ?? 0,
+      status?.uplinkThroughputBps ?? 0,
+    );
+  }, [status]);
+
   // One clock for the tiles and the chart windows alike, so a figure and the
   // chart beneath it describe the same instant — except power, whose figure and
   // chart both settle instead on the 5s boundary (`powerWindowEndMs`).
-  const { nowMs, livePowerW, powerWindowEndMs, averagePowerW, recentPingSuccessPercent, sparklines } =
-    useLiveReadings(samples);
+  const {
+    nowMs,
+    livePowerW,
+    powerWindowEndMs,
+    averagePowerW,
+    recentPingSuccessPercent,
+    sparklines,
+  } = useLiveReadings(samples);
 
   const liveDownlink = formatThroughput(status?.downlinkThroughputBps ?? 0);
   const liveUplink = formatThroughput(status?.uplinkThroughputBps ?? 0);

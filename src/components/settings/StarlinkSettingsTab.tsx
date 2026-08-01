@@ -1,6 +1,6 @@
 // Dish configuration and maintenance — the Starlink half of the settings sheet.
 
-import { useState, useSyncExternalStore } from "react";
+import { useState } from "react";
 import { Callout } from "@/components/ui/callout";
 import { Loading } from "@/components/ui/loading";
 import { Switch } from "@/components/ui/switch";
@@ -24,7 +24,6 @@ import {
 } from "./settingsChrome";
 import { localTimeToUtcMinutes, utcMinutesToLocalTime } from "./sleepSchedule";
 import { UPDATE_WINDOWS, updateWindowFor } from "./updateWindow";
-import { readNavStyle, setNavStyle, subscribeToNavStyle, type NavStyle } from "../../lib/navStyle";
 
 const SNOW_MELT_LABEL: Record<SnowMeltMode, string> = {
   AUTO: "Automatic",
@@ -47,7 +46,6 @@ export function StarlinkSettingsTab({
   onCopyDiagnostics: () => Promise<"copied" | "failed">;
 }) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
-  const navStyle = useSyncExternalStore(subscribeToNavStyle, readNavStyle);
   const config = settings.config;
 
   const sleepEnabled = Boolean(config?.powerSaveMode);
@@ -246,25 +244,6 @@ export function StarlinkSettingsTab({
           )}
         </>
       )}
-
-      {/* An app-display choice, not dish config — kept outside the config gate so
-          it stays available even when the dish is unreachable, and last so the
-          dish's own settings lead. */}
-      <SettingRow title='App toolbar' caption='Floating dock or a left rail for the section links'>
-        <Select value={navStyle} onValueChange={(value) => setNavStyle(value as NavStyle)}>
-          <SelectTrigger className={triggerClass} style={{ width: 118 }}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className={selectContentClass}>
-            <SelectItem value='dock' className={selectItemClass}>
-              Dock
-            </SelectItem>
-            <SelectItem value='rail' className={selectItemClass}>
-              Left rail
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </SettingRow>
     </>
   );
 }

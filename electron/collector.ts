@@ -9,11 +9,17 @@ import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { AlertTransition } from "../core/alertEngine";
+import type { ThroughputSample } from "../collector/historian.mts";
+
+export type { ThroughputSample };
 
 type NodeHandler = (request: IncomingMessage, response: ServerResponse) => void;
 type AlertListener = (transitions: AlertTransition[]) => void;
+type ThroughputListener = (sample: ThroughputSample) => void;
 let handleRequest: NodeHandler | null = null;
 let subscribeToAlerts: ((listener: AlertListener) => () => void) | null = null;
+let subscribeToThroughput: ((listener: ThroughputListener) => () => void) | null = null;
+let enableLiveThroughput: ((enabled: boolean) => void) | null = null;
 
 /**
  * Start the historian in this process. It is configured through the same env the
@@ -29,6 +35,8 @@ export async function startCollector(rendererRoot: string): Promise<void> {
   const historian = await import("../collector/historian.mts");
   handleRequest = historian.handleRequest;
   subscribeToAlerts = historian.onAlertTransitions;
+  subscribeToThroughput = historian.onThroughput;
+  enableLiveThroughput = historian.setLiveThroughputEnabled;
 }
 
 /**
@@ -41,6 +49,31 @@ export async function startCollector(rendererRoot: string): Promise<void> {
  */
 export function onAlertTransitions(listener: AlertListener): () => void {
   return subscribeToAlerts?.(listener) ?? (() => {});
+}
+
+/**
+ * Watch the recorder's live throughput — the once-a-second dish reading the
+ * menu-bar readout shows while no window is open.
+ *
+ * The feed is silent until switched on with setLiveThroughputEnabled, and only its
+ * owner does that, in the gap where no window is running the equivalent poll. A
+ * subscriber that arrives before the collector has started gets a no-op unsubscribe
+ * and the real feed once it runs.
+ */
+export function onThroughput(listener: ThroughputListener): () => void {
+  return subscribeToThroughput?.(listener) ?? (() => {});
+}
+
+/**
+ * Start or stop the recorder's once-a-second throughput poll of the dish.
+ *
+ * Its owner drives this from its own gate — on only while the readout is showing
+ * and no window is polling the dish itself — so the dish is never asked twice a
+ * second. A no-op until the collector has started (a dev main leaves it unstarted
+ * and lets the separate dev historian record instead).
+ */
+export function setLiveThroughputEnabled(enabled: boolean): void {
+  enableLiveThroughput?.(enabled);
 }
 
 /**

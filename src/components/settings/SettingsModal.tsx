@@ -14,6 +14,7 @@ import { useDishSettings } from "../../hooks/useDishSettings";
 import { specForHardware } from "../../lib/dishMesh";
 import { RouterSettingsTab } from "./RouterSettingsTab";
 import { StarlinkSettingsTab } from "./StarlinkSettingsTab";
+import { AppSettingsTab } from "./AppSettingsTab";
 
 interface SettingsModalProps {
   open: boolean;
@@ -32,7 +33,7 @@ export function SettingsModal({
   wifiConfig,
   routerReachable,
 }: SettingsModalProps) {
-  const [tab, setTab] = useState<"starlink" | "router">("starlink");
+  const [tab, setTab] = useState<"starlink" | "router" | "app">("starlink");
   const settings = useDishSettings(open);
 
   // Animate the body height: measure the active panel and cap at 68vh (inner
@@ -107,6 +108,7 @@ export function SettingsModal({
             options={[
               { value: "starlink", label: "Starlink" },
               { value: "router", label: "Router" },
+              { value: "app", label: "App" },
             ]}
           />
         </div>
@@ -128,6 +130,7 @@ export function SettingsModal({
             {tab === "router" && (
               <RouterSettingsTab wifiConfig={wifiConfig} routerReachable={routerReachable} />
             )}
+            {tab === "app" && <AppSettingsTab />}
           </div>
         </div>
       </DialogContent>

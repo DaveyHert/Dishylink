@@ -4,11 +4,23 @@
 interface Window {
   dishlink?: {
     versions: { electron: string; chrome: string };
+    // The host OS ("darwin" | "win32" | "linux" | …), so a control can name the
+    // right surface (menu bar vs taskbar) without sniffing the user agent.
+    platform: string;
+    // The renderer has no shell access, so opening links crosses to main.
+    openExternal: (url: string) => void;
     signIn: () => Promise<{ ok: boolean; message?: string }>;
     cloud: (request: {
       path: string;
       method?: string;
       body?: unknown;
     }) => Promise<{ status: number; body: unknown }>;
+    // The throughput-readout controls — macOS menu bar or Windows taskbar —
+    // exposed by the preload only on those platforms, so they are optional, and
+    // the settings toggle renders only where `setMenuBarThroughput` is present.
+    menuBarThroughput?: () => Promise<boolean>;
+    setMenuBarThroughput?: (on: boolean) => Promise<boolean>;
+    onMenuBarThroughput?: (listener: (on: boolean) => void) => () => void;
+    reportThroughput?: (downBps: number, upBps: number) => void;
   };
 }

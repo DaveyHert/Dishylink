@@ -6,13 +6,16 @@
 
 import { contextBridge, ipcRenderer } from "electron";
 import type { NotificationState } from "../core/alertNotification";
-import { NOTIFICATION_STATE_CHANNEL } from "./ipc";
+import { NOTIFICATION_STATE_CHANNEL, MENUBAR_THROUGHPUT_CHANNEL } from "./ipc";
 
 contextBridge.exposeInMainWorld("dishlink", {
   versions: {
     electron: process.versions.electron,
     chrome: process.versions.chrome,
   },
+  // So the renderer can word a control for the host it runs on (menu bar on
+  // macOS, taskbar on Windows) without sniffing the user agent.
+  platform: process.platform,
   // The renderer has no shell access, so this crosses to main.
   openExternal: (url: string): void => {
     ipcRenderer.send("open-external", url);
@@ -63,4 +66,29 @@ contextBridge.exposeInMainWorld("dishlink", {
       ipcRenderer.off(NOTIFICATION_STATE_CHANNEL, handler);
     };
   },
+  // The live throughput readout — the macOS menu-bar tray title or the Windows
+  // taskbar strip — so these are exposed on those two platforms only. The renderer
+  // keys the settings toggle off their presence: absent here, absent from the UI,
+  // with no platform check of its own. Owned by main because main owns the tray and
+  // the strip the readout rides on.
+  ...(process.platform === "darwin" || process.platform === "win32"
+    ? {
+        menuBarThroughput: (): Promise<boolean> => ipcRenderer.invoke("get-menubar-throughput"),
+        setMenuBarThroughput: (on: boolean): Promise<boolean> =>
+          ipcRenderer.invoke("set-menubar-throughput", on),
+        // The window's live dish throughput, forwarded to the readout so it shows
+        // the same number the dashboard does. Fire-and-forget: it fires once a
+        // second and the readout is cosmetic, so nothing waits on it.
+        reportThroughput: (downBps: number, upBps: number): void => {
+          ipcRenderer.send("report-throughput", downBps, upBps);
+        },
+        onMenuBarThroughput: (listener: (on: boolean) => void): (() => void) => {
+          const handler = (_event: unknown, on: boolean): void => listener(on);
+          ipcRenderer.on(MENUBAR_THROUGHPUT_CHANNEL, handler);
+          return () => {
+            ipcRenderer.off(MENUBAR_THROUGHPUT_CHANNEL, handler);
+          };
+        },
+      }
+    : {}),
 });

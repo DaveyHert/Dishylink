@@ -52,11 +52,7 @@ import { ClientTotalsStore } from "./clientTotals.mts";
 import { ThroughputTracker } from "../core/throughputTracker.ts";
 import { usageKey } from "../core/clientUsage.ts";
 import { AlertStore } from "./alertStore.mts";
-import {
-  AlertEngine,
-  type AlertObservation,
-  type AlertTransition,
-} from "../core/alertEngine.ts";
+import { AlertEngine, type AlertObservation, type AlertTransition } from "../core/alertEngine.ts";
 import { ObstructionStore, packCells } from "./obstructionStore.mts";
 
 const DISH_URL =
@@ -454,13 +450,78 @@ const alertEngine = new AlertEngine(
  */
 const alertListeners = new Set<(transitions: AlertTransition[]) => void>();
 
-export function onAlertTransitions(
-  listener: (transitions: AlertTransition[]) => void,
-): () => void {
+export function onAlertTransitions(listener: (transitions: AlertTransition[]) => void): () => void {
   alertListeners.add(listener);
   return () => {
     alertListeners.delete(listener);
   };
+}
+
+/**
+ * A live throughput feed for a readout that outlives an open window — the desktop
+ * menu-bar number shown while the dashboard is closed.
+ *
+ * While enabled it polls the dish's get_status once a second and hands each
+ * reading to the listeners: the same downlink/uplink the dashboard's live tiles
+ * draw, so the two agree. It stays off until switched on, so nothing here polls
+ * the dish unless a readout is actually showing — and its owner starts it only in
+ * the gap where no window is running the equivalent poll, so the dish is never
+ * asked twice a second.
+ */
+export interface ThroughputSample {
+  downBps: number;
+  upBps: number;
+  /** When the reading was taken, so a stale readout can be told apart from a
+   *  genuinely idle link by whoever renders it. */
+  atMs: number;
+}
+
+const throughputListeners = new Set<(sample: ThroughputSample) => void>();
+
+export function onThroughput(listener: (sample: ThroughputSample) => void): () => void {
+  throughputListeners.add(listener);
+  return () => {
+    throughputListeners.delete(listener);
+  };
+}
+
+const LIVE_THROUGHPUT_POLL_MS = 1_000;
+let liveThroughputTimer: ReturnType<typeof setInterval> | null = null;
+
+/** Fetch one dish get_status and publish its throughput. A failed fetch publishes
+ *  nothing — the readout's owner ages the last number out to zero on its own — and
+ *  is swallowed so a momentary miss doesn't tear down the once-a-second loop. */
+async function pollLiveThroughput(): Promise<void> {
+  let status: { downlinkThroughputBps?: number; uplinkThroughputBps?: number } | undefined;
+  try {
+    const json = (await deviceCall(DISH_URL, GET_STATUS_FIELD)) as {
+      dishGetStatus?: { downlinkThroughputBps?: number; uplinkThroughputBps?: number };
+    };
+    status = json.dishGetStatus;
+  } catch {
+    return;
+  }
+  if (!status) return;
+  const sample: ThroughputSample = {
+    downBps: status.downlinkThroughputBps ?? 0,
+    upBps: status.uplinkThroughputBps ?? 0,
+    atMs: Date.now(),
+  };
+  for (const listener of throughputListeners) listener(sample);
+}
+
+/** Start or stop the once-a-second dish poll behind the live feed. Idempotent, so
+ *  the owner can drive it straight from its own gate each tick: a repeated call
+ *  with the state it is already in does nothing. */
+export function setLiveThroughputEnabled(enabled: boolean): void {
+  if (enabled === (liveThroughputTimer !== null)) return;
+  if (enabled) {
+    void pollLiveThroughput();
+    liveThroughputTimer = setInterval(() => void pollLiveThroughput(), LIVE_THROUGHPUT_POLL_MS);
+  } else if (liveThroughputTimer !== null) {
+    clearInterval(liveThroughputTimer);
+    liveThroughputTimer = null;
+  }
 }
 
 /** Persist a cycle's transitions, then hand them to whoever is listening. */
@@ -955,7 +1016,12 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
     const from = url.searchParams.get("from");
     const to = url.searchParams.get("to");
     const distinct = url.searchParams.get("distinct") === "1";
-    const applied = from && to ? (distinct ? clientTotals.rejectMerge(from, to) : clientTotals.merge(from, to)) : false;
+    const applied =
+      from && to
+        ? distinct
+          ? clientTotals.rejectMerge(from, to)
+          : clientTotals.merge(from, to)
+        : false;
     if (applied) clientTotals.snapshot();
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify(distinct ? { rejected: applied } : { merged: applied }));
@@ -1030,7 +1096,9 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
           ? []
           : foldMinuteCollisions(resolveRows(clientStore.history(hours), resolveRowKey, client)),
         ...(wantSamples
-          ? { samples: resolveRows(clientWindow.samples(undefined, sinceMs), resolveRowKey, client) }
+          ? {
+              samples: resolveRows(clientWindow.samples(undefined, sinceMs), resolveRowKey, client),
+            }
           : {}),
         // Monthly odometer, so the device detail can show a real total that
         // survives the reconnects the router's own counter resets on. Asked for

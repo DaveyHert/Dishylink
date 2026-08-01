@@ -66,10 +66,15 @@ mac:
 win:
   artifactName: ${productName}-${version}-${arch}.${ext}
   target:
-    # nsis is the standard assisted installer .exe. Only x64 — Windows on ARM is a
-    # rounding error and the dev/test box is x64.
+    # nsis is the standard assisted installer .exe, built for both Windows
+    # architectures: x64 (the near-universal Intel/AMD desktop) and arm64 (Windows
+    # on ARM — Surface Pro X, Snapdragon/Copilot+ laptops). ARM machines can run the
+    # x64 build under emulation, so the native arm64 installer is the faster path
+    # for them rather than a gap being closed. Nothing here is compiled per-arch —
+    # vite inlines every dependency and the tree has no native modules — so the
+    # second arch costs only its own Electron download at build time.
     - target: nsis
-      arch: [x64]
+      arch: [x64, arm64]
   # The runtime PNG doubles as the packaging icon. electron-builder converts it to a
   # multi-resolution .ico itself; only its *ICNS* writer is the buggy one that forced
   # the prebuilt-icns dance on macOS above — its ICO writer is fine, so no per-format
