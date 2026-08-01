@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "vite",
     "dev:electron": "node scripts/make-icon.mjs && ELECTRON=1 vite",
-    "dev:electron:win": "node scripts/make-icon.mjs && cross-env ELECTRON=1 vite",
+    "dev:electron:win": "cross-env ELECTRON=1 vite",
     "build": "tsc -b && vite build",
     "build:electron": "ELECTRON=1 vite build",
     "pack:mac": "rm -rf dist dist-electron release && tsc -b && ELECTRON=1 vite build && node scripts/make-icon.mjs && electron-builder --mac --publish never",

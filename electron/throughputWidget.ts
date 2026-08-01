@@ -10,7 +10,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 const PILL_PADDING_Y = 5;
 const PILL_PADDING_X = 9;
 const FONT_SIZE = 11;
-// Fixed window size — transparent, so space beyond the pill is invisible.
+// Initial window size before the first paint snaps it to the pill.
 const WIDGET_WIDTH = 200;
 const WIDGET_HEIGHT = 30;
 const DEFAULT_MARGIN = 16;
@@ -39,6 +39,8 @@ const PAGE = `<!doctype html>
     window.__setRates = function (down, up) {
       document.getElementById("downVal").textContent = down;
       document.getElementById("upVal").textContent = up;
+      var r = document.querySelector(".pill").getBoundingClientRect();
+      return { w: Math.ceil(r.width), h: Math.ceil(r.height) };
     };
   </script>
 </body>
@@ -48,6 +50,9 @@ let widget: BrowserWindow | null = null;
 let ready = false;
 let pending: { down: string; up: string } | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+// Track drag state so we can defer resizing while the user is actively dragging.
+let isDragging = false;
+let pendingSize: { w: number; h: number } | null = null;
 // Guards clampToScreen's setBounds from re-entering the "moved" handler.
 let clamping = false;
 
@@ -77,7 +82,15 @@ function savePositionDebounced(): void {
   if (saveTimer !== null) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     saveTimer = null;
+    isDragging = false;
     if (widget === null || widget.isDestroyed()) return;
+    
+    // Apply any resizes that were deferred while dragging.
+    if (pendingSize !== null) {
+      widget.setContentSize(pendingSize.w, pendingSize.h);
+      pendingSize = null;
+    }
+    
     clampToScreen();
     const { x, y } = widget.getBounds();
     try {
@@ -88,11 +101,11 @@ function savePositionDebounced(): void {
   }, SAVE_DEBOUNCE_MS);
 }
 
-/** Clamp fully onto the nearest display (full bounds, not work area). */
+/** Clamp fully onto the nearest display's work area (excludes taskbar). */
 function clampToScreen(): void {
   if (widget === null || widget.isDestroyed()) return;
   const bounds = widget.getBounds();
-  const area = screen.getDisplayMatching(bounds).bounds;
+  const area = screen.getDisplayMatching(bounds).workArea;
   const x = Math.min(Math.max(bounds.x, area.x), area.x + area.width - bounds.width);
   const y = Math.min(Math.max(bounds.y, area.y), area.y + area.height - bounds.height);
   if (x !== bounds.x || y !== bounds.y) {
@@ -145,6 +158,7 @@ export function showThroughputWidget(): void {
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   widget.on("moved", () => {
+    isDragging = true;
     if (clamping) return;
     savePositionDebounced();
   });
@@ -174,9 +188,21 @@ export function paintThroughputWidget(downLabel: string, upLabel: string): void 
 async function renderRates(down: string, up: string): Promise<void> {
   if (widget === null || widget.isDestroyed() || !ready) return;
   try {
-    await widget.webContents.executeJavaScript(
+    const size = (await widget.webContents.executeJavaScript(
       `window.__setRates(${JSON.stringify(down)}, ${JSON.stringify(up)})`,
-    );
+    )) as { w: number; h: number } | undefined;
+    if (size === undefined || widget === null || widget.isDestroyed()) return;
+
+    const [width, height] = widget.getContentSize();
+    if (width !== size.w || height !== size.h) {
+      if (isDragging) {
+        // Defer resize until dragging finishes to avoid OS snapping glitches.
+        pendingSize = size;
+      } else {
+        widget.setContentSize(size.w, size.h);
+        clampToScreen();
+      }
+    }
   } catch {
     // Window tearing down; next paint recovers.
   }
