@@ -67,10 +67,10 @@ contextBridge.exposeInMainWorld("dishlink", {
     };
   },
   // The live throughput readout — the macOS menu-bar tray title or the Windows
-  // taskbar strip — so these are exposed on those two platforms only. The renderer
+  // floating widget — so these are exposed on those two platforms only. The renderer
   // keys the settings toggle off their presence: absent here, absent from the UI,
   // with no platform check of its own. Owned by main because main owns the tray and
-  // the strip the readout rides on.
+  // the widget the readout rides on.
   ...(process.platform === "darwin" || process.platform === "win32"
     ? {
         menuBarThroughput: (): Promise<boolean> => ipcRenderer.invoke("get-menubar-throughput"),

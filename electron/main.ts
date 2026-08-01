@@ -39,10 +39,10 @@ import {
 import { NOTIFICATION_STATE_CHANNEL, MENUBAR_THROUGHPUT_CHANNEL } from "./ipc";
 import { formatMenuBarRate, formatSpacedRate } from "./menuBarThroughput";
 import {
-  showThroughputStrip,
-  paintThroughputStrip,
-  hideThroughputStrip,
-} from "./throughputStrip";
+  showThroughputWidget,
+  paintThroughputWidget,
+  hideThroughputWidget,
+} from "./throughputWidget";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const rendererRoot = join(here, "../dist");
@@ -70,8 +70,8 @@ let notifyItem: MenuItem | null = null;
 let notifyReasonItem: MenuItem | null = null;
 let throughputItem: MenuItem | null = null;
 
-// The live throughput readout: the macOS tray title, or the Windows taskbar strip
-// (throughputStrip.ts) — one preference, two paint targets, nothing on Linux.
+// The live throughput readout: the macOS tray title, or the Windows floating widget
+// (throughputWidget.ts) — one preference, two paint targets, nothing on Linux.
 // Registered in dev too, but the window-closed feed is dark there since its
 // recorder runs only in the packaged app.
 const MENU_BAR_THROUGHPUT_SUPPORTED =
@@ -179,7 +179,7 @@ function createTray(): void {
       enabled: false,
       visible: false,
     },
-    // macOS and Windows only: the surface it drives (tray title / taskbar strip)
+    // macOS and Windows only: the surface it drives (tray title / floating widget)
     // has no equivalent on Linux. The label names that surface per platform.
     ...(MENU_BAR_THROUGHPUT_SUPPORTED
       ? [
@@ -225,14 +225,14 @@ function throughputTitle(downBps: number, upBps: number): string {
 
 /** Paint the readout from the latest throughput, or clear it when off. A stale
  *  sample (dish unreachable) reads as 0, not a frozen value. macOS writes the tray
- *  title; Windows drives the taskbar strip. */
+ *  title; Windows drives the floating widget. */
 function applyMenuBarThroughput(): void {
   if (!MENU_BAR_THROUGHPUT_SUPPORTED || tray === null) return;
   const on = preferences().menuBarThroughput;
   if (throughputItem !== null) throughputItem.checked = on;
   if (!on) {
     if (process.platform === "darwin") tray.setTitle("");
-    else hideThroughputStrip();
+    else hideThroughputWidget();
     return;
   }
   const sample = latestThroughput;
@@ -242,9 +242,9 @@ function applyMenuBarThroughput(): void {
   if (process.platform === "darwin") {
     tray.setTitle(throughputTitle(downBps, upBps), { fontType: "monospaced" });
   } else {
-    // The strip has room for the spaced unit; the menu-bar title packs it out.
-    showThroughputStrip();
-    paintThroughputStrip(formatSpacedRate(downBps), formatSpacedRate(upBps));
+    // The widget has room for the spaced unit; the menu-bar title packs it out.
+    showThroughputWidget();
+    paintThroughputWidget(formatSpacedRate(downBps), formatSpacedRate(upBps));
   }
 }
 

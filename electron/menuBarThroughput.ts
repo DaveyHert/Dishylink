@@ -1,8 +1,7 @@
-// Formatting and layout math for the two throughput readouts — the macOS menu-bar
-// tray title and the Windows taskbar strip — kept apart from main.ts so it can be
-// tested without pulling in Electron. Pure math, no app state; the geometry types
-// mirror Electron's Rectangle rather than importing it, so this file stays
-// electron-free and importable from a Node test.
+// Formatting for the two throughput readouts — the macOS menu-bar tray title and
+// the Windows floating widget — kept apart from main.ts so it can be tested without
+// pulling in Electron. Pure functions, no app state. (The Windows widget's window —
+// its placement, dragging, and remembered position — lives in throughputWidget.ts.)
 
 /**
  * Compact bitrate for the narrow menu bar: "1.2Mb/s", "340Kb/s", "2.0Gb/s".
@@ -26,54 +25,4 @@ export function formatMenuBarRate(bitsPerSecond: number): string {
  */
 export function formatSpacedRate(bitsPerSecond: number): string {
   return formatMenuBarRate(bitsPerSecond).replace(/(?=[KMG]b\/s$)/, " ");
-}
-
-/** A screen rectangle, matching the shape of Electron's Rectangle. */
-export interface Rect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-/** A display's full extent and the part of it not covered by the taskbar. */
-export interface DisplayMetrics {
-  bounds: Rect;
-  workArea: Rect;
-}
-
-/**
- * The taskbar strip's default spot: centred in the taskbar band, tucked left of
- * the clock. The band is inferred from the gap between the display's full bounds
- * and its work area — that gap is the taskbar. A bottom bar is the common case; a
- * top bar is handled the same way in the top band. For a side bar, or an
- * auto-hidden one that leaves no gap, there's no horizontal band to ride, so the
- * strip pins to the bottom-right of the usable area instead of landing off-screen.
- */
-export function defaultStripPosition(
-  display: DisplayMetrics,
-  size: { width: number; height: number },
-): { x: number; y: number } {
-  const { bounds, workArea } = display;
-  const bottomBand = bounds.y + bounds.height - (workArea.y + workArea.height);
-  const topBand = workArea.y - bounds.y;
-  // Left of the clock and system-tray cluster, roughly its width, so the default
-  // spot clears it. Only a starting point — the strip is a small, fixed overlay.
-  const clockClearance = 180;
-  if (bottomBand > 0) {
-    return {
-      x: bounds.x + bounds.width - size.width - clockClearance,
-      y: bounds.y + bounds.height - bottomBand + Math.round((bottomBand - size.height) / 2),
-    };
-  }
-  if (topBand > 0) {
-    return {
-      x: bounds.x + bounds.width - size.width - clockClearance,
-      y: bounds.y + Math.round((topBand - size.height) / 2),
-    };
-  }
-  return {
-    x: workArea.x + workArea.width - size.width - 8,
-    y: workArea.y + workArea.height - size.height - 8,
-  };
 }

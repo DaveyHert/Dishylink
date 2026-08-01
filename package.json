@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "type": "module",
   "main": "dist-electron/main.js",
-  "author": "daveyhert <daveyhert@gmail.com>",
+  "author": "daveyhert <daviehert@gmail.com>",
   "description": "Live dashboard and always-on history recorder for a Starlink kit (unofficial).",
   "scripts": {
     "dev": "vite",
