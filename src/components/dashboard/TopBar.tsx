@@ -86,6 +86,7 @@ export function TopBar({
           notificationsBlockedReason={notificationsBlockedReason}
           onToggleNotifications={onToggleNotifications}
         />
+        <SupportMenu />
         <button
           className={iconButton}
           onClick={onToggleTheme}
@@ -94,7 +95,6 @@ export function TopBar({
         >
           {theme === "light" ? <MoonIcon /> : <SunIcon />}
         </button>
-        <SupportMenu />
       </div>
     </header>
   );

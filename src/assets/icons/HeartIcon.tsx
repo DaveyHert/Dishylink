@@ -1,13 +1,14 @@
 export function HeartIcon({ size = 14, ...props }: React.ComponentProps<"svg"> & { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox='0 0 24 24' fill='none' aria-hidden='true' {...props}>
-      <path
-        d='M12 20.6c-.3 0-.6-.1-.8-.3C7.6 17.5 4 14.3 4 10.4 4 7.7 6.1 5.6 8.7 5.6c1.4 0 2.7.6 3.3 1.6.6-1 1.9-1.6 3.3-1.6 2.6 0 4.7 2.1 4.7 4.8 0 3.9-3.6 7.1-7.2 9.9-.2.2-.5.3-.8.3Z'
-        stroke='currentColor'
-        strokeWidth={2}
-        strokeLinecap='round'
-        strokeLinejoin='round'
-      />
+    <svg
+      width={size}
+      height={size}
+      viewBox='0 0 256 256'
+      fill='currentColor'
+      aria-hidden='true'
+      {...props}
+    >
+      <path d='M178,40c-20.65,0-38.73,8.88-50,23.89C116.73,48.88,98.65,40,78,40a62.07,62.07,0,0,0-62,62c0,70,103.79,126.66,108.21,129a8,8,0,0,0,7.58,0C136.21,228.66,240,172,240,102A62.07,62.07,0,0,0,178,40ZM128,214.8C109.74,204.16,32,155.69,32,102A46.06,46.06,0,0,1,78,56c19.45,0,35.78,10.36,42.6,27a8,8,0,0,0,14.8,0c6.82-16.67,23.15-27,42.6-27a46.06,46.06,0,0,1,46,46C224,155.61,146.24,204.15,128,214.8Z' />
     </svg>
   );
 }
