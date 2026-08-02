@@ -1,10 +1,12 @@
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { HeartIcon } from "../../assets/icons/HeartIcon";
 import { StarIcon } from "../../assets/icons/StarIcon";
 import { HandHeartIcon } from "../../assets/icons/HandHeartIcon";
 import { CoffeeIcon } from "../../assets/icons/CoffeeIcon";
-import { GiftIcon } from "../../assets/icons/GiftIcon";
+import { PatreonIcon } from "../../assets/icons/PatreonIcon";
+import { DownloadIcon } from "../../assets/icons/DownloadIcon";
 import { BugIcon } from "../../assets/icons/BugIcon";
 import { BulbIcon } from "../../assets/icons/BulbIcon";
 import { MailIcon } from "../../assets/icons/MailIcon";
@@ -13,19 +15,19 @@ import { ScaleIcon } from "../../assets/icons/ScaleIcon";
 
 type IconComponent = React.ComponentType<React.ComponentProps<"svg"> & { size?: number }>;
 
-// Not imported from package.json: that file sits outside every build target's
-// tsconfig `include` (web, Electron, extension each scope their own), so
-// pulling it in would need resolveJsonModule wired three times over for one
-// string. Bump this alongside the version in package.json instead.
-const APP_VERSION = "0.1.0";
+// Injected at build time from package.json — see vite.config.ts and
+// wxt.config.ts's `define`. Bumping package.json's version is the only edit a
+// release needs; nothing here goes stale.
+const APP_VERSION = __APP_VERSION__;
 
 const REPO = "https://github.com/DaveyHert/dishylink";
 
 const SUPPORT_LINKS = {
   starRepo: REPO,
   githubSponsors: "https://github.com/sponsors/daveyhert",
-  buyMeACoffee: "TODO: buymeacoffee.com handle",
-  koFi: "TODO: ko-fi.com handle",
+  buyMeACoffee: "https://buymeacoffee.com/daveyhert",
+  patreon: "https://www.patreon.com/DaveyHert",
+  latestRelease: `${REPO}/releases/latest`,
   reportIssue: `${REPO}/issues/new?labels=bug`,
   requestFeature: `${REPO}/issues/new?labels=enhancement`,
   contact: "mailto:hello@daveyhert.com",
@@ -46,19 +48,20 @@ function openExternal(url: string): void {
 }
 
 const MENU_ITEM =
-  "flex w-full items-center gap-2.5 rounded-[8px] px-2 py-2 text-left text-[13px] text-[var(--ink)] no-underline transition-colors hover:bg-[var(--hairline)]";
+  "flex w-full items-center gap-2.5 rounded-[8px] px-2 py-2 text-left text-[13px] text-(--ink) no-underline transition-colors hover:bg-(--hairline)";
 const MENU_LABEL =
-  "px-2 pt-1.5 pb-1 text-[10.5px] font-semibold tracking-[0.06em] text-[var(--ink-muted)] uppercase";
-const SECTION = "border-b border-solid border-[var(--hairline)] p-1.5 last:border-b-0";
+  "px-2 pt-1.5 pb-1 text-[10.5px] font-semibold tracking-[0.06em] text-(--ink-muted) uppercase";
+const SECTION = "border-b border-solid border-(--hairline) p-1.5 last:border-b-0";
 
 interface MenuLinkItem {
   href: string;
   icon: IconComponent;
   accent?: boolean;
+  iconClassName?: string;
   children: React.ReactNode;
 }
 
-function MenuLink({ href, icon: Icon, accent, children }: MenuLinkItem) {
+function MenuLink({ href, icon: Icon, accent, iconClassName, children }: MenuLinkItem) {
   return (
     <button
       type='button'
@@ -68,7 +71,7 @@ function MenuLink({ href, icon: Icon, accent, children }: MenuLinkItem) {
       <span
         className={cn(
           "size-[15px] flex-none",
-          accent ? "text-[var(--accent)]" : "text-[var(--ink-secondary)]",
+          iconClassName ?? (accent ? "text-(--accent)" : "text-(--ink-secondary)"),
         )}
       >
         <Icon className='size-full' />
@@ -89,8 +92,13 @@ const SECTIONS: { label: string; items: MenuLinkItem[] }[] = [
         accent: true,
         children: "Become a GitHub Sponsor",
       },
+      {
+        href: SUPPORT_LINKS.patreon,
+        icon: PatreonIcon,
+        accent: true,
+        children: "Become a Patreon",
+      },
       { href: SUPPORT_LINKS.buyMeACoffee, icon: CoffeeIcon, accent: true, children: "Buy Me a Coffee" },
-      { href: SUPPORT_LINKS.koFi, icon: GiftIcon, accent: true, children: "Ko-fi" },
     ],
   },
   {
@@ -113,16 +121,38 @@ const SECTIONS: { label: string; items: MenuLinkItem[] }[] = [
   },
 ];
 
+/** Absent in the browser and extension builds, where there is no packaged build
+ *  to check a GitHub release against — window.dishlink.updateState is desktop-only. */
+function useUpdateAvailable(): string | null {
+  const [version, setVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    const host = window.dishlink;
+    if (!host) return;
+    host.updateState().then((state) => setVersion(state.available ? state.version : null));
+    return host.onUpdateState((state) => setVersion(state.available ? state.version : null));
+  }, []);
+
+  return version;
+}
+
 export function SupportMenu() {
+  const updateVersion = useUpdateAvailable();
+
   return (
     <Popover>
       <PopoverTrigger asChild>
         <button
-          className='inline-flex size-8 cursor-pointer items-center justify-center rounded-full border-0 bg-card text-[var(--ink-secondary)] transition-colors hover:text-foreground'
-          aria-label='Support and more'
+          className='relative inline-flex size-8 cursor-pointer items-center justify-center rounded-full border-0 bg-card text-(--ink-secondary) transition-colors hover:text-foreground'
+          aria-label={updateVersion ? "Support and more (update available)" : "Support and more"}
           title='Support & more'
         >
           <HeartIcon />
+          {updateVersion && (
+            <span className='absolute -top-0.5 -right-0.5 flex size-3.5 items-center justify-center rounded-full bg-destructive text-[8px] font-semibold leading-none text-destructive-foreground'>
+              1
+            </span>
+          )}
         </button>
       </PopoverTrigger>
 
@@ -143,6 +173,22 @@ export function SupportMenu() {
             </span>
           </div>
         </div>
+
+        {updateVersion && (
+          <div className={SECTION}>
+            <div className={cn(MENU_LABEL, "flex items-center gap-1.5")}>
+              Update available
+              <span className='size-1 rounded-full bg-red-500 shadow-[0_0_4px_1.5px_rgba(239,68,68,0.85)]' />
+            </div>
+            <MenuLink
+              href={SUPPORT_LINKS.latestRelease}
+              icon={DownloadIcon}
+              iconClassName='text-(--status-good)'
+            >
+              Download v{updateVersion}
+            </MenuLink>
+          </div>
+        )}
 
         {SECTIONS.map((section) => (
           <div key={section.label} className={SECTION}>
