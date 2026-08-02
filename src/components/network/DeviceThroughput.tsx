@@ -9,12 +9,18 @@ import { formatThroughputLabel, formatThroughputTick } from "../../lib/format";
 import { THROUGHPUT_SERIES } from "../../lib/statDetails";
 import type { TelemetrySample } from "@core/telemetry";
 import { InfoDot } from "../shared/InfoDot";
-import { TelemetryChart } from "../shared/TelemetryChart";
+import { TelemetryChart, type ChartSeries } from "../shared/TelemetryChart";
 import { windowTail } from "../../lib/telemetryWindow";
 import { useNow } from "../../hooks/useNow";
 import { SegmentedControl } from "../ui/segmented-control";
 import { SectionHeading } from "./DataRow";
 import { PER_DEVICE_GAP_MS, WINDOW_OPTIONS } from "./networkFormat";
+
+// Stable references so TelemetryChart's bucket-binning memo isn't invalidated
+// by a fresh array on every render (on top of the live window edge it already
+// recomputes for each tick).
+const DOWNLOAD_SERIES: ChartSeries[] = [THROUGHPUT_SERIES[0]];
+const UPLOAD_SERIES: ChartSeries[] = [THROUGHPUT_SERIES[1]];
 
 export function DeviceThroughput({
   history,
@@ -55,14 +61,14 @@ export function DeviceThroughput({
           <DirectionChart
             label='Download'
             liveBps={downMbps * 1_000_000}
-            series={THROUGHPUT_SERIES[0]}
+            series={DOWNLOAD_SERIES}
             samples={chartHistory}
             windowMinutes={windowMinutes}
           />
           <DirectionChart
             label='Upload'
             liveBps={upMbps * 1_000_000}
-            series={THROUGHPUT_SERIES[1]}
+            series={UPLOAD_SERIES}
             samples={chartHistory}
             windowMinutes={windowMinutes}
           />
@@ -81,7 +87,7 @@ function DirectionChart({
 }: {
   label: string;
   liveBps: number;
-  series: (typeof THROUGHPUT_SERIES)[number];
+  series: ChartSeries[];
   samples: TelemetrySample[];
   windowMinutes: number;
 }) {
@@ -95,7 +101,7 @@ function DirectionChart({
       </div>
       <TelemetryChart
         samples={samples}
-        series={[series]}
+        series={series}
         windowMinutes={windowMinutes}
         formatValue={formatThroughputLabel}
         formatTick={formatThroughputTick}
