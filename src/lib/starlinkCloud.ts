@@ -1,11 +1,11 @@
 // Typed client for the user's own starlink.com account data, read-only.
 //
 // The UI only ever talks to /cloud/* (served by the host's cloud binding — the
-// Vite dev proxy, Electron main, the extension background worker later, see
-// CLOUD-ACCOUNT.md). It never touches starlink.com directly, and it never picks
-// a host: cloudHost.ts decides how a /cloud/* call is carried. Transport is
-// deliberately separate from the historian: this needs internet + the account
-// session, nothing about the local dish.
+// Vite dev proxy, Electron main, the extension background worker later). It
+// never touches starlink.com directly, and it never picks a host: cloudHost.ts
+// decides how a /cloud/* call is carried. Transport is deliberately separate
+// from the historian: this needs internet + the account session, nothing about
+// the local dish.
 
 import { cloudRequest, noteCloudSessionChanged } from "./cloudHost";
 

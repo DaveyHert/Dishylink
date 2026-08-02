@@ -1,4 +1,4 @@
-// Dev-only binding for the cloud account feature (CLOUD-ACCOUNT.md).
+// Dev-only binding for the cloud account feature.
 //
 // The browser cannot call starlink.com directly (CORS: ACAO is starlink.com-only;
 // the session cookies are HttpOnly/SameSite so JS can't attach them). In the

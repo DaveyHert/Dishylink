@@ -1,9 +1,8 @@
 # Unsigned Mac build. The renderer (dist/) and the fully bundled main + preload +
 # historian (dist-electron/) are self-contained — every third-party dependency is
-# inlined at build time, so no node_modules ships. Signing (Developer ID) is
-# deferred to a paid Apple account and is config-only when it lands (PLAN.md phase
-# 5); identity:null tells electron-builder to skip signing rather than hunt for a
-# certificate and fail.
+# inlined at build time, so no node_modules ships. Developer ID signing needs a
+# paid Apple account, which this project doesn't have; identity:null tells
+# electron-builder to skip signing rather than hunt for a certificate and fail.
 appId: com.dishboard.dishylink
 productName: DishyLink
 copyright: © 2026 daveyhert
@@ -72,9 +71,9 @@ mac:
 # Unsigned Windows build. There is no ad-hoc equivalent to reach for here and none
 # is needed: unlike macOS (whose notification API refuses to fire from an unsigned
 # app — see afterPack.cjs), Windows posts notifications from unsigned apps fine.
-# A code-signing cert is a few hundred a year (PLAN.md's accepted sleeper cost), so
-# until that lands the installer is unsigned and Windows SmartScreen shows a one-off
-# "unknown publisher" prompt on first run — click through and it installs normally.
+# This project has no code-signing cert, so the installer is unsigned and Windows
+# SmartScreen shows a one-off "unknown publisher" prompt on first run — click
+# through and it installs normally.
 win:
   artifactName: ${productName}-${version}-${arch}.${ext}
   target:
