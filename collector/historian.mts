@@ -90,6 +90,9 @@ const CLIENTS_POLL_MS = 200;
 /** Recording cadence. The rates are already exact per refresh interval, so this
  *  sets how densely they are stored, independent of how often they are read. */
 const CLIENTS_RECORD_MS = 1_000;
+/** Matches useRadioTemps.ts's own refresh interval — no reason to hold a fresher
+ *  router reading than the one consumer ever asks for. */
+const RADIO_CACHE_TTL_MS = 15_000;
 const GET_HISTORY_FIELD = 1007;
 const GET_STATUS_FIELD = 1004;
 const GET_RADIO_STATS_FIELD = 1036;
@@ -112,6 +115,11 @@ const ROUTER_URL =
 const THERMAL_ALERT_KEYS = ["thermalThrottle", "thermalShutdown", "powerSupplyThermalThrottle"];
 const SAMPLE_WINDOW_MS = 6 * 3_600_000;
 const SNAPSHOT_EVERY_MS = 60_000;
+/** A debugging aid, not a store — nothing should ever need more than the most
+ *  recent megabyte of it. */
+const LOG_MAX_BYTES = 1_048_576;
+const OUT_LOG_FILE = join(DATA_DIR, "historian.out.log");
+const ERR_LOG_FILE = join(DATA_DIR, "historian.err.log");
 
 const registry = createFileRegistry(
   fromBinary(FileDescriptorSetSchema, readFileSync(PROTOSET_PATH)),
@@ -624,6 +632,23 @@ function writeSampleSnapshot(): void {
 }
 
 /**
+ * Caps launchd's redirected stdout/stderr logs, which otherwise grow forever.
+ * The running process holds its stdout/stderr file descriptor open for its
+ * entire lifetime, so rotation copies the content to a backup and truncates
+ * the original in place — same inode, same descriptor, new writes land in
+ * what is now an empty file.
+ */
+function rotateLogIfLarge(path: string): void {
+  try {
+    if (statSync(path).size < LOG_MAX_BYTES) return;
+    writeFileSync(`${path}.1`, readFileSync(path));
+    writeFileSync(path, "");
+  } catch {
+    // no log file at this path (e.g. not running under launchd) — nothing to rotate
+  }
+}
+
+/**
  * Record alert edges from both devices. An unreachable device means no reading,
  * not a cleared alert, so a failed fetch leaves that device's open episodes open
  * and never touches the other's.
@@ -719,22 +744,38 @@ async function pollAlerts(): Promise<void> {
 }
 
 /**
- * Record the router's radio temperatures. The router is a separate device on a
- * separate address: it can be unreachable while the dish is fine, so its
- * failures stay quiet rather than reading as a dish problem.
+ * Radio temperatures feed one on-demand UI panel and nothing persists them, so
+ * fetching happens lazily: a request only reaches the router when the cache is
+ * older than RADIO_CACHE_TTL_MS, and concurrent callers share one in-flight
+ * request instead of each firing their own.
+ *
+ * The router is a separate device on a separate address: it can be unreachable
+ * while the dish is fine, so its failures stay quiet and just serve the last
+ * known reading rather than reading as a dish problem.
  */
-async function pollRadio(): Promise<void> {
-  try {
-    const readings = await getRadioReadings();
-    if (readings.length === 0) return;
-    latestRadio = { readings, atMs: Date.now() };
-  } catch {
-    // router unreachable (or not a Starlink router) — leave the last reading be
+let radioRefreshInFlight: Promise<void> | null = null;
+async function radioTempSnapshot(): Promise<{ readings: RadioStatReading[]; atMs: number } | null> {
+  const isStale = !latestRadio || Date.now() - latestRadio.atMs >= RADIO_CACHE_TTL_MS;
+  if (isStale) {
+    if (!radioRefreshInFlight) {
+      radioRefreshInFlight = (async () => {
+        try {
+          const readings = await getRadioReadings();
+          if (readings.length > 0) latestRadio = { readings, atMs: Date.now() };
+        } catch {
+          // router unreachable (or not a Starlink router) — leave the last reading be
+        }
+      })().finally(() => {
+        radioRefreshInFlight = null;
+      });
+    }
+    await radioRefreshInFlight;
   }
+  return latestRadio;
 }
 
 /**
- * Same contract as pollRadio: the router is a separate box and its failures
+ * Same contract as radioTempSnapshot: the router is a separate box and its failures
  * must not read as a dish problem.
  *
  * Runs on its own fast timer rather than the main 5s cycle, because unlike the
@@ -844,7 +885,6 @@ function nonOverlapping(run: () => Promise<void>): () => Promise<void> {
 
 async function poll(): Promise<void> {
   await pollAlerts();
-  await pollRadio();
 
   let history: Awaited<ReturnType<typeof getHistory>>;
   try {
@@ -993,12 +1033,14 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
   }
   if (url.pathname === "/api/radio") {
     response.setHeader("Content-Type", "application/json");
-    response.end(
-      JSON.stringify({
-        current: latestRadio?.readings ?? [],
-        atMs: latestRadio?.atMs ?? null,
-      }),
-    );
+    void radioTempSnapshot().then((radio) => {
+      response.end(
+        JSON.stringify({
+          current: radio?.readings ?? [],
+          atMs: radio?.atMs ?? null,
+        }),
+      );
+    });
     return;
   }
   // Zero one device's total but keep it listed (a reset, distinct from delete).
@@ -1262,6 +1304,10 @@ const pollObstructionCycle = nonOverlapping(pollObstruction);
 void pollCycle();
 setInterval(() => void pollCycle(), POLL_MS);
 setInterval(writeSampleSnapshot, SNAPSHOT_EVERY_MS);
+setInterval(() => {
+  rotateLogIfLarge(OUT_LOG_FILE);
+  rotateLogIfLarge(ERR_LOG_FILE);
+}, SNAPSHOT_EVERY_MS);
 // Clients run on their own timers: the router keeps no history, so nothing is
 // recoverable after the fact. Polling is fast enough to catch each counter step
 // as it happens; recording runs at 1 Hz and is what sets chart resolution. One
