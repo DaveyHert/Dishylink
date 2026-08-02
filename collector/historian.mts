@@ -874,12 +874,17 @@ async function poll(): Promise<void> {
   // at the top of this same cycle — so the router series persists in the
   // snapshot alongside the dish's and answers the same 15M/1H/6H filter.
   const now = Date.now();
-  latestSamples = sampleWindow.ingest(history, now, {
-    latencyMs: latestRouterLatencyMs,
-    pingSuccessPercent: latestRouterPingSuccessPercent,
-  });
-  const { samples } = decodeHistoryWindow(history, now);
-  const perMinute = foldSamplesToMinutes(samples);
+  const window = decodeHistoryWindow(history, now);
+  latestSamples = sampleWindow.ingest(
+    history,
+    now,
+    {
+      latencyMs: latestRouterLatencyMs,
+      pingSuccessPercent: latestRouterPingSuccessPercent,
+    },
+    window,
+  );
+  const perMinute = foldSamplesToMinutes(window.samples);
 
   // Replace (not accumulate) so re-seeing a minute across overlapping polls is idempotent.
   for (const [minute, bucket] of perMinute) {

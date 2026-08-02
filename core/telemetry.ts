@@ -542,8 +542,15 @@ export class TelemetryAccumulator {
    * series, which is what a point-in-time value honestly is. A field left null
    * stays null on those samples rather than repeating the last known value.
    */
-  ingest(history: DishHistoryJson, nowMs: number, router: RouterReadings = {}): TelemetrySample[] {
-    const window = decodeHistoryWindow(history, nowMs);
+  ingest(
+    history: DishHistoryJson,
+    nowMs: number,
+    router: RouterReadings = {},
+    /** Skips the decode below when a caller already has it (avoids re-unrolling
+     *  the same ring buffer twice in one poll cycle). */
+    precomputedWindow?: ReturnType<typeof decodeHistoryWindow>,
+  ): TelemetrySample[] {
+    const window = precomputedWindow ?? decodeHistoryWindow(history, nowMs);
     if (window.samples.length === 0) return this.samples;
 
     // Which samples are new is decided by the shared, pure selectFreshSamples: by
