@@ -36,13 +36,14 @@ import {
   NOTIFICATIONS_ON_CONFIRMATION,
   type NotificationState,
 } from "../core/alertNotification";
-import { NOTIFICATION_STATE_CHANNEL, MENUBAR_THROUGHPUT_CHANNEL } from "./ipc";
+import { NOTIFICATION_STATE_CHANNEL, MENUBAR_THROUGHPUT_CHANNEL, UPDATE_STATE_CHANNEL } from "./ipc";
 import { formatMenuBarRate, formatSpacedRate } from "./menuBarThroughput";
 import {
   showThroughputStrip,
   paintThroughputStrip,
   hideThroughputStrip,
 } from "./throughputStrip";
+import { startUpdateChecks, updateState, onUpdateStateChanged } from "./updater";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const rendererRoot = join(here, "../dist");
@@ -120,8 +121,12 @@ function createWindow(): void {
 
   // Keep the fixed window title; without this the page's <title> replaces it.
   mainWindow.on("page-title-updated", (event) => event.preventDefault());
-  // Push notification state as the page loads, so the control's first paint is right.
-  mainWindow.webContents.on("did-finish-load", publishNotificationState);
+  // Push notification and update state as the page loads, so both controls' first
+  // paint is right.
+  mainWindow.webContents.on("did-finish-load", () => {
+    publishNotificationState();
+    publishUpdateState();
+  });
   mainWindow.once("ready-to-show", () => mainWindow?.show());
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -359,6 +364,16 @@ function publishNotificationState(): void {
   mainWindow?.webContents.send(NOTIFICATION_STATE_CHANNEL, state);
 }
 
+/** Single writer of the update state to the window. */
+function publishUpdateState(): void {
+  mainWindow?.webContents.send(UPDATE_STATE_CHANNEL, updateState());
+}
+
+function registerUpdateHandler(): void {
+  ipcMain.handle("get-update-state", () => updateState());
+  onUpdateStateChanged(publishUpdateState);
+}
+
 /** Record what an attempt proved about the channel, and show it if that changed. */
 function recordDelivery(delivered: boolean): void {
   const reason = delivered ? null : undeliverableReason();
@@ -494,7 +509,10 @@ void app.whenReady().then(async () => {
   // Registered for dev and packaged alike: notifications are the alerting channel.
   registerNotificationHandler();
   registerMenuBarThroughputHandler();
+  registerUpdateHandler();
   registerExternalLinkHandler();
+  // checkForUpdates needs app-update.yml, which only a packaged build carries.
+  if (app.isPackaged) startUpdateChecks();
   createTray();
   // A login-triggered launch stays in the tray (no window), so booting doesn't pop one.
   if (!app.getLoginItemSettings().wasOpenedAtLogin) createWindow();

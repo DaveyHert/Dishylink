@@ -1,0 +1,48 @@
+# Builds and publishes a draft GitHub Release when a v* tag is pushed. Draft,
+# not published: electron-updater ignores drafts, so installed apps see nothing
+# until someone clicks "Publish release" on GitHub — that click is the actual
+# rollout, on demand, separate from when this workflow runs.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  # "Run workflow" button in the Actions tab — publishes whatever's on the
+  # selected branch under package.json's current version, without needing a tag.
+  workflow_dispatch:
+
+# contents: write is what lets GITHUB_TOKEN create/update a release and upload
+# assets to it; the repo's default token permissions are read-only, so this has
+# to be declared explicitly.
+permissions:
+  contents: write
+
+jobs:
+  release-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Both mac archs in one invocation: electron-builder writes a single
+      # latest-mac.yml covering arm64 and x64. Two separate jobs would each
+      # overwrite the other's yml on the release and strand one arch.
+      - run: npm run release:mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release-win:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run release:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

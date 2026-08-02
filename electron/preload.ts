@@ -6,7 +6,8 @@
 
 import { contextBridge, ipcRenderer } from "electron";
 import type { NotificationState } from "../core/alertNotification";
-import { NOTIFICATION_STATE_CHANNEL, MENUBAR_THROUGHPUT_CHANNEL } from "./ipc";
+import { NOTIFICATION_STATE_CHANNEL, MENUBAR_THROUGHPUT_CHANNEL, UPDATE_STATE_CHANNEL } from "./ipc";
+import type { UpdateState } from "./updater";
 
 contextBridge.exposeInMainWorld("dishlink", {
   versions: {
@@ -64,6 +65,16 @@ contextBridge.exposeInMainWorld("dishlink", {
     ipcRenderer.on(NOTIFICATION_STATE_CHANNEL, handler);
     return () => {
       ipcRenderer.off(NOTIFICATION_STATE_CHANNEL, handler);
+    };
+  },
+  // Whether a GitHub release newer than this build has been published. Detection
+  // only — nothing here downloads or installs anything; see electron/updater.ts.
+  updateState: (): Promise<UpdateState> => ipcRenderer.invoke("get-update-state"),
+  onUpdateState: (listener: (state: UpdateState) => void): (() => void) => {
+    const handler = (_event: unknown, state: UpdateState): void => listener(state);
+    ipcRenderer.on(UPDATE_STATE_CHANNEL, handler);
+    return () => {
+      ipcRenderer.off(UPDATE_STATE_CHANNEL, handler);
     };
   },
   // The live throughput readout — the macOS menu-bar tray title or the Windows

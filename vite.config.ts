@@ -1,4 +1,5 @@
 import path from "node:path";
+import { readFileSync } from "node:fs";
 // vitest's defineConfig, so the `test` block below is typed. It is a superset of
 // vite's — the dev/build config is unaffected.
 import { configDefaults, defineConfig } from "vitest/config";
@@ -7,6 +8,12 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import electron from "vite-plugin-electron/simple";
 import { starlinkCloudProxy } from "./dev/starlinkCloudProxy";
+
+// Config files run in plain Node, outside every build target's tsconfig
+// `include`, so this is the one place package.json can be read without wiring
+// resolveJsonModule into src/electron/extension for one string.
+const appVersion: string = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8"))
+  .version;
 
 interface OutgoingProxyRequest {
   removeHeader(headerName: string): void;
@@ -23,6 +30,7 @@ export default defineConfig(({ command }) => ({
   // assets must be referenced relatively. The browser build and every dev server
   // keep an absolute base.
   base: withElectron && command === "build" ? "./" : "/",
+  define: { __APP_VERSION__: JSON.stringify(appVersion) },
   plugins: [
     react(),
     tailwindcss(),

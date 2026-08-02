@@ -18,6 +18,18 @@ directories:
   output: release
   buildResources: build
 
+# The auto-update feed (electron/updater.ts) and the release workflow's publish
+# target. Draft by default (electron-builder's own default for this provider) —
+# the workflow never flips that, so a built release sits unlisted until someone
+# clicks "Publish release" on GitHub. electron-updater ignores drafts, so that
+# click is the actual rollout moment. Note this requires the repo to be public:
+# an installed app has no credential to authenticate a private-repo download.
+publish:
+  provider: github
+  owner: DaveyHert
+  repo: dishylink
+  releaseType: draft
+
 # Only the built app ships. build/icon.png is named explicitly because main.ts
 # loads the tray/dock icon from ../build/icon.png at runtime, so it has to sit
 # inside the asar; being the buildResources dir would otherwise keep it out.

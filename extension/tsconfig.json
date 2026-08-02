@@ -12,12 +12,17 @@
 // WXT's defaults are realigned to the rest of the repo: it turns on
 // noUncheckedIndexedAccess, which nothing else here uses, and leaves out the JSX
 // setting its own Vite build applies. Needs `wxt prepare` to have generated .wxt/.
+//
+// `extends` only inherits compilerOptions, not `include` — a config that declares
+// its own `include` drops the base's entirely. An imported file still enters the
+// program through the module graph regardless, but an ambient file with no
+// imports or exports, like src/vite-env.d.ts, only enters if `include` names it.
 {
   "extends": "../.wxt/tsconfig.json",
   "compilerOptions": {
     "jsx": "react-jsx",
     "noUncheckedIndexedAccess": false
   },
-  "include": ["**/*", "../.wxt/wxt.d.ts"],
+  "include": ["**/*", "../.wxt/wxt.d.ts", "../src/vite-env.d.ts"],
   "exclude": ["**/node_modules", "../.output"]
 }

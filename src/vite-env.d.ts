@@ -1,5 +1,9 @@
 /// <reference types="vite/client" />
 
+// Injected by vite.config.ts / wxt.config.ts's `define`, from package.json's
+// "version" — the one field a release actually keys off.
+declare const __APP_VERSION__: string;
+
 // Exposed by the Electron preload bridge; absent in the browser and extension.
 interface Window {
   dishlink?: {
@@ -22,5 +26,10 @@ interface Window {
     setMenuBarThroughput?: (on: boolean) => Promise<boolean>;
     onMenuBarThroughput?: (listener: (on: boolean) => void) => () => void;
     reportThroughput?: (downBps: number, upBps: number) => void;
+    // Whether a GitHub release newer than this build has been published.
+    updateState: () => Promise<{ available: boolean; version: string | null }>;
+    onUpdateState: (
+      listener: (state: { available: boolean; version: string | null }) => void,
+    ) => () => void;
   };
 }

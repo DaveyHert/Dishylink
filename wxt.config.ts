@@ -1,6 +1,12 @@
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "wxt";
+
+// See vite.config.ts's own copy of this read for why it's done per-config
+// rather than imported as a module.
+const appVersion: string = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8"))
+  .version;
 
 // srcDir is the shared app tree so WXT's built-in `@`/`~` aliases point at ./src,
 // exactly as the web build's do — the extension mounts the same src/App and its
@@ -23,6 +29,7 @@ export default defineConfig({
   // hundreds of app symbols into scope (#imports still works for defineBackground).
   imports: false,
   vite: () => ({
+    define: { __APP_VERSION__: JSON.stringify(appVersion) },
     // Tailwind processes index.css's utility classes; without it the extension
     // ships the shared app's markup with none of its styling — the same plugin the
     // web build runs in vite.config.ts. (@wxt-dev/module-react adds React itself.)
