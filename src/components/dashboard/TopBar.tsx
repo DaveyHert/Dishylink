@@ -41,10 +41,10 @@ const CONNECTION_DOT: Record<DishConnectionState, string> = {
 // Read-only status readouts (divider-separated, no button feel) and round icon
 // button — repeated in the strip.
 const statusItem =
-  "inline-flex items-center gap-[7px] whitespace-nowrap text-[12.5px] font-medium text-[var(--ink-secondary)]";
-const statusDivider = "border-l border-[var(--baseline)] pl-2.5";
+  "inline-flex items-center gap-[7px] whitespace-nowrap text-[12.5px] font-medium text-(--ink-secondary)";
+const statusDivider = "border-l border-input pl-2.5";
 const iconButton =
-  "inline-flex size-8 cursor-pointer items-center justify-center rounded-full border-0 bg-card text-[var(--ink-secondary)] transition-colors hover:text-foreground";
+  "inline-flex size-8 cursor-pointer items-center justify-center rounded-full border-0 bg-card text-(--ink-secondary) transition-colors hover:text-foreground";
 
 export function TopBar({
   connectionState,

@@ -61,7 +61,7 @@ function YAxis({ yAxis, heightPx }: { yAxis: RangeBarYAxis; heightPx: number }) 
   );
   return (
     <div className='flex flex-none flex-col items-end' style={{ height: heightPx }}>
-      <div className='flex min-h-0 flex-1 flex-col items-end justify-between font-mono text-[9px] text-[var(--ink-muted)]'>
+      <div className='flex min-h-0 flex-1 flex-col items-end justify-between font-mono text-[9px] text-(--ink-muted)'>
         {values.map((value, i) => (
           <span key={i}>{yAxis.format(value)}</span>
         ))}
@@ -69,7 +69,7 @@ function YAxis({ yAxis, heightPx }: { yAxis: RangeBarYAxis; heightPx: number }) 
       {/* Invisible label matching the x-axis row height, so the 0 tick lines up
           with the bar baseline rather than the bottom of the label. */}
       <span
-        className='mt-1 font-mono text-[9px] whitespace-nowrap text-[var(--ink-muted)]'
+        className='mt-1 font-mono text-[9px] whitespace-nowrap text-(--ink-muted)'
         style={{ visibility: "hidden" }}
       >
         0
@@ -94,14 +94,14 @@ export function RangeBars({ columns, range, labelWidthPx, heightPx = 96, yAxis }
         >
           <div className='flex min-h-0 w-full flex-1 items-end'>{column.bar}</div>
           <div
-            className='pointer-events-none absolute bottom-[calc(100%-12px)] left-1/2 z-[6] -translate-x-1/2 rounded-[6px] bg-[var(--ink)] px-2 py-1 text-[11px] font-medium whitespace-nowrap text-[var(--surface)] opacity-0 transition-opacity duration-100 group-hover:opacity-100'
+            className='pointer-events-none absolute bottom-[calc(100%-12px)] left-1/2 z-[6] -translate-x-1/2 rounded-[6px] bg-(--ink) px-2 py-1 text-[11px] font-medium whitespace-nowrap text-card opacity-0 transition-opacity duration-100 group-hover:opacity-100'
             role='tooltip'
           >
             {column.title}
           </div>
           {/* Skipped labels keep their box so the label row stays one height. */}
           <span
-            className='mt-1 font-mono text-[9px] whitespace-nowrap text-[var(--ink-muted)]'
+            className='mt-1 font-mono text-[9px] whitespace-nowrap text-(--ink-muted)'
             style={{ visibility: index % labelEvery === 0 ? undefined : "hidden" }}
           >
             {column.label}

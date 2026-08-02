@@ -42,7 +42,7 @@ export function ObstructionTimeLapse({
                   isLive
                     ? "bg-[var(--status-good)]"
                     : isActive
-                      ? "bg-[var(--ink)]"
+                      ? "bg-(--ink)"
                       : "bg-[var(--ink-muted)]"
                 }`}
               />

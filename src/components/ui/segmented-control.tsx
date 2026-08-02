@@ -79,7 +79,7 @@ export function SegmentedControl<T extends string>({
             transform: `translateX(${Math.max(0, activeIndex) * 100}%)`,
           }}
           className={cn(
-            "pointer-events-none absolute inset-y-[3px] left-[3px] rounded-[999px] bg-[var(--ink)]",
+            "pointer-events-none absolute inset-y-[3px] left-[3px] rounded-[999px] bg-(--ink)",
             "transition-transform duration-[220ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
             "dark:bg-[var(--surface)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.15)]",
           )}

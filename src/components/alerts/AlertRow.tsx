@@ -41,7 +41,7 @@ export function AlertRow({
             </span>
           )}
         </p>
-        {meta && <p className='mt-0.5 text-xs text-[var(--ink-muted)]'>{meta}</p>}
+        {meta && <p className='mt-0.5 text-xs text-(--ink-muted)'>{meta}</p>}
       </div>
     </div>
   );

@@ -54,7 +54,7 @@ export function NetworkRow({
     >
       <span className='inline-flex flex-none items-center'>{icon}</span>
       <span className='flex min-w-0 flex-1 flex-col gap-px'>
-        <span className='overflow-hidden text-[14px] font-semibold text-ellipsis whitespace-nowrap text-foreground group-disabled:text-[var(--ink-secondary)]'>
+        <span className='overflow-hidden text-[14px] font-semibold text-ellipsis whitespace-nowrap text-foreground group-disabled:text-(--ink-secondary)'>
           {name}
         </span>
         {/* Inline rather than a flex row: `sub` is running text, and flexing it
@@ -101,11 +101,7 @@ export function DeviceRow({
       icon={<DeviceSignalIcon client={client} quality={signalQuality(client)} />}
       name={name}
       subIcon={
-        <DeviceTypeIcon
-          kind={classifyDevice(name)}
-          size={13}
-          className='text-[var(--ink-secondary)]'
-        />
+        <DeviceTypeIcon kind={classifyDevice(name)} size={13} className='text-(--ink-secondary)' />
       }
       sub={deviceRowSubtitle(client, isSelf)}
       band={bandLabel(client)}

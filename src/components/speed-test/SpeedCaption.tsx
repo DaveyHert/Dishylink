@@ -12,7 +12,7 @@ export type SpeedMode = "download" | "upload" | "idle";
 export function SpeedCaption({ mode, caption }: { mode: SpeedMode; caption: string }) {
   const Arrow = mode === "upload" ? ArrowUpIcon : ArrowDownIcon;
   return (
-    <div className='-mt-1.5 flex items-center justify-center gap-[3px] text-[12px] font-semibold text-[var(--ink-muted)]'>
+    <div className='-mt-1.5 flex items-center justify-center gap-[3px] text-[12px] font-semibold text-(--ink-muted)'>
       {mode !== "idle" && (
         <Arrow
           size={12}

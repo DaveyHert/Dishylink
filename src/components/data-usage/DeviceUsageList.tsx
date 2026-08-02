@@ -169,7 +169,7 @@ function DeviceUsageRow({
   const kind = classifyDevice(name);
   return (
     <div className='flex items-center gap-3 border-t border-t-[var(--hairline)] py-2.5'>
-      <DeviceTypeIcon kind={kind} size={22} className='flex-none text-[var(--ink-secondary)]' />
+      <DeviceTypeIcon kind={kind} size={22} className='flex-none text-(--ink-secondary)' />
       <span className='flex min-w-0 flex-1 flex-col gap-px'>
         <span className='overflow-hidden text-[14px] font-semibold text-ellipsis whitespace-nowrap text-foreground'>
           {name}
@@ -216,7 +216,7 @@ function RowAction({
     <Tooltip>
       <TooltipTrigger asChild>
         <button
-          className={`flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-[var(--ink-secondary)] transition-[background,color] hover:bg-[color-mix(in_srgb,var(--ink)_10%,var(--surface))] ${destructive ? "hover:text-destructive" : "hover:text-foreground"}`}
+          className={`flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-(--ink-secondary) transition-[background,color] hover:bg-[color-mix(in_srgb,var(--ink)_10%,var(--surface))] ${destructive ? "hover:text-destructive" : "hover:text-foreground"}`}
           aria-label={label}
           onClick={onClick}
         >

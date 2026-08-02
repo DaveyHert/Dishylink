@@ -111,7 +111,5 @@ have real data behind them — never anything invented across a gap; every
 range reports what fraction of it was actually sampled. See
 `collector/README.md` for how it runs and its on-disk format.
 
-## Roadmap
-
 Everything above is local-only by design: your telemetry, your history, your
 storage, never transmitted.

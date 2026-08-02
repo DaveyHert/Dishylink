@@ -93,7 +93,7 @@ function Window({ theme, compact = false }: { theme: "light" | "dark"; compact?:
               </button>
             </div>
             <div className='min-h-[220px] flex-1 p-5'>
-              <div className='h-full rounded-lg border border-dashed border-[var(--baseline)]' />
+              <div className='h-full rounded-lg border border-dashed border-input' />
             </div>
           </div>
         </>

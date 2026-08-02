@@ -116,7 +116,7 @@ export function StatusTab({
         if (checks.length === 0) return null;
         return (
           <div key={source}>
-            <p className='sticky top-0 z-10 flex items-center justify-between gap-2 bg-[var(--page)] px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--ink-muted)]'>
+            <p className='sticky top-0 z-10 flex items-center justify-between gap-2 bg-[var(--page)] px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-(--ink-muted)'>
               <span>{label}</span>
               {/* Never let a stale snapshot read as a live all-clear. */}
               {!live && (

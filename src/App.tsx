@@ -72,7 +72,7 @@ const WINDOW_OPTIONS = WINDOW_CHOICES.map((choice) => ({
 
 // Throughput legend entry (swatch + series name).
 const legendItem =
-  "inline-flex items-center gap-1.5 text-[12px] font-medium text-[var(--ink-secondary)]";
+  "inline-flex items-center gap-1.5 text-[12px] font-medium text-(--ink-secondary)";
 
 export default function App() {
   // Dark is the instrument's resting state — it's how the Starlink app ships and

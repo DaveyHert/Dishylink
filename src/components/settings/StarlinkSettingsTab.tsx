@@ -118,7 +118,7 @@ export function StarlinkSettingsTab({
               <span className='mt-px block text-[12px] text-muted-foreground'>from</span>
               <input
                 type='time'
-                className='h-7 rounded-sm border border-[var(--hairline)] bg-transparent px-2 font-mono text-[12px] text-[color:var(--ink)] tabular-nums hover:border-[var(--baseline)]'
+                className='h-7 rounded-sm border border-[var(--hairline)] bg-transparent px-2 font-mono text-[12px] text-[color:var(--ink)] tabular-nums hover:border-input'
                 value={sleepStart}
                 disabled={settings.saving}
                 onChange={(event) =>

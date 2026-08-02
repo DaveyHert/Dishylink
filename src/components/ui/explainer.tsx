@@ -21,7 +21,7 @@ export function Explainer({ title, children, className }: ExplainerProps) {
     <div
       data-slot='explainer'
       className={cn(
-        "mt-4 rounded-xl border border-[var(--hairline)] px-[14px] py-[13px] text-[13.5px] leading-[1.55] text-[var(--ink-secondary)]",
+        "mt-4 rounded-xl border border-[var(--hairline)] px-[14px] py-[13px] text-[13.5px] leading-[1.55] text-(--ink-secondary)",
         className,
       )}
     >

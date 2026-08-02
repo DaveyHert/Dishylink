@@ -70,7 +70,7 @@ export function DeviceDetail({
           <DeviceTypeIcon
             kind={classifyDevice(name)}
             size={24}
-            className='flex-none text-[var(--ink-secondary)]'
+            className='flex-none text-(--ink-secondary)'
           />
           <div className='min-w-0'>
             <div className='flex items-center gap-2'>

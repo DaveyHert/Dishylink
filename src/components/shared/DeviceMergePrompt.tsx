@@ -62,7 +62,7 @@ export function DeviceMergePrompt({
             </span>
           )}
         </div>
-        <div className='mt-1 text-[13.5px] leading-[1.55] text-[var(--ink-secondary)]'>
+        <div className='mt-1 text-[13.5px] leading-[1.55] text-(--ink-secondary)'>
           This device appears twice, both named{" "}
           <span className='font-medium text-foreground'>{candidate.detail}</span>. This happens when
           a device changes its Wi-Fi address and your router treats it as new.
@@ -84,7 +84,7 @@ export function DeviceMergePrompt({
             Whether the two figures add depends on the month each bucket covers — a
             rule the recorder owns, and re-deriving it here would eventually promise
             a total it does not produce. The history joins either way. */}
-        <div className='mt-2.5 text-[13.5px] leading-[1.55] text-[var(--ink-secondary)]'>
+        <div className='mt-2.5 text-[13.5px] leading-[1.55] text-(--ink-secondary)'>
           {candidate.foldsBytes
             ? `Combining keeps one device with ${formatBytes(
                 candidate.resultRxBytes + candidate.resultTxBytes,
@@ -136,7 +136,7 @@ function MergeDeviceCard({ total, nowMs }: { total: ClientUsageTotal; nowMs: num
 
   return (
     <div className='flex flex-1 items-center gap-3 rounded-md border border-border p-2.5'>
-      <DeviceTypeIcon kind={kind} size={22} className='flex-none text-[var(--ink-secondary)]' />
+      <DeviceTypeIcon kind={kind} size={22} className='flex-none text-(--ink-secondary)' />
       <span className='flex min-w-0 flex-1 flex-col gap-px'>
         <span className='text-[14px] leading-[1.3] font-semibold text-foreground'>{name}</span>
         <span className='text-[11.5px] leading-[1.3] text-muted-foreground'>

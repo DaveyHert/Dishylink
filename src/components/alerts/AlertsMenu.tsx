@@ -66,7 +66,7 @@ const AlertsBellTrigger = forwardRef<
   return (
     <button
       ref={ref}
-      className='relative inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border-0 bg-card text-[var(--ink-secondary)] transition-colors duration-[120ms] hover:text-[var(--ink)]'
+      className='relative inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border-0 bg-card text-(--ink-secondary) transition-colors duration-[120ms] hover:text-[var(--ink)]'
       aria-label='Alerts and notifications'
       title={
         (count > 0 ? `${count} active alert${count === 1 ? "" : "s"}` : "Alerts — all healthy") +
@@ -148,7 +148,7 @@ export function AlertsMenu({
         {/* Why an enable attempt was refused — so the toggle explains itself
             instead of reading as a click that did nothing. */}
         {notificationsBlockedReason && (
-          <p className='px-4 pb-2 text-[11px] leading-snug text-[var(--ink-secondary)]'>
+          <p className='px-4 pb-2 text-[11px] leading-snug text-(--ink-secondary)'>
             {notificationsBlockedReason}
           </p>
         )}
@@ -166,7 +166,7 @@ export function AlertsMenu({
                 className={cn(
                   BTN_RESET,
                   "-mb-px flex items-center gap-1.5 border-0 border-b-2 border-solid border-transparent py-1.5 text-[13px] transition-colors",
-                  tab === key ? "font-semibold text-[var(--ink)]" : "text-[var(--ink-muted)]",
+                  tab === key ? "font-semibold text-[var(--ink)]" : "text-(--ink-muted)",
                 )}
                 style={tab === key ? { borderBottomColor: "var(--ink)" } : undefined}
               >
