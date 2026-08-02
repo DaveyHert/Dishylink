@@ -3,7 +3,7 @@
 
 import { Sparkline } from "../../assets/icons/Sparkline";
 
-interface StatTileProps {
+export interface StatTileProps {
   label: string;
   value: string;
   unit?: string;
