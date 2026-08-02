@@ -1,8 +1,7 @@
 # Privacy Policy
 
 DishyLink is a local dashboard and history recorder for a Starlink kit. This
-page describes what the app does with data today, not what a future feature
-might do.
+page describes what the app does with your data.
 
 ## What stays on your machine
 
@@ -45,9 +44,8 @@ see the repository this file lives in.
 
 ## Changes
 
-If a future feature changes what leaves your machine (for example, a
-possible opt-in, anonymized congestion map), this document will be updated
-before that feature ships, and any such feature will require its own
+If a future feature changes what leaves your machine, this document will be
+updated before that feature ships, and any such feature will require its own
 explicit opt-in.
 
 ## Contact
