@@ -24,8 +24,11 @@ type Bounds = { top: number; left: number; width: number; height: number };
 const DEFAULT_BOUNDS: Bounds = { top: 80, left: 120, width: 1320, height: 880 };
 
 // The single open dashboard window, so a second click focuses it instead of
-// opening another. Held in memory; the browser clears the worker's memory on
-// teardown, but a stale id is re-validated against browser.windows before use.
+// opening another. Held in memory as a same-wake fast path only — the service
+// worker's memory does not survive teardown, and a click can arrive any number
+// of wakes after the window was created, so the source of truth is always the
+// live windows.popup query below, the same way openDashboardTab and
+// dashboardIsForeground never trust memory for the tab surface either.
 let dashboardWindowId: number | undefined;
 
 async function readSurface(): Promise<Surface> {
@@ -33,10 +36,25 @@ async function readSurface(): Promise<Surface> {
   return stored[SURFACE_KEY] === "tab" ? "tab" : "window";
 }
 
+/** The open dashboard window's id, found by querying live browser state rather
+ *  than trusting memory — a popup window's own tab carries the dashboard URL. */
+async function findDashboardWindowId(): Promise<number | undefined> {
+  const url = browser.runtime.getURL(DASHBOARD_PATH);
+  const tabs = await browser.tabs.query({ url }).catch(() => []);
+  for (const tab of tabs) {
+    if (tab.windowId === undefined) continue;
+    const win = await browser.windows.get(tab.windowId).catch(() => null);
+    if (win?.type === "popup") return tab.windowId;
+  }
+  return undefined;
+}
+
 async function openDashboardWindow(): Promise<void> {
-  if (dashboardWindowId !== undefined) {
+  const existingId = dashboardWindowId ?? (await findDashboardWindowId());
+  if (existingId !== undefined) {
     try {
-      await browser.windows.update(dashboardWindowId, { focused: true });
+      await browser.windows.update(existingId, { focused: true });
+      dashboardWindowId = existingId;
       return;
     } catch {
       // The remembered window was closed; fall through and open a fresh one.
@@ -238,13 +256,17 @@ export default defineBackground(() => {
   });
 
   // Saved bounds are restored on the next open, so the window returns where the
-  // user left it. Only the dashboard window's own moves and resizes are tracked.
+  // user left it. Only the dashboard window's own moves and resizes are
+  // tracked — checked live rather than against dashboardWindowId, which this
+  // event can arrive after a teardown has already cleared.
   const rememberBounds = (windowId: number) => {
-    if (windowId !== dashboardWindowId) return;
-    void browser.windows.get(windowId).then((win) => {
-      if (win.top == null || win.left == null || win.width == null || win.height == null) return;
-      void browser.storage.local.set({
-        [WINDOW_BOUNDS_KEY]: { top: win.top, left: win.left, width: win.width, height: win.height },
+    void findDashboardWindowId().then((dashboardId) => {
+      if (windowId !== dashboardId) return;
+      void browser.windows.get(windowId).then((win) => {
+        if (win.top == null || win.left == null || win.width == null || win.height == null) return;
+        void browser.storage.local.set({
+          [WINDOW_BOUNDS_KEY]: { top: win.top, left: win.left, width: win.width, height: win.height },
+        });
       });
     });
   };
