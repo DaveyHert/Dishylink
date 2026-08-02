@@ -111,10 +111,21 @@ export class ClientWindow {
    */
   samples(key?: string, sinceMs?: number): ClientSample[] {
     const cutoffMs = Math.max(Date.now() - WINDOW_MS, sinceMs ?? 0);
-    const series = key
-      ? (this.series.get(key) ?? [])
-      : [...this.series.values()].flat().sort((a, b) => a.atMs - b.atMs);
-    return series.filter((sample) => sample.atMs > cutoffMs);
+    if (key) return (this.series.get(key) ?? []).filter((sample) => sample.atMs > cutoffMs);
+
+    // Each series is already ascending (ingest() appends in time order,
+    // ingestSamples() sorts on restore), so walking from the end and
+    // stopping at the first stale sample finds exactly the live tail. The
+    // per-series walks land in Map iteration order, not time order, so the
+    // merged result still needs a final sort before it can be returned.
+    const collected: ClientSample[] = [];
+    for (const series of this.series.values()) {
+      for (let index = series.length - 1; index >= 0; index--) {
+        if (series[index].atMs <= cutoffMs) break;
+        collected.push(series[index]);
+      }
+    }
+    return collected.sort((a, b) => a.atMs - b.atMs);
   }
 
   /** Persist so a historian restart does not blank the chart. */
