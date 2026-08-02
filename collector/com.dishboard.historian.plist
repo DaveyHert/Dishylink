@@ -20,12 +20,12 @@
   <key>ProgramArguments</key>
   <array>
     <string>/Users/daveyhert/.nvm/versions/node/v22.19.0/bin/node</string>
-    <string>/Users/daveyhert/Desktop/projects/starlink/node_modules/tsx/dist/cli.mjs</string>
-    <string>/Users/daveyhert/Desktop/projects/starlink/collector/historian.mts</string>
+    <string>/Users/daveyhert/Desktop/projects/dishylink/node_modules/tsx/dist/cli.mjs</string>
+    <string>/Users/daveyhert/Desktop/projects/dishylink/collector/historian.mts</string>
   </array>
 
   <key>WorkingDirectory</key>
-  <string>/Users/daveyhert/Desktop/projects/starlink</string>
+  <string>/Users/daveyhert/Desktop/projects/dishylink</string>
 
   <key>RunAtLoad</key>
   <true/>
@@ -33,8 +33,8 @@
   <true/>
 
   <key>StandardOutPath</key>
-  <string>/Users/daveyhert/Desktop/projects/starlink/collector/data/historian.out.log</string>
+  <string>/Users/daveyhert/Desktop/projects/dishylink/collector/data/historian.out.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/daveyhert/Desktop/projects/starlink/collector/data/historian.err.log</string>
+  <string>/Users/daveyhert/Desktop/projects/dishylink/collector/data/historian.err.log</string>
 </dict>
 </plist>
