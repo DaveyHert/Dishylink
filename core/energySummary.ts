@@ -122,24 +122,24 @@ export function summarizeEnergy(buckets: MinuteBucket[], range: Range, now: Date
 
   const groups = new Map<
     number,
-    { wattSeconds: number; samples: number; dlBits: number; ulBits: number }
+    { wattSeconds: number; samples: number; downlinkBits: number; uplinkBits: number }
   >();
   let totalWattSeconds = 0;
   let sampledSeconds = 0;
-  let totalDlBits = 0;
-  let totalUlBits = 0;
+  let totalDownlinkBits = 0;
+  let totalUplinkBits = 0;
   for (const bucket of buckets) {
     const key = groupKeyOf(bucket.minute, spec);
-    const group = groups.get(key) ?? { wattSeconds: 0, samples: 0, dlBits: 0, ulBits: 0 };
+    const group = groups.get(key) ?? { wattSeconds: 0, samples: 0, downlinkBits: 0, uplinkBits: 0 };
     group.wattSeconds += bucket.wattSeconds;
     group.samples += bucket.samples;
-    group.dlBits += bucket.dlBits ?? 0;
-    group.ulBits += bucket.ulBits ?? 0;
+    group.downlinkBits += bucket.downlinkBits ?? 0;
+    group.uplinkBits += bucket.uplinkBits ?? 0;
     groups.set(key, group);
     totalWattSeconds += bucket.wattSeconds;
     sampledSeconds += bucket.samples;
-    totalDlBits += bucket.dlBits ?? 0;
-    totalUlBits += bucket.ulBits ?? 0;
+    totalDownlinkBits += bucket.downlinkBits ?? 0;
+    totalUplinkBits += bucket.uplinkBits ?? 0;
   }
 
   const BITS_PER_GB = 8e9;
@@ -147,8 +147,8 @@ export function summarizeEnergy(buckets: MinuteBucket[], range: Range, now: Date
   return {
     range,
     totalKWh: totalWattSeconds / 3_600_000,
-    totalDownGB: totalDlBits / BITS_PER_GB,
-    totalUpGB: totalUlBits / BITS_PER_GB,
+    totalDownGB: totalDownlinkBits / BITS_PER_GB,
+    totalUpGB: totalUplinkBits / BITS_PER_GB,
     coverage: {
       sampledSeconds,
       expectedSeconds,
@@ -170,8 +170,8 @@ export function summarizeEnergy(buckets: MinuteBucket[], range: Range, now: Date
       return {
         t,
         kWh: group.wattSeconds / 3_600_000,
-        downGB: group.dlBits / BITS_PER_GB,
-        upGB: group.ulBits / BITS_PER_GB,
+        downGB: group.downlinkBits / BITS_PER_GB,
+        upGB: group.uplinkBits / BITS_PER_GB,
         sampledSeconds: group.samples,
         expectedSeconds,
       };

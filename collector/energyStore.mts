@@ -17,39 +17,19 @@ import {
   readJsonLines,
   writeJsonLinesAtomically,
 } from "./jsonLinesFile.mts";
-import { foldSamplesToMinutes, type MinuteBucket } from "../core/energyBuckets.ts";
+import {
+  foldSamplesToMinutes,
+  foldMinutesToMonths,
+  monthKeyOf,
+  startOfYearSec,
+  type MinuteBucket,
+  type MonthBucket,
+} from "../core/energyBuckets.ts";
 
-// The fold primitive and the minute-bucket shape are shared with the extension,
-// so they live in core; re-exported here because this store and the historian
-// have always reached for them by this name.
-export { foldSamplesToMinutes, type MinuteBucket };
-
-/** One archived calendar month, folded from that month's minutes. */
-export interface MonthBucket {
-  /** Epoch seconds at the local start of the month. */
-  month: number;
-  wattSeconds: number;
-  /** Minutes actually recorded that month — the honesty check on a summary. */
-  samples: number;
-  dlBits: number;
-  ulBits: number;
-}
-
-/** Local start of the current calendar year, epoch seconds. */
-function startOfYearSec(now: Date): number {
-  const date = new Date(now);
-  date.setHours(0, 0, 0, 0);
-  date.setMonth(0, 1);
-  return Math.floor(date.getTime() / 1000);
-}
-
-/** Local start of the calendar month a minute falls in, epoch seconds. */
-function monthKeyOf(minuteSec: number): number {
-  const date = new Date(minuteSec * 1000);
-  date.setHours(0, 0, 0, 0);
-  date.setDate(1);
-  return Math.floor(date.getTime() / 1000);
-}
+// The fold primitives and bucket shapes are shared with the extension, so they
+// live in core; re-exported here because this store and the historian have
+// always reached for them by this name.
+export { foldSamplesToMinutes, type MinuteBucket, type MonthBucket };
 
 export class EnergyStore {
   private maxWrittenMinute = -1;
@@ -77,18 +57,12 @@ export class EnergyStore {
     const expired = all.filter((bucket) => bucket.minute < cutoffSec);
     if (expired.length === 0) return 0;
 
+    // Already-archived months are excluded before folding, not after: this log
+    // is append-only, so a month written twice would read back as two rows
+    // instead of one.
     const archived = new Set(this.readMonths().map((row) => row.month));
-    const folded = new Map<number, MonthBucket>();
-    for (const bucket of expired) {
-      const month = monthKeyOf(bucket.minute);
-      if (archived.has(month)) continue; // already summarised on an earlier run
-      const row = folded.get(month) ?? { month, wattSeconds: 0, samples: 0, dlBits: 0, ulBits: 0 };
-      row.wattSeconds += bucket.wattSeconds;
-      row.samples += bucket.samples;
-      row.dlBits += bucket.dlBits ?? 0;
-      row.ulBits += bucket.ulBits ?? 0;
-      folded.set(month, row);
-    }
+    const notYetArchived = expired.filter((bucket) => !archived.has(monthKeyOf(bucket.minute)));
+    const folded = foldMinutesToMonths(notYetArchived);
     appendJsonLines(
       this.monthlyPath,
       [...folded.values()].sort((a, b) => a.month - b.month),

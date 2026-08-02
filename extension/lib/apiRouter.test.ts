@@ -38,7 +38,7 @@ describe("routeApiRequest", () => {
     const store = new InMemoryHistory();
     // A minute inside the 1h window ending at NOW, worth exactly 1 kWh.
     await store.commit(
-      [{ minute: 1_599_998_400, wattSeconds: 3_600_000, samples: 60, dlBits: 0, ulBits: 0 }],
+      [{ minute: 1_599_998_400, wattSeconds: 3_600_000, samples: 60, downlinkBits: 0, uplinkBits: 0 }],
       EMPTY_CURSOR,
     );
 
@@ -53,7 +53,7 @@ describe("routeApiRequest", () => {
   it("serves the same buckets for /api/usage", async () => {
     const store = new InMemoryHistory();
     await store.commit(
-      [{ minute: 1_599_998_400, wattSeconds: 0, samples: 60, dlBits: 8e9, ulBits: 0 }],
+      [{ minute: 1_599_998_400, wattSeconds: 0, samples: 60, downlinkBits: 8e9, uplinkBits: 0 }],
       EMPTY_CURSOR,
     );
 

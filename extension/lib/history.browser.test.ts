@@ -138,3 +138,29 @@ describe("IndexedDbHistory client-row pruning", () => {
     expect(survived.map((s) => s.atMs)).toEqual([fresh]);
   });
 });
+
+describe("IndexedDbHistory energy compaction", () => {
+  const NOW_MS = Date.now();
+  const CURRENT_YEAR_MINUTE = Math.floor(NOW_MS / 1000 / 60) * 60;
+  const OLD_YEAR_MINUTE = CURRENT_YEAR_MINUTE - 3 * 365 * 24 * 3_600;
+
+  it("folds a past year's minutes into a month row via a real transaction, and drops them", async () => {
+    const store = await IndexedDbHistory.open(await freshStoreName());
+    await store.commit(
+      [
+        { minute: OLD_YEAR_MINUTE, wattSeconds: 120, samples: 60, downlinkBits: 8e6, uplinkBits: 1e6 },
+        { minute: CURRENT_YEAR_MINUTE, wattSeconds: 50, samples: 60, downlinkBits: 0, uplinkBits: 0 },
+      ],
+      { counter: 0, newestSampleMs: 0 },
+    );
+
+    const archived = await store.compactEnergy(NOW_MS);
+
+    expect(archived).toBe(1);
+    expect(await store.readMinutes(OLD_YEAR_MINUTE, OLD_YEAR_MINUTE)).toEqual([]);
+    expect(await store.readMinutes(CURRENT_YEAR_MINUTE, CURRENT_YEAR_MINUTE)).toHaveLength(1);
+    const months = await store.readMonths();
+    expect(months).toHaveLength(1);
+    expect(months[0].wattSeconds).toBe(120);
+  });
+});

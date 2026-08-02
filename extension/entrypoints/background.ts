@@ -271,10 +271,31 @@ export default defineBackground(() => {
   // minute, because the alarm is what makes an alert reach anyone: nothing else
   // in the browser is awake to notice.
   browser.alarms.create("drain", { periodInMinutes: 0.5 });
+  // Keeps the minute store from growing forever — same trade as the historian's
+  // server-side EnergyStore, folding anything older than the current calendar
+  // year into monthly rows. Daily is plenty; nothing about this is time-critical
+  // the way the drain is.
+  const runCompactEnergy = async () => {
+    const store = await IndexedDbHistory.open();
+    await store.compactEnergy();
+  };
+  // This whole function body re-runs on every service-worker wake — every ~30s,
+  // driven by the drain alarm above — and alarms.create() resets an existing
+  // alarm's schedule if called again under the same name. Creating it
+  // unconditionally here would restart the 24h clock on every wake and it would
+  // never actually fire, so it's only (re)created when it does not already
+  // exist. Nothing calls runCompactEnergy() on startup the way runDrain() does
+  // below — compaction is not urgent enough to need one, and the alarm alone
+  // reaching it once a day is the point.
+  void browser.alarms.get("compactEnergy").then((existing) => {
+    if (!existing) browser.alarms.create("compactEnergy", { periodInMinutes: 1_440 });
+  });
   browser.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === "drain") void runDrain();
+    if (alarm.name === "compactEnergy") void runCompactEnergy();
   });
   // A worker that just started (install, browser launch, or wake) drains at once
   // rather than idling until the first alarm a minute later.
   void runDrain();
+  void runCompactEnergy();
 });

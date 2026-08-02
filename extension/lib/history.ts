@@ -8,7 +8,14 @@
 // does. A teardown between the two would leave the cursor behind its data, and
 // the next wake would re-drain and re-add the same samples.
 
-import { addMinuteBucket, type MinuteBucket } from "@core/energyBuckets";
+import {
+  addMinuteBucket,
+  addMonthBucket,
+  foldMinutesToMonths,
+  startOfYearSec,
+  type MinuteBucket,
+  type MonthBucket,
+} from "@core/energyBuckets";
 import { planDrain, type DishWindow } from "@core/drain";
 import type { AlertTransition } from "@core/alertEngine";
 import type { OutageEvent, RadioStatReading, SampleCursor, TelemetrySample } from "@core/telemetry";
@@ -79,6 +86,13 @@ export interface HistoryStore {
   commit(deltas: MinuteBucket[], cursor: SampleCursor): Promise<void>;
   /** Buckets whose minute (epoch seconds) falls within [startSec, endSec]. */
   readMinutes(startSec: number, endSec: number): Promise<MinuteBucket[]>;
+  /** Fold minutes older than the current calendar year into monthly archive
+   *  rows, then drop them from the minute store — the same trade the historian's
+   *  server-side EnergyStore makes, so an install that runs for years doesn't
+   *  keep one row per minute forever. Returns how many minutes were archived. */
+  compactEnergy(nowMs?: number): Promise<number>;
+  /** Archived monthly summaries, oldest first. */
+  readMonths(): Promise<MonthBucket[]>;
   /** Upsert outage episodes keyed by start, so a re-seen one updates rather than
    *  duplicates — the dish's ring buffer replays the same episodes each drain —
    *  and drop any past the retention window on the same write. */
@@ -176,11 +190,11 @@ export async function applyDrain(store: HistoryStore, window: DishWindow): Promi
 // --- IndexedDB (service worker) ---
 
 const DB_NAME = "dishylink-history";
-const DB_VERSION = 7;
+const DB_VERSION = 1;
 const MINUTES = "minutes";
+const MONTHS = "months";
 const META = "meta";
 const OUTAGES = "outages";
-const RADIO = "radio";
 const ALERTS = "alerts";
 const OBSTRUCTION = "obstruction";
 const SAMPLES = "samples";
@@ -217,9 +231,6 @@ function openDatabase(name: string): Promise<IDBDatabase> {
       // startMs is the key, so an outage the ring buffer replays each drain
       // updates its row rather than appending a duplicate.
       if (!db.objectStoreNames.contains(OUTAGES)) db.createObjectStore(OUTAGES, { keyPath: "startMs" });
-      // Radio is shown live only and keeps no history, so its store is dropped
-      // here; guarded so a fresh profile that never had it still upgrades cleanly.
-      if (db.objectStoreNames.contains(RADIO)) db.deleteObjectStore(RADIO);
       // One row per alert episode, keyed by `${source}:${key}:${startMs}`.
       if (!db.objectStoreNames.contains(ALERTS)) db.createObjectStore(ALERTS, { keyPath: "id" });
       // One row per hourly snapshot, keyed by capture time.
@@ -239,6 +250,10 @@ function openDatabase(name: string): Promise<IDBDatabase> {
         db.createObjectStore(CLIENT_MINUTES, { keyPath: "id" });
       if (!db.objectStoreNames.contains(CLIENT_SAMPLES))
         db.createObjectStore(CLIENT_SAMPLES, { keyPath: "id" });
+      // One row per archived calendar month, keyed by its start — matches the
+      // historian's server-side EnergyStore, whose per-minute detail is capped
+      // to the current year with older months folded in the same shape.
+      if (!db.objectStoreNames.contains(MONTHS)) db.createObjectStore(MONTHS, { keyPath: "month" });
     };
     open.onsuccess = () => resolve(open.result);
     open.onerror = () => reject(open.error);
@@ -274,6 +289,33 @@ export class IndexedDbHistory implements HistoryStore {
   async readMinutes(startSec: number, endSec: number): Promise<MinuteBucket[]> {
     const tx = this.db.transaction(MINUTES, "readonly");
     return request<MinuteBucket[]>(tx.objectStore(MINUTES).getAll(IDBKeyRange.bound(startSec, endSec)));
+  }
+
+  async compactEnergy(nowMs: number = Date.now()): Promise<number> {
+    const cutoffSec = startOfYearSec(new Date(nowMs));
+    const tx = this.db.transaction([MINUTES, MONTHS], "readwrite");
+    const minutes = tx.objectStore(MINUTES);
+    const months = tx.objectStore(MONTHS);
+    const expired = await request<MinuteBucket[]>(
+      minutes.getAll(IDBKeyRange.upperBound(cutoffSec, true)),
+    );
+    if (expired.length > 0) {
+      for (const [month, delta] of foldMinutesToMonths(expired)) {
+        // month is the key, so a re-fold of an already-archived month (a very
+        // late-arriving minute) adds onto its row instead of overwriting it.
+        const existing = await request<MonthBucket | undefined>(months.get(month));
+        months.put(addMonthBucket(existing, delta));
+      }
+      minutes.delete(IDBKeyRange.upperBound(cutoffSec, true));
+    }
+    await transactionDone(tx);
+    return expired.length;
+  }
+
+  async readMonths(): Promise<MonthBucket[]> {
+    const tx = this.db.transaction(MONTHS, "readonly");
+    const all = await request<MonthBucket[]>(tx.objectStore(MONTHS).getAll());
+    return all.sort((a, b) => a.month - b.month);
   }
 
   async putOutages(events: OutageEvent[], nowMs: number = Date.now()): Promise<void> {
@@ -435,6 +477,7 @@ function withoutId<T>(row: T & { id: string }): T {
 
 export class InMemoryHistory implements HistoryStore {
   private readonly minutes = new Map<number, MinuteBucket>();
+  private readonly months = new Map<number, MonthBucket>();
   private readonly outages = new Map<number, OutageEvent>();
   private radioCurrent: RadioCurrent | null = null;
   private readonly alerts = new Map<string, AlertEpisode>();
@@ -459,6 +502,21 @@ export class InMemoryHistory implements HistoryStore {
     return [...this.minutes.values()]
       .filter((bucket) => bucket.minute >= startSec && bucket.minute <= endSec)
       .sort((a, b) => a.minute - b.minute);
+  }
+
+  async compactEnergy(nowMs: number = Date.now()): Promise<number> {
+    const cutoffSec = startOfYearSec(new Date(nowMs));
+    const expired = [...this.minutes.values()].filter((bucket) => bucket.minute < cutoffSec);
+    if (expired.length === 0) return 0;
+    for (const [month, delta] of foldMinutesToMonths(expired)) {
+      this.months.set(month, addMonthBucket(this.months.get(month), delta));
+    }
+    for (const [minute, bucket] of this.minutes) if (bucket.minute < cutoffSec) this.minutes.delete(minute);
+    return expired.length;
+  }
+
+  async readMonths(): Promise<MonthBucket[]> {
+    return [...this.months.values()].sort((a, b) => a.month - b.month);
   }
 
   async putOutages(events: OutageEvent[], nowMs: number = Date.now()): Promise<void> {

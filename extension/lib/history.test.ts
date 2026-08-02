@@ -73,3 +73,88 @@ describe("applyDrain / cursor", () => {
     expect(await totalWattSeconds(store)).toBe(before);
   });
 });
+
+describe("compactEnergy", () => {
+  const EMPTY_CURSOR = { counter: 0, newestSampleMs: 0 };
+  // Both offsets are wide enough (years, not days) that neither can cross a
+  // calendar-year boundary the other way regardless of the machine's timezone.
+  const NOW_MS = Date.now();
+  const CURRENT_YEAR_MINUTE = Math.floor(NOW_MS / 1000 / 60) * 60;
+  const OLD_YEAR_MINUTE = CURRENT_YEAR_MINUTE - 3 * 365 * 24 * 3_600;
+
+  it("folds minutes from a past year into a month row and drops them from the minute store", async () => {
+    const store = new InMemoryHistory();
+    await store.commit(
+      [{ minute: OLD_YEAR_MINUTE, wattSeconds: 120, samples: 60, downlinkBits: 8e6, uplinkBits: 1e6 }],
+      EMPTY_CURSOR,
+    );
+
+    const archived = await store.compactEnergy(NOW_MS);
+
+    expect(archived).toBe(1);
+    expect(await store.readMinutes(OLD_YEAR_MINUTE, OLD_YEAR_MINUTE)).toEqual([]);
+    const months = await store.readMonths();
+    expect(months).toHaveLength(1);
+    expect(months[0].wattSeconds).toBe(120);
+    expect(months[0].downlinkBits).toBe(8e6);
+    expect(months[0].uplinkBits).toBe(1e6);
+  });
+
+  it("leaves minutes from the current year alone", async () => {
+    const store = new InMemoryHistory();
+    await store.commit(
+      [{ minute: CURRENT_YEAR_MINUTE, wattSeconds: 50, samples: 60, downlinkBits: 0, uplinkBits: 0 }],
+      EMPTY_CURSOR,
+    );
+
+    const archived = await store.compactEnergy(NOW_MS);
+
+    expect(archived).toBe(0);
+    expect(await store.readMinutes(CURRENT_YEAR_MINUTE, CURRENT_YEAR_MINUTE)).toHaveLength(1);
+    expect(await store.readMonths()).toEqual([]);
+  });
+
+  it("running it again after everything is already archived is a no-op", async () => {
+    const store = new InMemoryHistory();
+    await store.commit(
+      [{ minute: OLD_YEAR_MINUTE, wattSeconds: 120, samples: 60, downlinkBits: 8e6, uplinkBits: 1e6 }],
+      EMPTY_CURSOR,
+    );
+    await store.compactEnergy(NOW_MS);
+
+    const secondPass = await store.compactEnergy(NOW_MS);
+
+    expect(secondPass).toBe(0);
+    expect(await store.readMonths()).toHaveLength(1);
+  });
+
+  it("adds onto an already-archived month rather than overwriting it, for a late-arriving old minute", async () => {
+    const store = new InMemoryHistory();
+    await store.commit(
+      [{ minute: OLD_YEAR_MINUTE, wattSeconds: 100, samples: 60, downlinkBits: 0, uplinkBits: 0 }],
+      EMPTY_CURSOR,
+    );
+    await store.compactEnergy(NOW_MS);
+    // A second old minute in the same archived month, arriving after that
+    // month's row already exists (a backfill, or a very late drain).
+    await store.commit(
+      [
+        {
+          minute: OLD_YEAR_MINUTE + 60,
+          wattSeconds: 25,
+          samples: 60,
+          downlinkBits: 0,
+          uplinkBits: 0,
+        },
+      ],
+      EMPTY_CURSOR,
+    );
+
+    await store.compactEnergy(NOW_MS);
+
+    const months = await store.readMonths();
+    expect(months).toHaveLength(1);
+    expect(months[0].wattSeconds).toBe(125);
+    expect(months[0].samples).toBe(120);
+  });
+});
