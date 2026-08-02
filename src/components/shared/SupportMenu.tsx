@@ -3,13 +3,14 @@ import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { HeartIcon } from "../../assets/icons/HeartIcon";
 import { StarIcon } from "../../assets/icons/StarIcon";
-import { HandHeartIcon } from "../../assets/icons/HandHeartIcon";
 import { CoffeeIcon } from "../../assets/icons/CoffeeIcon";
 import { PatreonIcon } from "../../assets/icons/PatreonIcon";
 import { DownloadIcon } from "../../assets/icons/DownloadIcon";
 import { BugIcon } from "../../assets/icons/BugIcon";
 import { BulbIcon } from "../../assets/icons/BulbIcon";
 import { MailIcon } from "../../assets/icons/MailIcon";
+import { XIcon } from "../../assets/icons/XIcon";
+import { LinkedinIcon } from "../../assets/icons/LinkedinIcon";
 import { ShieldIcon } from "../../assets/icons/ShieldIcon";
 import { ScaleIcon } from "../../assets/icons/ScaleIcon";
 
@@ -31,6 +32,8 @@ const SUPPORT_LINKS = {
   reportIssue: `${REPO}/issues/new?labels=bug`,
   requestFeature: `${REPO}/issues/new?labels=enhancement`,
   contact: "mailto:hello@daveyhert.com",
+  x: "https://x.com/daveyhert",
+  linkedin: "http://linkedin.com/in/daveyhert/",
   privacyPolicy: `${REPO}/blob/master/PRIVACY.md`,
   disclaimer: `${REPO}/blob/master/DISCLAIMER.md`,
 };
@@ -51,29 +54,23 @@ const MENU_ITEM =
   "flex w-full items-center gap-2.5 rounded-[8px] px-2 py-2 text-left text-[13px] text-(--ink) no-underline transition-colors hover:bg-(--hairline)";
 const MENU_LABEL =
   "px-2 pt-1.5 pb-1 text-[10.5px] font-semibold tracking-[0.06em] text-(--ink-muted) uppercase";
-const SECTION = "border-b border-solid border-(--hairline) p-1.5 last:border-b-0";
+const SECTION = "border-b border-border p-1.5 last:border-b-0";
 
 interface MenuLinkItem {
   href: string;
   icon: IconComponent;
-  accent?: boolean;
   iconClassName?: string;
   children: React.ReactNode;
 }
 
-function MenuLink({ href, icon: Icon, accent, iconClassName, children }: MenuLinkItem) {
+function MenuLink({ href, icon: Icon, iconClassName, children }: MenuLinkItem) {
   return (
     <button
       type='button'
       className={cn(MENU_ITEM, "cursor-pointer border-0 bg-transparent")}
       onClick={() => openExternal(href)}
     >
-      <span
-        className={cn(
-          "size-[15px] flex-none",
-          iconClassName ?? (accent ? "text-(--accent)" : "text-(--ink-secondary)"),
-        )}
-      >
+      <span className={cn("size-[15px] flex-none", iconClassName ?? "text-(--ink-secondary)")}>
         <Icon className='size-full' />
       </span>
       {children}
@@ -85,20 +82,30 @@ const SECTIONS: { label: string; items: MenuLinkItem[] }[] = [
   {
     label: "Support development",
     items: [
-      { href: SUPPORT_LINKS.starRepo, icon: StarIcon, accent: true, children: "Star project on GitHub" },
+      {
+        href: SUPPORT_LINKS.starRepo,
+        icon: StarIcon,
+        iconClassName: "text-(--accent)",
+        children: "Star project on GitHub",
+      },
       {
         href: SUPPORT_LINKS.githubSponsors,
-        icon: HandHeartIcon,
-        accent: true,
+        icon: HeartIcon,
+        iconClassName: "text-[#ea4aaa]",
         children: "Become a GitHub Sponsor",
       },
       {
         href: SUPPORT_LINKS.patreon,
         icon: PatreonIcon,
-        accent: true,
+        iconClassName: "text-(--ink)",
         children: "Become a Patreon",
       },
-      { href: SUPPORT_LINKS.buyMeACoffee, icon: CoffeeIcon, accent: true, children: "Buy Me a Coffee" },
+      {
+        href: SUPPORT_LINKS.buyMeACoffee,
+        icon: CoffeeIcon,
+        iconClassName: "text-(--ink)",
+        children: "Buy Me a Coffee",
+      },
     ],
   },
   {
@@ -110,7 +117,11 @@ const SECTIONS: { label: string; items: MenuLinkItem[] }[] = [
   },
   {
     label: "Contact",
-    items: [{ href: SUPPORT_LINKS.contact, icon: MailIcon, children: "Contact me" }],
+    items: [
+      { href: SUPPORT_LINKS.contact, icon: MailIcon, children: "Contact me" },
+      { href: SUPPORT_LINKS.x, icon: XIcon, children: "@daveyhert" },
+      { href: SUPPORT_LINKS.linkedin, icon: LinkedinIcon, children: "LinkedIn" },
+    ],
   },
   {
     label: "Legal",
@@ -163,9 +174,9 @@ export function SupportMenu() {
         // The glass treatment the rail/dock toolbar uses at rest — translucent
         // surface, ink-tinted border, backdrop blur — rather than a flat opaque
         // panel that reads as a different surface family from the rest of the UI.
-        className='w-75 overflow-hidden rounded-xl border border-solid border-border/50 bg-[color-mix(in_srgb,var(--surface-raised)_80%,transparent)] dark:bg-[color-mix(in_srgb,#0e0e0e_80%,transparent)] p-0 text-(--ink) shadow-[0_12px_40px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-xl backdrop-saturate-150 dark:shadow-[0_12px_40px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.08)]'
+        className='w-75 overflow-hidden rounded-xl border border-border/50 bg-[color-mix(in_srgb,var(--surface-raised)_80%,transparent)] dark:bg-[color-mix(in_srgb,#0e0e0e_80%,transparent)] p-0 text-(--ink) shadow-[0_12px_40px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-xl backdrop-saturate-150 dark:shadow-[0_12px_40px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.08)]'
       >
-        <div className='border-b border-solid border-border/50 px-4 py-3'>
+        <div className='border-b border-border/50 px-4 py-3'>
           <div className='flex items-baseline gap-2'>
             <span className='text-[13.5px] font-semibold'>DishyLink</span>
             <span className='font-mono text-[11px] text-(--ink-muted) tabular-nums'>
