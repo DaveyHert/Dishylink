@@ -1,4 +1,4 @@
-/* DishyLink — Starlink companion desktop app & browser extension design language. Theme tokens, the base reset, and
+/* Dishylink — Starlink companion desktop app & browser extension design language. Theme tokens, the base reset, and
    the handful of rules that have no Tailwind utility: keyframes, scrollbar
    pseudo-elements, and positional selectors. Everything else is utilities in
    the components. */

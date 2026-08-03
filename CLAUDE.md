@@ -1,4 +1,4 @@
-# DishyLink
+# Dishylink
 
 Live dashboard plus an always-on recorder (the "historian") for a Starlink kit. The dev machine
 is on the Starlink network itself — changes are verified against real hardware.

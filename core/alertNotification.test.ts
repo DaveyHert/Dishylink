@@ -52,7 +52,7 @@ describe("describeTransition", () => {
     const engine = new AlertEngine();
     const [transition] = engine.update({ dish: { alerts: null, atMs: NOW } });
     expect(describeTransition(transition!)).toMatchObject({
-      title: "DishyLink alert",
+      title: "Dishylink alert",
       body: "Dish isn’t answering",
     });
   });

@@ -1,4 +1,4 @@
-// App-level display choices — the ones that are about DishyLink itself, not the
+// App-level display choices — the ones that are about Dishylink itself, not the
 // dish or the router. Kept in their own tab so the two device tabs stay a mirror
 // of the official app and app preferences don't masquerade as dish config.
 //

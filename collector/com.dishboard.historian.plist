@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  launchd service for the DishyLink energy historian — keeps it running across
+  launchd service for the Dishylink energy historian — keeps it running across
   logout and (re)launches it after sleep/crash.
 
   Install:

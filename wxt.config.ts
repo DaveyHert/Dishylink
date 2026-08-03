@@ -42,7 +42,7 @@ export default defineConfig({
     optimizeDeps: { entries: ["extension/entrypoints/**/*.html"] },
   }),
   manifest: {
-    name: "DishyLink",
+    name: "Dishylink",
     description: "The unofficial desktop companion app to monitor and manage your Starlink kit.",
     // A background service worker fetching 192.168.100.1 hit a Chromium Local
     // Network Access bug fixed only in 144; below it the drain silently collects
@@ -84,7 +84,7 @@ export default defineConfig({
     // the full dashboard page — a chart-heavy dashboard wants room, not a dropdown.
     // default_icon is set explicitly rather than left to the icons fallback.
     action: {
-      default_title: "DishyLink",
+      default_title: "Dishylink",
       default_icon: { "16": "icon/16.png", "32": "icon/32.png", "48": "icon/48.png", "128": "icon/128.png" },
     },
   },

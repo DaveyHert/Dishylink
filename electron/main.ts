@@ -52,7 +52,7 @@ const iconPath = join(here, "../build/icon.png");
 
 // Drives the menu-bar title and per-app data directory; must be set before anything
 // reads it.
-app.setName("DishyLink");
+app.setName("Dishylink");
 
 // Must run before the app is ready, so it's at module load rather than in whenReady.
 registerAppProtocolScheme();
@@ -148,7 +148,7 @@ function createWindow(): void {
     ...(restoredBounds ? { x: savedBounds.x, y: savedBounds.y } : {}),
     minWidth: 800,
     minHeight: 700,
-    title: "DishyLink — Starlink Companion Desktop App (Unofficial)",
+    title: "Dishylink — Starlink Companion Desktop App (Unofficial)",
     titleBarStyle: "hiddenInset",
     show: false,
     // Matches index.css's dark --page. Electron's own default is white, which the
@@ -210,9 +210,9 @@ function windowIsForeground(): boolean {
 function createTray(): void {
   const image = nativeImage.createFromPath(iconPath);
   tray = new Tray(image.isEmpty() ? image : image.resize({ width: 18, height: 18 }));
-  tray.setToolTip("DishyLink");
+  tray.setToolTip("Dishylink");
   const menu = Menu.buildFromTemplate([
-    { label: "Open DishyLink", click: showWindow },
+    { label: "Open Dishylink", click: showWindow },
     { type: "separator" },
     {
       // Alerting runs when no window is open, so it must be switchable from the tray.
@@ -264,7 +264,7 @@ function createTray(): void {
       click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked, openAsHidden: true }),
     },
     { type: "separator" },
-    { label: "Quit DishyLink", role: "quit" },
+    { label: "Quit Dishylink", role: "quit" },
   ]);
   notifyItem = menu.getMenuItemById(NOTIFY_ITEM_ID);
   notifyReasonItem = menu.getMenuItemById(NOTIFY_REASON_ITEM_ID);
@@ -394,8 +394,8 @@ function registerCloudHandlers(): void {
  *  a binary it can't verify. */
 function undeliverableReason(): string {
   return app.isPackaged
-    ? "macOS isn’t delivering notifications — allow DishyLink under System Settings ▸ Notifications."
-    : "Native notifications need the installed DishyLink app; a dev run can’t post them.";
+    ? "macOS isn’t delivering notifications — allow Dishylink under System Settings ▸ Notifications."
+    : "Native notifications need the installed Dishylink app; a dev run can’t post them.";
 }
 
 /** The one notification answer every surface renders: stored request + channel as last

@@ -4,7 +4,7 @@
 # paid Apple account, which this project doesn't have; identity:null tells
 # electron-builder to skip signing rather than hunt for a certificate and fail.
 appId: com.dishboard.dishylink
-productName: DishyLink
+productName: Dishylink
 copyright: © 2026 daveyhert
 
 # Ad-hoc sign the built .app so macOS will post notifications (an unsigned build
@@ -54,7 +54,7 @@ files:
 # modules — so x64 costs only the x64 Electron download at build time.
 mac:
   # Both DMGs name their arch. electron-builder omits the suffix for x64 on its
-  # own, which leaves the Intel build as plain DishyLink-<version>.dmg — unlabelled
+  # own, which leaves the Intel build as plain Dishylink-<version>.dmg — unlabelled
   # next to an explicit arm64 file, so it reads as the one to grab by default and
   # lands Intel binaries on Apple Silicon machines.
   artifactName: ${productName}-${version}-${arch}.${ext}

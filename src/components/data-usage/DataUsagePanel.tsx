@@ -1,6 +1,6 @@
 // Data usage sheet: self-measured download/upload volume from the historian,
 // in the layout of the Starlink account page's usage chart — headline GB,
-// range tabs, stacked down/up bars. Clearly labeled as measured by DishyLink
+// range tabs, stacked down/up bars. Clearly labeled as measured by Dishylink
 // (Starlink's own billing meter is cloud-side and not exposed locally).
 
 import { useState } from "react";
@@ -98,7 +98,7 @@ function LocalDataUsage() {
     return (
       <Callout className='mt-2.5'>
         Data usage needs the history recorder running. Start it with <code>npm run historian</code>{" "}
-        and DishyLink will meter traffic from now on.
+        and Dishylink will meter traffic from now on.
       </Callout>
     );
   }
@@ -133,7 +133,7 @@ function LocalDataUsage() {
       )}
 
       <Explainer title='How is this measured?'>
-        DishyLink integrates the dish's own per-second throughput telemetry into per-minute volume,
+        Dishylink integrates the dish's own per-second throughput telemetry into per-minute volume,
         on this machine. It tracks your real traffic from the moment the historian started — it is
         not Starlink's billing meter, which lives in their cloud and counts in UTC.
       </Explainer>

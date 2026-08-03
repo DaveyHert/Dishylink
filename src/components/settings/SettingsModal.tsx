@@ -1,7 +1,7 @@
 // Settings modal (gear icon): dish config + maintenance on the Starlink tab,
 // network info + reboot on the Router tab — layout mirrors the official app.
 // Chrome is the shadcn Dialog; the segment control, buttons and typography use
-// the DishyLink design language.
+// the Dishylink design language.
 //
 // What is left here is the shell: the dialog, the tab switch, and the height
 // animation between the two panels. Each tab's content is its own component.

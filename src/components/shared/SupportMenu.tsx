@@ -178,7 +178,7 @@ export function SupportMenu() {
       >
         <div className='border-b border-border/50 px-4 py-3'>
           <div className='flex items-baseline gap-2'>
-            <span className='text-[13.5px] font-semibold'>DishyLink</span>
+            <span className='text-[13.5px] font-semibold'>Dishylink</span>
             <span className='font-mono text-[11px] text-(--ink-muted) tabular-nums'>
               v{APP_VERSION}
             </span>

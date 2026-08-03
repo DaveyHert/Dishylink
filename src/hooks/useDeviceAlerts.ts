@@ -304,6 +304,6 @@ export function useDeviceAlerts(
 }
 
 function alertTitle(source: AlertSource, cleared: boolean): string {
-  const device = source === "dish" ? "Dish" : source === "router" ? "Router" : "DishyLink";
+  const device = source === "dish" ? "Dish" : source === "router" ? "Router" : "Dishylink";
   return cleared ? `${device} alert cleared` : `${device} alert`;
 }

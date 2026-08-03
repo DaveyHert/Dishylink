@@ -12,7 +12,7 @@ export function SearchingHero() {
       </div>
       <div className='text-[19px] font-bold tracking-[0.18em]'>SEARCHING FOR DISH</div>
       <p className='max-w-[420px] text-[13.5px] text-(--ink-secondary)'>
-        DishyLink talks to your Starlink terminal directly at{" "}
+        Dishylink talks to your Starlink terminal directly at{" "}
         <code className='rounded-[5px] bg-[var(--surface)] px-1.5 py-px font-mono text-[12px]'>
           192.168.100.1
         </code>

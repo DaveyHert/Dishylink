@@ -1,4 +1,4 @@
-# DishyLink
+# Dishylink
 
 A local dashboard plus an always-on history recorder for a Starlink kit. It
 talks to the dish and router directly over their LAN gRPC API — no cloud
@@ -30,7 +30,7 @@ own Starlink billing/usage data from `starlink.com` if you choose to sign in.
 
 ## Three ways to run it
 
-DishyLink ships as three independent products from one codebase — pick
+Dishylink ships as three independent products from one codebase — pick
 whichever fits:
 
 ```bash

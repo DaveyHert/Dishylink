@@ -60,7 +60,7 @@ export function TopBar({
     <header className='sticky top-0 z-20 flex items-center justify-between gap-4 bg-gradient-to-b from-[color-mix(in_srgb,var(--page)_72%,transparent)] via-[color-mix(in_srgb,var(--page)_42%,transparent)] to-transparent px-6 pt-3.5 pb-4'>
       <div className='flex min-w-0 items-center gap-[11px]'>
         <AppLogo size={28} className='flex-none' />
-        <span className='text-[17px] font-bold tracking-[0.16em]'>DISHYLINK</span>
+        <span className='text-[17px] font-bold tracking-[0.16em]'>Dishylink</span>
       </div>
       <div className='flex flex-none flex-wrap items-center justify-end gap-3'>
         <div className='flex items-center gap-2.5'>

@@ -15,7 +15,7 @@ export function AppLogo({ size = 26, ...props }: React.ComponentProps<"svg"> & {
       viewBox='0 0 220 220'
       fill='none'
       role='img'
-      aria-label='DishyLink'
+      aria-label='Dishylink'
       {...props}
     >
       <g transform='translate(110, 110)' stroke='currentColor' fill='currentColor'>

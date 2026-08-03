@@ -1,6 +1,6 @@
 # Privacy Policy
 
-DishyLink is a local dashboard and history recorder for a Starlink kit. This
+Dishylink is a local dashboard and history recorder for a Starlink kit. This
 page describes what the app does with your data.
 
 ## What stays on your machine
@@ -39,7 +39,7 @@ already involves.
 
 ## Open source
 
-DishyLink's source is public, so you can verify all of the above yourself —
+Dishylink's source is public, so you can verify all of the above yourself —
 see the repository this file lives in.
 
 ## Changes
