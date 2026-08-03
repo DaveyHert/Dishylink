@@ -14,6 +14,13 @@ import { app } from "electron";
 import { join } from "node:path";
 import { readFileSync, writeFileSync } from "node:fs";
 
+export interface WindowBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface Preferences {
   /**
    * Whether desktop notifications are wanted.
@@ -36,9 +43,26 @@ export interface Preferences {
    * only — renaming it would orphan the value in existing settings files.)
    */
   menuBarThroughput: boolean;
+
+  /**
+   * The main window's last position and size, restored on launch so it reopens
+   * where it was left. null until the window has moved or resized at least once.
+   */
+  windowBounds: WindowBounds | null;
 }
 
-const DEFAULTS: Preferences = { notifications: null, menuBarThroughput: false };
+const DEFAULTS: Preferences = { notifications: null, menuBarThroughput: false, windowBounds: null };
+
+function isWindowBounds(value: unknown): value is WindowBounds {
+  if (typeof value !== "object" || value === null) return false;
+  const bounds = value as Record<string, unknown>;
+  return (
+    typeof bounds.x === "number" &&
+    typeof bounds.y === "number" &&
+    typeof bounds.width === "number" &&
+    typeof bounds.height === "number"
+  );
+}
 
 let cached: Preferences | null = null;
 
@@ -58,6 +82,7 @@ export function preferences(): Preferences {
       notifications: typeof parsed.notifications === "boolean" ? parsed.notifications : null,
       menuBarThroughput:
         typeof parsed.menuBarThroughput === "boolean" ? parsed.menuBarThroughput : false,
+      windowBounds: isWindowBounds(parsed.windowBounds) ? parsed.windowBounds : null,
     };
   } catch {
     // No file yet, or unreadable. Either way the defaults are the answer.

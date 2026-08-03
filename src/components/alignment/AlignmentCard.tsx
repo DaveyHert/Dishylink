@@ -5,6 +5,7 @@
 
 import type { DishStatusJson } from "@core/dishClient";
 import { formatActuatorState, formatAttitudeState, formatHasActuators } from "../../lib/format";
+import { Callout } from "../ui/callout";
 import { Explainer } from "../ui/explainer";
 import { FactColumn, FactColumns, FactRow } from "../ui/fact-row";
 import { RotationInstrument, TiltInstrument } from "./AlignmentInstruments";
@@ -192,9 +193,18 @@ export function AlignmentPanel({
   status,
   onOpenSkyView,
 }: {
-  status: DishStatusJson;
+  status: DishStatusJson | null;
   onOpenSkyView?: () => void;
 }) {
+  if (!status) {
+    return (
+      <Callout tone='error'>
+        Couldn't reach the Starlink dish — alignment needs a live reading. This updates on its own
+        once the dish is back online.
+      </Callout>
+    );
+  }
+
   const reading = computeAlignment(status);
 
   return (

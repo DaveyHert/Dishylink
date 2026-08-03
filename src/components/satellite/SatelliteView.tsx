@@ -287,7 +287,7 @@ export function SatelliteView({
           className={`pointer-events-auto flex flex-col gap-3.5 rounded-xl px-[16px] py-4 ${glassPanel}`}
         >
           <div className='flex items-baseline justify-between gap-2 text-[12px] font-medium text-muted-foreground'>
-            <span>{site ? `site ${site}` : "no location set to fetch live satellites"}</span>
+            <span>{site ? `site ${site}` : "No location set to fetch live satellites"}</span>
             <span className='flex shrink-0 items-baseline gap-2.5'>
               <button
                 type='button'

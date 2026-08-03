@@ -11,6 +11,7 @@ import {
   nativeImage,
   ipcMain,
   Notification,
+  screen,
   shell,
   type MenuItem,
 } from "electron";
@@ -27,7 +28,7 @@ import {
   type ThroughputSample,
 } from "./collector";
 import { startCloud, handleCloudRequest, signIn } from "./cloud";
-import { preferences, setPreference, onPreferencesChanged } from "./preferences";
+import { preferences, setPreference, onPreferencesChanged, type WindowBounds } from "./preferences";
 import {
   describeTransition,
   NotificationThrottle,
@@ -101,15 +102,61 @@ let throughputStaleTimer: ReturnType<typeof setInterval> | null = null;
 // tells a working channel from a mute one.
 let notificationFailureReason: string | null = null;
 
+// A saved position from a display that's no longer connected (unplugged monitor)
+// would open the window off-screen; only reuse it when its center still lands on
+// some currently attached display.
+function boundsOnConnectedDisplay(bounds: WindowBounds): boolean {
+  const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+  return screen.getAllDisplays().some(({ bounds: display }) => {
+    return (
+      center.x >= display.x &&
+      center.x < display.x + display.width &&
+      center.y >= display.y &&
+      center.y < display.y + display.height
+    );
+  });
+}
+
+// Debounced so a drag or resize-in-progress doesn't write the settings file on every
+// intermediate frame; only the position it settles on is worth persisting.
+let saveBoundsTimer: ReturnType<typeof setTimeout> | null = null;
+
+// getBounds() on a maximized or fullscreen window returns the full-screen rect, not
+// the size the user actually chose — persisting that would make the next launch open
+// at that screen-filling size, un-maximized, and stay stuck there since every save
+// after would just re-persist it.
+function saveBounds(): void {
+  if (mainWindow === null || mainWindow.isMaximized() || mainWindow.isFullScreen()) return;
+  setPreference("windowBounds", mainWindow.getBounds());
+}
+
+function scheduleBoundsSave(): void {
+  if (saveBoundsTimer !== null) clearTimeout(saveBoundsTimer);
+  saveBoundsTimer = setTimeout(() => {
+    saveBoundsTimer = null;
+    saveBounds();
+  }, 500);
+}
+
 function createWindow(): void {
+  const savedBounds = preferences().windowBounds;
+  const restoredBounds = savedBounds !== null && boundsOnConnectedDisplay(savedBounds);
+
   mainWindow = new BrowserWindow({
-    width: 1450,
-    height: 980,
+    width: restoredBounds ? savedBounds.width : 1450,
+    height: restoredBounds ? savedBounds.height : 980,
+    ...(restoredBounds ? { x: savedBounds.x, y: savedBounds.y } : {}),
     minWidth: 800,
     minHeight: 700,
     title: "DishyLink — Starlink Companion Desktop App (Unofficial)",
     titleBarStyle: "hiddenInset",
     show: false,
+    // Matches index.css's dark --page. Electron's own default is white, which the
+    // native close animation exposes as a flash — it composites over this color,
+    // not the last-painted frame. The app defaults to dark theme (App.tsx), so
+    // this is right for the common case; a user on light theme would see the
+    // flash inverted, unaddressed here.
+    backgroundColor: "#000000",
     webPreferences: {
       preload: join(here, "preload.mjs"),
       contextIsolation: true,
@@ -128,6 +175,15 @@ function createWindow(): void {
     publishUpdateState();
   });
   mainWindow.once("ready-to-show", () => mainWindow?.show());
+  mainWindow.on("move", scheduleBoundsSave);
+  mainWindow.on("resize", scheduleBoundsSave);
+  // Bounds are captured here, not in "closed": by then the window is destroyed and
+  // getBounds() is no longer available. Catches whatever the debounce above hasn't
+  // flushed yet.
+  mainWindow.on("close", () => {
+    if (saveBoundsTimer !== null) clearTimeout(saveBoundsTimer);
+    saveBounds();
+  });
   mainWindow.on("closed", () => {
     mainWindow = null;
     lastRendererReportMs = 0;

@@ -16,6 +16,7 @@ import { NOTIFICATIONS_ENABLED_KEY, type NotifyResult } from "../lib/notificatio
 const DASHBOARD_PATH = "/dashboard.html";
 const SURFACE_KEY = "surface";
 const WINDOW_BOUNDS_KEY = "dashboardWindowBounds";
+const DASHBOARD_WINDOW_ID_KEY = "dashboardWindowId";
 const LAST_DRAIN_KEY = "lastDrain";
 
 type Surface = "window" | "tab";
@@ -26,9 +27,8 @@ const DEFAULT_BOUNDS: Bounds = { top: 80, left: 120, width: 1320, height: 880 };
 // The single open dashboard window, so a second click focuses it instead of
 // opening another. Held in memory as a same-wake fast path only — the service
 // worker's memory does not survive teardown, and a click can arrive any number
-// of wakes after the window was created, so the source of truth is always the
-// live windows.popup query below, the same way openDashboardTab and
-// dashboardIsForeground never trust memory for the tab surface either.
+// of wakes after the window was created, so the source of truth on a cold wake
+// is the id persisted below.
 let dashboardWindowId: number | undefined;
 
 async function readSurface(): Promise<Surface> {
@@ -36,16 +36,20 @@ async function readSurface(): Promise<Surface> {
   return stored[SURFACE_KEY] === "tab" ? "tab" : "window";
 }
 
-/** The open dashboard window's id, found by querying live browser state rather
- *  than trusting memory — a popup window's own tab carries the dashboard URL. */
+/** The open dashboard window's id, read from storage and confirmed still live via
+ *  `windows.get` by that id. This manifest carries no "tabs" permission and no
+ *  host permission for the extension's own chrome-extension:// origin, so Chrome
+ *  will not disclose any tab's url to a url-filtered `tabs.query` — including
+ *  this extension's own dashboard tab — and such a query always comes back
+ *  empty. Looking the window up by id needs no such permission. */
 async function findDashboardWindowId(): Promise<number | undefined> {
-  const url = browser.runtime.getURL(DASHBOARD_PATH);
-  const tabs = await browser.tabs.query({ url }).catch(() => []);
-  for (const tab of tabs) {
-    if (tab.windowId === undefined) continue;
-    const win = await browser.windows.get(tab.windowId).catch(() => null);
-    if (win?.type === "popup") return tab.windowId;
-  }
+  const stored = await browser.storage.local.get(DASHBOARD_WINDOW_ID_KEY);
+  const id = stored[DASHBOARD_WINDOW_ID_KEY] as number | undefined;
+  if (id === undefined) return undefined;
+  const win = await browser.windows.get(id).catch(() => null);
+  if (win?.type === "popup") return id;
+  // Stale: the window this id named is gone, or no longer a popup.
+  await browser.storage.local.remove(DASHBOARD_WINDOW_ID_KEY);
   return undefined;
 }
 
@@ -69,6 +73,9 @@ async function openDashboardWindow(): Promise<void> {
     ...bounds,
   });
   dashboardWindowId = created?.id;
+  if (created?.id !== undefined) {
+    await browser.storage.local.set({ [DASHBOARD_WINDOW_ID_KEY]: created.id });
+  }
 }
 
 async function openDashboardTab(): Promise<void> {

@@ -205,7 +205,7 @@ export default function App() {
         </DetailsModal>
       )}
       {/* Alignment modal */}
-      {openPanel === "alignment" && status && (
+      {openPanel === "alignment" && (
         <DetailsModal title='Alignment' onClose={() => setOpenPanel(null)} size='wide'>
           <AlignmentPanel status={status} onOpenSkyView={() => setSkyViewOpen(true)} />
         </DetailsModal>
