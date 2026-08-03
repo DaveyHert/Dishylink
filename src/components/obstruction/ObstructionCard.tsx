@@ -1,13 +1,4 @@
 // The dashboard's Obstructions card: the dish's view of its own sky, full-bleed.
-//
-// Not a SectionCard — that shell pads its content, which would box the scene
-// into a panel inside a panel. Here the dome IS the card, edge to edge, and the
-// title, key and figures float on top over gradient scrims. The shell classes
-// below mirror SectionCard's so it still sits in the dashboard grid identically.
-//
-// Pinned to the dark token set for the same reason the sky view is: the scene
-// clears and fogs to black, so it reads as a night sky whatever theme the
-// dashboard around it is in — and the chrome above has to be legible on that.
 
 import { useCallback, useState } from "react";
 import { Callout } from "../ui/callout";

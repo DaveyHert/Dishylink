@@ -1,9 +1,4 @@
-// The left rail: a glass capsule floating off the left edge. At rest it shows
-// icons only; hovering springs it open to reveal the labels, then it tucks back.
-// The accent bar marks the open destination. Width, labels and the enter/exit
-// all ride motion springs so the open/close reads as one fluid motion rather
-// than a set of separate CSS transitions.
-
+// The left rail: a glass capsule floating off the left edge.
 import { useState } from "react";
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils";

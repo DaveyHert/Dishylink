@@ -1,10 +1,3 @@
-// The app toolbar: the dashboard's section navigation, lifted out of the header
-// and shown as one of two floating treatments — the macOS-style dock (default)
-// or the left rail. Which one is the user's choice, read from the shared
-// navStyle store so the Settings tab can switch it live; AnimatePresence
-// cross-fades the two when it changes. This owns the destination list and hands
-// it to whichever treatment is showing, so the two can never drift apart.
-
 import { useSyncExternalStore } from "react";
 import { AnimatePresence } from "motion/react";
 import { readNavStyle, subscribeToNavStyle } from "../../lib/navStyle";

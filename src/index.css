@@ -246,6 +246,23 @@ body {
   }
 }
 
+/* ---------- loaders ----------
+   SpinLoader's keyframes: plain CSS, not motion/react — see SpinLoader.tsx. */
+@keyframes spin-loader {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spin-loader-fade {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.15;
+  }
+}
+
 /* ---------- unreachable hero ---------- */
 
 @keyframes sweep {

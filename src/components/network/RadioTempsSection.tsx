@@ -22,7 +22,7 @@ export function RadioTempsSection({ radios }: { radios: RadioReading[] }) {
         {radios.map((radio) => {
           // dutyCycle is the share of transmit airtime the radio is ALLOWED,
           // which the router cuts to cool a hot radio — not how busy the channel
-          // is. So 100 is the healthy state, and rendering it as "100% airtime"
+          // is. So 100 is the healthy state, and rendering it as "100%"
           // read as "completely saturated": the opposite of what it means, on
           // every radio, permanently. Say nothing when nothing is wrong.
           const throttling = radio.dutyCycle < 100;

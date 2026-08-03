@@ -1,5 +1,3 @@
-import { motion } from "motion/react";
-
 /**
  * SpinLoader — three spinner treatments behind one `variant` prop.
  *
@@ -9,19 +7,11 @@ import { motion } from "motion/react";
  *
  * Everything paints in the inherited text color.
  *
- * The rotation IS the message: it is the only thing separating "still working"
- * from "stalled". Nothing in this app dims its motion for
- * `prefers-reduced-motion` — the animations here are the live readings, not
- * decoration, and freezing them tells the reader strictly less. Where holding
- * still is genuinely wanted, it is offered as a control instead: see the
- * obstruction dome's pause.
  */
 
 const INK = "currentColor";
 // Faint same-hue track, so the ring reads on both light and dark grounds.
 const TRACK = "color-mix(in srgb, currentColor 16%, transparent)";
-
-const SPIN = { duration: 1, repeat: Infinity, ease: "linear" as const };
 
 export type SpinLoaderVariant = "conic" | "activity" | "segment";
 
@@ -57,9 +47,10 @@ function ConicSpinner({ size, label }: VariantProps) {
   const ringMask = `radial-gradient(farthest-side, transparent calc(100% - ${thickness}px), #000 calc(100% - ${thickness - 1}px))`;
 
   return (
-    <motion.div
+    <div
       role='status'
       aria-label={label}
+      className='animate-[spin-loader_1s_linear_infinite]'
       style={{
         width: size,
         height: size,
@@ -69,8 +60,6 @@ function ConicSpinner({ size, label }: VariantProps) {
         WebkitMask: ringMask,
         mask: ringMask,
       }}
-      animate={{ rotate: 360 }}
-      transition={SPIN}
     />
   );
 }
@@ -80,9 +69,10 @@ function ConicSpinner({ size, label }: VariantProps) {
 function SegmentSpinner({ size, label }: VariantProps) {
   const width = Math.max(4, Math.round(size * 0.1));
   return (
-    <motion.div
+    <div
       role='status'
       aria-label={label}
+      className='animate-[spin-loader_0.8s_linear_infinite]'
       style={{
         width: size,
         height: size,
@@ -91,8 +81,6 @@ function SegmentSpinner({ size, label }: VariantProps) {
         border: `${width}px solid ${TRACK}`,
         borderTopColor: INK,
       }}
-      animate={{ rotate: 360 }}
-      transition={{ ...SPIN, duration: 0.8 }}
     />
   );
 }
@@ -111,9 +99,10 @@ function ActivitySpinner({ size, label }: VariantProps) {
       style={{ position: "relative", width: size, height: size, flex: "none" }}
     >
       {Array.from({ length: 12 }, (_, spoke) => (
-        <motion.span
+        <span
           key={spoke}
           aria-hidden
+          className='animate-[spin-loader-fade_1s_linear_infinite]'
           style={{
             position: "absolute",
             left: "50%",
@@ -126,13 +115,7 @@ function ActivitySpinner({ size, label }: VariantProps) {
             background: INK,
             transformOrigin: `${spokeWidth / 2}px ${pivot}px`,
             transform: `rotate(${spoke * 30}deg)`,
-          }}
-          animate={{ opacity: [1, 0.15] }}
-          transition={{
-            duration: 1,
-            repeat: Infinity,
-            ease: "linear",
-            delay: -((11 - spoke) / 12),
+            animationDelay: `${-((11 - spoke) / 12)}s`,
           }}
         />
       ))}

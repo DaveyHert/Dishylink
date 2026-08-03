@@ -78,10 +78,9 @@ const POLL_MS = 5_000;
  * caught as an edge rather than sampled on our clock and aliased. See
  * `src/lib/throughputTracker.ts` for why the edge is what gets measured.
  *
- * 200 ms (five polls per step) is the comfortable margin. Restored 2026-07-21
- * as a deliberate trial: the 2026-07-20 watchdog reboots were traced to
+ * 200 ms (five polls per step) is the comfortable margin. Watchdog reboots were traced to
  * get_ping, not this poll, and running at full rate is the way to prove the
- * router stays healthy under it. If SOFTWARE_WATCHDOG reboots return, drop to
+ * router stays healthy under it. If SOFTWARE_WATCHDOG reboots, drop to
  * 500 ms — two polls per step still catches every edge (one slow reply can
  * land an edge a step late, briefly smearing a per-device reading) at 2 req/s
  * instead of 5, the chattiest thing we send the router.

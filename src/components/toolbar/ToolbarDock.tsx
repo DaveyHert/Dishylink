@@ -1,11 +1,3 @@
-// The floating dock: the default toolbar, a glass pill pinned to the
-// bottom-centre of the dashboard. It sits compact and see-through at rest, then
-// frosts up when the pointer is over it. Sweeping across it swells the icon
-// underneath and eases its neighbours up — the macOS Dock's genie magnification.
-// A single white bead rides along the pill's base, sliding under whichever icon
-// the pointer lifts; it scales in when the pointer enters and vanishes on exit.
-// Hovering a tile also floats its label as a chip above the lifted icon.
-
 import { useRef, useState } from "react";
 import { motion, useMotionValue, useSpring, useTransform, type MotionValue } from "motion/react";
 import { cn } from "@/lib/utils";
@@ -117,7 +109,7 @@ export function ToolbarDock({ items, activeId, onSelect }: ToolbarDockProps) {
   };
 
   return (
-    <div className='fixed bottom-[15px] left-1/2 z-30 -translate-x-1/2'>
+    <div className='fixed bottom-[25px] left-1/2 z-30 -translate-x-1/2'>
       <motion.nav
         aria-label='Dashboard sections'
         initial={{ opacity: 0, y: 26 }}

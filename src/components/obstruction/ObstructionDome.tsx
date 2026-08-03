@@ -1,12 +1,4 @@
-// The dashboard's obstruction dome: the sky view's WebGL scene, stripped to what
-// this card has always offered.
-//
-// Same engine as the full view, so the two cannot drift into looking like
-// different products — but no satellites, no starfield, no zoom and no picking.
-// What is left is the survey, the user's dish, and a slow drift you can grab.
-//
-// Fills its parent rather than taking a size: the card gives the scene its whole
-// area and floats its chrome on top, so the sky reaches every edge.
+// The dashboard's obstruction dome: the sky view's WebGL scene, stripped to bare sky dome and dish.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DishObstructionMapJson, DishStatusJson } from "@core/dishClient";
@@ -15,20 +7,8 @@ import { liveSurvey } from "../satellite/skySurvey";
 import { useDomeTrim } from "../../hooks/useDomeTrim";
 import { domeTrimEnabled } from "../../lib/domeTrim";
 
-/**
- * Far enough back that the whole dome sits in frame with air around it, which is
- * what gives it scale — the dish reads as a small object under a big sky. Closer
- * in, the dome overflows the frame and the perspective exaggerates until it
- * stops looking like a place. Matches the framing of the Starlink app's own
- * obstruction view.
- */
+// The distance and dish scale are locked to a visually pleasing view of the dish and its sky
 const CARD_DISTANCE = 3.6;
-
-/**
- * The dish, drawn well above true size. At true scale it is a speck under the
- * dome — correct, and invisible at this size — so the card exaggerates it into
- * something you can recognise at a glance.
- */
 const CARD_DISH_SCALE = 1.5;
 
 export function ObstructionDome({
