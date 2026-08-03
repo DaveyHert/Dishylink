@@ -284,3 +284,12 @@ body {
 :root[data-host="electron"] header [role="button"] {
   -webkit-app-region: no-drag;
 }
+
+/* ---------- extension popup window ---------- */
+
+/* The popup window has no OS-level resize floor, unlike the desktop app's
+   BrowserWindow minWidth. */
+:root[data-host="extension"] #root {
+  min-width: 700px;
+  overflow-x: auto;
+}

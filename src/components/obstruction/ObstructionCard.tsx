@@ -45,7 +45,7 @@ export function ObstructionCard({
   return (
     <div
       data-theme='dark'
-      className='relative row-span-2 col-span-4 min-w-0 overflow-hidden rounded-xl bg-[var(--page)] text-foreground'
+      className='relative row-span-2 col-span-4 min-w-0 max-[1080px]:h-[420px] overflow-hidden rounded-xl bg-[var(--page)] text-foreground'
     >
       <ObstructionDome
         obstructionMap={obstructionMap}

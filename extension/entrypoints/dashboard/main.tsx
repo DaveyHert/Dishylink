@@ -2,6 +2,8 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "@/index.css";
 import App from "@/App";
+
+document.documentElement.dataset.host = "extension";
 import { setApiHost } from "@/lib/apiHost";
 import { setCloudHost } from "@/lib/cloudHost";
 import { bindNotifications, setNotificationHost } from "@/lib/notifications";
