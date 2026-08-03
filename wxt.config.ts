@@ -87,6 +87,13 @@ export default defineConfig({
       default_title: "Dishylink",
       default_icon: { "16": "icon/16.png", "32": "icon/32.png", "48": "icon/48.png", "128": "icon/128.png" },
     },
+    // Matches PRIVACY.md: no backend, no analytics — nothing the extension does
+    // is collected by us. Required by AMO for new submissions since 2025-11-03.
+    browser_specific_settings: {
+      gecko: {
+        data_collection_permissions: { required: ["none"] },
+      },
+    },
   },
   alias: {
     "@core": "core",

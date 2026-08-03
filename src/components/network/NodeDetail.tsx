@@ -5,9 +5,10 @@
 // empty). This shows what a node actually has: what it serves, and what it is.
 
 import type { RadioReading } from "../../hooks/useRadioTemps";
-import type { WifiNetworkConfigJson } from "@core/dishClient";
+import type { WifiNetworkConfigJson, WifiStatusJson } from "@core/dishClient";
 import type { SelfIdentity } from "../../lib/selfIdentity";
 import { RouterIcon } from "../../assets/icons/RouterIcon";
+import { formatDeviceEnum, formatUptime } from "../../lib/format";
 import { DataRow, SectionHeading } from "./DataRow";
 import { DeviceRow } from "./NetworkRow";
 import { RadioTempsSection } from "./RadioTempsSection";
@@ -17,12 +18,15 @@ import type { NodeEntry } from "./nodeRoster";
 export function NodeDetail({
   node,
   wifiConfig,
+  routerStatus,
   radios,
   self,
   onSelect,
 }: {
   node: NodeEntry;
   wifiConfig: WifiNetworkConfigJson | null;
+  /** The router's own hardware/software version and uptime. */
+  routerStatus: WifiStatusJson | null;
   /** Live radio temps from the historian — router node only. */
   radios: RadioReading[];
   self: SelfIdentity;
@@ -40,6 +44,11 @@ export function NodeDetail({
   // Only the main router's own firmware is in wifiConfig.boot; a mesh node
   // reports just its hardware revision in its config entry.
   const firmware = isRouter ? wifiConfig?.boot?.evenSideSoftwareVersion : undefined;
+  const routerHardware = isRouter ? routerStatus?.deviceInfo?.hardwareVersion : undefined;
+  const routerUptimeS = isRouter ? routerStatus?.deviceState?.uptimeS : undefined;
+  const lastRebootReason = isRouter
+    ? formatDeviceEnum(wifiConfig?.boot?.lastReason, "")
+    : undefined;
 
   return (
     <div>
@@ -75,9 +84,13 @@ export function NodeDetail({
         {client?.deviceId && <DataRow label='Device ID' value={client.deviceId} />}
         {client?.ipAddress && <DataRow label='IP address' value={client.ipAddress} />}
         {firmware && <DataRow label='Firmware' value={firmware} />}
-        {meshConfig?.hardwareVersion && (
-          <DataRow label='Hardware' value={meshConfig.hardwareVersion} />
+        {(meshConfig?.hardwareVersion ?? routerHardware) && (
+          <DataRow label='Hardware' value={meshConfig?.hardwareVersion ?? routerHardware!} />
         )}
+        {routerUptimeS !== undefined && (
+          <DataRow label='Uptime' value={formatUptime(Number(routerUptimeS))} />
+        )}
+        {lastRebootReason && <DataRow label='Last reboot' value={lastRebootReason} />}
         {wifiConfig?.countryCode && isRouter && (
           <DataRow label='Region' value={wifiConfig.countryCode} />
         )}

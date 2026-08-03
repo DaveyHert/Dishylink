@@ -4,11 +4,17 @@
 // surface (Network sheet or Settings modal) is open.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DishClient, type WifiClientJson, type WifiNetworkConfigJson } from "@core/dishClient";
+import {
+  DishClient,
+  type WifiClientJson,
+  type WifiNetworkConfigJson,
+  type WifiStatusJson,
+} from "@core/dishClient";
 import type { ThroughputRates } from "@core/throughputTracker";
 import type { TelemetrySample } from "@core/telemetry";
 import { usageKey, type ClientUsageTotal } from "@core/clientUsage";
 import { apiRequest } from "../lib/apiHost";
+import { subscribeRouterStatus } from "../lib/routerStatusFeed";
 
 // Roster only — names, signal, addresses, link rates. These change on the order
 // of minutes, so there is nothing to gain from asking faster.
@@ -224,6 +230,8 @@ export interface RouterNetwork {
   /** Per-MAC monthly usage total from the historian's odometer — survives the
    *  reconnects that reset the router's own per-client counter. */
   totals: Map<string, ClientUsageTotal>;
+  /** From routerStatusFeed's shared poll — never poll the router directly here. */
+  routerStatus: WifiStatusJson | null;
 }
 
 export function useRouterNetwork(active: boolean): RouterNetwork {
@@ -236,6 +244,7 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
   const [rates, setRates] = useState<Map<string, ThroughputRates>>(new Map());
   const [ratesAtRoster, setRatesAtRoster] = useState<Map<string, ThroughputRates>>(new Map());
   const [totals, setTotals] = useState<Map<string, ClientUsageTotal>>(new Map());
+  const [routerStatus, setRouterStatus] = useState<WifiStatusJson | null>(null);
   const ratesRef = useRef<Map<string, ThroughputRates>>(new Map());
   /** Newest sample already merged, so each tail asks only for what is new. */
   const lastSampleMsRef = useRef(0);
@@ -371,6 +380,11 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
     };
   }, [active]);
 
+  useEffect(() => {
+    if (!active) return;
+    return subscribeRouterStatus((snapshot) => setRouterStatus(snapshot.status));
+  }, [active]);
+
   const renameClient = useCallback(async (macAddress: string, givenName: string) => {
     clientRef.current ??= DishClient.load("router");
     const routerClient = await clientRef.current;
@@ -393,5 +407,6 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
     rates,
     ratesAtRoster,
     totals,
+    routerStatus,
   };
 }

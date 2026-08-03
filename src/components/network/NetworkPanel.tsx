@@ -90,6 +90,7 @@ export function NetworkPanel({
       <NodeDetail
         node={selectedNode}
         wifiConfig={network.wifiConfig}
+        routerStatus={network.routerStatus}
         radios={radio.current}
         self={self}
         onSelect={onSelect}
