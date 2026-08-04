@@ -42,46 +42,11 @@
   --radius-xl: 16px;
 }
 
-:root {
-  --page: #f4f3ee;
-  --surface: #ffffff;
-  --surface-raised: #ffffff;
-  --ink: #111110;
-  --ink-secondary: #55544f;
-  --ink-muted: #8a8880;
-  --hairline: #e7e5dc;
-  --baseline: #c9c7bc;
-  --grid-dot: #dedcd2;
-
-  /* Starlink chart language: primary = ink, secondary = warm orange */
-  --chart-ink: #111110;
-  --chart-warm: #d1671f;
-  --series-down: #2f6fed;
-  --series-up: #1ba85f;
-  --satellite: #b7791f;
-  --accent: #b7791f;
-  --beam: var(--color-zinc-300);
-
-  /* The physical dish is white/silver hardware — never a black silhouette.
-     Kept theme-light in both modes (see dark override below). */
-  --dish-body: #fff;
-  --dish-edge: #aba9a9;
-
-  --status-good: #16a34a;
-  --status-critical: #e11d48;
-
-  /* The obstruction colours.*/
-  --sky-clear: #111110;
-  --sky-partial: #efa09b;
-  --sky-obstructed: #d81b1b;
-  --sky-unmapped: #8a8880;
-
-  --font-ui: "Barlow", system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
-
-  color-scheme: light;
-}
-
+/* Dark on :root so a surface that paints before any script runs comes up dark —
+   the extension dashboard cannot set data-theme first, as MV3 forbids inline
+   script. [data-theme="dark"] shares the block so an inner wrapper can pin dark
+   inside a light page. */
+:root,
 [data-theme="dark"] {
   --page: #000000;
   --surface: #0c0c0c;
@@ -107,6 +72,8 @@
   /* white light against the black sky */
   --beam: #ffffff;
 
+  /* The physical dish is white/silver hardware — never a black silhouette, so
+     the body stays light in both themes and only its edge changes. */
   --dish-body: #fff;
   --dish-edge: rgba(255, 255, 255, 0.559);
 
@@ -119,7 +86,46 @@
   --sky-obstructed: #f51e1e;
   --sky-unmapped: #7c7c7c;
 
+  --font-ui: "Barlow", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
   color-scheme: dark;
+}
+
+/* Equal specificity to :root, so it wins on source order — it must stay below. */
+[data-theme="light"] {
+  --page: #f4f3ee;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --ink: #111110;
+  --ink-secondary: #55544f;
+  --ink-muted: #8a8880;
+  --hairline: #e7e5dc;
+  --baseline: #c9c7bc;
+  --grid-dot: #dedcd2;
+
+  /* Starlink chart language: primary = ink, secondary = warm orange */
+  --chart-ink: #111110;
+  --chart-warm: #d1671f;
+  --series-down: #2f6fed;
+  --series-up: #1ba85f;
+  --satellite: #b7791f;
+  --accent: #b7791f;
+  --beam: var(--color-zinc-300);
+
+  --dish-body: #fff;
+  --dish-edge: #aba9a9;
+
+  --status-good: #16a34a;
+  --status-critical: #e11d48;
+
+  /* The obstruction colours.*/
+  --sky-clear: #111110;
+  --sky-partial: #efa09b;
+  --sky-obstructed: #d81b1b;
+  --sky-unmapped: #8a8880;
+
+  color-scheme: light;
 }
 
 html,
