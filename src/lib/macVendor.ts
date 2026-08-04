@@ -9,6 +9,16 @@
 
 let ouiRegistry: Record<string, string> | null = null;
 let ouiLoad: Promise<void> | null = null;
+const registryListeners = new Set<() => void>();
+
+export function isOuiRegistryLoaded(): boolean {
+  return ouiRegistry !== null;
+}
+
+export function subscribeToOuiRegistry(listener: () => void): () => void {
+  registryListeners.add(listener);
+  return () => registryListeners.delete(listener);
+}
 
 /** Fetches the IEEE OUI registry once from the static asset. */
 export function ensureOuiLoaded(): Promise<void> {
@@ -16,6 +26,7 @@ export function ensureOuiLoaded(): Promise<void> {
     .then((response) => response.json())
     .then((registry: Record<string, string>) => {
       ouiRegistry = registry;
+      for (const listener of registryListeners) listener();
     })
     .catch(() => {
       // Leave the registry unloaded; vendorForMac falls back to private-MAC

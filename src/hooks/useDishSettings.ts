@@ -1,12 +1,19 @@
-// Loads the dish's writable configuration when the Settings modal opens and
+// Loads the dish's writable configuration while the Settings modal is open and
 // applies partial changes (only touched fields are written, via apply_* flags).
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { DishClient, type DishConfigJson } from "@core/dishClient";
 import { GrpcWebError } from "@core/grpcWeb";
+import {
+  readDishSettings,
+  setDishConfig,
+  setDishSettingsError,
+  subscribeToDishSettings,
+  type DishConfig,
+} from "../lib/dishSettingsStore";
 
 export interface DishSettingsState {
-  config: (DishConfigJson & Record<string, unknown>) | null;
+  config: DishConfig | null;
   loading: boolean;
   error: string | null;
   saving: boolean;
@@ -15,48 +22,40 @@ export interface DishSettingsState {
   refresh: () => Promise<void>;
 }
 
-export function useDishSettings(active: boolean): DishSettingsState {
-  const [config, setConfig] = useState<(DishConfigJson & Record<string, unknown>) | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const clientRef = useRef<Promise<DishClient> | null>(null);
+// One client for the process. DishClient.load refetches and reparses the
+// ~161 KB protoset every call, so reopening the modal must not build another.
+let dishClientPromise: Promise<DishClient> | null = null;
+export const loadDishClient = () => (dishClientPromise ??= DishClient.load("dish"));
 
-  // Open with nothing to show and nothing gone wrong means the read is still out.
-  // Derived rather than set at the top of the effect below, so opening the modal
-  // does not spend a render announcing that it is about to start. Reopening keeps
-  // the config already read and refreshes it underneath, instead of blanking to a
-  // spinner for a value it still holds.
-  const loading = active && config === null && error === null;
+export function useDishSettings(): DishSettingsState {
+  const { config, error } = useSyncExternalStore(subscribeToDishSettings, readDishSettings);
+  const [saving, setSaving] = useState(false);
+
+  // Nothing to show and nothing gone wrong means the read is still out.
+  const loading = config === null && error === null;
 
   const loadConfig = useCallback(async () => {
-    clientRef.current ??= DishClient.load("dish");
-    const dishClient = await clientRef.current;
-    setConfig(await dishClient.getConfig());
+    const dishClient = await loadDishClient();
+    setDishConfig(await dishClient.getConfig());
   }, []);
 
   useEffect(() => {
-    if (!active) return;
     let disposed = false;
-    loadConfig()
-      // Clears a previous failure only once a read has actually succeeded, so a
-      // reopen after an error keeps showing it until there is something better.
-      .then(() => !disposed && setError(null))
-      .catch(
-        (loadError) =>
-          !disposed && setError(`Couldn't read dish config: ${(loadError as Error).message}`),
-      );
+    loadConfig().catch(
+      (loadError) =>
+        !disposed && setDishSettingsError(`Couldn't read dish config: ${(loadError as Error).message}`),
+    );
     return () => {
       disposed = true;
     };
-  }, [active, loadConfig]);
+  }, [loadConfig]);
 
   const save = useCallback(
     async (changes: DishConfigJson) => {
       setSaving(true);
-      setError(null);
+      setDishSettingsError(null);
       try {
-        clientRef.current ??= DishClient.load("dish");
-        const dishClient = await clientRef.current;
+        const dishClient = await loadDishClient();
         await dishClient.setConfig(changes);
         await loadConfig();
       } catch (saveError) {
@@ -65,12 +64,12 @@ export function useDishSettings(active: boolean): DishSettingsState {
         // app's cloud path can write). Nothing local unlocks it — not a bug in
         // the request, and no setting to flip.
         if (saveError instanceof GrpcWebError && saveError.grpcStatus === 7) {
-          setError(
+          setDishSettingsError(
             "The dish refused the write (permission denied). Starlink's current firmware only accepts config changes " +
               "through its own cloud, so local tools are read-only here — use the official Starlink app to change this.",
           );
         } else {
-          setError(`Dish refused the change: ${(saveError as Error).message}`);
+          setDishSettingsError(`Dish refused the change: ${(saveError as Error).message}`);
         }
         throw saveError;
       } finally {

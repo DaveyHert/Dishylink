@@ -3,11 +3,11 @@
 // reply. The two entries render as side-by-side device cards; buttons report the
 // answer to the caller, which owns the merge.
 
-import { useEffect, useState } from "react";
 import type { MergeCandidate } from "@core/clientTotals";
 import { usageKey, type ClientUsageTotal } from "@core/clientUsage";
 import { formatBytes, formatRelativeTime } from "../../lib/format";
-import { vendorForMac, ensureOuiLoaded } from "../../lib/macVendor";
+import { vendorForMac } from "../../lib/macVendor";
+import { useOuiRegistry } from "../../hooks/useOuiRegistry";
 import { classifyDevice } from "../../lib/deviceKind";
 import { DeviceTypeIcon } from "../../assets/icons/DeviceTypeIcon";
 import { MergeIcon } from "../../assets/icons/MergeIcon";
@@ -24,12 +24,7 @@ export function DeviceMergePrompt({
   nowMs: number;
   onAnswer: (candidate: MergeCandidate, same: boolean) => void;
 }) {
-  // The vendor/maker needs the OUI table; load it once, then re-render. A private
-  // (masked) address still reads "Private" without it, so the cards are never bare.
-  const [, setOuiReady] = useState(false);
-  useEffect(() => {
-    void ensureOuiLoaded().then(() => setOuiReady(true));
-  }, []);
+  useOuiRegistry();
 
   // One question at a time. Answering removes the candidate upstream, so the next
   // takes its place; several at once reads as an error report about the network

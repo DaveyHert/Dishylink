@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import type {
   DishStatusJson,
   DishObstructionMapJson,
@@ -13,7 +14,9 @@ import { SearchingHero } from "./SearchingHero";
 import { DishTerminalCard } from "./DishTerminalCard";
 import { SegmentedControl } from "../ui/segmented-control";
 import { SectionCard } from "../ui/section-card";
-import { THROUGHPUT_SERIES, LATENCY_SERIES, POWER_SERIES } from "../../lib/statDetails";
+import { THROUGHPUT_SERIES, LATENCY_SERIES, POWER_SERIES, buildStatDetails } from "../../lib/statDetails";
+import { DetailsModal } from "../ui/details-modal";
+import { StatDetailPanel } from "./StatDetailPanel";
 import { formatThroughputLabel, formatThroughputTick } from "../../lib/format";
 
 const CHART_TIME_RANGES: { label: string; minutes: number }[] = [
@@ -36,7 +39,6 @@ const THROUGHPUT_LEGEND = [
 ];
 
 interface DashboardViewProps {
-  showSearchingHero: boolean;
   status: DishStatusJson | null;
   connectionState: DishConnectionState;
   obstructionMap: DishObstructionMapJson | null;
@@ -53,13 +55,12 @@ interface DashboardViewProps {
   averagePowerW: number;
   outageEvents: OutageEvent[];
   thermalEvents: OutageEvent[];
-  onOpenDetail: (id: string) => void;
+  samples: TelemetrySample[];
   onOpenSatelliteView: () => void;
   onExpandTerminal: () => void;
 }
 
 export function DashboardView({
-  showSearchingHero,
   status,
   connectionState,
   obstructionMap,
@@ -76,11 +77,41 @@ export function DashboardView({
   averagePowerW,
   outageEvents,
   thermalEvents,
-  onOpenDetail,
+  samples,
   onOpenSatelliteView,
   onExpandTerminal,
 }: DashboardViewProps) {
-  if (showSearchingHero) return <SearchingHero />;
+  const [openDetailId, setOpenDetailId] = useState<string | null>(null);
+  const statDetails = useMemo(
+    () =>
+      buildStatDetails({
+        status,
+        currentPowerW: livePowerW,
+        powerWindowEndMs,
+        recentPingSuccessPercent,
+        outageEvents,
+      }),
+    [status, livePowerW, powerWindowEndMs, recentPingSuccessPercent, outageEvents],
+  );
+
+  const openDetail = openDetailId ? statDetails[openDetailId] : null;
+  const detailModal = openDetail && (
+    <DetailsModal
+      title={openDetail.modalTitle ?? openDetail.label}
+      onClose={() => setOpenDetailId(null)}
+    >
+      <StatDetailPanel detail={openDetail} samples={samples} />
+    </DetailsModal>
+  );
+
+  if (connectionState === "unreachable" && status === null && samples.length === 0) {
+    return (
+      <>
+        {detailModal}
+        <SearchingHero />
+      </>
+    );
+  }
 
   const statTiles: StatTileConfig[] = [
     {
@@ -90,7 +121,7 @@ export function DashboardView({
       caption: "current traffic",
       sparkValues: sparklines.downlink,
       sparkColorVar: "--series-down",
-      onOpenDetail: () => onOpenDetail("download"),
+      onOpenDetail: () => setOpenDetailId("download"),
     },
     {
       label: "Upload",
@@ -99,7 +130,7 @@ export function DashboardView({
       caption: "current traffic",
       sparkValues: sparklines.uplink,
       sparkColorVar: "--series-up",
-      onOpenDetail: () => onOpenDetail("upload"),
+      onOpenDetail: () => setOpenDetailId("upload"),
     },
     {
       label: "Latency",
@@ -107,7 +138,7 @@ export function DashboardView({
       unit: "ms",
       caption: "pop ping, live",
       sparkValues: sparklines.latency,
-      onOpenDetail: () => onOpenDetail("latency"),
+      onOpenDetail: () => setOpenDetailId("latency"),
     },
     {
       label: "Power draw",
@@ -115,7 +146,7 @@ export function DashboardView({
       unit: "W",
       caption: "current draw",
       sparkValues: sparklines.power,
-      onOpenDetail: () => onOpenDetail("power"),
+      onOpenDetail: () => setOpenDetailId("power"),
     },
     {
       label: "Ping success",
@@ -123,7 +154,7 @@ export function DashboardView({
       unit: "%",
       caption: "last minute",
       sparkValues: sparklines.pingSuccess,
-      onOpenDetail: () => onOpenDetail("pingSuccess"),
+      onOpenDetail: () => setOpenDetailId("pingSuccess"),
     },
     {
       label: "Sky obstructed",
@@ -237,6 +268,7 @@ export function DashboardView({
           />
         )}
       </section>
+      {detailModal}
     </main>
   );
 }

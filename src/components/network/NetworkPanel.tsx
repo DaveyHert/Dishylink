@@ -4,13 +4,13 @@
 // This file is the router: it owns the tab, resolves `selectedKey` to a node or
 // a device, and hands off. The rows and both detail views live beside it.
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { RouterNetwork } from "../../hooks/useRouterNetwork";
 import { useRadioTemps } from "../../hooks/useRadioTemps";
 import { useSelfIdentity } from "../../hooks/useSelfIdentity";
 import { matchesSelf } from "../../lib/selfIdentity";
 import type { RouterUnreachable } from "../../lib/routerDiagnosis";
-import { ensureOuiLoaded } from "../../lib/macVendor";
+import { DetailsModal } from "../ui/details-modal";
 import { Loading } from "../ui/loading";
 import { Callout } from "../ui/callout";
 import { SegmentedControl } from "../ui/segmented-control";
@@ -20,6 +20,7 @@ import { NodeDetail } from "./NodeDetail";
 import { DeviceRow, NetworkRow } from "./NetworkRow";
 import { buildNodeRoster } from "./nodeRoster";
 import { DeviceMergePrompt } from "../shared/DeviceMergePrompt";
+import { useOuiRegistry } from "../../hooks/useOuiRegistry";
 import { useClientTotals } from "../../hooks/useClientTotals";
 import { useNow } from "../../hooks/useNow";
 import { usageKey } from "@core/clientUsage";
@@ -28,32 +29,55 @@ import { clientEntryKey, liveThroughputMbps } from "./networkFormat";
 export function NetworkPanel({
   network,
   unreachable,
-  selectedKey,
-  onSelect,
+  onClose,
 }: {
   network: RouterNetwork;
   /** Why the router is silent, when it is. Null while it is answering. */
   unreachable: RouterUnreachable | null;
-  /** Selection is owned by the sheet, which renders the back chevron + title.
-   *  Devices select by `clientEntryKey` (MAC alone is not unique — cloned-MAC
+  onClose: () => void;
+}) {
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+
+  return (
+    <DetailsModal
+      title='Network'
+      size='wide'
+      onClose={onClose}
+      onBack={selectedKey ? () => setSelectedKey(null) : undefined}
+    >
+      <NetworkPanelBody
+        network={network}
+        unreachable={unreachable}
+        selectedKey={selectedKey}
+        onSelect={setSelectedKey}
+      />
+    </DetailsModal>
+  );
+}
+
+function NetworkPanelBody({
+  network,
+  unreachable,
+  selectedKey,
+  onSelect,
+}: {
+  network: RouterNetwork;
+  unreachable: RouterUnreachable | null;
+  /** Devices select by `clientEntryKey` (MAC alone is not unique — cloned-MAC
    *  devices share one); nodes select by their MAC. */
   selectedKey: string | null;
   onSelect: (entryKey: string | null) => void;
 }) {
   const [tab, setTab] = useState<"devices" | "nodes">("devices");
-  // Load the OUI registry once, then bump state so vendor lookups re-render.
-  const [, setOuiReady] = useState(false);
-  useEffect(() => {
-    void ensureOuiLoaded().then(() => setOuiReady(true));
-  }, []);
+  useOuiRegistry();
   // Radio temps come from the historian, not the router directly. Poll only
   // while the panel is mounted (i.e. the Network sheet is open).
-  const radio = useRadioTemps(true);
+  const radio = useRadioTemps();
   // The viewer's own address(es), to flag "This device" in the list.
-  const self = useSelfIdentity(true);
+  const self = useSelfIdentity();
   // The odometer's records, for the split-record question below the device list.
   // The rows themselves come from the router and know nothing about stored totals.
-  const { totals, mergeCandidates, writeError, answerMerge } = useClientTotals(true);
+  const { totals, mergeCandidates, writeError, answerMerge } = useClientTotals();
   const nowMs = useNow(30_000);
 
   const devices = useMemo(
@@ -209,7 +233,7 @@ function ListSection({ caption, children }: { caption: string; children: React.R
       <div className='text-[11.5px] font-medium text-muted-foreground' style={{ marginBottom: 8 }}>
         {caption}
       </div>
-      <div className='thin-scroll flex max-h-[460px] flex-col gap-1.5 overflow-y-auto'>
+      <div className='thin-scroll flex max-h-[660px] flex-col gap-1.5 overflow-y-auto'>
         {children}
       </div>
     </>

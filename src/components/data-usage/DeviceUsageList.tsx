@@ -10,13 +10,14 @@
 // counter reset); clearing wipes the month. Neither touches the throughput
 // charts — that history is a separate store.
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useOuiRegistry } from "../../hooks/useOuiRegistry";
 import { useClientTotals } from "../../hooks/useClientTotals";
 import { useNow } from "../../hooks/useNow";
 import { usageKey, type ClientUsageTotal } from "@core/clientUsage";
 import { classifyDevice } from "../../lib/deviceKind";
 import { formatBytes, formatRelativeTime } from "../../lib/format";
-import { vendorForMac, ensureOuiLoaded } from "../../lib/macVendor";
+import { vendorForMac } from "../../lib/macVendor";
 import { DeviceTypeIcon } from "../../assets/icons/DeviceTypeIcon";
 import { ResetIcon } from "../../assets/icons/ResetIcon";
 import { CloseIcon } from "../../assets/icons/CloseIcon";
@@ -32,18 +33,14 @@ function monthKey(atMs: number): number {
 
 export function DeviceUsageList() {
   const { totals, mergeCandidates, unavailable, writeError, reset, remove, clearAll, answerMerge } =
-    useClientTotals(true);
+    useClientTotals();
   // "Active now" and the month a row belongs to are both judged against the
   // current time, which moves whether or not anything re-renders. One clock for
   // the whole list, ticking well inside the two-minute active threshold; a row
   // reading the time itself would need an interval each.
   const nowMs = useNow(30_000);
   const [confirmingClear, setConfirmingClear] = useState(false);
-  // Vendor lookups need the OUI table; load it once, then re-render.
-  const [, setOuiReady] = useState(false);
-  useEffect(() => {
-    void ensureOuiLoaded().then(() => setOuiReady(true));
-  }, []);
+  useOuiRegistry();
 
   // Nothing to say yet on the very first load. A historian that has gone away is
   // a different thing and says so below, rather than vanishing as if empty.

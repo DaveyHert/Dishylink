@@ -11,7 +11,7 @@ import { apiRequest } from "../lib/apiHost";
 
 const REFRESH_MS = 10_000;
 
-export function useClientTotals(active: boolean) {
+export function useClientTotals() {
   const [totals, setTotals] = useState<ClientUsageTotal[] | null>(null);
   /** Buckets the recorder believes are one device under two router identities.
    *  Rides the totals reply, so a candidate can never name a row that is not in
@@ -50,7 +50,6 @@ export function useClientTotals(active: boolean) {
   }, []);
 
   useEffect(() => {
-    if (!active) return;
     let cancelled = false;
     const tick = async () => {
       if (!cancelled) await load();
@@ -61,7 +60,7 @@ export function useClientTotals(active: boolean) {
       cancelled = true;
       window.clearInterval(timerId);
     };
-  }, [active, load]);
+  }, [load]);
 
   // Optimistic: drop the row immediately, then confirm against the historian.
   // Keyed by clientId (usageKey), so removing one same-vendor device does not take

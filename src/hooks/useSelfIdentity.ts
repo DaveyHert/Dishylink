@@ -8,17 +8,16 @@ import { resolveSelfIdentity, type SelfIdentity } from "../lib/selfIdentity";
 
 const EMPTY: SelfIdentity = { ips: [], macs: [], describesHost: false };
 
-export function useSelfIdentity(active: boolean): SelfIdentity {
+export function useSelfIdentity(): SelfIdentity {
   const [identity, setIdentity] = useState<SelfIdentity>(EMPTY);
 
   useEffect(() => {
-    if (!active) return;
     const controller = new AbortController();
     void resolveSelfIdentity(controller.signal).then((resolved) => {
       if (!controller.signal.aborted) setIdentity(resolved);
     });
     return () => controller.abort();
-  }, [active]);
+  }, []);
 
   return identity;
 }

@@ -6,19 +6,18 @@
 // What is left here is the shell: the dialog, the tab switch, and the height
 // animation between the two panels. Each tab's content is its own component.
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import { DishClient, type DishStatusJson, type WifiNetworkConfigJson } from "@core/dishClient";
+import type { DishStatusJson, WifiNetworkConfigJson } from "@core/dishClient";
 import type { RouterUnreachable } from "../../lib/routerDiagnosis";
-import { useDishSettings } from "../../hooks/useDishSettings";
+import { useDishSettings, loadDishClient } from "../../hooks/useDishSettings";
 import { specForHardware } from "../../lib/dishMesh";
 import { RouterSettingsTab } from "./RouterSettingsTab";
 import { StarlinkSettingsTab } from "./StarlinkSettingsTab";
 import { AppSettingsTab } from "./AppSettingsTab";
 
 interface SettingsModalProps {
-  open: boolean;
   onClose: () => void;
   status: DishStatusJson | null;
   hardwareVersion?: string;
@@ -28,7 +27,6 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({
-  open,
   onClose,
   status,
   hardwareVersion,
@@ -37,7 +35,7 @@ export function SettingsModal({
   routerUnreachable,
 }: SettingsModalProps) {
   const [tab, setTab] = useState<"starlink" | "router" | "app">("starlink");
-  const settings = useDishSettings(open);
+  const settings = useDishSettings();
 
   // Animate the body height: measure the active panel and cap at 68vh (inner
   // scrolls past that), so switching tabs eases between the two heights.
@@ -52,17 +50,15 @@ export function SettingsModal({
     const observer = new ResizeObserver(measure);
     observer.observe(panel);
     return () => observer.disconnect();
-  }, [tab, open, settings.config, settings.error]);
+  }, [tab, settings.config, settings.error]);
 
   const isMotorized = specForHardware(hardwareVersion).mount === "mast";
 
-  // One lazily-created client, reused by every dish action in the sheet.
-  const dishClient = useMemo(() => ({ current: null as Promise<DishClient> | null }), []);
-  const loadDish = () => (dishClient.current ??= DishClient.load("dish"));
+
 
   const copyDiagnostics = async (): Promise<"copied" | "failed"> => {
     try {
-      const client = await loadDish();
+      const client = await loadDishClient();
       const [diagnostics, deviceInfo] = await Promise.all([
         client.getDiagnostics(),
         client.getDeviceInfo(),
@@ -87,7 +83,7 @@ export function SettingsModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(stillOpen) => !stillOpen && onClose()}>
+    <Dialog open onOpenChange={(stillOpen) => !stillOpen && onClose()}>
       <DialogContent className='max-w-md bg-card border-border p-0 gap-0' showCloseButton={false}>
         <DialogHeader className='flex flex-row items-center justify-between px-5 pt-[12px] pb-1 text-left'>
           <DialogTitle className='text-[17px] font-semibold tracking-[0.01em]'>
@@ -126,7 +122,7 @@ export function SettingsModal({
                 settings={settings}
                 status={status}
                 isMotorized={isMotorized}
-                loadDish={loadDish}
+                loadDish={loadDishClient}
                 onCopyDiagnostics={copyDiagnostics}
               />
             )}

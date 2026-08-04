@@ -4,7 +4,7 @@ import { useLanPresence } from "./hooks/useLanPresence";
 import { AnimatePresence, motion } from "motion/react";
 import { useSatellites } from "./hooks/useSatellites";
 import { useObserverLocation } from "./hooks/useObserverLocation";
-import { useHashRoute } from "./hooks/useHashRoute";
+import { usePanelRouting } from "./hooks/usePanelRouting";
 import { useOutageNotifications } from "./hooks/useOutageNotifications";
 import { useThermalEvents } from "./hooks/useThermalEvents";
 import { useDeviceAlerts } from "./hooks/useDeviceAlerts";
@@ -17,12 +17,11 @@ import {
 } from "./lib/notifications";
 import { armAlertSoundOnFirstGesture } from "./lib/alertSound";
 import { TopBar } from "./components/dashboard/TopBar";
-import { AppToolbar, type ToolbarItemId } from "./components/toolbar/AppToolbar";
+import { AppToolbar } from "./components/toolbar/AppToolbar";
 import { DashboardView } from "./components/dashboard/DashboardView";
 import { windowTail } from "./lib/telemetryWindow";
 import { SatelliteView } from "./components/satellite/SatelliteView";
 import { DishTerminalCard } from "./components/dashboard/DishTerminalCard";
-import { StatDetailPanel } from "./components/dashboard/StatDetailPanel";
 import { DetailsModal } from "./components/ui/details-modal";
 import { SpeedTestPanel } from "./components/speed-test/SpeedTestCard";
 import { AlignmentPanel } from "./components/alignment/AlignmentCard";
@@ -33,26 +32,26 @@ import { SettingsModal } from "./components/settings/SettingsModal";
 import { useRouterNetwork } from "./hooks/useRouterNetwork";
 import { useRouterUnreachable } from "./hooks/useRouterUnreachable";
 import { useLiveReadings } from "./hooks/useLiveReadings";
-import { buildStatDetails } from "./lib/statDetails";
 import { formatThroughput } from "./lib/format";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { useTheme } from "./hooks/useTheme";
 
-type PanelName =
-  "speedtest" | "alignment" | "datausage" | "network" | "account" | "settings" | "terminal";
-
 export default function App() {
   const { theme, cycleTheme } = useTheme();
+  const {
+    openPanel,
+    setOpenPanel,
+    skyViewOpen,
+    setSkyViewOpen,
+    openNav,
+    openSkyView,
+  } = usePanelRouting();
   const [windowMinutes, setWindowMinutes] = useState(15);
   const notificationsOn = useSyncExternalStore(subscribeToNotifications, readNotificationsOn);
   const notificationsBlockedReason = useSyncExternalStore(
     subscribeToNotifications,
     readNotificationsBlockedReason,
   );
-  const [openDetailId, setOpenDetailId] = useState<string | null>(null);
-  const [openPanel, setOpenPanel] = useState<PanelName | null>(null);
-  const [skyViewOpen, setSkyViewOpen] = useHashRoute("satellite");
-  const [networkSelectedKey, setNetworkSelectedKey] = useState<string | null>(null);
   const telemetry = useDishTelemetry();
   const { observerLocation, onLocationSaved, onClearLocation } = useObserverLocation(
     telemetry.dishLocation?.lla,
@@ -73,15 +72,6 @@ export default function App() {
     telemetry.status,
     telemetry.connectionState === "online",
   );
-
-  const openNav = (id: ToolbarItemId) => {
-    if (id === "satellite") {
-      setOpenPanel(null);
-      setSkyViewOpen(true);
-    } else {
-      setOpenPanel(id);
-    }
-  };
 
   useEffect(() => armAlertSoundOnFirstGesture(), []);
 
@@ -113,22 +103,6 @@ export default function App() {
     () => windowTail(samples, windowMinutes, powerWindowEndMs),
     [samples, windowMinutes, powerWindowEndMs],
   );
-  const statDetails = useMemo(
-    () =>
-      buildStatDetails({
-        status,
-        currentPowerW: livePowerW,
-        powerWindowEndMs,
-        recentPingSuccessPercent,
-        outageEvents,
-      }),
-    [status, livePowerW, powerWindowEndMs, recentPingSuccessPercent, outageEvents],
-  );
-  const openDetail = openDetailId ? statDetails[openDetailId] : null;
-
-  const showSearchingHero =
-    telemetry.connectionState === "unreachable" && status === null && samples.length === 0;
-
   return (
     <TooltipProvider delayDuration={200}>
       <AnimatePresence initial={false} mode='wait'>
@@ -153,7 +127,6 @@ export default function App() {
             <AppToolbar activeId={openPanel} onSelect={openNav} />
 
             <DashboardView
-              showSearchingHero={showSearchingHero}
               status={status}
               connectionState={telemetry.connectionState}
               obstructionMap={telemetry.obstructionMap}
@@ -170,23 +143,14 @@ export default function App() {
               averagePowerW={averagePowerW}
               outageEvents={outageEvents}
               thermalEvents={thermalEvents}
-              onOpenDetail={setOpenDetailId}
-              onOpenSatelliteView={() => setSkyViewOpen(true)}
+              samples={samples}
+              onOpenSatelliteView={openSkyView}
               onExpandTerminal={() => setOpenPanel("terminal")}
             />
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Stat detail modal */}
-      {openDetail && (
-        <DetailsModal
-          title={openDetail.modalTitle ?? openDetail.label}
-          onClose={() => setOpenDetailId(null)}
-        >
-          <StatDetailPanel detail={openDetail} samples={samples} />
-        </DetailsModal>
-      )}
       {/* Terminal modal */}
       {openPanel === "terminal" && status && (
         <DetailsModal title='Starlink Dish Terminal' onClose={() => setOpenPanel(null)} size='xxl'>
@@ -206,7 +170,7 @@ export default function App() {
       {/* Alignment modal */}
       {openPanel === "alignment" && (
         <DetailsModal title='Alignment' onClose={() => setOpenPanel(null)} size='wide'>
-          <AlignmentPanel status={status} onOpenSkyView={() => setSkyViewOpen(true)} />
+          <AlignmentPanel status={status} onOpenSkyView={openSkyView} />
         </DetailsModal>
       )}
       {/* Data usage modal */}
@@ -223,35 +187,25 @@ export default function App() {
       )}
       {/* Network modal */}
       {openPanel === "network" && (
-        <DetailsModal
-          title='Network'
-          onBack={networkSelectedKey ? () => setNetworkSelectedKey(null) : undefined}
-          onClose={() => {
-            setOpenPanel(null);
-            setNetworkSelectedKey(null);
-          }}
-          size='wide'
-        >
-          <NetworkPanel
-            network={routerNetwork}
-            unreachable={routerUnreachable}
-            selectedKey={networkSelectedKey}
-            onSelect={setNetworkSelectedKey}
-          />
-        </DetailsModal>
+        <NetworkPanel
+          network={routerNetwork}
+          unreachable={routerUnreachable}
+          onClose={() => setOpenPanel(null)}
+        />
       )}
       {/* Settings modal */}
-      <SettingsModal
-        open={openPanel === "settings"}
-        onClose={() => setOpenPanel(null)}
-        status={status}
-        hardwareVersion={
-          telemetry.deviceInfo?.hardwareVersion ?? status?.deviceInfo?.hardwareVersion
-        }
-        wifiConfig={routerNetwork.wifiConfig}
-        routerReachable={routerNetwork.routerReachable}
-        routerUnreachable={routerUnreachable}
-      />
+      {openPanel === "settings" && (
+        <SettingsModal
+          onClose={() => setOpenPanel(null)}
+          status={status}
+          hardwareVersion={
+            telemetry.deviceInfo?.hardwareVersion ?? status?.deviceInfo?.hardwareVersion
+          }
+          wifiConfig={routerNetwork.wifiConfig}
+          routerReachable={routerNetwork.routerReachable}
+          routerUnreachable={routerUnreachable}
+        />
+      )}
       {/* Sky view (full-viewport) */}
       <AnimatePresence>
         {skyViewOpen && (

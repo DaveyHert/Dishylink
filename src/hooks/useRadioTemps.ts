@@ -27,7 +27,7 @@ export interface RadioTemps {
 
 const REFRESH_MS = 15_000;
 
-export function useRadioTemps(active: boolean): RadioTemps {
+export function useRadioTemps(): RadioTemps {
   const [data, setData] = useState<Omit<RadioTemps, "unavailable">>({
     current: [],
     atMs: null,
@@ -35,7 +35,6 @@ export function useRadioTemps(active: boolean): RadioTemps {
   const [unavailable, setUnavailable] = useState(false);
 
   useEffect(() => {
-    if (!active) return;
     let cancelled = false;
 
     const load = async () => {
@@ -62,7 +61,7 @@ export function useRadioTemps(active: boolean): RadioTemps {
       cancelled = true;
       window.clearInterval(timerId);
     };
-  }, [active]);
+  }, []);
 
   return { ...data, unavailable };
 }
