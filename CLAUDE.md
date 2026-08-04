@@ -22,8 +22,7 @@ is on the Starlink network itself — changes are verified against real hardware
   editing. When the user says "leave this for now", stop editing entirely until redirected.
 - **If the user's message contains a question, answer it fully before any further tool calls.**
   Deferring the answer while continuing to edit counts as ignoring them.
-- Other agents edit this repo concurrently: never `git add -A` or `git stash`; commit only the
-  files you yourself changed.
+- Never `git add -A` or `git stash`; commit only the files you yourself changed.
 
 ## Process facts
 
