@@ -1,5 +1,4 @@
-// Crescent — shown on the theme toggle while the app is in light mode, since it
-// is what the button switches to.
+// Crescent — the theme toggle's dark-mode face.
 
 export function MoonIcon({ size = 14, ...props }: React.ComponentProps<"svg"> & { size?: number }) {
   return (

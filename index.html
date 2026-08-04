@@ -13,9 +13,17 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <!-- App sets data-theme in an effect, which lands after the first paint — on a
          dark-by-default dashboard that showed as a white flash on every load. Same
-         key and same default as the useState initialiser in App.tsx. -->
+         key, same default and same resolution of "system" as src/lib/theme.ts. -->
     <script>
-      document.documentElement.dataset.theme = localStorage.getItem("dishboard-theme") || "dark";
+      (function () {
+        var stored = localStorage.getItem("dishylink-theme") || "dark";
+        document.documentElement.dataset.theme =
+          stored === "system"
+            ? window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light"
+            : stored;
+      })();
     </script>
   </head>
   <body>

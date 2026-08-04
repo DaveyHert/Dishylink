@@ -36,15 +36,13 @@ import { useLiveReadings } from "./hooks/useLiveReadings";
 import { buildStatDetails } from "./lib/statDetails";
 import { formatThroughput } from "./lib/format";
 import { TooltipProvider } from "./components/ui/tooltip";
+import { useTheme } from "./hooks/useTheme";
 
-type ThemeName = "light" | "dark";
 type PanelName =
   "speedtest" | "alignment" | "datausage" | "network" | "account" | "settings" | "terminal";
 
 export default function App() {
-  const [theme, setTheme] = useState<ThemeName>(
-    () => (localStorage.getItem("dishboard-theme") as ThemeName) ?? "dark",
-  );
+  const { theme, cycleTheme } = useTheme();
   const [windowMinutes, setWindowMinutes] = useState(15);
   const notificationsOn = useSyncExternalStore(subscribeToNotifications, readNotificationsOn);
   const notificationsBlockedReason = useSyncExternalStore(
@@ -86,11 +84,6 @@ export default function App() {
   };
 
   useEffect(() => armAlertSoundOnFirstGesture(), []);
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    localStorage.setItem("dishboard-theme", theme);
-  }, [theme]);
 
   const { status, samples } = telemetry;
 
@@ -151,7 +144,7 @@ export default function App() {
               connectionState={telemetry.connectionState}
               status={status}
               theme={theme}
-              onToggleTheme={() => setTheme(theme === "light" ? "dark" : "light")}
+              onCycleTheme={cycleTheme}
               deviceAlerts={deviceAlerts}
               notificationsOn={notificationsOn}
               notificationsBlockedReason={notificationsBlockedReason}

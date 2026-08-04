@@ -1,4 +1,4 @@
-// Disc and eight rays — the theme toggle's dark-mode face.
+// Disc and eight rays — the theme toggle's light-mode face.
 
 export function SunIcon({ size = 14, ...props }: React.ComponentProps<"svg"> & { size?: number }) {
   return (

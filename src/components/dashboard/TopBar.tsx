@@ -2,8 +2,10 @@
 // identity, alerts and the theme toggle on the right. Below 1080px the secondary
 // status readouts (country, uptime) drop so the strip stays on one line.
 
+import { LaptopIcon } from "../../assets/icons/LaptopIcon";
 import { MoonIcon } from "../../assets/icons/MoonIcon";
 import { SunIcon } from "../../assets/icons/SunIcon";
+import { nextTheme, type ThemeName } from "../../lib/theme";
 import type { DishConnectionState } from "../../hooks/useDishTelemetry";
 import type { DishStatusJson } from "@core/dishClient";
 import { formatUptime } from "../../lib/format";
@@ -15,8 +17,8 @@ import type { DeviceAlerts } from "../../hooks/useDeviceAlerts";
 interface TopBarProps {
   connectionState: DishConnectionState;
   status: DishStatusJson | null;
-  theme: "light" | "dark";
-  onToggleTheme: () => void;
+  theme: ThemeName;
+  onCycleTheme: () => void;
   deviceAlerts: DeviceAlerts;
   notificationsOn: boolean;
   notificationsBlockedReason: string | null;
@@ -38,6 +40,13 @@ const CONNECTION_DOT: Record<DishConnectionState, string> = {
   unreachable: "bg-[var(--status-critical)]",
 };
 
+// One face per mode; the button shows the mode it is in.
+const THEME_ICON: Record<ThemeName, typeof SunIcon> = {
+  light: SunIcon,
+  dark: MoonIcon,
+  system: LaptopIcon,
+};
+
 // Read-only status readouts (divider-separated, no button feel) and round icon
 // button — repeated in the strip.
 const statusItem =
@@ -50,12 +59,14 @@ export function TopBar({
   connectionState,
   status,
   theme,
-  onToggleTheme,
+  onCycleTheme,
   deviceAlerts,
   notificationsOn,
   notificationsBlockedReason,
   onToggleNotifications,
 }: TopBarProps) {
+  const ThemeIcon = THEME_ICON[theme];
+
   return (
     <header className='sticky top-0 z-20 flex items-center justify-between gap-4 bg-gradient-to-b from-[color-mix(in_srgb,var(--page)_72%,transparent)] via-[color-mix(in_srgb,var(--page)_42%,transparent)] to-transparent px-6 pt-3.5 pb-4'>
       <div className='flex min-w-0 items-center gap-[11px]'>
@@ -89,11 +100,11 @@ export function TopBar({
         <SupportMenu />
         <button
           className={iconButton}
-          onClick={onToggleTheme}
-          aria-label='Toggle color theme'
-          title='Toggle color theme'
+          onClick={onCycleTheme}
+          aria-label={`Color theme: ${theme}. Switch to ${nextTheme(theme)}.`}
+          title={`Color theme: ${theme}`}
         >
-          {theme === "light" ? <MoonIcon /> : <SunIcon />}
+          <ThemeIcon />
         </button>
       </div>
     </header>
