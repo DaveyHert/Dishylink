@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SettingRow, selectContentClass, selectItemClass, triggerClass } from "./settingsChrome";
-import { readNavStyle, setNavStyle, subscribeToNavStyle, type NavStyle } from "../../lib/navStyle";
+import { readToolbarStyle, setToolbarStyle, subscribeToToolbarStyle, type ToolbarStyle } from "../../lib/toolbarStyle";
 
 /** The desktop host's throughput-readout bridge, exposed only in the macOS and
  *  Windows desktop apps (the preload gates it on those platforms). Null everywhere
@@ -60,7 +60,7 @@ function useMenuBarThroughput(): [boolean, (on: boolean) => void] | null {
 }
 
 export function AppSettingsTab() {
-  const navStyle = useSyncExternalStore(subscribeToNavStyle, readNavStyle);
+  const toolbarStyle = useSyncExternalStore(subscribeToToolbarStyle, readToolbarStyle);
   const menuBar = useMenuBarThroughput();
   // The readout lives in the menu bar on macOS and the taskbar on Windows; name
   // whichever this host is. Only reached when the bridge is present, i.e. desktop.
@@ -69,7 +69,7 @@ export function AppSettingsTab() {
   return (
     <>
       <SettingRow title='App toolbar' caption='Floating dock or a left rail for the section links'>
-        <Select value={navStyle} onValueChange={(value) => setNavStyle(value as NavStyle)}>
+        <Select value={toolbarStyle} onValueChange={(value) => setToolbarStyle(value as ToolbarStyle)}>
           <SelectTrigger className={triggerClass} style={{ width: 118 }}>
             <SelectValue />
           </SelectTrigger>

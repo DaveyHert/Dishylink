@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { AnimatePresence } from "motion/react";
-import { readNavStyle, subscribeToNavStyle } from "../../lib/navStyle";
+import { readToolbarStyle, subscribeToToolbarStyle } from "../../lib/toolbarStyle";
 import { ToolbarDock } from "./ToolbarDock";
 import { ToolbarRail } from "./ToolbarRail";
 import { SpeedometerIcon } from "../../assets/icons/SpeedometerIcon";
@@ -42,11 +42,11 @@ interface AppToolbarProps {
 }
 
 export function AppToolbar({ activeId, onSelect }: AppToolbarProps) {
-  const style = useSyncExternalStore(subscribeToNavStyle, readNavStyle);
+  const toolbarStyle = useSyncExternalStore(subscribeToToolbarStyle, readToolbarStyle);
 
   return (
     <AnimatePresence mode='wait'>
-      {style === "rail" ? (
+      {toolbarStyle === "rail" ? (
         <ToolbarRail key='rail' items={TOOLBAR_ITEMS} activeId={activeId} onSelect={onSelect} />
       ) : (
         <ToolbarDock key='dock' items={TOOLBAR_ITEMS} activeId={activeId} onSelect={onSelect} />
