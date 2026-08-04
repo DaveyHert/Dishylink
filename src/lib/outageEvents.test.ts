@@ -33,7 +33,7 @@ describe("outageEventMeta", () => {
   it("names the router (wifi_get_history) events, auto-cleaning the long tail", () => {
     expect(outageEventMeta("EVENT_REASON_ROUTER_POWER_CYCLE").label).toBe("Router powered on");
     expect(outageEventMeta("EVENT_REASON_CLIENT_SWITCHING_BAND").label).toBe(
-      "Device switching WiFi band",
+      "Device switched WiFi band",
     );
     // Unmapped router reasons still read cleanly via the sentence-case fallback.
     expect(outageEventMeta("EVENT_REASON_ROUTER_SOFTWARE_UPDATE").label).toBe(

@@ -97,32 +97,32 @@ export interface OutageMeta {
 const OUTAGE_META: Record<string, OutageMeta> = {
   NO_PINGS: {
     label: "Ping Network Interruption",
-    tip: "Radio frequency link looked fine but pings to the ground station/POP failed — traffic wasn't actually flowing",
+    tip: "Radio frequency link looked fine but pings to the ground station/POP failed — traffic wasn't actually flowing.",
     kind: "outage",
   },
   NO_DOWNLINK: {
     label: "Downlink Network Interruption",
-    tip: "Dish was pointed at a satellite but received no decodable downlink signal",
+    tip: "Dish was pointed at a satellite but received no decodable downlink signal.",
     kind: "outage",
   },
   NO_SATS: {
     label: "No satellite in range",
-    tip: "No Starlink satellite was overhead to connect to",
+    tip: "No Starlink satellite was overhead to connect to.",
     kind: "outage",
   },
   NO_SCHEDULE: {
     label: "No service scheduled",
-    tip: "Network gave your cell no time slot (seen during network congestion, service issues, account problems, or right after boot before a schedule downloads)",
+    tip: "Network gave your cell no time slot (seen during network congestion, service issues, account problems, or right after boot before a schedule downloads).",
     kind: "outage",
   },
   UNKNOWN: {
     label: "Unknown Event",
-    tip: "Dish couldn't classify the drop",
+    tip: "Dish couldn't classify the drop.",
     kind: "outage",
   },
   OBSTRUCTED: {
     label: "Dish's view obstructed",
-    tip: "Something physically blocked the dish's view of the sky (branch, roof, pole), so it dropped the satellite",
+    tip: "Something physically blocked the dish's view of the sky (branch, roof, pole), so it dropped the satellite.",
     kind: "outage",
   },
   THERMAL_SHUTDOWN: {
@@ -132,49 +132,49 @@ const OUTAGE_META: Record<string, OutageMeta> = {
   },
   RAIN_SNR_PERSISTENTLY_LOW: {
     label: "Weather interference",
-    tip: "Heavy rain/snow degraded signal-to-noise below usable level",
+    tip: "Heavy rain/snow degraded signal-to-noise below usable level.",
     kind: "outage",
   },
   // A prior build persisted this label before we stored raw enums; keep it as an
   // alias so those rows still resolve to the same meaning and dedupe.
   WEAK_SIGNAL_FROM_WEATHER: {
     label: "Weather interference",
-    tip: "Heavy rain/snow degraded signal-to-noise below usable level",
+    tip: "Heavy rain/snow degraded signal-to-noise below usable level.",
     kind: "outage",
   },
   BOOTING: {
     label: "Starlink booting",
-    tip: "Dish was rebooting / powering up",
+    tip: "Dish was rebooting / powering up.",
     kind: "outage",
   },
   SKY_SEARCH: {
     label: "Searching for satellites",
-    tip: "Dish was scanning the sky to lock onto satellites (after boot or being moved)",
+    tip: "Dish was scanning the sky to lock onto satellites (after boot or being moved).",
     kind: "outage",
   },
   ACTUATOR_ACTIVITY: {
     label: "Repositioning",
-    tip: "The dish's motors were physically moving it (repositioning/realigning); RF is muted while it moves",
+    tip: "The dish's motors were physically moving it (repositioning/realigning); RF is muted while it moves.",
     kind: "outage",
   },
   STOWED: {
     label: "Dish stowed",
-    tip: "Dish was folded in stow position",
+    tip: "Dish was folded in stow position.",
     kind: "outage",
   },
   SLEEPING: {
     label: "Scheduled sleep",
-    tip: 'Scheduled sleep window (the "snooze" schedule in the app)',
+    tip: 'Scheduled sleep window (the "snooze" schedule in the app).',
     kind: "outage",
   },
   CABLE_TEST: {
     label: "Cable test",
-    tip: "Dish was running its cable diagnostic",
+    tip: "Dish was running its cable diagnostic.",
     kind: "outage",
   },
   INHIBIT_RF: {
     label: "Transmission paused",
-    tip: "Dish stopped transmitting (RF inhibited — for safety, or commanded off)",
+    tip: "Dish stopped transmitting (RF inhibited — for safety, or commanded off).",
     kind: "outage",
   },
   // Router (wifi_get_history) events. The rest of the EventReason set auto-cleans
@@ -182,18 +182,18 @@ const OUTAGE_META: Record<string, OutageMeta> = {
   // need bespoke wording.
   ROUTER_POWER_CYCLE: {
     label: "Router powered on",
-    tip: "The router lost and regained power (unplugged/replugged, or a power blip)",
+    tip: "The router lost and regained power (unplugged/replugged, or a power blip).",
     kind: "info",
   },
   CLIENT_SWITCHING_BAND: {
-    label: "Device switching WiFi band",
-    tip: "A connected device moved between the 2.4 GHz and 5 GHz bands",
+    label: "Device switched WiFi band",
+    tip: "A connected device moved between the 2.4 GHz and 5 GHz bands. This is normal when devices are optimizing their connection for best WiFi performance.",
     kind: "info",
   },
   // prettifyToken renders this one as "Eth no link", which explains nothing.
   ETH_NO_LINK: {
     label: "Ethernet cable link to dish disconnected",
-    tip: "The ethernet link between the router and the dish went dead. Expected for a few seconds while either device reboots; at any other time, check the cable at both ends",
+    tip: "The ethernet link between the router and the dish went dead. Expected for a few seconds while either device reboots; at any other time, check the cable at both ends.",
     kind: "outage",
   },
 
@@ -203,32 +203,32 @@ const OUTAGE_META: Record<string, OutageMeta> = {
   // half a minute or more while throughput carried on uninterrupted.
   ROUTER_POP_IPV4_PING_DROP: {
     label: "Router lost its keepalive ping (IPv4)",
-    tip: "The router's own ping to the ground station went unanswered. It watches the link with these pings; losing them means the path looked unhealthy to the router, not that your traffic stopped — data usually keeps flowing right through it",
+    tip: "The router's own ping to the ground station went unanswered. It watches the link with these pings; losing them means the path looked unhealthy to the router, not that your traffic stopped — data usually keeps flowing right through it.",
     kind: "degraded",
   },
   ROUTER_POP_IPV6_PING_DROP: {
     label: "Router lost its keepalive ping (IPv6)",
-    tip: "As the IPv4 drop, on the IPv6 path. Seen alone it usually means only IPv6 was affected, which most traffic can route around",
+    tip: "As the IPv4 drop, on the IPv6 path. Seen alone it usually means only IPv6 was affected, which most traffic can route around.",
     kind: "degraded",
   },
   ROUTER_DISH_PING_DROP: {
     label: "Router lost contact with the dish briefly",
-    tip: "The router's keepalive ping to the dish over the Ethernet cable went unanswered. Expected while the dish reboots; otherwise it points at the cable between them",
+    tip: "The router's keepalive ping to the dish over the Ethernet cable went unanswered. Expected while the dish reboots; otherwise it points at the cable between them.",
     kind: "degraded",
   },
   HIGH_DOWNLINK_PACKET_LOSS: {
     label: "High downlink packet loss",
-    tip: "A raised share of incoming packets was lost. The connection stayed up — this is quality degrading, not service stopping",
+    tip: "A raised share of incoming packets was lost. The connection stayed up — this is quality degrading, not service stopping.",
     kind: "degraded",
   },
   CLIENT_SWITCHING_UPSTREAM_MAC: {
     label: "Device moved to another access point",
-    tip: "A connected device handed off between the router and a mesh node, or between radios",
+    tip: "A connected device handed off between the router and a mesh node, or between radios.",
     kind: "info",
   },
   ROUTER_PUBLIC_IPV4_CHANGE: {
     label: "Public IP address changed",
-    tip: "Starlink issued the router a different public IPv4 address — normal on a CGNAT network",
+    tip: "Starlink issued the router a different public IPv4 address — normal on a CGNAT network.",
     kind: "info",
   },
 };
