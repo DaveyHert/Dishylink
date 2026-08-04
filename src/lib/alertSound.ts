@@ -13,7 +13,7 @@
 
 import type { AlertSeverity } from "@core/alertDefinitions";
 
-const ENABLED_STORAGE_KEY = "dishboard-alert-sound";
+const ENABLED_STORAGE_KEY = "dishylink-alert-sound";
 
 /** Note pairs in Hz. A falling interval reads as urgent, a rising one as benign. */
 const TONES: Record<AlertSeverity, number[]> = {

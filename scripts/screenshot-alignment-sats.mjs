@@ -25,7 +25,7 @@ await page.screenshot({ path: `${outputDir}/dome-location-setup.png` });
 // seed a coordinate and let the satellite pipeline run (TLE fetch + coarse pass)
 await page.evaluate(() => {
   localStorage.setItem(
-    "dishboard-observer-location",
+    "dishylink-observer-location",
     JSON.stringify({ latitudeDeg: 6.5, longitudeDeg: 3.4, altitudeM: 40 }),
   );
 });

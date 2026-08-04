@@ -6,7 +6,7 @@
 
 export type NavStyle = "dock" | "rail";
 
-const STORAGE_KEY = "dishboard-nav-style";
+const STORAGE_KEY = "dishylink-nav-style";
 
 const listeners = new Set<() => void>();
 

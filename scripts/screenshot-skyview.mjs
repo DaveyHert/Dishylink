@@ -11,10 +11,10 @@ page.on("pageerror", (pageError) => console.log("[pageerror]", pageError.message
 await page.goto("http://localhost:5173", { waitUntil: "domcontentloaded" });
 await page.evaluate(() => {
   localStorage.setItem(
-    "dishboard-observer-location",
+    "dishylink-observer-location",
     JSON.stringify({ latitudeDeg: 6.5, longitudeDeg: 3.4, altitudeM: 40 }),
   );
-  localStorage.setItem("dishboard-theme", "dark");
+  localStorage.setItem("dishylink-theme", "dark");
 });
 await page.reload({ waitUntil: "networkidle" });
 await page.waitForTimeout(20000); // cached TLEs + coarse pass

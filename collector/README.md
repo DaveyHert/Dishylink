@@ -35,14 +35,14 @@ npm run historian
 Always-on (survives logout, relaunches after sleep/crash) via launchd:
 
 ```
-cp collector/com.dishboard.historian.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.dishboard.historian.plist
+cp collector/com.dishylink.historian.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.dishylink.historian.plist
 ```
 
 Stop / uninstall:
 
 ```
-launchctl unload ~/Library/LaunchAgents/com.dishboard.historian.plist
+launchctl unload ~/Library/LaunchAgents/com.dishylink.historian.plist
 ```
 
 The plist paths are absolute for this machine — update them if the repo moves or

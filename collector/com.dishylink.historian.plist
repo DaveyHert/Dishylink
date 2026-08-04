@@ -4,10 +4,10 @@
   logout and (re)launches it after sleep/crash.
 
   Install:
-    cp collector/com.dishboard.historian.plist ~/Library/LaunchAgents/
-    launchctl load  ~/Library/LaunchAgents/com.dishboard.historian.plist
+    cp collector/com.dishylink.historian.plist ~/Library/LaunchAgents/
+    launchctl load  ~/Library/LaunchAgents/com.dishylink.historian.plist
   Stop / uninstall:
-    launchctl unload ~/Library/LaunchAgents/com.dishboard.historian.plist
+    launchctl unload ~/Library/LaunchAgents/com.dishylink.historian.plist
   Logs: collector/data/historian.out.log  /  historian.err.log
 
   Paths below are absolute for this machine; update them if the repo moves.
@@ -15,7 +15,7 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.dishboard.historian</string>
+  <string>com.dishylink.historian</string>
 
   <key>ProgramArguments</key>
   <array>

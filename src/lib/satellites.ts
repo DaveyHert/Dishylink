@@ -17,7 +17,7 @@ let tleBaseUrl = "/celestrak";
 export function setSatelliteHost(baseUrl: string): void {
   tleBaseUrl = baseUrl;
 }
-const TLE_CACHE_KEY = "dishboard-starlink-tles";
+const TLE_CACHE_KEY = "dishylink-starlink-tles";
 const TLE_MAX_AGE_MS = 6 * 3_600_000;
 const COARSE_ELEVATION_FLOOR_DEG = -12; // keep sats about to rise
 const FINE_ELEVATION_FLOOR_DEG = 2;

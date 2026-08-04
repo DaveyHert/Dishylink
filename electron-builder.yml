@@ -3,7 +3,7 @@
 # inlined at build time, so no node_modules ships. Developer ID signing needs a
 # paid Apple account, which this project doesn't have; identity:null tells
 # electron-builder to skip signing rather than hunt for a certificate and fail.
-appId: com.dishboard.dishylink
+appId: com.dishylink.app
 productName: Dishylink
 copyright: © 2026 daveyhert
 

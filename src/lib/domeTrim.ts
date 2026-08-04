@@ -9,7 +9,7 @@
 // different parts of the tree and would otherwise need the flag threaded through
 // everything between them.
 
-const STORAGE_KEY = "dishboard-dome-trim";
+const STORAGE_KEY = "dishylink-dome-trim";
 
 const listeners = new Set<() => void>();
 

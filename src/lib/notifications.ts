@@ -32,7 +32,7 @@ import {
   type NotificationState,
 } from "@core/alertNotification";
 
-const ENABLED_STORAGE_KEY = "dishboard-notifications";
+const ENABLED_STORAGE_KEY = "dishylink-notifications";
 const THROTTLE_MS = 60_000;
 
 const lastSentAtByKind = new Map<string, number>();
@@ -249,7 +249,7 @@ export function sendNotification(kind: string, title: string, body: string): voi
     void host.notify(title, body).catch(() => {});
     return;
   }
-  new Notification(title, { body, tag: `dishboard-${kind}` });
+  new Notification(title, { body, tag: `dishylink-${kind}` });
 }
 
 /** Whether this window is the surface the user is looking at: visible and focused.
