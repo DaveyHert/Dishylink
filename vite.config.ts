@@ -8,12 +8,14 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import electron from "vite-plugin-electron/simple";
 import { starlinkCloudProxy } from "./dev/starlinkCloudProxy";
+import { routerProxy } from "./dev/routerProxy";
 
 // Config files run in plain Node, outside every build target's tsconfig
 // `include`, so this is the one place package.json can be read without wiring
 // resolveJsonModule into src/electron/extension for one string.
-const appVersion: string = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8"))
-  .version;
+const appVersion: string = JSON.parse(
+  readFileSync(new URL("./package.json", import.meta.url), "utf-8"),
+).version;
 
 interface OutgoingProxyRequest {
   removeHeader(headerName: string): void;
@@ -35,6 +37,7 @@ export default defineConfig(({ command }) => ({
     react(),
     tailwindcss(),
     starlinkCloudProxy(),
+    routerProxy(),
     ...(withElectron
       ? [
           electron({
@@ -115,21 +118,8 @@ export default defineConfig(({ command }) => ({
           });
         },
       },
-      // The Starlink router speaks the same grpc-web protocol on its LAN IP.
-      "/router": {
-        target: "http://192.168.1.1:9001",
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/router/, ""),
-        configure: (proxy) => {
-          const proxyEvents = proxy as unknown as {
-            on(eventName: "proxyReq", handler: (proxyRequest: OutgoingProxyRequest) => void): void;
-          };
-          proxyEvents.on("proxyReq", (proxyRequest) => {
-            proxyRequest.removeHeader("referer");
-            proxyRequest.removeHeader("origin");
-          });
-        },
-      },
+      // /router is not here: its address can be taken by another router, so it
+      // is served by dev/routerProxy, which can retry against a second one.
       // CelesTrak publishes SpaceX's official Starlink ephemerides but sends
       // no CORS headers; same-origin proxy for the TLE fetch.
       "/celestrak": {
