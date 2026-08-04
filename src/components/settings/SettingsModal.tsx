@@ -10,6 +10,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { DishClient, type DishStatusJson, type WifiNetworkConfigJson } from "@core/dishClient";
+import type { RouterUnreachable } from "../../lib/routerDiagnosis";
 import { useDishSettings } from "../../hooks/useDishSettings";
 import { specForHardware } from "../../lib/dishMesh";
 import { RouterSettingsTab } from "./RouterSettingsTab";
@@ -23,6 +24,7 @@ interface SettingsModalProps {
   hardwareVersion?: string;
   wifiConfig: WifiNetworkConfigJson | null;
   routerReachable: boolean | null;
+  routerUnreachable: RouterUnreachable | null;
 }
 
 export function SettingsModal({
@@ -32,6 +34,7 @@ export function SettingsModal({
   hardwareVersion,
   wifiConfig,
   routerReachable,
+  routerUnreachable,
 }: SettingsModalProps) {
   const [tab, setTab] = useState<"starlink" | "router" | "app">("starlink");
   const settings = useDishSettings(open);
@@ -128,7 +131,11 @@ export function SettingsModal({
               />
             )}
             {tab === "router" && (
-              <RouterSettingsTab wifiConfig={wifiConfig} routerReachable={routerReachable} />
+              <RouterSettingsTab
+                wifiConfig={wifiConfig}
+                routerReachable={routerReachable}
+                unreachable={routerUnreachable}
+              />
             )}
             {tab === "app" && <AppSettingsTab />}
           </div>

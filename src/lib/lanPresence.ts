@@ -41,6 +41,46 @@ function lastSeenMs(value: string | undefined): number | null {
 }
 
 /**
+ * The routers the dish is currently vouching for, by cloud DeviceId.
+ *
+ * downstreamRouters is preferred wherever the dish sends it, because its
+ * per-router lastSeen can catch an entry that outlives the link it describes.
+ * connectedRouters carries the same ids with no timestamp, so it stands in only
+ * when the timestamped map is absent altogether rather than supplementing it —
+ * re-adding those ids unconditionally would hand back exactly the staleness the
+ * lastSeen check exists to filter.
+ */
+function freshDownstreamRouterIds(dish: DishStatusJson | null, nowMs: number): string[] {
+  const downstream = dish?.downstreamRouters;
+  if (!downstream) return (dish?.connectedRouters ?? []).filter((id): id is string => !!id);
+  const ids: string[] = [];
+  for (const [routerId, entry] of Object.entries(downstream)) {
+    const seenMs = lastSeenMs(entry?.lastSeen);
+    // A missing or unreadable timestamp still counts: the dish listing the
+    // router at all is its statement that the link is up.
+    if (seenMs == null || nowMs - seenMs < LAST_SEEN_MS) ids.push(routerId);
+  }
+  return ids;
+}
+
+/**
+ * Whether the kit has a Starlink router on it that is up right now, according to
+ * the dish rather than to whether we can reach it.
+ *
+ * The distinction is the whole point: a router the dish can see but the app
+ * cannot ask is a routing problem between here and there, while no router at all
+ * is a kit in bypass mode with nothing to show. A dish that isn't answering has
+ * no opinion either way, so it reports none.
+ */
+export function dishSeesRouter(
+  dish: DishStatusJson | null,
+  dishReachable: boolean,
+  nowMs: number = Date.now(),
+): boolean {
+  return dishReachable && freshDownstreamRouterIds(dish, nowMs).length > 0;
+}
+
+/**
  * The set of cloud DeviceIds currently answering on this LAN.
  *
  * Both feeds keep their last reply through a failure so other surfaces can
@@ -58,26 +98,7 @@ export function lanOnlineDeviceIds(input: LanPresenceInput): Set<string> {
 
     // The dish's view of its routers, which is the only live signal available
     // for a mesh node — it has no LAN address of its own to ask.
-    //
-    // downstreamRouters is preferred wherever the dish sends it, because its
-    // per-router lastSeen can catch an entry that outlives the link it
-    // describes. connectedRouters carries the same ids with no timestamp, so it
-    // stands in only when the timestamped map is absent altogether rather than
-    // supplementing it — re-adding those ids unconditionally would hand back
-    // exactly the staleness the lastSeen check exists to filter.
-    const downstream = dish?.downstreamRouters;
-    if (downstream) {
-      for (const [routerId, entry] of Object.entries(downstream)) {
-        const seenMs = lastSeenMs(entry?.lastSeen);
-        // A missing or unreadable timestamp still counts: the dish listing the
-        // router at all is its statement that the link is up.
-        if (seenMs == null || nowMs - seenMs < LAST_SEEN_MS) present.add(routerId);
-      }
-    } else {
-      for (const routerId of dish?.connectedRouters ?? []) {
-        if (routerId) present.add(routerId);
-      }
-    }
+    for (const routerId of freshDownstreamRouterIds(dish, nowMs)) present.add(routerId);
   }
 
   if (routerReachable) {

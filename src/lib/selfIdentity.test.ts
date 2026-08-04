@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { matchesSelf, type SelfIdentity } from "./selfIdentity";
 
-const self = (over: Partial<SelfIdentity> = {}): SelfIdentity => ({ ips: [], macs: [], ...over });
+const self = (over: Partial<SelfIdentity> = {}): SelfIdentity => ({
+  ips: [],
+  macs: [],
+  describesHost: false,
+  ...over,
+});
 
 describe("matchesSelf", () => {
   it("matches on MAC case-insensitively (Electron path)", () => {

@@ -30,6 +30,7 @@ import { join, resolve } from "node:path";
 import { createFileRegistry, fromBinary, toJson, type DescMessage } from "@bufbuild/protobuf";
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { grpcWebUnaryCall } from "../core/grpcWeb.ts";
+import { createRouterOrigins } from "../core/routerEndpoint.ts";
 import {
   decodeHistoryWindow,
   decodeOutageEvents,
@@ -101,9 +102,22 @@ const WIFI_GET_CLIENTS_FIELD = 3002;
 /**
  * The router answers get_radio_stats on its own endpoint; the dish answers it
  * Unimplemented. This is the only live temperature either device will give up.
+ *
+ * Its address, unlike the dish's, is one another router can be using — so it is
+ * resolved per call rather than fixed here. See core/routerEndpoint.
  */
-const ROUTER_URL =
-  process.env.ROUTER_URL ?? "http://192.168.1.1:9001/SpaceX.API.Device.Device/Handle";
+const ROUTER_PATH = "/SpaceX.API.Device.Device/Handle";
+
+/** Pins the router to one URL and turns the fallback off — for pointing this
+ *  process at a stand-in, and for the probe scripts under scripts/. */
+const ROUTER_URL_OVERRIDE = process.env.ROUTER_URL ?? null;
+
+const routerOrigins = createRouterOrigins(() =>
+  Object.values(networkInterfaces())
+    .flat()
+    .filter((entry) => entry && entry.family === "IPv6" && !entry.internal)
+    .map((entry) => entry!.address),
+);
 
 /**
  * Thermal flags on get_status → alerts. The dish has no temperature reading to
@@ -187,6 +201,34 @@ async function deviceCall(
   >;
 }
 
+/**
+ * A device call to the router, tried against each address it may be reachable at.
+ *
+ * `timeoutMs` bounds the whole thing, not each attempt. That is the point: this
+ * process derives outages from how long a call took to fail, so a fallback that
+ * doubled the time a dead router takes to report dead would write down outages
+ * twice as long as they were. Spending one budget across the attempts keeps the
+ * recording identical to what a single call produced.
+ *
+ * It also decides, correctly, when the fallback is worth trying at all. An
+ * address taken by another router refuses instantly, leaving nearly the whole
+ * budget for the IPv6 attempt that will succeed. A genuinely absent router
+ * consumes the budget going silent, and no second address would have answered
+ * anyway.
+ */
+async function routerCall(
+  fieldNumber: number,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+): Promise<Record<string, unknown>> {
+  if (ROUTER_URL_OVERRIDE) return deviceCall(ROUTER_URL_OVERRIDE, fieldNumber, timeoutMs);
+  const deadline = Date.now() + timeoutMs;
+  return routerOrigins.run((origin) => {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw new Error("router call budget spent");
+    return deviceCall(origin + ROUTER_PATH, fieldNumber, remaining);
+  });
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getHistory(): Promise<any> {
   const json = (await deviceCall(DISH_URL, GET_HISTORY_FIELD)) as { dishGetHistory?: unknown };
@@ -197,7 +239,7 @@ async function getHistory(): Promise<any> {
 // wifi_get_history — the router's own event log (power cycles, reboots, software
 // updates, client band-switching, …), the same UXEvent shape as the dish's.
 async function getWifiHistory(): Promise<{ eventLog?: { events?: unknown[] } }> {
-  const json = (await deviceCall(ROUTER_URL, GET_HISTORY_FIELD)) as {
+  const json = (await routerCall(GET_HISTORY_FIELD)) as {
     wifiGetHistory?: { eventLog?: { events?: unknown[] } };
   };
   return json.wifiGetHistory ?? {};
@@ -232,7 +274,7 @@ async function getRouterStatus(): Promise<{
   popPingLatencyMs?: number;
   popPingDropRate5m?: number;
 }> {
-  const json = (await deviceCall(ROUTER_URL, GET_STATUS_FIELD)) as {
+  const json = (await routerCall(GET_STATUS_FIELD)) as {
     wifiGetStatus?: {
       alerts?: Record<string, boolean>;
       popPingLatencyMs?: number;
@@ -270,7 +312,7 @@ let latestRouterPingSuccessPercent: number | null = null;
  * back rather than assume.
  */
 async function getRadioReadings(): Promise<RadioStatReading[]> {
-  const json = (await deviceCall(ROUTER_URL, GET_RADIO_STATS_FIELD)) as {
+  const json = (await routerCall(GET_RADIO_STATS_FIELD)) as {
     getRadioStats?: {
       radioStats?: Array<{
         band?: string;
@@ -344,7 +386,7 @@ function entryIdOf(client: WireClient): string {
 }
 
 async function getClientReadings(): Promise<ClientReading[]> {
-  const json = (await deviceCall(ROUTER_URL, WIFI_GET_CLIENTS_FIELD)) as {
+  const json = (await routerCall(WIFI_GET_CLIENTS_FIELD)) as {
     wifiGetClients?: { clients?: WireClient[] };
   };
   // One reading per roster entry, not per MAC. The router masks each client's MAC

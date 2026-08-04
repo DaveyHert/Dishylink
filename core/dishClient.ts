@@ -40,14 +40,10 @@ export function setDishHost(binding: DishHost): void {
   dishHost = binding;
 }
 
-/** The router's LAN address. */
+/** The router's LAN address — the only one it answers on, which is what makes it
+ *  collidable with another router's default. lib/routerDiagnosis turns a failure
+ *  to reach it into the one wording every surface reports. */
 export const ROUTER_LAN_ADDRESS = "192.168.1.1";
-
-/**
- * One wording for "we can't reach the router". The Network panel and Settings both
- * report this; they had drifted into two different sentences saying the same thing.
- */
-export const ROUTER_UNREACHABLE_MESSAGE = `Couldn't reach the Starlink router at ${ROUTER_LAN_ADDRESS} — it may be in bypass mode or on a different subnet.`;
 
 // Oneof field numbers inside SpaceX.API.Device.Request (from the dish schema).
 const REQUEST_FIELD = {
@@ -357,9 +353,19 @@ export interface WifiClientJson {
    *  surfaces the live effect here. Set from the app (LAN writes are denied), but
    *  readable locally — see wifiConfig.clientConfigs[].weeklyBlockSchedules. */
   blocked?: boolean;
-  /** Do NOT render these: the router reports nonsense here (uploadMb reads
-   *  ~3.7e9 "Mb" against 15 MB of rxStats.bytes). Real per-device totals live in
-   *  rxStats.bytes / txStats.bytes. */
+  /** Cumulative per-client totals, in megabytes despite the name.
+   *
+   *  Not interchangeable with rxStats.bytes / txStats.bytes: these appear to
+   *  count WAN-attributed traffic only, where the byte counters count everything
+   *  crossing the radio. They diverge by large factors in either direction, so
+   *  a device's totals are read from the byte counters. On a client whose
+   *  traffic is nearly all WAN — a downstream router — the two agree, which
+   *  makes the difference easy to miss.
+   *
+   *  A wired client has empty rxStats/txStats and only these, which is why its
+   *  usage reads blank rather than a different quantity under the same label.
+   *
+   *  Guard anything built on them: a client has been seen reporting ~3.7e9. */
   uploadMb?: number;
   downloadMb?: number;
   rxStats?: WifiClientStatsJson;

@@ -4,11 +4,8 @@
 import { useMemo } from "react";
 import { Callout } from "@/components/ui/callout";
 import { Loading } from "@/components/ui/loading";
-import {
-  DishClient,
-  ROUTER_UNREACHABLE_MESSAGE,
-  type WifiNetworkConfigJson,
-} from "@core/dishClient";
+import { DishClient, type WifiNetworkConfigJson } from "@core/dishClient";
+import type { RouterUnreachable } from "../../lib/routerDiagnosis";
 import { Badge } from "@/components/ui/badge";
 import { DangerAction, SectionLabel, SettingRow } from "./settingsChrome";
 
@@ -33,16 +30,20 @@ function ssidsWithBands(wifiConfig: WifiNetworkConfigJson | null): [string, stri
 export function RouterSettingsTab({
   wifiConfig,
   routerReachable,
+  unreachable,
 }: {
   wifiConfig: WifiNetworkConfigJson | null;
   routerReachable: boolean | null;
+  /** Why the router is silent, when it is. Null while it is answering. */
+  unreachable: RouterUnreachable | null;
 }) {
   const ssids = useMemo(() => ssidsWithBands(wifiConfig), [wifiConfig]);
   const meshNodes = Object.values(wifiConfig?.meshConfigs ?? {});
 
   if (routerReachable === null) return <Loading message='Contacting the router…' />;
-  if (routerReachable === false)
-    return <Callout tone='error'>{ROUTER_UNREACHABLE_MESSAGE}</Callout>;
+  // Branch on the diagnosis rather than on `routerReachable` again: it is
+  // derived from that same flag, so this cannot render an empty callout.
+  if (unreachable) return <Callout tone='error'>{unreachable.message}</Callout>;
   if (!wifiConfig) return null;
 
   return (

@@ -6,7 +6,7 @@
 import { useEffect, useState } from "react";
 import { resolveSelfIdentity, type SelfIdentity } from "../lib/selfIdentity";
 
-const EMPTY: SelfIdentity = { ips: [], macs: [] };
+const EMPTY: SelfIdentity = { ips: [], macs: [], describesHost: false };
 
 export function useSelfIdentity(active: boolean): SelfIdentity {
   const [identity, setIdentity] = useState<SelfIdentity>(EMPTY);

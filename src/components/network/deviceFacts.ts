@@ -39,8 +39,9 @@ export function buildDeviceFacts({
   const idleSeconds = client.noDataIdleS ?? 0;
   const linkRx = client.rxStats?.rateMbps;
   const linkTx = client.txStats?.rateMbps;
-  // Cumulative counters since the client associated. uploadMb/downloadMb are
-  // misdecoded by the router, so these are the only trustworthy totals.
+  // Cumulative counters since the client associated — everything over the radio,
+  // which is what a device total means here. uploadMb/downloadMb count a
+  // narrower quantity; see WifiClientJson.
   const rxBytes = Number(client.rxStats?.bytes ?? 0);
   const txBytes = Number(client.txStats?.bytes ?? 0);
 

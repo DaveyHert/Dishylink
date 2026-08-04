@@ -18,12 +18,27 @@ import { apiRequest } from "./apiHost";
 export interface SelfIdentity {
   /** Lowercased IPv4/IPv6 address(es) of this device's active interface(s). */
   ips: string[];
-  /** Lowercased interface MAC(s). Populated only under Electron (browsers and
-   *  the whoami echo can't see a MAC). */
+  /** Lowercased interface MAC(s). Populated only when the addresses were read
+   *  off real interfaces — a whoami echo of a remote caller can't see a MAC. */
   macs: string[];
+  /**
+   * Whether `ips` are the interface addresses of the machine running this
+   * dashboard's network requests, rather than an echo of some other caller's
+   * address.
+   *
+   * The distinction only matters to callers reasoning about *routing* — which
+   * subnet the requests actually originate from (lib/routerDiagnosis). For
+   * matching a row in the client list it is irrelevant, because a remote
+   * viewer's echoed address is exactly the one the router lists for it.
+   *
+   * False for a remote viewer: it is the proxy host, not the browser, that
+   * opens the socket to the dish and the router, so that browser's address says
+   * nothing about where those requests come from.
+   */
+  describesHost: boolean;
 }
 
-const EMPTY: SelfIdentity = { ips: [], macs: [] };
+const EMPTY: SelfIdentity = { ips: [], macs: [], describesHost: false };
 
 /** IPv4-mapped IPv6 (`::ffff:192.168.1.45`) → the bare v4 the router reports.
  *  Everything is lowercased so matching is case-insensitive for v6. */
@@ -53,7 +68,13 @@ async function fromElectron(): Promise<SelfIdentity | null> {
   if (!bridge?.getSelfIdentity) return null;
   try {
     const id = await bridge.getSelfIdentity();
-    return { ips: clean(id.ips ?? []), macs: (id.macs ?? []).map((mac) => mac.toLowerCase()) };
+    return {
+      ips: clean(id.ips ?? []),
+      macs: (id.macs ?? []).map((mac) => mac.toLowerCase()),
+      // Read from this process's own os.networkInterfaces(), and the desktop
+      // app makes its LAN requests from that same process.
+      describesHost: true,
+    };
   } catch {
     return null;
   }
@@ -68,7 +89,11 @@ async function fromWhoami(signal?: AbortSignal): Promise<SelfIdentity | null> {
     const { ips, macs } = (await response.json()) as { ips?: string[]; macs?: string[] };
     const cleaned = clean(ips ?? []);
     const macList = (macs ?? []).map((mac) => mac.toLowerCase());
-    return cleaned.length > 0 || macList.length > 0 ? { ips: cleaned, macs: macList } : null;
+    if (cleaned.length === 0 && macList.length === 0) return null;
+    // Which of those two branches answered, told apart by the only thing that
+    // separates them on the wire: a MAC can be read off an interface but never
+    // off a caller's socket, so MACs mean these are the host's own addresses.
+    return { ips: cleaned, macs: macList, describesHost: macList.length > 0 };
   } catch {
     return null;
   }

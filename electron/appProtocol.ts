@@ -8,7 +8,9 @@
 
 import { protocol, net } from "electron";
 import { readFile } from "node:fs/promises";
+import { networkInterfaces } from "node:os";
 import { join, extname, normalize, sep } from "node:path";
+import { createRouterOrigins } from "../core/routerEndpoint";
 
 const SCHEME = "app";
 const HOST = "bundle";
@@ -17,8 +19,21 @@ const HOST = "bundle";
 // publishes the Starlink ephemerides but sends no CORS headers, so it too must be
 // fetched from here rather than the renderer.
 const DISH_ORIGIN = process.env.DISH_ORIGIN ?? "http://192.168.100.1:9201";
-const ROUTER_ORIGIN = process.env.ROUTER_ORIGIN ?? "http://192.168.1.1:9001";
 const CELESTRAK_ORIGIN = "https://celestrak.org";
+
+/** Pins the router to one origin and turns the fallback off — for pointing a
+ *  build at a stand-in. Unset, the router is found by core/routerEndpoint. */
+const ROUTER_ORIGIN_OVERRIDE = process.env.ROUTER_ORIGIN ?? null;
+
+/** This host's own IPv6 addresses, which is where the router's are derived from.
+ *  Read per call rather than once: a laptop that joins a different network gets
+ *  a different prefix, and a value cached at startup would outlive its network. */
+const routerOrigins = createRouterOrigins(() =>
+  Object.values(networkInterfaces())
+    .flat()
+    .filter((entry) => entry && entry.family === "IPv6" && !entry.internal)
+    .map((entry) => entry!.address),
+);
 
 const CONTENT_TYPES: Record<string, string> = {
   ".html": "text/html",
@@ -55,17 +70,37 @@ export const APP_ENTRY_URL = `${SCHEME}://${HOST}/index.html`;
  * recognize, so those are dropped rather than forwarded; the host header is left to
  * net.fetch to set for the real target.
  */
-async function proxy(request: Request, targetUrl: string): Promise<Response> {
+async function forwardable(request: Request): Promise<RequestInit> {
   const headers = new Headers(request.headers);
   headers.delete("referer");
   headers.delete("origin");
   headers.delete("host");
   const hasBody = request.method !== "GET" && request.method !== "HEAD";
-  return net.fetch(targetUrl, {
+  return {
     method: request.method,
     headers,
+    // Captured as bytes, not left as the request's stream, so it can be sent
+    // more than once — a body may only be read once, and the router below may
+    // have to send the same call to a second address.
     body: hasBody ? await request.arrayBuffer() : undefined,
-  });
+  };
+}
+
+async function proxy(request: Request, targetUrl: string): Promise<Response> {
+  return net.fetch(targetUrl, await forwardable(request));
+}
+
+/**
+ * Forward to the router, which unlike the dish has an address another router can
+ * take: try IPv4, then the IPv6 addresses derived from this host's own prefixes.
+ *
+ * Only a rejected fetch — nobody home — moves on to the next origin. An HTTP
+ * error is the router answering, and is returned as-is.
+ */
+async function proxyRouter(request: Request, path: string): Promise<Response> {
+  const init = await forwardable(request);
+  if (ROUTER_ORIGIN_OVERRIDE) return net.fetch(ROUTER_ORIGIN_OVERRIDE + path, init);
+  return routerOrigins.run((origin) => net.fetch(origin + path, init));
 }
 
 /**
@@ -107,7 +142,7 @@ export function handleAppProtocol(
       return proxy(request, DISH_ORIGIN + pathname.slice("/dishy".length) + search);
     }
     if (pathname.startsWith("/router/")) {
-      return proxy(request, ROUTER_ORIGIN + pathname.slice("/router".length) + search);
+      return proxyRouter(request, pathname.slice("/router".length) + search);
     }
     if (pathname.startsWith("/celestrak/")) {
       return proxy(request, CELESTRAK_ORIGIN + pathname.slice("/celestrak".length) + search);

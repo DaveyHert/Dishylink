@@ -31,6 +31,7 @@ import { NetworkPanel } from "./components/network/NetworkPanel";
 import { AccountPanel } from "./components/account/AccountPanel";
 import { SettingsModal } from "./components/settings/SettingsModal";
 import { useRouterNetwork } from "./hooks/useRouterNetwork";
+import { useRouterUnreachable } from "./hooks/useRouterUnreachable";
 import { useLiveReadings } from "./hooks/useLiveReadings";
 import { buildStatDetails } from "./lib/statDetails";
 import { formatThroughput } from "./lib/format";
@@ -69,6 +70,11 @@ export default function App() {
     [telemetry.outageEvents, persistedOutages],
   );
   const routerNetwork = useRouterNetwork(openPanel === "network" || openPanel === "settings");
+  const routerUnreachable = useRouterUnreachable(
+    routerNetwork.routerReachable,
+    telemetry.status,
+    telemetry.connectionState === "online",
+  );
 
   const openNav = (id: ToolbarItemId) => {
     if (id === "satellite") {
@@ -235,6 +241,7 @@ export default function App() {
         >
           <NetworkPanel
             network={routerNetwork}
+            unreachable={routerUnreachable}
             selectedKey={networkSelectedKey}
             onSelect={setNetworkSelectedKey}
           />
@@ -250,6 +257,7 @@ export default function App() {
         }
         wifiConfig={routerNetwork.wifiConfig}
         routerReachable={routerNetwork.routerReachable}
+        routerUnreachable={routerUnreachable}
       />
       {/* Sky view (full-viewport) */}
       <AnimatePresence>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { lanOnlineDeviceIds } from "./lanPresence";
+import { dishSeesRouter, lanOnlineDeviceIds } from "./lanPresence";
 
 // The real ids, as measured on 2026-07-29 — LAN deviceInfo.id and cloud
 // DeviceId are the same string on both device kinds, which is what lets the
@@ -125,5 +125,31 @@ describe("lanOnlineDeviceIds", () => {
       routerReachable: true,
     });
     expect([...present]).toEqual([MAIN_ROUTER]);
+  });
+});
+
+describe("dishSeesRouter", () => {
+  it("vouches for a router the dish reports, whether or not we can reach it", () => {
+    // The signal that separates "a router exists and something is in the way"
+    // from "this kit has no router" — see lib/routerDiagnosis.
+    const dish = { downstreamRouters: { [MAIN_ROUTER]: { lastSeen: nsAt(2_000) } } };
+    expect(dishSeesRouter(dish, true, NOW)).toBe(true);
+  });
+
+  it("does not vouch for a router the dish has stopped hearing from", () => {
+    const dish = { downstreamRouters: { [MAIN_ROUTER]: { lastSeen: nsAt(10 * 60_000) } } };
+    expect(dishSeesRouter(dish, true, NOW)).toBe(false);
+  });
+
+  it("has no opinion when the dish itself is not answering", () => {
+    // A silent dish is not evidence that the kit has no router.
+    const dish = { downstreamRouters: { [MAIN_ROUTER]: { lastSeen: nsAt(2_000) } } };
+    expect(dishSeesRouter(dish, false, NOW)).toBe(false);
+    expect(dishSeesRouter(null, true, NOW)).toBe(false);
+  });
+
+  it("accepts the untimestamped fallback list", () => {
+    expect(dishSeesRouter({ connectedRouters: [MAIN_ROUTER] }, true, NOW)).toBe(true);
+    expect(dishSeesRouter({ connectedRouters: [] }, true, NOW)).toBe(false);
   });
 });

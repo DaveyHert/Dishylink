@@ -9,7 +9,7 @@ import type { RouterNetwork } from "../../hooks/useRouterNetwork";
 import { useRadioTemps } from "../../hooks/useRadioTemps";
 import { useSelfIdentity } from "../../hooks/useSelfIdentity";
 import { matchesSelf } from "../../lib/selfIdentity";
-import { ROUTER_UNREACHABLE_MESSAGE } from "@core/dishClient";
+import type { RouterUnreachable } from "../../lib/routerDiagnosis";
 import { ensureOuiLoaded } from "../../lib/macVendor";
 import { Loading } from "../ui/loading";
 import { Callout } from "../ui/callout";
@@ -27,10 +27,13 @@ import { clientEntryKey, liveThroughputMbps } from "./networkFormat";
 
 export function NetworkPanel({
   network,
+  unreachable,
   selectedKey,
   onSelect,
 }: {
   network: RouterNetwork;
+  /** Why the router is silent, when it is. Null while it is answering. */
+  unreachable: RouterUnreachable | null;
   /** Selection is owned by the sheet, which renders the back chevron + title.
    *  Devices select by `clientEntryKey` (MAC alone is not unique — cloned-MAC
    *  devices share one); nodes select by their MAC. */
@@ -76,8 +79,10 @@ export function NetworkPanel({
   if (network.routerReachable === null) {
     return <Loading message='Contacting the router…' />;
   }
-  if (network.routerReachable === false) {
-    return <Callout tone='error'>{ROUTER_UNREACHABLE_MESSAGE}</Callout>;
+  // Branch on the diagnosis rather than on `routerReachable` again: it is
+  // derived from that same flag, so this cannot render an empty callout.
+  if (unreachable) {
+    return <Callout tone='error'>{unreachable.message}</Callout>;
   }
 
   const nodes = buildNodeRoster(network.clients, network.wifiConfig);
