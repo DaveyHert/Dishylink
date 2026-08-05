@@ -119,7 +119,6 @@ Diagnostics:
 ```bash
 node scripts/debug-decode.mjs <captured-body.bin>   # decode a captured response
 node scripts/debug-browser.mjs                      # probe fetch path in headless Chrome
-node scripts/screenshot.mjs <output-dir>             # light/dark/tooltip screenshots
 ```
 
 ## How it talks to the dish and router

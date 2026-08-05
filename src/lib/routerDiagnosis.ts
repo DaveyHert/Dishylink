@@ -87,8 +87,9 @@ export function viewerOnRouterSubnet(selfIps: readonly string[] = []): boolean |
 const MESSAGES: Record<RouterUnreachableCause, string> = {
   addressTaken:
     `Another device on this network is using ${ROUTER_LAN_ADDRESS}, the address the Starlink ` +
-    `router answers on, so the router is hidden behind it. Connect to your Starlink WiFi, or ` +
-    `change the other router's address (192.168.2.1, say), and this fills in.`,
+    `router answers on, so the router is hidden behind it. To fix it, either connect to your ` +
+    `Starlink WiFi or give the other router a different address (like 192.168.2.1) — then the ` +
+    `details fill in here.`,
   differentNetwork:
     `Your Starlink router is running, but this device isn't on its network. Connect to your ` +
     `Starlink WiFi to see its settings and the devices using it.`,
