@@ -44,6 +44,10 @@ interface SatelliteViewProps {
   obstructionMap: DishObstructionMapJson | null;
   obstructionStats?: DishObstructionStatsJson;
   status: DishStatusJson | null;
+  /** True while the dish isn't answering. The serving beam is the dish's live
+   *  link made visible, so we can't claim one — it goes quiet until the dish is
+   *  back. The constellation itself is ephemeris-driven and stays live. */
+  stale?: boolean;
   satellites: SatelliteFeed;
   observerLocation: ObserverLocation | null;
   onLocationSaved: (location: ObserverLocation) => void;
@@ -55,6 +59,7 @@ export function SatelliteView({
   obstructionMap,
   obstructionStats,
   status,
+  stale = false,
   satellites,
   observerLocation,
   onLocationSaved,
@@ -158,17 +163,20 @@ export function SatelliteView({
     scene?.setTrimUnmapped(trimmed);
   }, [scene, trimmed]);
 
-  // Live satellites belong to the live map only — while scrubbing history there
-  // is no constellation to speak of, so the sampler and the beam both go quiet.
+  // The constellation is the dish's live sky. It goes quiet while scrubbing
+  // history (no live map then) and while the dish is offline — a sky full of
+  // moving satellites with no live link reads as invented data, not telemetry.
   useEffect(() => {
-    scene?.setSampler(viewingHistory ? null : satellites.sampleSky);
-  }, [scene, viewingHistory, satellites.sampleSky]);
+    scene?.setSampler(viewingHistory || stale ? null : satellites.sampleSky);
+  }, [scene, viewingHistory, stale, satellites.sampleSky]);
 
-  // Scrubbed history has no live constellation to speak of, so the beam belongs
-  // to the live view only.
+  // The beam marks the satellite the dish is serving from. It belongs to the live
+  // view only (scrubbed history has no live constellation), and with the dish not
+  // answering there is no live link to draw — so it goes quiet in both cases.
+  const servingCandidate = viewingHistory || stale ? null : satellites.stats.servingCandidate;
   useEffect(() => {
-    scene?.setServing(viewingHistory ? null : satellites.stats.servingCandidate);
-  }, [scene, viewingHistory, satellites.stats.servingCandidate]);
+    scene?.setServing(servingCandidate);
+  }, [scene, servingCandidate]);
 
   // Three DOM elements ride along with satellites: the serving one's name tag,
   // and — on whatever was tapped — the selection ring and its callout. The scene
@@ -179,7 +187,7 @@ export function SatelliteView({
   // The ring belongs to the SELECTED satellite, so it has to ride the selected
   // tracker. It once lived inside the label node below, which follows the
   // serving satellite — so it marked the serving one no matter what was tapped.
-  const servingName = satellites.stats.servingCandidate?.name ?? null;
+  const servingName = stale ? null : (satellites.stats.servingCandidate?.name ?? null);
   const selectedName = selected?.sky.name ?? null;
   useEffect(() => {
     if (!scene) return;
@@ -265,7 +273,7 @@ export function SatelliteView({
     // Pinned to the dark token set regardless of the app theme: this is a night
     // sky, and the shared components below read --ink / --baseline / --muted-
     // foreground, which would otherwise render dark-on-dark in light mode.
-    <div data-theme='dark' className='fixed inset-0 z-50 bg-[var(--page)] text-foreground'>
+    <div data-theme='dark' className='fixed inset-0 z-50 bg-page text-foreground'>
       <canvas
         ref={canvasRef}
         className='absolute inset-0 h-full w-full touch-none'
@@ -457,6 +465,7 @@ export function SatelliteView({
           <ObstructionTimeLapse
             snapshots={snapshots}
             scrubIndex={scrubIndex}
+            stale={stale}
             onScrub={setScrubIndex}
           />
         </div>

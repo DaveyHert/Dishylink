@@ -52,11 +52,18 @@ const HISTORY_POLL_MS = 1_000;
 const OBSTRUCTION_POLL_MS = 30_000;
 const LOCATION_RETRY_MS = 60_000; // picks up the app-side toggle without a reload
 const SAMPLE_RETENTION_MS = 6 * 3_600_000; // keep six hours of clock, gaps included
+// How long the link must stay unanswered before the UI treats it as offline, so a
+// fresh load's opening `connecting` and short reconnect blips don't flip the live
+// surfaces to their offline state and back.
+const STALE_AFTER_MS = 5_000;
 
 export type DishConnectionState = "connecting" | "online" | "unreachable";
 
 export interface DishTelemetry {
   connectionState: DishConnectionState;
+  /** connectionState has been non-online for STALE_AFTER_MS — the debounced flag
+   *  the live surfaces gate their offline state on, immune to blips and cold start. */
+  stale: boolean;
   deviceInfo: DishDeviceInfoJson | null;
   status: DishStatusJson | null;
   samples: TelemetrySample[];
@@ -73,6 +80,7 @@ export interface DishTelemetry {
 
 export function useDishTelemetry(): DishTelemetry {
   const [connectionState, setConnectionState] = useState<DishConnectionState>("connecting");
+  const [stale, setStale] = useState(false);
   const [deviceInfo, setDeviceInfo] = useState<DishDeviceInfoJson | null>(null);
   const [status, setStatus] = useState<DishStatusJson | null>(null);
   const [lastStatusAtMs, setLastStatusAtMs] = useState<number | null>(null);
@@ -82,6 +90,16 @@ export function useDishTelemetry(): DishTelemetry {
   const [dishLocation, setDishLocation] = useState<DishLocationJson | null>(null);
   const [locationDenied, setLocationDenied] = useState(false);
   const accumulatorRef = useRef(new TelemetryAccumulator(SAMPLE_RETENTION_MS));
+
+  // Debounce offline: it trips only after the link has stayed unanswered for
+  // STALE_AFTER_MS, and clears on reconnect — a blip's timer is cleared before it
+  // fires. Both sides go through the timer (online at 0ms) so neither sets state
+  // synchronously in the effect.
+  useEffect(() => {
+    const offline = connectionState !== "online";
+    const timerId = window.setTimeout(() => setStale(offline), offline ? STALE_AFTER_MS : 0);
+    return () => window.clearTimeout(timerId);
+  }, [connectionState]);
 
   useEffect(() => {
     let disposed = false;
@@ -216,6 +234,7 @@ export function useDishTelemetry(): DishTelemetry {
 
   return {
     connectionState,
+    stale,
     deviceInfo,
     status,
     samples,

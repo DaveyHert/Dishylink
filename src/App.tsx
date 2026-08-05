@@ -129,6 +129,7 @@ export default function App() {
             <DashboardView
               status={status}
               connectionState={telemetry.connectionState}
+              stale={telemetry.stale}
               obstructionMap={telemetry.obstructionMap}
               liveDownlink={liveDownlink}
               liveUplink={liveUplink}
@@ -156,7 +157,7 @@ export default function App() {
         <DetailsModal title='Starlink Dish Terminal' onClose={() => setOpenPanel(null)} size='xxl'>
           <DishTerminalCard
             status={status}
-            stale={telemetry.connectionState !== "online"}
+            stale={telemetry.stale}
             expanded
           />
         </DetailsModal>
@@ -170,7 +171,12 @@ export default function App() {
       {/* Alignment modal */}
       {openPanel === "alignment" && (
         <DetailsModal title='Alignment' onClose={() => setOpenPanel(null)} size='wide'>
-          <AlignmentPanel status={status} onOpenSkyView={openSkyView} />
+          <AlignmentPanel
+            status={status}
+            stale={telemetry.stale}
+            lastStatusAtMs={telemetry.lastStatusAtMs}
+            onOpenSkyView={openSkyView}
+          />
         </DetailsModal>
       )}
       {/* Data usage modal */}
@@ -220,6 +226,7 @@ export default function App() {
               obstructionMap={telemetry.obstructionMap}
               obstructionStats={status?.obstructionStats}
               status={status}
+              stale={telemetry.stale}
               satellites={satellites}
               observerLocation={observerLocation}
               onLocationSaved={onLocationSaved}

@@ -31,7 +31,7 @@ const CHART_TIME_RANGE_FILTER_OPTIONS = CHART_TIME_RANGES.map((range) => ({
 }));
 
 const legendItem =
-  "inline-flex items-center gap-1.5 text-[12px] font-medium text-(--ink-secondary)";
+  "inline-flex items-center gap-1.5 text-[12px] font-medium text-ink-secondary";
 
 const THROUGHPUT_LEGEND = [
   { label: "Download", colorVar: "--series-down" },
@@ -41,6 +41,9 @@ const THROUGHPUT_LEGEND = [
 interface DashboardViewProps {
   status: DishStatusJson | null;
   connectionState: DishConnectionState;
+  /** Debounced offline flag from the telemetry hook — the terminal card's stale
+   *  badge keys off this, not the raw connectionState, so a blip doesn't flash it. */
+  stale: boolean;
   obstructionMap: DishObstructionMapJson | null;
   liveDownlink: { value: string; unit: string };
   liveUplink: { value: string; unit: string };
@@ -63,6 +66,7 @@ interface DashboardViewProps {
 export function DashboardView({
   status,
   connectionState,
+  stale,
   obstructionMap,
   liveDownlink,
   liveUplink,
@@ -253,7 +257,7 @@ export function DashboardView({
         {status ? (
           <DishTerminalCard
             status={status}
-            stale={connectionState !== "online"}
+            stale={stale}
             onExpand={onExpandTerminal}
           />
         ) : (

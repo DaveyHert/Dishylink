@@ -4,7 +4,12 @@
 // the sheet that arranges them.
 
 import type { DishStatusJson } from "@core/dishClient";
-import { formatActuatorState, formatAttitudeState, formatHasActuators } from "../../lib/format";
+import {
+  formatActuatorState,
+  formatAttitudeState,
+  formatHasActuators,
+  formatRelativeTime,
+} from "../../lib/format";
 import { Callout } from "../ui/callout";
 import { Explainer } from "../ui/explainer";
 import { FactColumn, FactColumns, FactRow } from "../ui/fact-row";
@@ -15,26 +20,39 @@ import { computeAlignment, SEPARATION_LIMIT_DEG, type AlignmentReading } from ".
 const adjustmentColor = (errorDeg: number) =>
   Math.abs(errorDeg) < SEPARATION_LIMIT_DEG ? "var(--status-good)" : "var(--chart-warm)";
 
-/** The one-line verdict, coloured by how sure we are of it. */
-function AlignmentVerdict({ reading }: { reading: AlignmentReading }) {
+/** The one-line verdict, coloured by how sure we are of it. A stale reading
+ *  supersedes the alignment verdict: a frozen "aligned" must not read as live. */
+function AlignmentVerdict({
+  reading,
+  stale,
+  lastStatusAtMs,
+}: {
+  reading: AlignmentReading;
+  stale: boolean;
+  lastStatusAtMs: number | null;
+}) {
   return (
     <div
       className='text-[11.5px] font-medium text-muted-foreground'
       style={{
-        color: reading.isAligned
-          ? "var(--status-good)"
-          : reading.isValid
-            ? "var(--chart-warm)"
-            : "var(--ink-muted)",
+        color: stale
+          ? "var(--status-critical)"
+          : reading.isAligned
+            ? "var(--status-good)"
+            : reading.isValid
+              ? "var(--chart-warm)"
+              : "var(--ink-muted)",
         fontWeight: 600,
         fontSize: 13.5,
       }}
     >
-      {!reading.isValid
-        ? "Attitude filter not ready — alignment data is settling."
-        : reading.isAligned
-          ? "Starlink is aligned — pointed in the correct direction."
-          : "Starlink is not aligned — adjust the dish toward the wedge."}
+      {stale
+        ? `Dish not answering — showing the last reading${lastStatusAtMs ? ` from ${formatRelativeTime(lastStatusAtMs)}` : ""}.`
+        : !reading.isValid
+          ? "Attitude filter not ready — alignment data is settling."
+          : reading.isAligned
+            ? "Starlink is aligned — pointed in the correct direction."
+            : "Starlink is not aligned — adjust the dish toward the wedge."}
     </div>
   );
 }
@@ -191,11 +209,17 @@ function AlignmentFacts({
 
 export function AlignmentPanel({
   status,
+  stale = false,
+  lastStatusAtMs = null,
   onOpenSkyView,
 }: {
   status: DishStatusJson | null;
+  stale?: boolean;
+  lastStatusAtMs?: number | null;
   onOpenSkyView?: () => void;
 }) {
+  // Null only on a cold start; after the first reading the dish going quiet keeps
+  // the last status and is the `stale` case instead.
   if (!status) {
     return (
       <Callout tone='error'>
@@ -212,10 +236,10 @@ export function AlignmentPanel({
       <div
         style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
       >
-        <AlignmentVerdict reading={reading} />
+        <AlignmentVerdict reading={reading} stale={stale} lastStatusAtMs={lastStatusAtMs} />
         {onOpenSkyView && (
           <button
-            className='shrink-0 cursor-pointer border-0 bg-transparent p-0 font-sans text-[13px] font-semibold text-[var(--accent)] transition-[color,opacity] duration-[120ms] hover:opacity-75'
+            className='shrink-0 cursor-pointer border-0 bg-transparent p-0 font-sans text-[13px] font-semibold text-(--accent) transition-[color,opacity] duration-[120ms] hover:opacity-75'
             onClick={onOpenSkyView}
           >
             Live satellite view ›

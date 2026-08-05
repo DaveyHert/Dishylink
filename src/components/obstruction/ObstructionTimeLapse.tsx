@@ -9,11 +9,14 @@ import type { ObstructionSnapshot } from "../../lib/obstructionSnapshots";
 export function ObstructionTimeLapse({
   snapshots,
   scrubIndex,
+  stale = false,
   onScrub,
 }: {
   snapshots: ObstructionSnapshot[];
   /** null = live. */
   scrubIndex: number | null;
+  /** Dish not answering: the live end is offline, not live. */
+  stale?: boolean;
   onScrub: (index: number | null) => void;
 }) {
   const isViewingHistory = scrubIndex !== null && scrubIndex < snapshots.length;
@@ -40,10 +43,12 @@ export function ObstructionTimeLapse({
                 key={tickIndex}
                 className={`w-[2px] rounded-[1px] ${isActive ? "h-3" : "h-2"} ${
                   isLive
-                    ? "bg-[var(--status-good)]"
+                    ? stale
+                      ? "bg-status-critical"
+                      : "bg-status-good"
                     : isActive
-                      ? "bg-(--ink)"
-                      : "bg-[var(--ink-muted)]"
+                      ? "bg-ink"
+                      : "bg-ink-muted"
                 }`}
               />
             );
@@ -51,7 +56,7 @@ export function ObstructionTimeLapse({
         </div>
         <input
           type='range'
-          className='relative z-[1] h-[3px] w-full accent-[var(--ink)]'
+          className='relative z-[1] h-[3px] w-full accent-ink'
           min={0}
           max={snapshots.length}
           step={1}
@@ -81,14 +86,20 @@ export function ObstructionTimeLapse({
             })}
           </span>
         ) : (
-          <>
-            <span className='font-semibold tracking-wide text-[var(--status-good)]'>LIVE</span>
-            {/* The one moving thing in the row — a live pulse, not just a word. */}
-            <span
-              className='size-1.5 animate-pulse rounded-full bg-[var(--status-good)]'
-              aria-hidden='true'
-            />
-          </>
+          stale ? (
+            <span className='font-semibold tracking-wide text-status-critical'>
+              OFFLINE
+            </span>
+          ) : (
+            <>
+              <span className='font-semibold tracking-wide text-status-good'>LIVE</span>
+              {/* The one moving thing in the row — a live pulse, not just a word. */}
+              <span
+                className='size-1.5 animate-pulse rounded-full bg-status-good'
+                aria-hidden='true'
+              />
+            </>
+          )
         )}
       </span>
     </div>
