@@ -18,7 +18,13 @@ import {
 } from "@core/energyBuckets";
 import { planDrain, type DishWindow } from "@core/drain";
 import type { AlertTransition } from "@core/alertEngine";
-import type { OutageEvent, RadioStatReading, SampleCursor, TelemetrySample } from "@core/telemetry";
+import {
+  selectFreshSamples,
+  type OutageEvent,
+  type RadioStatReading,
+  type SampleCursor,
+  type TelemetrySample,
+} from "@core/telemetry";
 import type { Snapshot as TotalsSnapshot } from "@core/clientTotals";
 
 /** One device's aggregated throughput for a closed minute — the row /api/clients
@@ -180,11 +186,26 @@ function episodesForTransitions(
   return toPut;
 }
 
-/** Read the cursor, drain the window past it, and commit — one wake's work. */
-export async function applyDrain(store: HistoryStore, window: DishWindow): Promise<void> {
+/** Read the cursor, drain the window past it, and commit — one wake's work. The
+ *  raw 1 Hz samples the charts backfill from are persisted here too, but only the
+ *  ones past the cursor, exactly as the minute deltas are. Storing the whole window
+ *  cannot dedup a re-drained overlap: decodeHistoryWindow stamps each sample from
+ *  the drain's own nowMs, and consecutive wakes are never a whole second apart, so
+ *  the same ring slot re-decodes to a different timestamp and lands under a new key
+ *  instead of overwriting. Only what advanced past the cursor is genuinely new, so
+ *  only that is written, and the sample store stays at true 1 Hz. */
+export async function applyDrain(
+  store: HistoryStore,
+  window: DishWindow,
+  nowMs: number = Date.now(),
+): Promise<void> {
   const cursor = await store.readCursor();
   const plan = planDrain(window, cursor);
   await store.commit(plan.deltas, plan.cursor);
+  // Samples after the commit, not before: a teardown between the two advances the
+  // cursor and drops at most one drain's raw backfill, whereas the reverse order
+  // would re-decode the overlap to new timestamps on the retry and re-grow the store.
+  await store.putSamples(selectFreshSamples(window, cursor), nowMs);
 }
 
 // --- IndexedDB (service worker) ---

@@ -105,11 +105,11 @@ export async function drainOnce(): Promise<DrainResult> {
     const history = await client.getHistory(AbortSignal.timeout(DRAIN_TIMEOUT_MS));
     const now = Date.now();
     const window = decodeHistoryWindow(history, now);
-    await applyDrain(store, window);
-    // Retain the raw 1 Hz samples too, not only the per-minute energy aggregate —
-    // the main charts backfill from these. Overlapping re-drains upsert by
-    // timestamp, so the window dedups itself.
-    await store.putSamples(window.samples, now);
+    // Drains the per-minute energy deltas and the raw 1 Hz samples the charts
+    // backfill from together, both from the cursor-fresh set — storing only what
+    // advanced past the cursor keeps a re-drained overlap from being re-stored
+    // under a fresh wall-clock timestamp (see applyDrain).
+    await applyDrain(store, window, now);
     // Outages ride the same reply — the dish's event log / outage list is in the
     // history window we already fetched, so recording them costs no extra poll.
     await store.putOutages(decodeOutageEvents(history));

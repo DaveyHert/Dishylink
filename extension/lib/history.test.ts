@@ -4,8 +4,9 @@
 // worker (see the browser test), which this deliberately does not stand in for.
 
 import { describe, expect, it } from "vitest";
-import type { TelemetrySample } from "@core/telemetry";
+import { decodeHistoryWindow, type TelemetrySample } from "@core/telemetry";
 import type { DishWindow } from "@core/drain";
+import type { DishHistoryJson } from "@core/dishClient";
 import { applyDrain, InMemoryHistory } from "./history";
 
 const MINUTE = 1_785_000_000; // an arbitrary minute start, epoch seconds
@@ -27,6 +28,21 @@ function sample(secondIntoMinute: number, powerW: number): TelemetrySample {
 function window(count: number, powerW: number): DishWindow {
   const samples = Array.from({ length: count }, (_, second) => sample(second, powerW));
   return { samples, newestCounter: count };
+}
+
+/** A dish history ring of `length` one-second slots reporting since-boot counter
+ *  `current` — the shape decodeHistoryWindow unrolls, so its samples get the same
+ *  wall-clock stamping (anchored to the decode's nowMs) a live drain produces. */
+function ring(current: number, length: number): DishHistoryJson {
+  const filled = (value: number) => Array.from({ length }, () => value);
+  return {
+    current,
+    popPingLatencyMs: filled(20),
+    popPingDropRate: filled(0),
+    downlinkThroughputBps: filled(0),
+    uplinkThroughputBps: filled(0),
+    powerIn: filled(10),
+  } as DishHistoryJson;
 }
 
 async function totalWattSeconds(store: InMemoryHistory): Promise<number> {
@@ -71,6 +87,29 @@ describe("applyDrain / cursor", () => {
     await applyDrain(store, window(45, 8));
     await applyDrain(store, window(45, 8));
     expect(await totalWattSeconds(store)).toBe(before);
+  });
+
+  // The raw-sample store must hold true 1 Hz — not a copy of every overlapping
+  // sample per drain. decodeHistoryWindow stamps from each drain's nowMs, so a
+  // re-drained slot re-decodes to a different timestamp; stored whole it would land
+  // under a new key instead of overwriting, and the store would grow ~30x — far
+  // enough to push /api/samples past the service worker's 64 MiB message cap.
+  it("stores each raw sample once across overlapping drains, not once per re-drain", async () => {
+    const store = new InMemoryHistory();
+    const RING = 900; // a ~15-minute dish ring, re-read whole on every drain
+
+    // A drain decodes the ring at its own wall clock; the next, ~30s later, is not
+    // a whole second on from it, so the overlapping slots re-decode to new stamps.
+    const nowA = 1_785_000_000_000 + 137;
+    await applyDrain(store, decodeHistoryWindow(ring(1_000, RING), nowA), nowA);
+
+    const nowB = nowA + 30_200; // the .2s of drift is what defeats the timestamp dedup
+    await applyDrain(store, decodeHistoryWindow(ring(1_030, RING), nowB), nowB);
+
+    // First drain seeded the whole ring; the second advanced the counter by 30, so
+    // only its 30 newest samples are new. The 870-sample overlap must not re-store.
+    const stored = await store.readSamples(360, nowB);
+    expect(stored.length).toBe(RING + 30);
   });
 });
 
