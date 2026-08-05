@@ -48,7 +48,7 @@ function EnergyBars({ buckets, range }: { buckets: EnergyBucket[]; range: Energy
         />
       ) : (
         <div
-          className='w-full min-h-[2px] rounded-t-[3px] bg-[var(--chart-warm)]'
+          className='w-full min-h-[2px] rounded-t-[3px] bg-chart-warm'
           style={{
             height: `${(bucket.kWh / maxKWh) * 100}%`,
             // Part-sampled slots are real but short by construction; fade one
@@ -68,7 +68,7 @@ export function EnergyHistoryPanel({ active }: { active: boolean }) {
   const coveragePct = data ? Math.round(data.coverage.fraction * 100) : 0;
 
   return (
-    <div className='mt-4 border-t border-[var(--hairline)] pt-[13px]'>
+    <div className='mt-4 border-t border-hairline pt-[13px]'>
       <div className='flex flex-wrap items-center justify-between gap-2.5'>
         <span className='text-[14.5px] font-[650]'>Total energy used</span>
         <SegmentedControl

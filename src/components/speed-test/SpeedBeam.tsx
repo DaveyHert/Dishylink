@@ -310,11 +310,11 @@ export function SpeedBeam({ value, mode, caption, testActive = false, dishModel 
             above it — dropping it past 100 made a 118.5 Mbps run read as two
             different numbers on the same screen. */}
         <span
-          className={`text-[38px] font-bold tracking-[-0.02em] ${pending ? "text-(--ink-muted)" : "text-[var(--ink)]"}`}
+          className={`text-[38px] font-bold tracking-[-0.02em] ${pending ? "text-ink-muted" : "text-ink"}`}
         >
           {pending ? "0" : eased.toFixed(1)}
         </span>
-        <span className='text-[13px] font-medium text-(--ink-muted)'>Mbps</span>
+        <span className='text-[13px] font-medium text-ink-muted'>Mbps</span>
       </div>
       <SpeedCaption mode={mode} caption={caption} />
     </div>

@@ -79,9 +79,9 @@ export function SegmentedControl<T extends string>({
             transform: `translateX(${Math.max(0, activeIndex) * 100}%)`,
           }}
           className={cn(
-            "pointer-events-none absolute inset-y-[3px] left-[3px] rounded-[999px] bg-(--ink)",
-            "transition-transform duration-[220ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
-            "dark:bg-[var(--surface)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.15)]",
+            "pointer-events-none absolute inset-y-[3px] left-[3px] rounded-[999px] bg-ink",
+            "transition-transform duration-220 ease-in-out",
+            "dark:dark:bg-card dark:shadow-[0_1px_2px_rgba(0,0,0,0.15)]",
           )}
         />
         {options.map((option) => (
@@ -90,10 +90,10 @@ export function SegmentedControl<T extends string>({
             value={option.value}
             data-slot='segmented-control-item'
             className={cn(
-              "relative z-[1] cursor-pointer border-0 bg-transparent px-6 py-[7px] text-center font-sans text-[13px] font-semibold transition-colors duration-200 disabled:cursor-default disabled:opacity-50",
+              "relative z-1 cursor-pointer border-0 bg-transparent px-6 py-[7px] text-center font-sans text-[13px] font-semibold transition-colors duration-200 disabled:cursor-default disabled:opacity-50",
               option.value === value
-                ? "text-[color:var(--page)] dark:text-foreground"
-                : "text-[color:var(--ink-secondary)] dark:text-muted-foreground",
+                ? "text-page dark:text-foreground"
+                : "text-ink-secondary dark:text-muted-foreground",
             )}
           >
             {option.label}

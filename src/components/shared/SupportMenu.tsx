@@ -51,9 +51,9 @@ function openExternal(url: string): void {
 }
 
 const MENU_ITEM =
-  "flex w-full items-center gap-2.5 rounded-[8px] px-2 py-2 text-left text-[13px] text-(--ink) no-underline transition-colors hover:bg-(--hairline)";
+  "flex w-full items-center gap-2.5 rounded-[8px] px-2 py-2 text-left text-[13px] text-ink no-underline transition-colors hover:bg-hairline";
 const MENU_LABEL =
-  "px-2 pt-1.5 pb-1 text-[10.5px] font-semibold tracking-[0.06em] text-(--ink-muted) uppercase";
+  "px-2 pt-1.5 pb-1 text-[10.5px] font-semibold tracking-[0.06em] text-ink-muted uppercase";
 const SECTION = "border-b border-border p-1.5 last:border-b-0";
 
 interface MenuLinkItem {
@@ -70,7 +70,7 @@ function MenuLink({ href, icon: Icon, iconClassName, children }: MenuLinkItem) {
       className={cn(MENU_ITEM, "cursor-pointer border-0 bg-transparent")}
       onClick={() => openExternal(href)}
     >
-      <span className={cn("size-[15px] flex-none", iconClassName ?? "text-(--ink-secondary)")}>
+      <span className={cn("size-[15px] flex-none", iconClassName ?? "text-ink-secondary")}>
         <Icon className='size-full' />
       </span>
       {children}
@@ -97,13 +97,13 @@ const SECTIONS: { label: string; items: MenuLinkItem[] }[] = [
       {
         href: SUPPORT_LINKS.patreon,
         icon: PatreonIcon,
-        iconClassName: "text-(--ink)",
+        iconClassName: "text-ink",
         children: "Become a Patreon",
       },
       {
         href: SUPPORT_LINKS.buyMeACoffee,
         icon: CoffeeIcon,
-        iconClassName: "text-(--ink)",
+        iconClassName: "text-ink",
         children: "Buy Me a Coffee",
       },
     ],
@@ -154,7 +154,7 @@ export function SupportMenu() {
     <Popover>
       <PopoverTrigger asChild>
         <button
-          className='relative inline-flex size-8 cursor-pointer items-center justify-center rounded-full border-0 bg-card text-(--ink-secondary) transition-colors hover:text-foreground'
+          className='relative inline-flex size-8 cursor-pointer items-center justify-center rounded-full border-0 bg-card text-ink-secondary transition-colors hover:text-foreground'
           aria-label={updateVersion ? "Support and more (update available)" : "Support and more"}
           title='Support & more'
         >
@@ -174,12 +174,12 @@ export function SupportMenu() {
         // The glass treatment the rail/dock toolbar uses at rest — translucent
         // surface, ink-tinted border, backdrop blur — rather than a flat opaque
         // panel that reads as a different surface family from the rest of the UI.
-        className='w-75 overflow-hidden rounded-xl border border-border/50 bg-[color-mix(in_srgb,var(--surface-raised)_80%,transparent)] dark:bg-[color-mix(in_srgb,#0e0e0e_80%,transparent)] p-0 text-(--ink) shadow-[0_12px_40px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-xl backdrop-saturate-150 dark:shadow-[0_12px_40px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.08)]'
+        className='w-75 overflow-hidden rounded-xl border border-border/50 bg-[color-mix(in_srgb,var(--surface-raised)_80%,transparent)] dark:bg-[color-mix(in_srgb,#0e0e0e_80%,transparent)] p-0 text-ink shadow-[0_12px_40px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-xl backdrop-saturate-150 dark:shadow-[0_12px_40px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.08)]'
       >
         <div className='border-b border-border/50 px-4 py-3'>
           <div className='flex items-baseline gap-2'>
             <span className='text-[13.5px] font-semibold'>Dishylink</span>
-            <span className='font-mono text-[11px] text-(--ink-muted) tabular-nums'>
+            <span className='font-mono text-[11px] text-ink-muted tabular-nums'>
               v{APP_VERSION}
             </span>
           </div>
@@ -194,7 +194,7 @@ export function SupportMenu() {
             <MenuLink
               href={SUPPORT_LINKS.latestRelease}
               icon={DownloadIcon}
-              iconClassName='text-(--status-good)'
+              iconClassName='text-status-good'
             >
               Download v{updateVersion}
             </MenuLink>

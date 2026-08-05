@@ -127,7 +127,7 @@ export function DevicesSection({
                 item.kind === "router" ? "pl-7" : "pl-2.5"
               } ${
                 item.key === selected?.key
-                  ? "bg-[var(--surface-raised)]"
+                  ? "bg-surface-raised"
                   : "bg-transparent hover:bg-[color-mix(in_srgb,var(--surface-raised)_55%,transparent)]"
               }`}
             >

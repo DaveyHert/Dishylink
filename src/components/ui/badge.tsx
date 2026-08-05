@@ -26,8 +26,8 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
-        spec: "rounded-[6px] border border-input px-[7px] py-0.5 font-mono text-[10px] tracking-[0.04em] text-(--ink-secondary) tabular-nums",
-        tag: "rounded border border-input px-[5px] py-px font-mono text-[8.5px] uppercase tracking-[0.08em] text-(--ink-secondary)",
+        spec: "rounded-[6px] border border-input px-[7px] py-0.5 font-mono text-[10px] tracking-[0.04em] text-ink-secondary tabular-nums",
+        tag: "rounded border border-input px-[5px] py-px font-mono text-[8.5px] uppercase tracking-[0.08em] text-ink-secondary",
         status: "rounded-full border px-2 py-0.5 text-[11px] font-semibold",
       },
     },

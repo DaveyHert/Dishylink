@@ -34,6 +34,18 @@
   --color-border: var(--hairline);
   --color-input: var(--baseline);
   --color-ring: var(--ink-muted);
+  --color-page: var(--page);
+  --color-surface-raised: var(--surface-raised);
+  --color-ink: var(--ink);
+  --color-ink-secondary: var(--ink-secondary);
+  --color-ink-muted: var(--ink-muted);
+  --color-hairline: var(--hairline);
+  --color-chart-ink: var(--chart-ink);
+  --color-chart-warm: var(--chart-warm);
+  --color-series-down: var(--series-down);
+  --color-series-up: var(--series-up);
+  --color-status-good: var(--status-good);
+  --color-status-critical: var(--status-critical);
   --font-sans: var(--font-ui);
   --font-mono: var(--font-mono);
   --radius-lg: 12px;

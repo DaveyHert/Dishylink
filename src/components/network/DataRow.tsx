@@ -3,7 +3,7 @@
 
 export function DataRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className='flex items-baseline justify-between gap-4 border-t border-t-[var(--hairline)] py-[9px]'>
+    <div className='flex items-baseline justify-between gap-4 border-t border-t-hairline py-[9px]'>
       <span className='text-[11.5px] font-medium text-muted-foreground'>{label}</span>
       <span className='font-mono tabular-nums text-[13px] text-right text-foreground [overflow-wrap:anywhere]'>
         {value}

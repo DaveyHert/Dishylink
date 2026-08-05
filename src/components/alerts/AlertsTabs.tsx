@@ -116,11 +116,13 @@ export function StatusTab({
         if (checks.length === 0) return null;
         return (
           <div key={source}>
-            <p className='sticky top-0 z-10 flex items-center justify-between gap-2 bg-[var(--page)] px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-(--ink-muted)'>
+            <p className='sticky top-0 z-10 flex items-center justify-between gap-2 bg-page px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted'>
               <span>{label}</span>
               {/* Never let a stale snapshot read as a live all-clear. */}
               {!live && (
-                <span className='normal-case tracking-normal'>not answering · last known</span>
+                <span className='normal-case tracking-normal'>
+                  Starlink offline · last known status
+                </span>
               )}
             </p>
             {checks.map((c) => (
@@ -139,7 +141,7 @@ export function StatusTab({
                         : "var(--status-good)",
                   }}
                 />
-                <span className='truncate text-[14px] text-[var(--ink)]'>
+                <span className='truncate text-[14px] text-ink'>
                   {c.active ? c.firing : c.ok}
                 </span>
               </div>

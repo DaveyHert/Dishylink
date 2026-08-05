@@ -13,11 +13,11 @@ import { Tooltip as TooltipPrimitive } from "radix-ui";
 import { cn } from "@/lib/utils";
 
 const infoDot =
-  "relative inline-flex size-[13px] cursor-help items-center justify-center rounded-full border border-input font-mono text-[9px] italic leading-none text-muted-foreground outline-none [transition:border-color_120ms_ease,color_120ms_ease] hover:border-[var(--accent)] hover:text-[var(--accent)] focus-visible:border-[var(--accent)] focus-visible:text-[var(--accent)]";
+  "relative inline-flex size-[13px] cursor-help items-center justify-center rounded-full border border-input font-mono text-[9px] italic leading-none text-muted-foreground outline-none [transition:border-color_120ms_ease,color_120ms_ease] hover:border-(--accent) hover:text-(--accent) focus-visible:border-(--accent) focus-visible:text-(--accent)";
 // Portalled by Radix, so this is presentation only — the resets (not-italic,
 // normal-case, tracking-normal) guard against whatever context it lands in.
 const infoTip =
-  "z-[60] w-max max-w-[240px] rounded-sm border border-[var(--hairline)] bg-secondary px-2.5 py-2 text-left text-[11.5px] not-italic normal-case leading-[1.45] tracking-normal text-(--ink-secondary) shadow-[0_6px_24px_rgba(0,0,0,0.28)]";
+  "z-[60] w-max max-w-[240px] rounded-sm border border-hairline bg-secondary px-2.5 py-2 text-left text-[11.5px] not-italic normal-case leading-[1.45] tracking-normal text-ink-secondary shadow-[0_6px_24px_rgba(0,0,0,0.28)]";
 
 /** Standalone ⓘ dot. Pair with any heading. */
 export function InfoDot({ tip }: { tip: string }) {

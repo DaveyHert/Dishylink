@@ -30,7 +30,7 @@ export function AlertRow({
         <span className='size-2 rounded-full' style={{ background: color }} />
       </span>
       <div className='min-w-0 flex-1'>
-        <p className='text-[13.5px] leading-snug text-[var(--ink)]'>
+        <p className='text-[13.5px] leading-snug text-ink'>
           {title}
           {/* Sits after the message, not inside it. The gap is on the wrapper —
               a bare InfoDot has none of its own (StatLabel's .info-label
@@ -41,7 +41,7 @@ export function AlertRow({
             </span>
           )}
         </p>
-        {meta && <p className='mt-0.5 text-xs text-(--ink-muted)'>{meta}</p>}
+        {meta && <p className='mt-0.5 text-xs text-ink-muted'>{meta}</p>}
       </div>
     </div>
   );

@@ -66,7 +66,7 @@ const AlertsBellTrigger = forwardRef<
   return (
     <button
       ref={ref}
-      className='relative inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border-0 bg-card text-(--ink-secondary) transition-colors duration-[120ms] hover:text-[var(--ink)]'
+      className='relative inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border-0 bg-card text-ink-secondary transition-colors duration-[120ms] hover:text-ink'
       aria-label='Alerts and notifications'
       title={
         (count > 0 ? `${count} active alert${count === 1 ? "" : "s"}` : "Alerts — all healthy") +
@@ -78,7 +78,7 @@ const AlertsBellTrigger = forwardRef<
       <BellIcon muted={muted} />
       {count > 0 && (
         <span
-          className='absolute -top-1 -right-1 flex h-[15px] min-w-[15px] items-center justify-center rounded-full border-[1.5px] border-solid border-[var(--page)] px-1 text-[10px] font-bold leading-none text-white'
+          className='absolute -top-1 -right-1 flex h-[15px] min-w-[15px] items-center justify-center rounded-full border-[1.5px] border-solid border-page px-1 text-[10px] font-bold leading-none text-white'
           style={{ background: color }}
         >
           {count}
@@ -127,10 +127,10 @@ export function AlertsMenu({
         align='end'
         sideOffset={10}
         collisionPadding={12}
-        className='w-[380px] overflow-hidden rounded-xl border border-solid border-[var(--hairline)] bg-[var(--surface)] p-0 text-[var(--ink)] shadow-[0_12px_40px_rgba(0,0,0,0.45)]'
+        className='w-[380px] overflow-hidden rounded-xl border border-solid border-hairline dark:bg-card p-0 text-ink shadow-[0_12px_40px_rgba(0,0,0,0.45)]'
       >
         <div className='flex items-center justify-between px-4 py-2'>
-          <span className='text-[15px] font-semibold text-[var(--ink)]'>Alerts</span>
+          <span className='text-[15px] font-semibold text-ink'>Alerts</span>
           <span className='flex items-center gap-3.5'>
             <SoundToggle soundOn={soundOn} onToggle={toggleSound} />
             {notificationsSupported() && (
@@ -148,7 +148,7 @@ export function AlertsMenu({
         {/* Why an enable attempt was refused — so the toggle explains itself
             instead of reading as a click that did nothing. */}
         {notificationsBlockedReason && (
-          <p className='px-4 pb-2 text-[11px] leading-snug text-(--ink-secondary)'>
+          <p className='px-4 pb-2 text-[11px] leading-snug text-ink-secondary'>
             {notificationsBlockedReason}
           </p>
         )}
@@ -159,14 +159,14 @@ export function AlertsMenu({
               {/* Status is the live health list, not an alert feed: set apart by a
                   short rule, the height of the text — not a full-height border. */}
               {key === "status" && (
-                <span className='h-3.5 w-px shrink-0 bg-[var(--hairline)]' aria-hidden='true' />
+                <span className='h-3.5 w-px shrink-0 bg-hairline' aria-hidden='true' />
               )}
               <button
                 onClick={() => setTab(key)}
                 className={cn(
                   BTN_RESET,
                   "-mb-px flex items-center gap-1.5 border-0 border-b-2 border-solid border-transparent py-1.5 text-[13px] transition-colors",
-                  tab === key ? "font-semibold text-[var(--ink)]" : "text-(--ink-muted)",
+                  tab === key ? "font-semibold text-ink" : "text-ink-muted",
                 )}
                 style={tab === key ? { borderBottomColor: "var(--ink)" } : undefined}
               >

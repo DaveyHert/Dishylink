@@ -56,14 +56,14 @@ function SignInConnect({
         <h2 className='m-0 text-[19px] font-semibold tracking-tight'>
           Connect your Starlink account
         </h2>
-        <p className='m-0 text-[13.5px] leading-relaxed text-(--ink-secondary)'>
+        <p className='m-0 text-[13.5px] leading-relaxed text-ink-secondary'>
           See your plan, data usage, service address, and every dish and router on the account —
           read-only, straight from starlink.com. Your session stays encrypted on this device and is
           only ever sent to Starlink.
         </p>
       </div>
 
-      {error && <div className='text-[12.5px] text-[var(--status-critical)]'>{error}</div>}
+      {error && <div className='text-[12.5px] text-status-critical'>{error}</div>}
 
       <Button onClick={start} disabled={busy} className='w-full max-w-[260px] border-0'>
         {busy ? (
@@ -127,7 +127,7 @@ function PasteConnect({ onConnected }: { onConnected: () => void }) {
     <div className={cardClass}>
       <div>
         <div className='text-[14px] font-semibold'>Connect your Starlink account</div>
-        <div className='mt-0.5 text-[12.5px] leading-normal text-(--ink-secondary)'>
+        <div className='mt-0.5 text-[12.5px] leading-normal text-ink-secondary'>
           Read-only — your account, your data. The session is written to a local{" "}
           <code>.starlink-cookie</code> file on this machine and only ever sent to Starlink.
         </div>
@@ -137,7 +137,7 @@ function PasteConnect({ onConnected }: { onConnected: () => void }) {
         {STEPS.map((step, index) => (
           <li
             key={index}
-            className='flex gap-2.5 text-[12.5px] leading-snug text-(--ink-secondary)'
+            className='flex gap-2.5 text-[12.5px] leading-snug text-ink-secondary'
           >
             <span className='mt-[1px] flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--ink)_10%,var(--surface))] text-[11px] font-semibold text-foreground'>
               {index + 1}
@@ -157,10 +157,10 @@ function PasteConnect({ onConnected }: { onConnected: () => void }) {
         aria-label='Starlink session cookie'
         spellCheck={false}
         rows={3}
-        className='min-w-0 resize-y rounded-md border border-input bg-card px-2.5 py-2 font-mono text-[11.5px] leading-normal break-all text-foreground focus:border-[var(--ink)] focus:outline-none'
+        className='min-w-0 resize-y rounded-md border border-input bg-card px-2.5 py-2 font-mono text-[11.5px] leading-normal break-all text-foreground focus:border-ink focus:outline-none'
       />
 
-      {error && <div className='text-[12px] text-[var(--status-critical)]'>{error}</div>}
+      {error && <div className='text-[12px] text-status-critical'>{error}</div>}
 
       <div className='flex items-center gap-2'>
         <Button

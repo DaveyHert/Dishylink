@@ -205,7 +205,7 @@ export function DishTerminalCard({
         </div>
       </div>
       {updateBanner && (
-        <div className='mb-3 flex items-center gap-2 rounded-md bg-[color-mix(in_srgb,var(--chart-warm)_14%,var(--surface))] px-3 py-[9px] text-[13px] font-semibold text-[color:var(--chart-warm)]'>
+        <div className='mb-3 flex items-center gap-2 rounded-md bg-[color-mix(in_srgb,var(--chart-warm)_14%,var(--surface))] px-3 py-[9px] text-[13px] font-semibold text-chart-warm'>
           ↻ {updateBanner}
         </div>
       )}

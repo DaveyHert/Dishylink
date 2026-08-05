@@ -38,7 +38,7 @@ export function ToolbarRail({ items, activeId, onSelect }: ToolbarRailProps) {
             aria-label={item.label}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "relative flex h-11 flex-none cursor-pointer items-center gap-3.5 rounded-full border-0 bg-transparent px-[11px] text-(--ink-secondary) transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] hover:text-foreground",
+              "relative flex h-11 flex-none cursor-pointer items-center gap-3.5 rounded-full border-0 bg-transparent px-[11px] text-ink-secondary transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] hover:text-foreground",
               active && "bg-[color-mix(in_srgb,var(--ink)_10%,transparent)] text-foreground",
             )}
           >

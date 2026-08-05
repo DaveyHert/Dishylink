@@ -18,7 +18,7 @@ import { CloudDataUsage } from "./CloudDataUsage";
 type UsageSource = "local" | "cloud";
 
 const SOURCE_TABS = [
-  { label: "Local Session", value: "local" as const },
+  { label: "Local session", value: "local" as const },
   { label: "Starlink billing", value: "cloud" as const },
 ];
 
@@ -53,10 +53,10 @@ function UsageBars({ buckets, range }: { buckets: UsageBucket[]; range: EnergyRa
           style={{ height: `${(total / maxTotalGB) * 100}%` }}
         >
           <div
-            className='min-h-0 bg-[var(--chart-warm)]'
+            className='min-h-0 bg-chart-warm'
             style={{ height: `${((bucket.upGB ?? 0) / Math.max(total, 1e-9)) * 100}%` }}
           />
-          <div className='bg-[var(--chart-ink)] opacity-75' style={{ flex: 1 }} />
+          <div className='bg-chart-ink opacity-75' style={{ flex: 1 }} />
         </div>
       ),
     };

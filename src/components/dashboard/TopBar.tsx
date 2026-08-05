@@ -35,9 +35,9 @@ const CONNECTION_LABEL: Record<DishConnectionState, string> = {
 // and sits still once the dish is unreachable.
 const statusDot = "size-[7px] flex-none rounded-full";
 const CONNECTION_DOT: Record<DishConnectionState, string> = {
-  connecting: "bg-[var(--ink-muted)] animate-[status-pulse_1s_ease-in-out_infinite]",
-  online: "bg-[var(--status-good)] animate-[status-pulse_2.2s_ease-in-out_infinite]",
-  unreachable: "bg-[var(--status-critical)]",
+  connecting: "bg-ink-muted animate-[status-pulse_1s_ease-in-out_infinite]",
+  online: "bg-status-good animate-[status-pulse_2.2s_ease-in-out_infinite]",
+  unreachable: "bg-status-critical",
 };
 
 // One face per mode; the button shows the mode it is in.
@@ -50,10 +50,10 @@ const THEME_ICON: Record<ThemeName, typeof SunIcon> = {
 // Read-only status readouts (divider-separated, no button feel) and round icon
 // button — repeated in the strip.
 const statusItem =
-  "inline-flex items-center gap-[7px] whitespace-nowrap text-[12.5px] font-medium text-(--ink-secondary)";
+  "inline-flex items-center gap-[7px] whitespace-nowrap text-[12.5px] font-medium text-ink-secondary";
 const statusDivider = "border-l border-input pl-2.5";
 const iconButton =
-  "inline-flex size-8 cursor-pointer items-center justify-center rounded-full border-0 bg-card text-(--ink-secondary) transition-colors hover:text-foreground";
+  "inline-flex size-8 cursor-pointer items-center justify-center rounded-full border-0 bg-card text-ink-secondary transition-colors hover:text-foreground";
 
 export function TopBar({
   connectionState,

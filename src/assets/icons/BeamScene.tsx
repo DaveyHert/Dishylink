@@ -52,7 +52,7 @@ export function BeamOrbit({ d, ...props }: React.ComponentProps<"path"> & { d: s
 export function BeamWordmark(props: React.ComponentProps<"text">) {
   return (
     <text
-      className='fill-[var(--ink)] font-sans text-[12px] font-bold tracking-[0.22em]'
+      className='fill-ink font-sans text-[12px] font-bold tracking-[0.22em]'
       textAnchor='middle'
       {...props}
     >

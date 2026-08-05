@@ -71,7 +71,7 @@ export function LatencyHistogram({
               />
             ))}
           </div>
-          <div className='flex justify-between border-t border-[var(--hairline)] pt-1 font-mono text-[10px] text-muted-foreground'>
+          <div className='flex justify-between border-t border-hairline pt-1 font-mono text-[10px] text-muted-foreground'>
             <span>0 ms</span>
             <span>50 ms</span>
             <span>100+ ms</span>

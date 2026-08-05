@@ -20,9 +20,9 @@ const callout = cva(
   {
     variants: {
       tone: {
-        info: "bg-[color-mix(in_srgb,var(--ink)_5%,var(--surface))] text-(--ink-secondary)",
+        info: "bg-[color-mix(in_srgb,var(--ink)_5%,var(--surface))] text-ink-secondary",
         error:
-          "bg-[color-mix(in_srgb,var(--status-critical)_8%,var(--surface))] text-(--ink-secondary)",
+          "bg-[color-mix(in_srgb,var(--status-critical)_8%,var(--surface))] text-ink-secondary",
       },
     },
     defaultVariants: { tone: "info" },
@@ -51,7 +51,7 @@ export function Callout({ children, tone, className }: CalloutProps) {
     >
       <span
         aria-hidden='true'
-        className={resolvedTone === "error" ? "text-[var(--status-critical)]" : undefined}
+        className={resolvedTone === "error" ? "text-status-critical" : undefined}
       >
         {ICON[resolvedTone]}
       </span>

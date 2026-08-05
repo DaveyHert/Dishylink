@@ -91,7 +91,7 @@ export function GaugeDial({
             <text
               x={lx}
               y={ly}
-              className='fill-[var(--ink-muted)] font-mono text-[9px]'
+              className='fill-ink-muted font-mono text-[9px]'
               textAnchor='middle'
               dominantBaseline='middle'
             >
@@ -113,7 +113,7 @@ export function GaugeDial({
       <text
         x={CENTER}
         y={CENTER + 52}
-        className={`text-[40px] font-bold tracking-[-0.02em] ${muted ? "fill-[var(--ink-muted)]" : "fill-[var(--ink)]"}`}
+        className={`text-[40px] font-bold tracking-[-0.02em] ${muted ? "fill-ink-muted" : "fill-ink"}`}
         textAnchor='middle'
       >
         {value}
@@ -121,7 +121,7 @@ export function GaugeDial({
       <text
         x={CENTER}
         y={CENTER + 72}
-        className='fill-[var(--ink-muted)] text-[13px] font-medium'
+        className='fill-ink-muted text-[13px] font-medium'
         textAnchor='middle'
       >
         {unit}

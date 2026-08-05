@@ -11,9 +11,9 @@ export function SearchingHero() {
         <div className='absolute inset-0 animate-[sweep_2.6s_linear_infinite] [background:conic-gradient(from_0deg,transparent_78%,color-mix(in_srgb,var(--ink)_45%,transparent))]' />
       </div>
       <div className='text-[19px] font-bold tracking-[0.18em]'>SEARCHING FOR DISH</div>
-      <p className='max-w-[420px] text-[13.5px] text-(--ink-secondary)'>
+      <p className='max-w-[420px] text-[13.5px] text-ink-secondary'>
         Dishylink talks to your Starlink terminal directly at{" "}
-        <code className='rounded-[5px] bg-[var(--surface)] px-1.5 py-px font-mono text-[12px]'>
+        <code className='rounded-[5px] dark:bg-card px-1.5 py-px font-mono text-[12px]'>
           192.168.100.1
         </code>
         . Make sure this machine is connected to the Starlink network (Wi‑Fi or ethernet behind the

@@ -251,7 +251,7 @@ export function SpeedTestPanel({
       <button
         className={`mt-2 flex min-h-[42px] w-full cursor-pointer items-center justify-center gap-2 rounded-xl border-0 py-[11px] font-sans text-[14px] font-semibold transition-colors duration-300 disabled:cursor-default ${
           untouched
-            ? "bg-[color-mix(in_srgb,var(--ink)_86%,transparent)] text-[var(--page)] enabled:hover:bg-(--ink)"
+            ? "bg-[color-mix(in_srgb,var(--ink)_86%,transparent)] text-pageenabled:hover:bg-ink"
             : "bg-[color-mix(in_srgb,var(--ink)_12%,transparent)] text-foreground enabled:hover:bg-[color-mix(in_srgb,var(--ink)_18%,transparent)] disabled:bg-[color-mix(in_srgb,var(--ink)_8%,transparent)] disabled:text-muted-foreground"
         }`}
         disabled={isRunning || phase === "resting"}

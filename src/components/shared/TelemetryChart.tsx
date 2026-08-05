@@ -468,7 +468,7 @@ export function TelemetryChart({
               className='flex items-center justify-between gap-[7px] leading-[1.7]'
               key={chartSeries.id}
             >
-              <span className='inline-flex items-center gap-1.5 text-(--ink-secondary)'>
+              <span className='inline-flex items-center gap-1.5 text-ink-secondary'>
                 <span
                   className='size-[9px] flex-none rounded-full'
                   style={{ background: `var(${chartSeries.colorVar})` }}

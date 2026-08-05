@@ -47,7 +47,7 @@ export function DeviceMergePrompt({
       />
       <div className='p-3 pl-3.5'>
         <div className='flex items-center gap-1.5'>
-          <MergeIcon size={15} className='text-[var(--chart-warm)]' />
+          <MergeIcon size={15} className='text-chart-warm' />
           <span className='text-[14.5px] font-[650] text-foreground'>
             Possible duplicate device
           </span>
@@ -57,7 +57,7 @@ export function DeviceMergePrompt({
             </span>
           )}
         </div>
-        <div className='mt-1 text-[13.5px] leading-[1.55] text-(--ink-secondary)'>
+        <div className='mt-1 text-[13.5px] leading-[1.55] text-ink-secondary'>
           This device appears twice, both named{" "}
           <span className='font-medium text-foreground'>{candidate.detail}</span>. This happens when
           a device changes its Wi-Fi address and your router treats it as new.
@@ -67,7 +67,7 @@ export function DeviceMergePrompt({
           <MergeDeviceCard total={older} nowMs={nowMs} />
           {/* Directional: the older, idle device folds into the current one. */}
           <span
-            className='shrink-0 self-center text-[13px] text-[var(--chart-warm)]'
+            className='shrink-0 self-center text-[13px] text-chart-warm'
             aria-hidden='true'
           >
             →
@@ -79,7 +79,7 @@ export function DeviceMergePrompt({
             Whether the two figures add depends on the month each bucket covers — a
             rule the recorder owns, and re-deriving it here would eventually promise
             a total it does not produce. The history joins either way. */}
-        <div className='mt-2.5 text-[13.5px] leading-[1.55] text-(--ink-secondary)'>
+        <div className='mt-2.5 text-[13.5px] leading-[1.55] text-ink-secondary'>
           {candidate.foldsBytes
             ? `Combining keeps one device with ${formatBytes(
                 candidate.resultRxBytes + candidate.resultTxBytes,
@@ -131,7 +131,7 @@ function MergeDeviceCard({ total, nowMs }: { total: ClientUsageTotal; nowMs: num
 
   return (
     <div className='flex flex-1 items-center gap-3 rounded-md border border-border p-2.5'>
-      <DeviceTypeIcon kind={kind} size={22} className='flex-none text-(--ink-secondary)' />
+      <DeviceTypeIcon kind={kind} size={22} className='flex-none text-ink-secondary' />
       <span className='flex min-w-0 flex-1 flex-col gap-px'>
         <span className='text-[14px] leading-[1.3] font-semibold text-foreground'>{name}</span>
         <span className='text-[11.5px] leading-[1.3] text-muted-foreground'>
@@ -146,8 +146,8 @@ function MergeDeviceCard({ total, nowMs }: { total: ClientUsageTotal; nowMs: num
           {formatBytes(total.rxBytes + total.txBytes)}
         </span>
         <span className='font-mono text-[10.5px] tabular-nums text-muted-foreground'>
-          {formatBytes(total.rxBytes)} <span className='text-[var(--series-down)]'>↓</span> ·{" "}
-          {formatBytes(total.txBytes)} <span className='text-[var(--series-up)]'>↑</span>
+          {formatBytes(total.rxBytes)} <span className='text-series-down'>↓</span> ·{" "}
+          {formatBytes(total.txBytes)} <span className='text-series-up'>↑</span>
         </span>
       </span>
     </div>

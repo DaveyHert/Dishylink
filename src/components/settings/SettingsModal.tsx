@@ -90,7 +90,7 @@ export function SettingsModal({
             Settings
           </DialogTitle>
           <button
-            className='inline-flex h-[30px] w-[30px] cursor-pointer items-center justify-center rounded-full border-0 bg-[color-mix(in_srgb,var(--ink)_6%,var(--surface))] text-[13px] leading-none text-[color:var(--ink-secondary)] transition-colors hover:text-foreground'
+            className='inline-flex h-[30px] w-[30px] cursor-pointer items-center justify-center rounded-full border-0 bg-[color-mix(in_srgb,var(--ink)_6%,var(--surface))] text-[13px] leading-none text-ink-secondary transition-colors hover:text-foreground'
             onClick={onClose}
             aria-label='Close'
           >

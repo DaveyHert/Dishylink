@@ -7,8 +7,8 @@ import { actionButton } from "../ui/action-button";
 
 /** Compact select trigger in the app's language (mono, hairline, small). */
 export const triggerClass =
-  "font-mono tabular-nums inline-flex h-7 items-center justify-between gap-1.5 rounded-lg border border-[var(--hairline)] bg-transparent px-2.5 text-xs text-foreground shadow-none outline-none hover:border-input data-[placeholder]:text-muted-foreground [&>svg]:size-3 [&>svg]:opacity-60";
-export const selectContentClass = "min-w-[7rem] rounded-lg border-[var(--hairline)]";
+  "font-mono tabular-nums inline-flex h-7 items-center justify-between gap-1.5 rounded-lg border border-hairline bg-transparent px-2.5 text-xs text-foreground shadow-none outline-none hover:border-input data-[placeholder]:text-muted-foreground [&>svg]:size-3 [&>svg]:opacity-60";
+export const selectContentClass = "min-w-[7rem] rounded-lg border-hairline";
 export const selectItemClass = "text-xs py-1.5";
 
 /** One settings row: label block on the left, control(s) pinned right, never

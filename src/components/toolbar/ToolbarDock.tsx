@@ -67,7 +67,7 @@ function DockTile({
       <motion.span
         style={{ scale, y }}
         className={cn(
-          "flex size-[34px] origin-bottom items-center justify-center rounded-[11px] text-(--ink-secondary) transition-colors group-hover:text-foreground",
+          "flex size-[34px] origin-bottom items-center justify-center rounded-[11px] text-ink-secondary transition-colors group-hover:text-foreground",
           active && "text-foreground",
         )}
       >

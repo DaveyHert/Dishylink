@@ -8,7 +8,7 @@ import { StatLabel } from "../shared/InfoDot";
 export const skyLegendClass = "flex flex-wrap gap-x-4 gap-y-2.5 pt-1";
 export const skyStatsClass = "mt-2.5 grid grid-cols-2 gap-x-3.5 gap-y-2";
 const legendItem =
-  "inline-flex items-center gap-[7px] text-[12.5px] font-medium text-(--ink-secondary)";
+  "inline-flex items-center gap-[7px] text-[12.5px] font-medium text-ink-secondary";
 const legendCell = "size-[9px] flex-none rounded-full";
 
 function LegendEntry({ color, label }: { color: string; label: string }) {

@@ -23,7 +23,7 @@ const saveButton =
  *  button chrome at all — an icon and its label, over the glass. */
 const sourceButton =
   "inline-flex cursor-pointer items-center gap-1.5 border-0 bg-transparent p-0 font-sans " +
-  "text-[12.5px] font-semibold text-(--ink-secondary) transition-colors duration-[120ms] " +
+  "text-[12.5px] font-semibold text-ink-secondary transition-colors duration-[120ms] " +
   "enabled:hover:text-foreground disabled:cursor-default disabled:opacity-50";
 
 export function LocationSetup({
@@ -71,7 +71,7 @@ export function LocationSetup({
     // that blurs: it carries an input and its instructions, so the sky moving
     // behind it has to be pushed out of focus rather than read through.
     <div className='mt-3 flex flex-col gap-2.5 rounded-lg border border-[#8b97a824] bg-[#00000073] px-[13px] py-3 backdrop-blur-xl'>
-      <p className='text-[12.5px] leading-[1.5] text-(--ink-secondary)'>
+      <p className='text-[12.5px] leading-[1.5] text-ink-secondary'>
         To show the satellites passing over you, we need to know where your dish is. Tip: long-press
         your home in Google Maps, or open the iPhone <strong>Compass</strong> app, and paste what it
         shows.
@@ -87,7 +87,7 @@ export function LocationSetup({
             if (keyEvent.key === "Enter") submitPasted();
           }}
           aria-label='Latitude, longitude'
-          className='min-w-0 flex-1 rounded-full border border-[color-mix(in_srgb,var(--ink)_18%,transparent)] bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] px-3.5 py-[7px] font-mono text-[12px] text-foreground placeholder:text-(--ink-secondary) focus:border-[color-mix(in_srgb,var(--ink)_40%,transparent)] focus:outline-none'
+          className='min-w-0 flex-1 rounded-full border border-[color-mix(in_srgb,var(--ink)_18%,transparent)] bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] px-3.5 py-[7px] font-mono text-[12px] text-foreground placeholder:text-ink-secondary focus:border-[color-mix(in_srgb,var(--ink)_40%,transparent)] focus:outline-none'
         />
         <button onClick={submitPasted} className={saveButton}>
           Save
@@ -107,7 +107,7 @@ export function LocationSetup({
           {busySource === "ip" ? "Looking up…" : "Approximate from IP"}
         </button>
       </div>
-      {errorText && <div className='text-[12px] text-[var(--status-critical)]'>{errorText}</div>}
+      {errorText && <div className='text-[12px] text-status-critical'>{errorText}</div>}
     </div>
   );
 }
