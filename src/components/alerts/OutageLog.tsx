@@ -3,7 +3,7 @@
 // duration on the right. Each cause carries a plain-English tooltip (the dish's
 // raw jargon explained) via outageEventMeta.
 
-import { outageEventMeta, type OutageEvent } from "@core/telemetry";
+import { canonicalCause, outageEventMeta, type OutageEvent } from "@core/telemetry";
 import { formatClockTimeShort, formatEventDuration } from "../../lib/format";
 import { EmptyState } from "../ui/empty-state";
 import { InfoDot } from "../shared/InfoDot";
@@ -35,12 +35,12 @@ export function OutageLog({ outageEvents }: { outageEvents: OutageEvent[] }) {
         <EmptyState className='py-[18px]'>no outages recorded in the current window</EmptyState>
       ) : (
         <div className='thin-scroll flex max-h-[240px] flex-col overflow-y-auto'>
-          {newestFirst.map((outage, eventIndex) => {
+          {newestFirst.map((outage) => {
             const meta = outageEventMeta(outage.cause);
             return (
               <div
                 className='grid grid-cols-[auto_1fr_auto] items-center gap-2.5 border-b border-border px-0.5 py-2 text-[13px] font-medium last:border-b-0'
-                key={`${outage.startMs}-${eventIndex}`}
+                key={`${outage.startMs}-${canonicalCause(outage.cause)}`}
               >
                 <span className='font-mono text-[10.5px] whitespace-nowrap text-muted-foreground tabular-nums'>
                   {formatClockTimeShort(outage.startMs)}
