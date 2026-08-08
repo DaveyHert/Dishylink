@@ -1,10 +1,10 @@
 // Series definitions for the dashboard charts, plus the builder that turns
-// raw telemetry into the Average/Current/energy config each stat-detail sheet
+// raw telemetry into the Average/Current/energy config each stat-detail panel
 // needs. Kept out of App so the component just wires data to views.
 
 import type { ChartSeries } from "../components/shared/TelemetryChart";
 import type { StatDetail } from "../components/dashboard/StatDetailPanel";
-import type { TelemetrySample, OutageEvent } from "@core/telemetry";
+import { readRouterLatencyMs, type TelemetrySample, type OutageEvent } from "@core/telemetry";
 import type { DishStatusJson } from "@core/dishClient";
 import { formatThroughput, formatThroughputLabel, formatThroughputTick } from "./format";
 
@@ -166,7 +166,7 @@ export function coverageNote(slice: TelemetrySample[], windowMinutes: number): s
 export interface StatDetailInputs {
   status: DishStatusJson | null;
   currentPowerW: number;
-  /** The 5s bucket boundary the power figure settled on, so the sheet's power
+  /** The 5s bucket boundary the power figure settled on, so the panel's power
    *  chart freezes its window on the same instant and steps with the tile. */
   powerWindowEndMs: number;
   /** Pings answered over the last minute, as a percentage, matching the tile's
@@ -178,7 +178,7 @@ export interface StatDetailInputs {
   outageEvents: OutageEvent[];
 }
 
-// Window-INDEPENDENT config for each detail sheet. The sheet owns its own time
+// Window-INDEPENDENT config for each detail panel. The panel owns its own time
 // window (local to the popup) and computes the average / window-energy itself,
 // so it never touches the dashboard's window state.
 /** Builds the detail config for every clickable tile, keyed by tile id. */
@@ -212,7 +212,7 @@ export function buildStatDetails({
     },
     latency: {
       label: "Latency",
-      current: status?.popPingLatencyMs ?? 0,
+      current: readRouterLatencyMs(status?.popPingLatencyMs) ?? 0,
       formatBig: (value) => ({ value: value.toFixed(0), unit: "ms" }),
       series: LATENCY_DETAIL_SERIES,
       formatValue: (value) => `${value.toFixed(0)} ms`,

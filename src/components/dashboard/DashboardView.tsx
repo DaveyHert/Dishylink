@@ -1,9 +1,6 @@
 import { useMemo, useState } from "react";
-import type {
-  DishStatusJson,
-  DishObstructionMapJson,
-} from "@core/dishClient";
-import type { OutageEvent, TelemetrySample } from "@core/telemetry";
+import type { DishStatusJson, DishObstructionMapJson } from "@core/dishClient";
+import { readRouterLatencyMs, type OutageEvent, type TelemetrySample } from "@core/telemetry";
 import type { DishConnectionState } from "../../hooks/useDishTelemetry";
 import type { LiveSparklines } from "../../hooks/useLiveReadings";
 import { StatTile, type StatTileProps as StatTileConfig } from "./StatTile";
@@ -14,7 +11,12 @@ import { SearchingHero } from "./SearchingHero";
 import { DishTerminalCard } from "./DishTerminalCard";
 import { SegmentedControl } from "../ui/segmented-control";
 import { SectionCard } from "../ui/section-card";
-import { THROUGHPUT_SERIES, LATENCY_SERIES, POWER_SERIES, buildStatDetails } from "../../lib/statDetails";
+import {
+  THROUGHPUT_SERIES,
+  LATENCY_SERIES,
+  POWER_SERIES,
+  buildStatDetails,
+} from "../../lib/statDetails";
 import { DetailsModal } from "../ui/details-modal";
 import { StatDetailPanel } from "./StatDetailPanel";
 import { formatThroughputLabel, formatThroughputTick } from "../../lib/format";
@@ -30,8 +32,7 @@ const CHART_TIME_RANGE_FILTER_OPTIONS = CHART_TIME_RANGES.map((range) => ({
   value: String(range.minutes),
 }));
 
-const legendItem =
-  "inline-flex items-center gap-1.5 text-[12px] font-medium text-ink-secondary";
+const legendItem = "inline-flex items-center gap-1.5 text-[12px] font-medium text-ink-secondary";
 
 const THROUGHPUT_LEGEND = [
   { label: "Download", colorVar: "--series-down" },
@@ -117,6 +118,11 @@ export function DashboardView({
     );
   }
 
+  // popPingLatencyMs carries the same non-measurement sentinels (proto3's
+  // omitted zero, an occasional negative) that readRouterLatencyMs already
+  // filters for the router's own reading — the tile must reject them too.
+  const liveLatencyMs = readRouterLatencyMs(status?.popPingLatencyMs);
+
   const statTiles: StatTileConfig[] = [
     {
       label: "Download",
@@ -138,7 +144,7 @@ export function DashboardView({
     },
     {
       label: "Latency",
-      value: (status?.popPingLatencyMs ?? 0).toFixed(0),
+      value: (liveLatencyMs ?? 0).toFixed(0),
       unit: "ms",
       caption: "pop ping, live",
       sparkValues: sparklines.latency,
@@ -255,11 +261,7 @@ export function DashboardView({
 
         {/* Terminal card */}
         {status ? (
-          <DishTerminalCard
-            status={status}
-            stale={stale}
-            onExpand={onExpandTerminal}
-          />
+          <DishTerminalCard status={status} stale={stale} onExpand={onExpandTerminal} />
         ) : (
           <SectionCard
             title='Starlink Dish Terminal'
