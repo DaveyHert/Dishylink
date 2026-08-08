@@ -26,6 +26,9 @@ export default tseslint.config(
       ".output",
       ".wxt",
       "node_modules",
+      // Astro's generated types, written wherever astro is run from.
+      "**/.astro",
+      "landing/dist",
       // The historian's recordings, not source.
       "collector/data",
       "public",
