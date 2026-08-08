@@ -50,4 +50,4 @@ explicit opt-in.
 
 ## Contact
 
-Questions about this policy: hello@daveyhert.com
+Questions about this policy: hello@dishylink.com

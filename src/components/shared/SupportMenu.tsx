@@ -31,7 +31,7 @@ const SUPPORT_LINKS = {
   latestRelease: `${REPO}/releases/latest`,
   reportIssue: `${REPO}/issues/new?labels=bug`,
   requestFeature: `${REPO}/issues/new?labels=enhancement`,
-  contact: "mailto:hello@daveyhert.com",
+  contact: "mailto:hello@dishylink.com",
   x: "https://x.com/daveyhert",
   linkedin: "http://linkedin.com/in/daveyhert/",
   privacyPolicy: `${REPO}/blob/master/PRIVACY.md`,

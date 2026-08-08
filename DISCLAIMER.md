@@ -31,4 +31,4 @@ software, including any disruption to your Starlink service.
 
 ## Contact
 
-hello@daveyhert.com
+hello@dishylink.com
