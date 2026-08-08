@@ -9,6 +9,7 @@
   "license": "MIT",
   "description": "Live dashboard and always-on history recorder for a Starlink kit (unofficial).",
   "scripts": {
+    "postinstall": "wxt prepare",
     "dev": "vite",
     "dev:electron": "node scripts/make-icon.mjs && ELECTRON=1 vite",
     "dev:electron:win": "cross-env ELECTRON=1 vite",
