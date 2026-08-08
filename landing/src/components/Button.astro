@@ -53,7 +53,7 @@ const external = href?.startsWith("http") ?? false;
   target={external ? "_blank" : undefined}
   rel={external ? "noopener noreferrer" : undefined}
   class:list={[
-    "inline-flex items-center justify-center gap-2 border font-semibold transition-colors cursor-pointer",
+    "inline-flex items-center justify-center gap-2 border font-semibold whitespace-nowrap transition-colors cursor-pointer",
     sizes[size],
     variants[variant],
     className,

@@ -98,7 +98,7 @@ const faqs: { q: string; a: string; aside?: string }[] = [
 
         <div class="mx-auto max-w-7xl px-5">
         <p class="mx-auto mt-8 max-w-2xl text-lg text-ink-2 sm:text-xl">
-          Monitor the performance and health of your Starlink system with live speed, latency, power draw, obstruction maps, satellite tracking and per-device data usage.
+          Monitor the performance and health of your Starlink. Features live telemetry, obstruction map, speed test, latency stats, ping success, power draw, live satellite tracking, events and outages log, alerts, and per-device data usage.
         </p>
 
         <div class="mt-10 flex flex-wrap items-center justify-center gap-3">
@@ -113,7 +113,7 @@ const faqs: { q: string; a: string; aside?: string }[] = [
         </div>
 
         <p class="mt-6 font-mono text-[12px] text-ink-3">
-          Free and open source · No account, ever · Nothing leaves your machine
+          Free and open source · No account · Nothing leaves your machine
         </p>
 
         <Figure
@@ -157,7 +157,7 @@ const faqs: { q: string; a: string; aside?: string }[] = [
               Runs in the tray, starts at login, and keeps a permanent history with menu-bar and
               taskbar readouts.
             </p>
-            <div class="mt-6 grid grid-cols-2 gap-3">
+            <div class="mt-6 grid gap-3 sm:grid-cols-2">
               {
                 desktopDownloads.map(({ icon, label, href, variant }) => (
                   <Button href={href} variant={variant} size="sm">
