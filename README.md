@@ -1,12 +1,25 @@
-# Dishylink
+# <img src="docs/logo.svg" alt="" width="34" height="34" align="top"> Dishylink
 
-A local dashboard plus an always-on history recorder for a Starlink kit. It
-talks to the dish and router directly over their LAN gRPC API — no cloud
-required for any of the core dashboard, and nothing you record ever leaves
-the machine. An optional, read-only "connect account" feature can pull your
-own Starlink billing/usage data from `starlink.com` if you choose to sign in.
+[![macOS](https://img.shields.io/badge/macOS-12.0+-black.svg)](https://github.com/DaveyHert/dishylink/releases/latest)
+[![Windows](https://img.shields.io/badge/Windows-10+-0078D4.svg)](https://github.com/DaveyHert/dishylink/releases/latest)
+[![Browsers](https://img.shields.io/badge/Chrome%20%7C%20Edge%20%7C%20Firefox-extension-FF6F00.svg)](#browser-extension-chrome-edge-firefox)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![X](https://img.shields.io/badge/X-%23000000.svg?style=flat&logo=X&logoColor=white)](https://x.com/daveyhert)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-%23FFDD00.svg?style=flat&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/daveyhert)
 
-![status: prototype](https://img.shields.io/badge/status-prototype-blue)
+An open-source Starlink desktop app for macOS, Windows and browsers to monitor
+the performance and health of your Starlink.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="landing/src/assets/shots/dashboard-dark.png">
+  <img alt="The Dishylink dashboard: download, upload, latency, power draw, ping success and sky-obstruction tiles above live throughput, latency and power charts, with the 3D obstruction dome and an events and outages log alongside." src="landing/src/assets/shots/dashboard-light.png">
+</picture>
+
+It reads your dish and router directly over your local network, so it keeps
+working during an outage — which is exactly when you want to see what happened.
+No account, no cloud, no telemetry: everything it records is written to your own
+machine and stays there. Connecting a Starlink account is optional, read-only,
+and only adds your plan and billing figures.
 
 ## What it shows
 
@@ -167,3 +180,10 @@ range reports what fraction of it was actually sampled. See
 
 Everything above is local-only by design: your telemetry, your history, your
 storage, never transmitted.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
+
+Dishylink is an unofficial, independent project with no affiliation to SpaceX or
+Starlink. Starlink is a trademark of Space Exploration Technologies Corp.

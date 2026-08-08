@@ -6,6 +6,7 @@
   "type": "module",
   "main": "dist-electron/main.js",
   "author": "daveyhert <daviehert@gmail.com>",
+  "license": "MIT",
   "description": "Live dashboard and always-on history recorder for a Starlink kit (unofficial).",
   "scripts": {
     "dev": "vite",
