@@ -1,0 +1,44 @@
+---
+import Logo from "./Logo.astro";
+import SectionRule from "./SectionRule.astro";
+import { GITHUB, ISSUES, PRIVACY } from "../consts";
+
+const links = [
+  { label: "Features", href: "#features" },
+  { label: "Privacy", href: PRIVACY },
+  { label: "FAQ", href: "#faq" },
+  { label: "GitHub", href: GITHUB },
+  { label: "Report a bug", href: ISSUES },
+];
+---
+
+<SectionRule />
+<footer class="mx-auto max-w-7xl px-5 py-12">
+  <div class="flex flex-wrap items-center gap-x-8 gap-y-4">
+    <a href="/" class="flex items-center gap-2.5 font-semibold">
+      <Logo class="size-5" />
+      Dishylink
+    </a>
+
+    <nav class="flex flex-wrap gap-x-6 gap-y-2 text-sm text-ink-2" aria-label="Footer">
+      {
+        links.map((link) => (
+          <a
+            href={link.href}
+            target={link.href.startsWith("http") ? "_blank" : undefined}
+            rel={link.href.startsWith("http") ? "noopener noreferrer" : undefined}
+            class="hover:text-ink"
+          >
+            {link.label}
+          </a>
+        ))
+      }
+    </nav>
+  </div>
+
+  <p class="mt-8 text-sm leading-relaxed text-ink-2">
+    Dishylink is an unofficial, independent project. It is not affiliated with, endorsed by, or
+    connected to SpaceX or Starlink, and Starlink is a trademark of Space Exploration
+    Technologies Corp.
+  </p>
+</footer>

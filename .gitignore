@@ -24,3 +24,15 @@ build/icon.png
 # Rendered from the tones in src/lib/alertSound.ts by scripts/make-alert-sounds.mjs,
 # so the chime the tray plays cannot drift from the one the dashboard synthesises.
 build/sounds/
+
+# Landing site (landing/) — Astro build output, local wrangler state, and any
+# env files. Nothing here belongs in the repo, and the env entries keep a stray
+# API key from ever being committed alongside a public site.
+landing/node_modules/
+landing/dist/
+landing/.env
+landing/.dev.vars
+.wrangler/
+# Unanchored: astro writes this cache into whichever directory it is run from,
+# not only the project root.
+.astro/

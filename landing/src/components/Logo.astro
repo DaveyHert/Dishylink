@@ -1,0 +1,25 @@
+---
+// The app mark: dish ring, the satellite it is tracking, and the beam centre.
+// Runs plateless here and takes its colour from the surrounding text, the way
+// it does inside the app.
+interface Props {
+  class?: string;
+}
+const { class: className = "size-7" } = Astro.props;
+---
+
+<svg
+  viewBox="0 0 300 300"
+  fill="none"
+  aria-hidden="true"
+  class={className}
+  style="color: inherit"
+>
+  <g transform="translate(150, 150)">
+    <circle r="95" fill="none" stroke="currentColor" stroke-width="14" opacity="0.85"></circle>
+    <circle cx="67" cy="-67" r="30" fill="var(--color-paper)"></circle>
+    <circle cx="67" cy="-67" r="18" fill="currentColor"></circle>
+    <circle r="34" fill="currentColor"></circle>
+    <circle r="14" fill="var(--color-paper)"></circle>
+  </g>
+</svg>

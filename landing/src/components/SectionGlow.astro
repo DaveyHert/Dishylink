@@ -1,0 +1,114 @@
+---
+// Two section backdrops ported from varxell-team: "halo" is the resources blob,
+// a circle hung above the top edge with constellation arcs sweeping under it;
+// "spotlight" is the careers treatment, a tilted ellipse over a dot grid with a
+// vignette pulling the corners back down. Neither carries the hero's grain.
+import Constellation from "./Constellation.astro";
+
+interface Props {
+  variant: "halo" | "spotlight";
+}
+
+const { variant } = Astro.props;
+
+// Ring diameters in px, all wider than a phone so the arcs run off the sides.
+const rings = [1044, 1476, 1700];
+---
+
+<div class:list={["section-glow", variant]} aria-hidden="true">
+  {
+    variant === "halo" ? (
+      <>
+        {rings.map((d) => (
+          <span class="ring" style={`--d:${d}px`} />
+        ))}
+        <span class="halo" />
+      </>
+    ) : (
+      <>
+        <span class="grid" />
+        <span class="beam" />
+        <span class="vignette" />
+      </>
+    )
+  }
+</div>
+
+{/* Outside the glow layer: that one masks and clips, and this has to escape both. */}
+{variant === "halo" && <Constellation />}
+
+<style>
+  .section-glow {
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 62%;
+    pointer-events: none;
+    overflow: hidden;
+    --glow: rgb(17 17 16 / 0.05);
+    --ring: rgb(17 17 16 / 0.1);
+    /* Everything clears the screenshots below. */
+    -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent);
+    mask-image: linear-gradient(to bottom, #000 55%, transparent);
+  }
+
+  :global([data-theme="dark"]) .section-glow {
+    --glow: rgb(255 255 255 / 0.11);
+    --ring: rgb(255 255 255 / 0.09);
+  }
+
+  /* Hung above the top edge, so only its lower half lights the section. */
+  .halo {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    width: min(1000px, 130vw);
+    aspect-ratio: 1;
+    translate: -50% -45%;
+    background: radial-gradient(circle, var(--glow) 0, transparent 71%);
+  }
+
+  /* Centre sits below the heading block, so only shallow top arcs cross it. */
+  .ring {
+    position: absolute;
+    left: 50%;
+    top: 1030px;
+    width: var(--d);
+    aspect-ratio: 1;
+    translate: -50% -42%;
+    border: 1px solid var(--ring);
+    border-radius: 50%;
+  }
+
+  .ring:nth-of-type(3) {
+    opacity: 0.15;
+  }
+
+  .ring:nth-of-type(-n + 2) {
+    opacity: 0.1;
+  }
+
+  .grid {
+    position: absolute;
+    inset: 0;
+    opacity: 0.5;
+    background-image: radial-gradient(var(--color-rule-2) 0.5px, transparent 0.5px);
+    background-size: 22px 22px;
+  }
+
+  /* The hero's ellipse mirrored, so the two lean opposite ways. */
+  .beam {
+    position: absolute;
+    left: 50%;
+    top: -25%;
+    width: min(1500px, 130%);
+    height: 150%;
+    transform: translateX(-50%) rotate(-45deg);
+    background: radial-gradient(50% 50% at 50% 50%, var(--glow) 0, transparent 100%);
+  }
+
+  .vignette {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 50% 45%, transparent 0, var(--color-paper) 100%);
+  }
+</style>

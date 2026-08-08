@@ -1,0 +1,77 @@
+---
+import Logo from "./Logo.astro";
+import Button from "./Button.astro";
+import Icon from "./Icon.astro";
+import SponsorMenu from "./SponsorMenu.astro";
+import { GITHUB, X, PRIVACY } from "../consts";
+
+const links = [
+  { label: "Features", href: "#features" },
+  { label: "Privacy", href: PRIVACY },
+  { label: "FAQ", href: "#faq" },
+  { label: "Contribute", href: GITHUB },
+];
+
+const socials = [
+  { href: GITHUB, icon: "github", label: "Dishylink on GitHub" },
+  { href: X, icon: "x", label: "@daveyhert on X" },
+] as const;
+---
+
+<!-- The blur lives on a pseudo-element: backdrop-filter on the header itself
+     would make it a backdrop root and flatten the sponsor menu's own blur. -->
+<header
+  class="sticky top-0 z-50 before:absolute before:inset-0 before:-z-10 before:bg-paper/85 before:backdrop-blur-md"
+>
+  <nav
+    class="mx-auto flex h-14 max-w-7xl items-center gap-6"
+    aria-label="Primary"
+  >
+    <a href="/" class="flex items-center gap-2 text-xl font-semibold tracking-tight">
+      <Logo class="size-10" />
+      Dishylink
+    </a>
+
+    <ul class="ml-4 hidden items-center gap-6 text-sm text-ink-2 md:flex">
+      {
+        links.map((link) => (
+          <li>
+            <a
+              href={link.href}
+              target={link.href.startsWith("http") ? "_blank" : undefined}
+              rel={link.href.startsWith("http") ? "noopener noreferrer" : undefined}
+              class="cursor-pointer transition-colors hover:text-ink"
+            >
+              {link.label}
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+
+    <div class="ml-auto flex items-center gap-1.5">
+      <SponsorMenu />
+
+      <Button
+        id="theme-toggle"
+        type="button"
+        aria-label="Toggle colour theme"
+        variant="ghost"
+        size="icon"
+      >
+        <svg viewBox="0 0 24 24" class="size-4.5" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M12 3v1.5M12 19.5V21M3 12h1.5M19.5 12H21M5.6 5.6l1.1 1.1M17.3 17.3l1.1 1.1M18.4 5.6l-1.1 1.1M6.7 17.3l-1.1 1.1" stroke-linecap="round"></path>
+          <circle cx="12" cy="12" r="4"></circle>
+        </svg>
+      </Button>
+
+      {
+        socials.map((social) => (
+          <Button href={social.href} variant="ghost" size="icon" aria-label={social.label}>
+            <Icon name={social.icon} class="size-4.5" />
+          </Button>
+        ))
+      }
+    </div>
+  </nav>
+</header>

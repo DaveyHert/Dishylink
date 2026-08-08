@@ -1,0 +1,41 @@
+---
+// Renders with no wrapper element of its own, so the centred layouts can keep
+// these as direct children of the section container — LandingSection's
+// `[&>h2]:mx-auto` only reaches one level down.
+interface Props {
+  title: string;
+  body: string[];
+  bullets?: [term: string, detail: string][];
+  /** Centred layouts cap the measure and carry the top margin here. */
+  centred?: boolean;
+}
+
+const { title, body, bullets, centred = false } = Astro.props;
+---
+
+<h2 class:list={["text-section font-semibold text-balance", centred && "mt-8 max-w-3xl"]}>
+  {title}
+</h2>
+
+{
+  body.map((paragraph, i) => (
+    <p class:list={[i === 0 ? "mt-5 text-lg" : "mt-4", "text-ink-2", centred && "max-w-2xl"]}>
+      {paragraph}
+    </p>
+  ))
+}
+
+{
+  bullets && (
+    <ul class="mt-8 space-y-3.5">
+      {bullets.map(([term, detail]) => (
+        <li class="flex gap-3.5">
+          <span class="mt-2 size-1.5 flex-none rounded-full bg-warm" />
+          <span>
+            <strong class="font-semibold">{term}</strong> <span class="text-ink-2">— {detail}</span>
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}

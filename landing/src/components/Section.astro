@@ -1,0 +1,54 @@
+---
+import LandingSection from "./LandingSection.astro";
+import SectionProse from "./SectionProse.astro";
+import Figure from "./Figure.astro";
+import VideoFigure from "./VideoFigure.astro";
+import type { SectionContent } from "../data/sections";
+
+type Props = SectionContent;
+
+const { label, id, tint, backdrop, layout, title, body, bullets, media } = Astro.props;
+
+// The four arrangements every feature section is built from. Order comes from
+// the layout too, so no section hand-places its own media.
+const grids = {
+  "media-right": "mt-8 grid gap-12 lg:grid-cols-[1fr_1.15fr] lg:items-center",
+  "media-left": "mt-8 grid gap-12 lg:grid-cols-[1.15fr_1fr] lg:items-center",
+  "two-media": "mt-10 grid gap-5 lg:grid-cols-2",
+  "full-media": "",
+};
+
+const centred = layout === "two-media" || layout === "full-media";
+const prose = { title, body, bullets };
+---
+
+<LandingSection label={label} id={id} tint={tint} backdrop={backdrop} center={centred}>
+  {
+    centred ? (
+      <>
+        <SectionProse {...prose} centred />
+        {layout === "full-media" ? (
+          media[0].video ? (
+            <VideoFigure {...media[0]} video={media[0].video} class="mt-10" />
+          ) : (
+            <Figure {...media[0]} class="mt-10" />
+          )
+        ) : (
+          <div class={grids[layout]}>
+            {media.map((item) => (
+              <Figure {...item} />
+            ))}
+          </div>
+        )}
+      </>
+    ) : (
+      <div class={grids[layout]}>
+        {layout === "media-left" && <Figure {...media[0]} />}
+        <div>
+          <SectionProse {...prose} />
+        </div>
+        {layout === "media-right" && <Figure {...media[0]} />}
+      </div>
+    )
+  }
+</LandingSection>

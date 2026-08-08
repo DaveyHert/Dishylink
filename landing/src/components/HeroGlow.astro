@@ -1,0 +1,117 @@
+---
+// Hero backdrop: tilted haze, film grain and stars, scoped to the text band.
+
+// `x` is a vw offset from the band's centre, so the scatter narrows with the
+// column and needs no second set of positions. Negative delays stagger.
+const stars = [
+  { y: "7%", x: -8, size: 16, tilt: 18, delay: -0.5 },
+  { y: "5%", x: 15, size: 5, tilt: 18, delay: -0.5 },
+  { y: "24%", x: 2, size: 13, tilt: -8, delay: -1.2 },
+  { y: "15%", x: 28, size: 18, tilt: -24, delay: 0 },
+
+  { y: "17%", x: -29, size: 21, tilt: 6, delay: -0.9 },
+  { y: "22%", x: 21, size: 14, tilt: -14, delay: -1.5 },
+  { y: "29.5%", x: -15, size: 15, tilt: 12, delay: -0.3 },
+
+
+];
+---
+
+<div class="hero-glow" aria-hidden="true">
+  <span class="glow"></span>
+  {
+    stars.map(({ y, x, size, tilt, delay }) => (
+      <span
+        class="star"
+        style={`--y:${y};--x:${x}vw;--size:${size}px;--tilt:${tilt}deg;animation-delay:${delay}s`}
+      />
+    ))
+  }
+  <span class="grain"></span>
+</div>
+
+<style>
+  .hero-glow {
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 72%;
+    pointer-events: none;
+    overflow: hidden;
+    --glow: rgb(17 17 16 / 0.05);
+    --star: rgb(17 17 16 / 0.4);
+    --grain-opacity: 0.05;
+    --grain-blend: multiply;
+    /* Ramps in at the top or the sticky nav's bg-paper/85 leaves a seam. */
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 9%, #000 40%, transparent);
+    mask-image: linear-gradient(to bottom, transparent, #000 9%, #000 40%, transparent);
+  }
+
+  :global([data-theme="dark"]) .hero-glow {
+    --glow: rgb(255 255 255 / 0.13);
+    --star: rgb(255 255 255 / 0.65);
+    --grain-opacity: 0.13;
+    --grain-blend: soft-light;
+  }
+
+  /* Rotated so the ellipse sits off-axis rather than reading as a spotlight. */
+  .glow {
+    position: absolute;
+    left: 50%;
+    top: -18%;
+    width: min(1700px, 135%);
+    height: 128%;
+    transform: translateX(-50%) rotate(45deg);
+    background: radial-gradient(50% 50% at 50% 50%, var(--glow) 0, transparent 100%);
+  }
+
+  /* Size and tilt stay off `scale` — the twinkle owns it. */
+  .star {
+    position: absolute;
+    top: var(--y);
+    left: calc(50% + var(--x));
+    width: var(--size);
+    height: var(--size);
+    transform: rotate(var(--tilt));
+    filter: blur(0.5px);
+    background: radial-gradient(circle at 50% 50%, var(--star) 0, transparent 18%);
+    animation: twinkle 1.7s ease-in-out infinite alternate;
+  }
+
+  @keyframes twinkle {
+    from {
+      scale: 0.6;
+      opacity: 0.4;
+    }
+
+    to {
+      scale: 1;
+      opacity: 0.85;
+    }
+  }
+
+  .star::before,
+  .star::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 1px;
+    height: 100%;
+    margin-left: -0.5px;
+    background: linear-gradient(to bottom, transparent, var(--star), transparent);
+  }
+
+  .star::after {
+    transform: rotate(78deg);
+  }
+
+  /* A tile rather than filter: url(#…) — one rasterisation, no global id. */
+  .grain {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    opacity: var(--grain-opacity);
+    mix-blend-mode: var(--grain-blend);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+</style>

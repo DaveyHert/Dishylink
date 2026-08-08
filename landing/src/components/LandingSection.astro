@@ -1,0 +1,47 @@
+---
+import SectionRule from "./SectionRule.astro";
+import SectionGlow from "./SectionGlow.astro";
+
+// The shell every numbered section shares: a divider rule, the centred
+// container, and the mono "NN / Label" eyebrow. It owns layout only. The label
+// is plain copy the caller passes in, and the number is a CSS counter that
+// counts sections in the order they render — so rewording a label or moving a
+// section in index.astro needs no edit here and nothing to keep in sync.
+interface Props {
+  /** The section's name, shown after its number. */
+  label: string;
+  /** Paint the alternating surface tint. */
+  tint?: boolean;
+  /** Anchor id for nav/footer links. */
+  id?: string;
+  /** Centre the slotted heading and prose — the layout the two-figure sections use. */
+  center?: boolean;
+  /** Decorative backdrop behind the heading block. */
+  backdrop?: "halo" | "spotlight";
+}
+
+const { label, tint = false, id, center = false, backdrop } = Astro.props;
+---
+
+<section
+  id={id}
+  class:list={[
+    "[counter-increment:section]",
+    tint && "bg-surface/40",
+    backdrop && "relative overflow-hidden",
+  ]}
+>
+  <SectionRule />
+  {backdrop && <SectionGlow variant={backdrop} />}
+  <div
+    class:list={[
+      "relative mx-auto max-w-7xl px-5 py-24 lg:py-32",
+      center && "text-center [&>h2]:mx-auto [&>p]:mx-auto",
+    ]}
+  >
+    <div class="flex items-center gap-3.5 text-left font-mono text-[11px] uppercase tracking-[0.14em] text-ink-3">
+      <span class="before:[content:counter(section,decimal-leading-zero)'_/_']">{label}</span>
+    </div>
+    <slot />
+  </div>
+</section>

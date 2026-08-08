@@ -1,0 +1,235 @@
+---
+import "../styles/global.css";
+import Button from "../components/Button.astro";
+import Icon from "../components/Icon.astro";
+
+interface Props {
+  title: string;
+  description: string;
+  /** Page path for the canonical URL, e.g. "/" or "/privacy/". */
+  path?: string;
+}
+
+const { title, description, path = "/" } = Astro.props;
+const canonical = new URL(path, Astro.site ?? "https://dishylink.com").toString();
+const ogImage = new URL("/og.png", Astro.site ?? "https://dishylink.com").toString();
+
+// Marked up as an application rather than a product page: it is what earns the
+// rich result for brand queries, and "free" is a fact search engines can show.
+const appSchema = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "Dishylink",
+  applicationCategory: "UtilitiesApplication",
+  operatingSystem: "macOS, Windows, Chrome, Edge, Firefox",
+  description,
+  url: canonical,
+  isAccessibleForFree: true,
+  license: "https://opensource.org/licenses/MIT",
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+};
+
+const faqSchema = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: [
+    {
+      "@type": "Question",
+      name: "Does Dishylink need a Starlink account or an internet connection?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "No. Dishylink talks to your dish and router directly over your local network, so it keeps working during an outage — which is exactly when you want to see what happened. Signing in to a Starlink account is optional and read-only, and only adds your plan and billing figures.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Is my telemetry sent anywhere?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Never. Everything Dishylink records is written to your own machine and stays there. There is no cloud sync, no analytics and no tracking of any kind.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Which platforms does Dishylink run on?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "A native desktop app for macOS and Windows, and a browser extension for Chrome, Edge and Firefox. The desktop app is the one that records around the clock.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Is Dishylink an official Starlink app?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "No. Dishylink is an unofficial, independent project and is not affiliated with, endorsed by or connected to SpaceX or Starlink.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "How much does Dishylink cost?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Nothing. Dishylink is free and open source, with no paid tier and no feature held back behind one.",
+      },
+    },
+  ],
+};
+---
+
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Dishylink" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImage} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+
+    <script is:inline set:html={JSON.stringify(appSchema)} type="application/ld+json" />
+    <script is:inline set:html={JSON.stringify(faqSchema)} type="application/ld+json" />
+
+  </head>
+  <body class="bg-paper text-ink antialiased">
+    <slot />
+
+    {/* Shared image lightbox. Triggered by any [data-lightbox] element carrying
+        data-src-light / data-src-dark (see Figure.astro). */}
+    <div
+      id="lightbox"
+      class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+      aria-hidden="true"
+    >
+      <Button
+        id="lightbox-close"
+        type="button"
+        aria-label="Close"
+        variant="overlay"
+        size="icon-lg"
+        class="absolute top-4 right-4"
+      >
+        <Icon name="close" class="size-5" />
+      </Button>
+      <img id="lightbox-img" src="" alt="" class="max-h-[92vh] max-w-[92vw] rounded-lg object-contain shadow-2xl" />
+    </div>
+
+    {/* Zoom-in motion: the backdrop fades while the shot scales up toward the
+        viewer. Toggled by the `is-open` class the script adds a frame after
+        the box is shown. */}
+    <style is:global>
+      #lightbox {
+        opacity: 0;
+        transition: opacity 200ms ease;
+      }
+      #lightbox.is-open {
+        opacity: 1;
+      }
+      #lightbox #lightbox-img {
+        transform: scale(0.88);
+        transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1);
+        will-change: transform;
+      }
+      #lightbox.is-open #lightbox-img {
+        transform: scale(1);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #lightbox,
+        #lightbox #lightbox-img {
+          transition: none;
+        }
+      }
+    </style>
+
+    <script is:inline>
+      (function () {
+        var box = document.getElementById("lightbox");
+        var img = document.getElementById("lightbox-img");
+        if (!box || !img) return;
+
+        // The trigger that opened the box, so focus can return to it on close.
+        var opener = null;
+        var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+        function open(src, alt, trigger) {
+          opener = trigger || null;
+          img.setAttribute("src", src);
+          img.setAttribute("alt", alt || "");
+          box.classList.remove("hidden");
+          box.classList.add("flex");
+          box.setAttribute("aria-hidden", "false");
+          document.body.style.overflow = "hidden";
+          // Flip to the open state a frame later so the zoom/fade animates from
+          // the base transform rather than snapping straight to it.
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              box.classList.add("is-open");
+            });
+          });
+        }
+        function hideNow() {
+          box.classList.add("hidden");
+          box.classList.remove("flex");
+          img.setAttribute("src", "");
+          if (opener) opener.focus();
+          opener = null;
+        }
+        function close() {
+          box.setAttribute("aria-hidden", "true");
+          document.body.style.overflow = "";
+          box.classList.remove("is-open");
+          if (reduced) return hideNow();
+          // Wait for the fade-out to finish before removing it from the layout.
+          var done = false;
+          function finish() {
+            if (done) return;
+            done = true;
+            box.removeEventListener("transitionend", onEnd);
+            hideNow();
+          }
+          function onEnd(e) {
+            if (e.target === box && e.propertyName === "opacity") finish();
+          }
+          box.addEventListener("transitionend", onEnd);
+          setTimeout(finish, 340);
+        }
+
+        document.querySelectorAll("[data-lightbox]").forEach(function (el) {
+          el.addEventListener("click", function () {
+            var dark = document.documentElement.dataset.theme === "dark";
+            var src = el.getAttribute(dark ? "data-src-dark" : "data-src-light");
+            if (src) open(src, el.getAttribute("data-alt"), el);
+          });
+        });
+
+        box.addEventListener("click", function (e) {
+          if (e.target === box || (e.target.closest && e.target.closest("#lightbox-close"))) close();
+        });
+        document.addEventListener("keydown", function (e) {
+          if (e.key === "Escape" && !box.classList.contains("hidden")) close();
+        });
+      })();
+    </script>
+
+    <script is:inline>
+      // Deliberately not persisted: the choice lasts the visit, and every
+      // arrival starts dark.
+      document.getElementById("theme-toggle")?.addEventListener("click", function () {
+        document.documentElement.dataset.theme =
+          document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+      });
+    </script>
+  </body>
+</html>

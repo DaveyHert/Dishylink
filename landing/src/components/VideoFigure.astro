@@ -1,0 +1,99 @@
+---
+import type { ImageMetadata } from "astro";
+
+// A still with a play control over it. The <video> is created on click, so the
+// file is never requested by visitors who don't ask for it.
+//
+// The poster is served as the original file rather than a resized derivative:
+// it stands in for a frame of the video and has no lightbox to open, so this is
+// the only quality the visitor ever gets.
+interface Props {
+  light: ImageMetadata;
+  dark?: ImageMetadata;
+  alt: string;
+  video: string;
+  class?: string;
+}
+
+const { light, dark, alt, video, class: className = "" } = Astro.props;
+
+const frame = "overflow-hidden rounded-xl border border-rule bg-surface";
+---
+
+<div class:list={["group relative", frame, className]} data-video-figure data-src={video}>
+  <img
+    src={light.src}
+    width={light.width}
+    height={light.height}
+    alt={alt}
+    loading="lazy"
+    data-poster
+    class:list={["w-full", dark && "dark:hidden"]}
+  />
+  {
+    dark && (
+      <img
+        src={dark.src}
+        width={dark.width}
+        height={dark.height}
+        alt={alt}
+        loading="lazy"
+        data-poster
+        class="hidden w-full dark:block"
+      />
+    )
+  }
+
+  <button
+    type="button"
+    class="absolute inset-0 flex cursor-pointer items-center justify-center bg-black/20 transition-colors hover:bg-black/10"
+    aria-label="Play"
+  >
+    <span
+      class="flex size-16 items-center justify-center rounded-full bg-white/90 text-black shadow-[0_8px_30px_rgb(0_0_0/0.35)] transition-all group-hover:scale-105"
+    >
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" class="ml-1 size-7">
+        <path d="M8 5v14l11-7z"></path>
+      </svg>
+    </span>
+  </button>
+</div>
+
+<script>
+  document.querySelectorAll<HTMLElement>("[data-video-figure]").forEach((figure) => {
+    const overlay = figure.querySelector("button");
+    const badge = overlay?.firstElementChild;
+    if (!overlay || !badge) return;
+
+    // Playing, the overlay gets out of the way entirely; paused, it comes back
+    // as the play affordance so the frame stays its own control.
+    function showPlaying(playing: boolean) {
+      overlay!.classList.toggle("bg-black/20", !playing);
+      overlay!.classList.toggle("hover:bg-black/10", !playing);
+      badge!.classList.toggle("opacity-0", playing);
+      badge!.classList.toggle("scale-90", playing);
+      overlay!.setAttribute("aria-label", playing ? "Pause" : "Play");
+    }
+
+    overlay.addEventListener("click", () => {
+      const playing = figure.querySelector("video");
+      if (playing) {
+        if (playing.paused) playing.play();
+        else playing.pause();
+        return;
+      }
+
+      const video = document.createElement("video");
+      video.src = figure.dataset.src ?? "";
+      video.autoplay = true;
+      video.playsInline = true;
+      video.className = "w-full";
+      video.addEventListener("play", () => showPlaying(true));
+      video.addEventListener("pause", () => showPlaying(false));
+      video.addEventListener("ended", () => showPlaying(false));
+
+      figure.querySelectorAll("[data-poster]").forEach((poster) => poster.remove());
+      figure.prepend(video);
+    });
+  });
+</script>

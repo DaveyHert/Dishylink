@@ -1,0 +1,61 @@
+---
+import { Image } from "astro:assets";
+import type { ImageMetadata } from "astro";
+
+// One framed figure: a theme-matched image that opens full size in the lightbox
+// on click. Shows the light capture in light mode and the dark one when a `dark`
+// variant is given. The lightbox itself lives once in Base.astro; this only
+// marks the trigger and carries the two source URLs.
+interface Props {
+  light: ImageMetadata;
+  dark?: ImageMetadata;
+  alt: string;
+  /** Responsive candidate widths. Defaults suit the two-up half-column figures. */
+  widths?: number[];
+  sizes?: string;
+  /** Extra classes on the frame (e.g. the hero's drop shadow, a top margin). */
+  class?: string;
+  /** Load eagerly with high priority — for above-the-fold figures only. */
+  priority?: boolean;
+}
+
+const {
+  light,
+  dark,
+  alt,
+  widths = [640, 1000, 1600],
+  sizes = "(max-width: 1024px) 100vw, 600px",
+  class: className = "",
+  priority = false,
+} = Astro.props;
+
+// Shared frame, so every figure on the page reads as one set.
+const frame = "overflow-hidden rounded-xl border border-rule bg-surface";
+
+const imgProps = {
+  widths,
+  sizes,
+  format: "webp" as const,
+  quality: 95,
+  loading: priority ? ("eager" as const) : ("lazy" as const),
+  ...(priority ? { fetchpriority: "high" as const } : {}),
+};
+
+// The page always opens dark, so a light capture is never the one on screen.
+const lightProps = dark
+  ? { ...imgProps, loading: "lazy" as const, fetchpriority: undefined }
+  : imgProps;
+---
+
+<button
+  type="button"
+  class:list={["group block w-full cursor-zoom-in", frame, className]}
+  data-lightbox
+  data-src-light={light.src}
+  data-src-dark={(dark ?? light).src}
+  data-alt={alt}
+  aria-label="Open this image full size"
+>
+  <Image src={light} alt={alt} {...lightProps} class:list={["w-full", dark && "dark:hidden"]} />
+  {dark && <Image src={dark} alt={alt} {...imgProps} class="hidden w-full dark:block" />}
+</button>

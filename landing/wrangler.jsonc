@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "dishylink-landing",
+  // No Worker code — this is a static asset upload. Nothing here reads a secret,
+  // and account_id is deliberately absent: pass CLOUDFLARE_ACCOUNT_ID as an env
+  // var so no account identifier is committed to a public repo.
+  "compatibility_date": "2026-08-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page"
+  },
+  // Both hosts serve the same assets. The apex is the canonical one — every page
+  // emits <link rel="canonical"> against it (Base.astro), so search engines fold
+  // the www copy into the apex rather than treating it as duplicate content.
+  // Cloudflare creates and manages the DNS record for each custom_domain route.
+  "routes": [
+    { "pattern": "dishylink.com", "custom_domain": true },
+    { "pattern": "www.dishylink.com", "custom_domain": true }
+  ]
+}

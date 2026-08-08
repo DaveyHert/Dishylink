@@ -1,0 +1,80 @@
+---
+// Two thin streaks that fly out of the hero, ported from the varxell-team
+// React/motion version. Same rhythm, no client JS: one 27.2s cycle per star,
+// four flashes each, and they leave together on every fourth phase.
+---
+
+<div class="shooting-stars" aria-hidden="true">
+  <span class="star star-a"></span>
+  <span class="star star-b"></span>
+</div>
+
+<style>
+  .shooting-stars {
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 70%;
+    pointer-events: none;
+    /* Streak reads as light on the near-black page; on paper it has to darken
+       instead, or it is invisible. */
+    --star: rgb(17 17 16 / 0.3);
+  }
+
+  :global([data-theme="dark"]) .shooting-stars {
+    --star: rgb(255 255 255 / 0.55);
+  }
+
+  .star {
+    position: absolute;
+    bottom: 0;
+    width: 300px;
+    height: 1px;
+    opacity: 0;
+    background: linear-gradient(90deg, transparent, var(--star) 50%, transparent);
+    animation-duration: 27.2s;
+    animation-iteration-count: infinite;
+    animation-timing-function: linear;
+  }
+
+  .star-a {
+    right: 0;
+    animation-name: star-a;
+  }
+
+  .star-b {
+    left: 120px;
+    animation-name: star-b;
+  }
+
+  /* Each flash is 0.6s of a 27.2s cycle, so 2.206%. The pair fires together at
+     0%, then alternates 1.5s apart for three phases before meeting again. */
+  @keyframes star-a {
+    0% { transform: translate(0, 0) rotate(45deg); opacity: 1; animation-timing-function: ease-in-out; }
+    2.206% { transform: translate(-1100px, -1100px) rotate(45deg); opacity: 0; }
+    2.216%, 15.064% { transform: translate(0, 0) rotate(45deg); opacity: 0; }
+    15.074% { transform: translate(0, 0) rotate(45deg); opacity: 1; animation-timing-function: ease-in-out; }
+    17.279% { transform: translate(-1100px, -1100px) rotate(45deg); opacity: 0; }
+    17.289%, 43.372% { transform: translate(0, 0) rotate(45deg); opacity: 0; }
+    43.382% { transform: translate(0, 0) rotate(45deg); opacity: 1; animation-timing-function: ease-in-out; }
+    45.588% { transform: translate(-1100px, -1100px) rotate(45deg); opacity: 0; }
+    45.598%, 71.681% { transform: translate(0, 0) rotate(45deg); opacity: 0; }
+    71.691% { transform: translate(0, 0) rotate(45deg); opacity: 1; animation-timing-function: ease-in-out; }
+    73.897% { transform: translate(-1100px, -1100px) rotate(45deg); opacity: 0; }
+    73.907%, 100% { transform: translate(0, 0) rotate(45deg); opacity: 0; }
+  }
+
+  @keyframes star-b {
+    0% { transform: translate(0, 0) rotate(-45deg); opacity: 1; animation-timing-function: ease-in-out; }
+    2.206% { transform: translate(1100px, -1100px) rotate(-45deg); opacity: 0; }
+    2.216%, 22.784% { transform: translate(0, 0) rotate(-45deg); opacity: 0; }
+    22.794% { transform: translate(0, 0) rotate(-45deg); opacity: 1; animation-timing-function: ease-in-out; }
+    25% { transform: translate(1100px, -1100px) rotate(-45deg); opacity: 0; }
+    25.01%, 51.093% { transform: translate(0, 0) rotate(-45deg); opacity: 0; }
+    51.103% { transform: translate(0, 0) rotate(-45deg); opacity: 1; animation-timing-function: ease-in-out; }
+    53.309% { transform: translate(1100px, -1100px) rotate(-45deg); opacity: 0; }
+    53.319%, 79.402% { transform: translate(0, 0) rotate(-45deg); opacity: 0; }
+    79.412% { transform: translate(0, 0) rotate(-45deg); opacity: 1; animation-timing-function: ease-in-out; }
+    81.618% { transform: translate(1100px, -1100px) rotate(-45deg); opacity: 0; }
+    81.628%, 100% { transform: translate(0, 0) rotate(-45deg); opacity: 0; }
+  }
+</style>

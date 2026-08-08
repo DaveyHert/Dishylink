@@ -1,0 +1,100 @@
+/* Dishylink landing — theme tokens and the few rules that have no Tailwind
+   utility. Everything else is utilities in the components, same as the app's
+   src/index.css.
+
+   Direction taken from the app's instrument themes: warm paper rather than
+   white, ink rather than slate, a single teal accent, and the download-blue /
+   upload-green pair the charts use. Not a copy of the app's token set — this
+   page has its own display scale and wants more contrast than a dashboard. */
+
+@import "tailwindcss";
+/* Latin subsets only. The full Fontsource packages ship Cyrillic, Greek and
+   Vietnamese too — 44 files for a page written in English. */
+@import "@fontsource/barlow/latin-400.css";
+@import "@fontsource/barlow/latin-500.css";
+@import "@fontsource/barlow/latin-600.css";
+@import "@fontsource/barlow/latin-700.css";
+@import "@fontsource/ibm-plex-mono/latin-400.css";
+@import "@fontsource/ibm-plex-mono/latin-500.css";
+/* Manrope drives the hero display only — a monolinear, circular geometric.
+   Base rows sit at 500; highlighted words step to 700. */
+@import "@fontsource/manrope/latin-500.css";
+@import "@fontsource/manrope/latin-700.css";
+
+/* Theme follows the data-theme attribute, as the app's does, so the toggle and
+   the OS preference resolve through one mechanism (Base.astro sets it before
+   first paint). */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme {
+  --color-paper: #ffffff;
+  --color-surface: #f4f3ee;
+  --color-ink: #111110;
+  --color-ink-2: #55544f;
+  --color-ink-3: #8a8880;
+  --color-rule: #e7e5dc;
+  --color-rule-2: #c9c7bc;
+
+  --color-warm: #0f766e;
+  --color-gold: #b7791f;
+  --color-down: #2f6fed;
+  --color-up: #1ba85f;
+  --color-good: #16a34a;
+  --color-crit: #e11d48;
+
+  --font-sans: "Barlow", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --font-display: "Manrope", system-ui, sans-serif;
+
+  /* A display scale that actually steps — marketing headlines want more range
+     than a dashboard's 12→24px. Used as text-display / text-section. */
+  --text-display: clamp(2.75rem, 1.2rem + 6.2vw, 6rem);
+  --text-display--line-height: 0.94;
+  --text-display--letter-spacing: -0.025em;
+  --text-section: clamp(1.9rem, 1.1rem + 2.6vw, 3.1rem);
+  --text-section--line-height: 1.04;
+  --text-section--letter-spacing: -0.02em;
+}
+
+/* The same token names re-pointed for dark. Utilities compile to var(--color-*),
+   so reassigning here flips every one of them. */
+[data-theme="dark"] {
+  --color-paper: #000000;
+  --color-surface: #121211;
+  --color-ink: #f7f6f2;
+  --color-ink-2: #888888;
+  --color-ink-3: #7c7a73;
+  --color-rule: #232322;
+  --color-rule-2: #3a3a38;
+  --color-warm: #2dd4bf;
+  --color-gold: #e0a422;
+  --color-down: #5b9bff;
+  --color-up: #4ade80;
+  --color-good: #4db450;
+  --color-crit: #f43f5e;
+}
+
+/* Soft horizontal fade on the two large hero lines, so their outer edges
+   dissolve into the page the way the reference headline does. Left off the
+   byline on purpose — it runs wider and the fade would eat the "app." word. */
+.hero-line-fade {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 28%, #000 72%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 28%, #000 72%, transparent);
+}
+
+/* Base page colors — no utility applies to the root element itself. */
+html {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  scroll-behavior: smooth;
+  /* Keep the gutter reserved so the lightbox's overflow lock can't shift the page. */
+  scrollbar-gutter: stable;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
