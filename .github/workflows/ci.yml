@@ -57,6 +57,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npx playwright install --with-deps chromium
       # The dish and router are not reachable from CI. Everything under test here
       # is pure logic and rendering; nothing dials 192.168.100.1.
       - run: npm test
