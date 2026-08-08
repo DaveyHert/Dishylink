@@ -63,7 +63,7 @@ export const sections: SectionContent[] = [
     layout: "media-right",
     title: "Dish alignment you can act on.",
     body: [
-      "The dish knows the rotation and tilt it wants and where it's actually pointed. Dishylink lets you see the target rotation and tilt to accurately fine-tune your dish for the strongest possible signal. Its visualized so you can see at a glance whether it's aligned, and the exact nudge in degrees when it isn't.",
+      "Dishylink lets you see the desired target rotation and tilt of your dish to accurately fine-tune it for the strongest possible signal. Its visualized so you can see at a glance whether it's aligned, and the exact nudge in degrees when it isn't.",
     ],
     media: [
       screenshot(

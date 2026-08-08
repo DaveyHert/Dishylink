@@ -1,5 +1,5 @@
 // The ranges the bar chart offers, and how a bucket's timestamp is labelled at
-// each one. Held apart from the chart so the sheets can build their tab strip
+// each one. Held apart from the chart so the panels can build their tab strip
 // and read labels without importing the chart itself.
 
 import type { EnergyRange } from "../../hooks/useEnergyHistory";

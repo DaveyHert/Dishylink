@@ -331,9 +331,9 @@ export interface AlertState extends AlertSpec {
  *
  * A device that has stopped answering is critical and is raised the instant it
  * happens. Nothing here waits to see whether it recovers: a delay would mean the
- * top bar showing "dish unreachable" while the alert panel still said "no active
- * alerts", and the whole point of an alert is that it arrives when the thing
- * goes wrong, not once it has been wrong for a while.
+ * connection status indicator showing "dish unreachable" while the alert panel
+ * still said "no active alerts", and the whole point of an alert is that it
+ * arrives when the thing goes wrong, not once it has been wrong for a while.
  */
 export const SYSTEM_ALERTS = {
   dishUnreachable: {

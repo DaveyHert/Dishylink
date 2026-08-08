@@ -1,4 +1,4 @@
-// Four corner brackets — opens the terminal card into its full detail sheet.
+// Four corner brackets — opens the terminal card into its full detail panel.
 
 export function ExpandIcon({
   size = 16,

@@ -71,7 +71,7 @@ function NetworkPanelBody({
   const [tab, setTab] = useState<"devices" | "nodes">("devices");
   useOuiRegistry();
   // Radio temps come from the historian, not the router directly. Poll only
-  // while the panel is mounted (i.e. the Network sheet is open).
+  // while the panel is mounted (i.e. the Network panel is open).
   const radio = useRadioTemps();
   // The viewer's own address(es), to flag "This device" in the list.
   const self = useSelfIdentity();
@@ -177,7 +177,7 @@ function NetworkPanelBody({
             ))}
           </ListSection>
           {/* The device list is where a split record is noticed — one name on two
-              entries — so the question belongs here as well as on the usage sheet.
+              entries — so the question belongs here as well as on the usage panel.
               Outside ListSection, whose rows scroll within a fixed height: a
               question placed among them would sit below the fold on a busy network.
               Both surfaces read the same candidate list, so answering in one closes

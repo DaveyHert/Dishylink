@@ -65,10 +65,10 @@ export interface StatDetail {
   /** Show the persistent day/week/month energy section (Power detail only). */
   showEnergyHistory?: boolean;
   /** Freezes the chart's newest edge on a fixed instant (Power detail only, the
-   *  5s bucket boundary), so the sheet's chart steps in lockstep with the tile
+   *  5s bucket boundary), so the panel's chart steps in lockstep with the tile
    *  and the dashboard chart instead of sliding every second. */
   chartWindowEndMs?: number;
-  /** Window the sheet opens on (defaults to 1H). */
+  /** Window the panel opens on (defaults to 1H). */
   defaultWindowMinutes?: number;
 }
 
@@ -91,7 +91,7 @@ interface StatDetailPanelProps {
 
 export function StatDetailPanel({ detail, samples }: StatDetailPanelProps) {
   // Local to the popup — decoupled from the dashboard's window. Fresh mount per
-  // open (the sheet unmounts on close), so this initializer picks the per-tile
+  // open (the panel unmounts on close), so this initializer picks the per-tile
   // default each time.
   const [windowMinutes, setWindowMinutes] = useState(detail.defaultWindowMinutes ?? 15);
 
@@ -106,7 +106,7 @@ export function StatDetailPanel({ detail, samples }: StatDetailPanelProps) {
     () => windowTail(samples, windowMinutes, nowMs),
     [samples, windowMinutes, nowMs],
   );
-  // The power sheet freezes its chart on the 5s boundary, so that chart trims to
+  // The power panel freezes its chart on the 5s boundary, so that chart trims to
   // the same instant — otherwise a live floor drops samples still inside the
   // frozen window and creeps its left edge every second. The figures and energy
   // below keep `windowed` (cut to now), so their math is untouched.
@@ -207,7 +207,7 @@ export function StatDetailPanel({ detail, samples }: StatDetailPanelProps) {
         height={220}
       />
 
-      {/* Two lines on one axis need naming; a single line is named by the sheet
+      {/* Two lines on one axis need naming; a single line is named by the panel
           title. Same placement as the official app: dots under the chart. */}
       {detail.series.length > 1 && (
         <div className='mt-2 flex items-center justify-center gap-5'>

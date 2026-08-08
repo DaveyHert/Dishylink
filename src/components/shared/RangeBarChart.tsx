@@ -1,5 +1,5 @@
-// The bar chart shared by the Power (energy) and Data usage sheets: range tabs,
-// a plot row, and a label row. Both sheets draw the same frame and differ only
+// The bar chart shared by the Power (energy) and Data usage panels: range tabs,
+// a plot row, and a label row. Both panels draw the same frame and differ only
 // in what fills a column, so the frame lives here and the bar comes in as a node.
 //
 // Layout note: the plot and label rows are declared once on the chart and each
@@ -48,7 +48,7 @@ interface RangeBarsProps {
    *  numbers fit far more labels than a 42px clock time, so passing ~16 stops
    *  the every-other-day skipping. */
   labelWidthPx?: number;
-  /** Plot height in px. Defaults to the compact 96 the Energy sheet uses. */
+  /** Plot height in px. Defaults to the compact 96 the Energy panel uses. */
   heightPx?: number;
   yAxis?: RangeBarYAxis;
 }

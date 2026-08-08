@@ -235,7 +235,7 @@ body {
   background: transparent;
 }
 
-/* ---------- detail sheets ---------- */
+/* ---------- detail panels ---------- */
 
 /* Settings rows are hairline-divided, but not at the top of a group: the first
    row and the row right after a section label drop the border. Positional

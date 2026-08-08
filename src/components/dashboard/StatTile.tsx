@@ -10,7 +10,7 @@ export interface StatTileProps {
   caption?: string;
   sparkValues?: (number | null)[];
   sparkColorVar?: string;
-  /** Opens the stat's detail sheet; renders the tile as a button with a chevron. */
+  /** Opens the stat's detail panel; renders the tile as a button with a chevron. */
   onOpenDetail?: () => void;
 }
 

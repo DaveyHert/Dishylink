@@ -1,5 +1,5 @@
 // A run is bound only by its own phase clock, so nothing but the signal stops it
-// early. Closing the speed test sheet unmounts the panel while six download
+// early. Closing the speed test panel unmounts the panel while six download
 // streams — and then a whole upload phase that begins after the unmount — carry
 // on saturating the link, invisibly: progress updates to a gone component are
 // silent no-ops. These cover the cancellation contract that teardown relies on.

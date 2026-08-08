@@ -41,7 +41,7 @@ own Starlink billing/usage data from `starlink.com` if you choose to sign in.
 
 ## What it controls
 
-Monitoring is only half of it — the settings sheet writes to the dish over the
+Monitoring is only half of it — the settings panel writes to the dish over the
 same LAN API:
 
 - **Snow melt** — automatic, always on, or off.
@@ -127,9 +127,9 @@ The dish serves its API at `192.168.100.1` on two ports; the router answers
 a matching API on its own LAN address:
 
 | Port | Protocol                | Notes                               |
-| ---- | ----------------------- | ------------------------------------ |
-| 9200 | native gRPC (HTTP/2)    | used by `grpcurl`, has reflection    |
-| 9201 | **grpc-web** (HTTP/1.1) | what this app uses from the browser  |
+| ---- | ----------------------- | ----------------------------------- |
+| 9200 | native gRPC (HTTP/2)    | used by `grpcurl`, has reflection   |
+| 9201 | **grpc-web** (HTTP/1.1) | what this app uses from the browser |
 
 Two quirks discovered while building (both handled by the Vite proxy in dev,
 and by the host's own transport in Electron/the extension):

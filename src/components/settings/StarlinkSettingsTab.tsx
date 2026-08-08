@@ -1,4 +1,4 @@
-// Dish configuration and maintenance — the Starlink half of the settings sheet.
+// Dish configuration and maintenance — the Starlink half of the settings panel.
 
 import { useState } from "react";
 import { Callout } from "@/components/ui/callout";

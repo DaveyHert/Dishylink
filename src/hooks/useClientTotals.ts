@@ -1,6 +1,6 @@
 // Per-device monthly usage from the historian's odometer (/api/clients/totals),
 // with the delete/clear actions the usage list exposes. Kept separate from the
-// live network hook: this drives the Data Usage sheet, which is open on its own
+// live network hook: this drives the Data Usage panel, which is open on its own
 // and wants the whole list (including devices currently offline), not just the
 // clients the router reports right now.
 

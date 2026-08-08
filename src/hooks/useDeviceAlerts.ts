@@ -227,8 +227,9 @@ export function useDeviceAlerts(
       (a) => a.active && (a.source === "dish" ? dishReachable : routerReachable !== false),
     );
     // Raised the moment a device stops answering, off the same value the filter
-    // above uses. The top bar and this panel therefore never disagree: anything
-    // that turns the indicator red is an active alert in the same render.
+    // above uses. The connection status indicator and this panel therefore never
+    // disagree: anything that turns the indicator red is an active alert in the
+    // same render.
     const system = [
       ...(dishReachable ? [] : [DISH_UNREACHABLE]),
       ...(routerReachable === false ? [ROUTER_UNREACHABLE] : []),

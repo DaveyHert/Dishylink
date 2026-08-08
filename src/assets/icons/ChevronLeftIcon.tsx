@@ -1,4 +1,4 @@
-// Back chevron — returns a details sheet to the panel it was opened from.
+// Back chevron — returns a details panel to the panel it was opened from.
 
 export function ChevronLeftIcon({
   size = 18,

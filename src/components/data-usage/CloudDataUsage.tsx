@@ -82,7 +82,7 @@ export function CloudDataUsage({ active }: { active: boolean }) {
   );
 
   if (status === "not-connected") {
-    // Same framing as the account sheet's connect state, so switching between the
+    // Same framing as the account panel's connect state, so switching between the
     // two tabs doesn't move the panel around.
     return (
       <div className='flex min-h-[360px] items-center justify-center px-4 py-8'>

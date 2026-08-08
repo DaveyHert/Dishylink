@@ -2,7 +2,7 @@
 //  - "toggle" (default): the compact mono pill — chart windows, energy/data ranges,
 //    stat detail. Active item is an ink slab.
 //  - "glider": the larger tab switch with a glider that slides to the active item —
-//    the Settings modal (Starlink/Router) and Network sheet (Devices/Nodes). Track,
+//    the Settings modal (Starlink/Router) and Network panel (Devices/Nodes). Track,
 //    glider and label colors invert by theme.
 //
 // Radix ToggleGroup gives roving tabindex and arrow-key navigation. Exact values

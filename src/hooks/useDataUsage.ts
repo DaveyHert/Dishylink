@@ -1,6 +1,6 @@
 // Self-measured data usage from the historian's /api/usage (same per-minute
 // buckets as energy, integrating the dish's throughput telemetry).
-// Kept separate from useEnergyHistory so the two sheets stay independent.
+// Kept separate from useEnergyHistory so the two panels stay independent.
 
 import { useEffect, useState } from "react";
 import type { EnergyRange } from "./useEnergyHistory";

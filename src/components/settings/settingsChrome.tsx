@@ -1,4 +1,4 @@
-// Shared furniture for the settings sheet: the row layout both tabs are built
+// Shared furniture for the settings panel: the row layout both tabs are built
 // from, the section label above a group, and the compact select styling that
 // keeps the controls in the app's language rather than the library's default.
 

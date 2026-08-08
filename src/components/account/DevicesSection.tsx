@@ -1,5 +1,5 @@
 // The account's device browser: a picker on the left (dishes with their routers
-// indented under them), the selected device's spec sheet on the right.
+// indented under them), the selected device's spec panel on the right.
 
 import { useMemo, useState, type ReactNode } from "react";
 import {
@@ -31,7 +31,7 @@ function DeviceIcon({ item }: { item: DeviceItem }) {
 }
 
 /** The fields each kind of device exposes. Dish and router share no columns, so
- *  the sheet is built per kind rather than merged into one optional-heavy list. */
+ *  the panel is built per kind rather than merged into one optional-heavy list. */
 function fieldsFor(item: DeviceItem): { label: string; value: ReactNode; mono?: boolean }[] {
   if (item.kind === "dish") {
     const t = item.terminal!;

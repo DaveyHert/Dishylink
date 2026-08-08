@@ -1,7 +1,7 @@
-// The Alignment sheet: a verdict line, the two instruments, and the numbers
+// The Alignment panel: a verdict line, the two instruments, and the numbers
 // behind them. The math is SpaceX's own (alignmentMath.ts) and the dials are
 // ported 1:1 from their web app (AlignmentInstruments.tsx); what lives here is
-// the sheet that arranges them.
+// the panel that arranges them.
 
 import type { DishStatusJson } from "@core/dishClient";
 import {

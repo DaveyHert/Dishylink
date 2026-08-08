@@ -97,7 +97,7 @@ describe("TelemetryChart outage bands", () => {
 });
 
 // windowTail is the one windowing function: the chart clips with it internally,
-// and the stat sheet's Average and energy figures slice with it, so a figure can
+// and the stat panel's Average and energy figures slice with it, so a figure can
 // never describe a different stretch than the chart beside it draws. It cuts by
 // clock. Counting out windowMinutes × 60 samples looks equivalent — the buffer
 // is nominally 1 Hz — and holds right up until a recording gap, at which point

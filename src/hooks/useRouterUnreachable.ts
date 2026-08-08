@@ -1,5 +1,5 @@
 // Explains a failing router poll to the surfaces that have to say something
-// about it — the Network sheet and the Settings modal's Router tab — so both
+// about it — the Network panel and the Settings modal's Router tab — so both
 // give the same account of the same failure.
 //
 // Only while the router is actually silent: resolving the viewer's own address

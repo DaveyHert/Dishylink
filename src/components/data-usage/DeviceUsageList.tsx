@@ -1,6 +1,6 @@
 // Per-device usage for the current billing month, from the historian's odometer
-// (/api/clients/totals). Complementary to the aggregate on the Data Usage sheet,
-// not a breakdown of it: the sheet's bars integrate the dish's WAN telemetry,
+// (/api/clients/totals). Complementary to the aggregate on the Data Usage panel,
+// not a breakdown of it: the panel's bars integrate the dish's WAN telemetry,
 // while this reads the router's per-client counters, so the two measure different
 // things and will not sum to the same number.
 //
@@ -100,7 +100,7 @@ export function DeviceUsageList() {
       )}
       {writeError && <div className='py-2.5 text-[12.5px] text-destructive'>{writeError}</div>}
       {/* Past five devices the list scrolls in place with the app's thin bar,
-          like the client detail sheet, so it never pushes the sheet too tall. */}
+          like the client detail panel, so it never pushes the panel too tall. */}
       <div
         className={`flex flex-col ${sorted.length > 5 ? "thin-scroll max-h-[300px] overflow-y-auto" : ""}`}
       >

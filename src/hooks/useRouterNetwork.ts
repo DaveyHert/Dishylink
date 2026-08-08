@@ -1,7 +1,7 @@
 // Polls the Starlink ROUTER's grpc-web endpoint (same Device service as the
 // dish, /router proxy) for the connected-client list plus the WiFi config
 // (SSIDs, mesh nodes, saved device names). Polled only while a router-backed
-// surface (Network sheet or Settings modal) is open.
+// surface (Network panel or Settings modal) is open.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {

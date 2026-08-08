@@ -1,4 +1,4 @@
-// Router information and maintenance — the Router half of the settings sheet.
+// Router information and maintenance — the Router half of the settings panel.
 // Read-mostly by design: the one write here is a reboot.
 
 import { useMemo } from "react";

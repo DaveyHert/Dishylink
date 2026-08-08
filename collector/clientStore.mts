@@ -2,7 +2,7 @@
 //
 // The router serves only an instantaneous rate — no history — so per-device
 // charts were built from whatever the browser happened to observe while the
-// Network sheet sat open, and were lost on every reload. That is fine for a
+// Network panel sat open, and were lost on every reload. That is fine for a
 // pet dashboard and useless for a product: the device that saturated the link
 // last night is exactly the one you want to look up this morning.
 //

@@ -1,4 +1,4 @@
-// Speed test sheet: download/upload/latency headline figures over a live gauge or
+// Speed test panel: download/upload/latency headline figures over a live gauge or
 // beam view. Throughput is measured through the real link against Cloudflare;
 // latency, jitter and loss are read off the dish's own per-second PoP-ping
 // telemetry for the window the test ran (see speedTest.ts for why timing a fetch
@@ -143,7 +143,7 @@ export function SpeedTestPanel({
 }) {
   const [progress, setProgress] = useState<SpeedTestProgress>(IDLE_PROGRESS);
   const [view, setView] = useState<SpeedView>("beam");
-  // The sheet unmounts when it is closed, but a run is bound only by its own
+  // The panel unmounts when it is closed, but a run is bound only by its own
   // clock — so without this it keeps six streams (and then a whole upload phase)
   // saturating the link after the panel is gone.
   const run = useRef<AbortController | null>(null);

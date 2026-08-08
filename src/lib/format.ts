@@ -102,7 +102,7 @@ export function formatRelativeTime(timestampMs: number, nowMs: number = Date.now
  * "Converged" and ACTUATOR_STATE_TILT reads "Tilt".
  *
  * The app keeps SpaceX's vocabulary on its debug screens rather than inventing
- * friendlier words, and the alignment sheet is ported from that screen — so it
+ * friendlier words, and the alignment panel is ported from that screen — so it
  * matches, and no term here is one we made up. Returns null for an absent value
  * so callers decide what silence means; for some fields proto3 omission is a
  * real zero value, for others it is genuinely unknown.

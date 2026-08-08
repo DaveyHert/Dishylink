@@ -1,11 +1,11 @@
 // The Latency screen's distribution histogram, as the official app draws it:
 // 2 ms bins from 0–100 ms plus one overflow bar, y = share of samples in the
 // bin. One panel per series — the app gives each device its own screen; this
-// sheet stacks them on a shared scale — so the dish's tight cluster and the
+// panel stacks them on a shared scale — so the dish's tight cluster and the
 // router's longer tail read separately instead of overprinting.
 //
 // The app's window is "since the hardware booted" (cloud-recorded); ours is
-// the sheet's selected window, which is the honest equivalent of what the
+// the panel's selected window, which is the honest equivalent of what the
 // recorder actually holds.
 
 import { useMemo } from "react";

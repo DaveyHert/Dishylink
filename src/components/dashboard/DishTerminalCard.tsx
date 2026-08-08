@@ -83,8 +83,8 @@ export function DishTerminalCard({
   onExpand,
 }: {
   status: DishStatusJson;
-  /** True in the popup: renders bare (no card chrome/title) inside the sheet.
-   *  Both views show every fact; the sheet just gives it its own width. */
+  /** True in the popup: renders bare (no card chrome/title) inside the panel.
+   *  Both views show every fact; the panel just gives it its own width. */
   expanded?: boolean;
   /** True while the dish isn't answering: the facts below are the last known
    *  snapshot, not live, and the header says so. */

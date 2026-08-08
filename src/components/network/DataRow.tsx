@@ -1,5 +1,5 @@
 // Label/value line used by both drill-ins. Monospace, tabular value on the
-// right, hairline above — the network sheet's own spec sheet row.
+// right, hairline above — the network panel's own spec sheet row.
 
 export function DataRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (

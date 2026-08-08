@@ -1,4 +1,4 @@
-// Data usage sheet: self-measured download/upload volume from the historian,
+// Data usage panel: self-measured download/upload volume from the historian,
 // in the layout of the Starlink account page's usage chart — headline GB,
 // range tabs, stacked down/up bars. Clearly labeled as measured by Dishylink
 // (Starlink's own billing meter is cloud-side and not exposed locally).

@@ -71,7 +71,7 @@ export function useLiveReadings(samples: TelemetrySample[]): LiveReadings {
   // Success, not the drop rate it comes from. A minute holding no readings
   // averages to zero drops, and zero drops is 100% answered — a perfect score
   // shown at the moment the dish is unreachable. Derived once so the tile and
-  // the detail sheet cannot disagree about it.
+  // the detail panel cannot disagree about it.
   const recentPingSuccessPercent = useMemo(
     () =>
       hasRecentReadings(samples, nowMs)
