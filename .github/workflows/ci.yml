@@ -9,12 +9,9 @@ name: CI
 on:
   push:
     branches: ["**"]
-    # Version tags (v0.1.0, …) are what release the Windows installer — see the
-    # package-win job's `if` below.
-    tags: ["v*"]
   pull_request:
-  # "Run workflow" button in the Actions tab. The only other way to fire the
-  # Windows build without cutting a tag.
+  # "Run workflow" button in the Actions tab, which is what fires the Windows
+  # packaging job below.
   workflow_dispatch:
 
 # A second push to the same branch makes the first one's answer irrelevant.
@@ -26,8 +23,8 @@ jobs:
   typecheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -37,8 +34,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -51,8 +48,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -65,11 +62,11 @@ jobs:
   format:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Two commits, so a push can be diffed against what it replaced.
           fetch-depth: 2
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -102,8 +99,8 @@ jobs:
   extension:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -115,14 +112,15 @@ jobs:
   # Packages the unsigned Windows installer. Deliberately not run on every push:
   # a Windows runner packaging a ~100 MB Electron app is slow and burns free
   # minutes 2x, and an installer is only wanted when one is being handed out. So
-  # it fires only on a manual "Run workflow" or a pushed v* tag — never on PRs or
-  # ordinary branch pushes. The .exe lands as a downloadable run artifact.
+  # it fires only on a manual "Run workflow" — never on PRs or ordinary branch
+  # pushes, and a v* tag builds Windows through release.yml instead. The .exe
+  # lands as a downloadable run artifact.
   package-win:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
