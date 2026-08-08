@@ -95,6 +95,16 @@ export default defineConfig({
       },
     },
   },
+  zip: {
+    excludeSources: [
+      "release/**",
+      "dist/**",
+      "dist-electron/**",
+      ".output/**",
+      "landing/**",
+      "collector/data/**",
+    ],
+  },
   alias: {
     "@core": "core",
     "@cloud": "cloud",
