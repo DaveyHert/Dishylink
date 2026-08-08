@@ -43,8 +43,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # Errors fail the build; warnings are reported and do not. The React
-      # Compiler-era hook rules are warnings here on purpose — see eslint.config.js.
+      # `--max-warnings 0`, so a warning fails the build exactly like an error. The
+      # warn severities in eslint.config.js set how a rule reads when you run it by
+      # hand; CI tolerates none of them, which is what keeps the tree warning-free.
       - run: npm run lint
 
   test:
@@ -96,6 +97,19 @@ jobs:
           fi
           echo "$changed"
           echo "$changed" | xargs npx prettier --check --ignore-unknown
+
+  extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck:extension
+      - run: npm run build:extension
+      - run: npm run build:extension:firefox
 
   # Packages the unsigned Windows installer. Deliberately not run on every push:
   # a Windows runner packaging a ~100 MB Electron app is slow and burns free
