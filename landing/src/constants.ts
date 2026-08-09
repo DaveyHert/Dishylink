@@ -98,8 +98,7 @@ export async function downloadPlatforms(fallbackVersion: string): Promise<{
       label,
       fileType,
       href:
-        asset?.browser_download_url ??
-        `${GITHUB}/releases/download/v${version}/${fallbackName}`,
+        asset?.browser_download_url ?? `${GITHUB}/releases/download/v${version}/${fallbackName}`,
       size: asset ? formatSize(asset.size) : null,
     };
   };
@@ -137,7 +136,13 @@ export async function downloadPlatforms(fallbackVersion: string): Promise<{
         choiceLabel: "CPU architecture",
         requirement: "Windows 10 or later",
         options: [
-          option("universal", "Universal", /^Dishylink-[\d.]+\.exe$/, "EXE", `Dishylink-${version}.exe`),
+          option(
+            "universal",
+            "Universal",
+            /^Dishylink-[\d.]+\.exe$/,
+            "EXE",
+            `Dishylink-${version}.exe`,
+          ),
           option("x64", "x64", /-x64\.exe$/, "EXE", `Dishylink-${version}-x64.exe`),
           option("arm64", "ARM64", /-arm64\.exe$/, "EXE", `Dishylink-${version}-arm64.exe`),
         ],
