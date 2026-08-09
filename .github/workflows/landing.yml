@@ -1,0 +1,36 @@
+name: Deploy landing
+
+on:
+  push:
+    branches: [master]
+    paths: ["landing/**", ".github/workflows/landing.yml"]
+  # Publishing a release changes what the site advertises: the download buttons
+  # resolve their URLs from the newest published release at build time, so the
+  # site has to rebuild once that release exists.
+  release:
+    types: [published]
+  workflow_dispatch:
+
+concurrency:
+  group: landing-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: landing
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: landing/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
