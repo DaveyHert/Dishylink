@@ -7,7 +7,7 @@
   "main": "dist-electron/main.js",
   "author": "daveyhert <daviehert@gmail.com>",
   "license": "MIT",
-  "description": "Live dashboard and always-on history recorder for a Starlink kit (unofficial).",
+  "description": "An open-source desktop app to monitor the performance and health of your Starlink.",
   "scripts": {
     "postinstall": "wxt prepare",
     "dev": "vite",

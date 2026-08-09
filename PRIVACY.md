@@ -1,16 +1,16 @@
 # Privacy Policy
 
-Dishylink is a local dashboard and history recorder for a Starlink kit. This
-page describes what the app does with your data.
+Dishylink is an open-source app that monitors the performance and health of
+your Starlink. This page describes what the app does with your data.
 
 ## What stays on your machine
 
-The dashboard and the always-on history recorder (the "historian") talk
-directly to your dish and router over your own LAN. Everything they record —
-throughput, latency, power draw, obstruction, outages, thermal events, radio
-temps, device lists — is written to local storage on your machine and is
-never transmitted anywhere. There is no backend, no analytics, and no
-telemetry collection by us. We do not see your data; we never receive it.
+Dishylink talks directly to your dish and router over your own LAN, including
+while its window is closed. Everything it measures — throughput, latency,
+power draw, obstruction, outages, thermal events, radio temps, device lists —
+is written to local storage on your machine and is never transmitted
+anywhere. There is no backend, no analytics, and no telemetry collection by
+us. We do not see your data; we never receive it.
 
 ## The optional "connect account" feature
 

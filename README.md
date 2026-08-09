@@ -113,9 +113,9 @@ npm run build:extension:edge
   ordinary tab — never a cramped toolbar popup.
 - **Toolbar badge** — the number of alerts firing right now, tinted by the worst
   one's severity, so it reads the same outside the app as the bell does inside.
-- Collects on a 30s `chrome.alarms` tick that survives service-worker teardown,
-  into IndexedDB, and shows honest coverage gaps for stretches the browser was
-  closed. Always-on collection is the desktop app's job.
+- **Recording** — its own history store in IndexedDB, filled by a 30s
+  `chrome.alarms` tick that survives service-worker teardown, with honest
+  coverage gaps for stretches when the browser was closed.
 - Chrome 144+ — below that a Local Network Access bug makes the worker silently
   collect nothing.
 

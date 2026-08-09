@@ -24,10 +24,33 @@ export const STORES: Record<string, string | null> = {
   firefox: null,
 };
 
-export const DOWNLOADS: Record<string, string | null> = {
-  mac: null,
-  windows: null,
-};
+// Resolved from the newest *published* release rather than package.json: the
+// version is bumped and pushed before the draft is published, so package.json
+// names assets that do not exist yet and every download button would 404.
+export async function latestVersion(fallback: string): Promise<string> {
+  try {
+    const response = await fetch(
+      "https://api.github.com/repos/DaveyHert/dishylink/releases/latest",
+      {
+        headers: { accept: "application/vnd.github+json" },
+      },
+    );
+    if (!response.ok) return fallback;
+    const tag = (await response.json())?.tag_name;
+    return typeof tag === "string" ? tag.replace(/^v/, "") : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function downloadsFor(version: string) {
+  const base = `${GITHUB}/releases/download/v${version}`;
+  return {
+    macArm: `${base}/Dishylink-${version}-arm64.dmg`,
+    macIntel: `${base}/Dishylink-${version}-x64.dmg`,
+    windows: `${base}/Dishylink-${version}.exe`,
+  };
+}
 
 export const SITE = {
   name: "Dishylink",

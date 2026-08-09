@@ -5,8 +5,9 @@ import { defineConfig } from "wxt";
 
 // See vite.config.ts's own copy of this read for why it's done per-config
 // rather than imported as a module.
-const appVersion: string = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8"))
-  .version;
+const appVersion: string = JSON.parse(
+  readFileSync(new URL("./package.json", import.meta.url), "utf-8"),
+).version;
 
 // srcDir is the shared app tree so WXT's built-in `@`/`~` aliases point at ./src,
 // exactly as the web build's do — the extension mounts the same src/App and its
@@ -43,7 +44,8 @@ export default defineConfig({
   }),
   manifest: {
     name: "Dishylink",
-    description: "The unofficial desktop companion app to monitor and manage your Starlink kit.",
+    description:
+      "Monitor your Starlink's performance and health. Live telemetry, speed test, obstruction map, alignment, alerts, per-device usage.",
     // A background service worker fetching 192.168.100.1 hit a Chromium Local
     // Network Access bug fixed only in 144; below it the drain silently collects
     // nothing, which is an unreproducible bug report. Excludes Chrome 142–143.
@@ -85,7 +87,12 @@ export default defineConfig({
     // default_icon is set explicitly rather than left to the icons fallback.
     action: {
       default_title: "Dishylink",
-      default_icon: { "16": "icon/16.png", "32": "icon/32.png", "48": "icon/48.png", "128": "icon/128.png" },
+      default_icon: {
+        "16": "icon/16.png",
+        "32": "icon/32.png",
+        "48": "icon/48.png",
+        "128": "icon/128.png",
+      },
     },
     // Matches PRIVACY.md: no backend, no analytics — nothing the extension does
     // is collected by us. Required by AMO for new submissions since 2025-11-03.

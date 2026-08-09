@@ -10,7 +10,8 @@ import Figure from "../components/Figure.astro";
 import Button from "../components/Button.astro";
 import ShootingStars from "../components/ShootingStars.astro";
 import HeroGlow from "../components/HeroGlow.astro";
-import { GITHUB, RELEASES, STORES, SPONSOR, EMAIL } from "../consts";
+import { readFileSync } from "node:fs";
+import { GITHUB, STORES, SPONSOR, EMAIL, latestVersion, downloadsFor } from "../constants";
 import { sections } from "../data/sections";
 
 // Real captures of the running app — no mockups, no illustrations. If a surface
@@ -22,12 +23,22 @@ const title = "Dishylink — The opensource Starlink desktop app (unofficial)";
 const description =
   "A free, open-source Starlink desktop app that monitors the performance and health of your Starlink system. Features live throughput, latency, power draw, obstruction maps, satellite tracking and per-device data usage — on macOS, Windows, Chrome, Edge and Firefox.";
 
-// The desktop builds, listed once. The hero shows them alongside a jump to the
-// browser card; the card itself shows the same two, so neither can lose an icon
-// or drift in wording.
+// Every hero button jumps to the chooser below rather than downloading, so a
+// visitor picks their architecture instead of guessing at it.
 const desktopDownloads = [
-  { icon: "apple", label: "Download for Mac", href: RELEASES, variant: "primary" },
-  { icon: "windows", label: "Download for Windows", href: RELEASES, variant: "tinted" },
+  { icon: "apple", label: "Download for Mac", href: "#get", variant: "primary" },
+  { icon: "windows", label: "Download for Windows", href: "#get", variant: "tinted" },
+] as const;
+
+const version = await latestVersion(
+  JSON.parse(readFileSync(new URL("../../../package.json", import.meta.url), "utf-8")).version,
+);
+const downloads = downloadsFor(version);
+
+const desktopBuilds = [
+  { icon: "apple", label: "Apple Silicon", href: downloads.macArm, variant: "primary" },
+  { icon: "apple", label: "Mac Intel", href: downloads.macIntel, variant: "tinted" },
+  { icon: "windows", label: "Windows", href: downloads.windows, variant: "secondary" },
 ] as const;
 
 const downloadLinks = [
@@ -157,9 +168,9 @@ const faqs: { q: string; a: string; aside?: string }[] = [
               Runs in the tray, starts at login, and keeps a permanent history with menu-bar and
               taskbar readouts.
             </p>
-            <div class="mt-6 grid gap-3 sm:grid-cols-2">
+            <div class="mt-6 grid gap-3 sm:grid-cols-3">
               {
-                desktopDownloads.map(({ icon, label, href, variant }) => (
+                desktopBuilds.map(({ icon, label, href, variant }) => (
                   <Button href={href} variant={variant} size="sm">
                     <Icon name={icon} class="size-4" />
                     {label}
@@ -167,7 +178,9 @@ const faqs: { q: string; a: string; aside?: string }[] = [
                 ))
               }
             </div>
-            <p class="mt-auto pt-4 font-mono text-[11px] text-ink-3">macOS 12+ · Windows 10+</p>
+            <p class="mt-auto pt-4 font-mono text-[11px] text-ink-3">
+              v{version} · macOS 12+ · Windows 10+
+            </p>
           </div>
 
           <div class="relative flex flex-col overflow-hidden rounded-2xl border border-rule p-8 before:absolute before:inset-x-0 before:top-0 before:h-px before:[background:linear-gradient(90deg,transparent,var(--color-rule-2)_50%,transparent)]">
