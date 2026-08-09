@@ -7,7 +7,7 @@
   "compatibility_date": "2026-08-01",
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "404-page"
+    "not_found_handling": "404-page",
   },
   // Both hosts serve the same assets. The apex is the canonical one — every page
   // emits <link rel="canonical"> against it (Base.astro), so search engines fold
@@ -15,6 +15,6 @@
   // Cloudflare creates and manages the DNS record for each custom_domain route.
   "routes": [
     { "pattern": "dishylink.com", "custom_domain": true },
-    { "pattern": "www.dishylink.com", "custom_domain": true }
-  ]
+    { "pattern": "www.dishylink.com", "custom_domain": true },
+  ],
 }

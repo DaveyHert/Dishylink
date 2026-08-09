@@ -66,10 +66,7 @@ export function DeviceMergePrompt({
         <div className='mt-2.5 flex items-stretch gap-2'>
           <MergeDeviceCard total={older} nowMs={nowMs} />
           {/* Directional: the older, idle device folds into the current one. */}
-          <span
-            className='shrink-0 self-center text-[13px] text-chart-warm'
-            aria-hidden='true'
-          >
+          <span className='shrink-0 self-center text-[13px] text-chart-warm' aria-hidden='true'>
             →
           </span>
           <MergeDeviceCard total={newer} nowMs={nowMs} />

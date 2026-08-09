@@ -59,7 +59,9 @@ export function buildSamples(
   const samples: ClientSampleRow[] = [];
   for (const client of live) {
     const entryId =
-      client.clientId !== undefined ? String(client.clientId) : (client.ipAddress ?? client.macAddress);
+      client.clientId !== undefined
+        ? String(client.clientId)
+        : (client.ipAddress ?? client.macAddress);
     const entryKey = `${client.macAddress}|${entryId}`;
     entryKeys.push(entryKey);
     // Absent stats mean "no reading", not zero bytes — passing 0 would read as a
@@ -67,7 +69,9 @@ export function buildSamples(
     const rx = client.rxStats?.bytes;
     const tx = client.txStats?.bytes;
     const counters =
-      rx === undefined || tx === undefined ? undefined : { rxBytes: Number(rx), txBytes: Number(tx) };
+      rx === undefined || tx === undefined
+        ? undefined
+        : { rxBytes: Number(rx), txBytes: Number(tx) };
     const rates = tracker.rates(entryKey, counters, nowMs, {
       downMbps: fallbackMbps(client.rxStats),
       upMbps: fallbackMbps(client.txStats),

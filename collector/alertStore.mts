@@ -98,5 +98,4 @@ export class AlertStore {
     }
     this.flush();
   }
-
 }

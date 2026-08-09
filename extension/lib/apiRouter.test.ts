@@ -38,7 +38,15 @@ describe("routeApiRequest", () => {
     const store = new InMemoryHistory();
     // A minute inside the 1h window ending at NOW, worth exactly 1 kWh.
     await store.commit(
-      [{ minute: 1_599_998_400, wattSeconds: 3_600_000, samples: 60, downlinkBits: 0, uplinkBits: 0 }],
+      [
+        {
+          minute: 1_599_998_400,
+          wattSeconds: 3_600_000,
+          samples: 60,
+          downlinkBits: 0,
+          uplinkBits: 0,
+        },
+      ],
       EMPTY_CURSOR,
     );
 
@@ -121,7 +129,10 @@ describe("routeApiRequest", () => {
     const reply = await routeApiRequest(store, "/api/radio", NOW);
 
     expect(reply.status).toBe(200);
-    const body = reply.body as { current: Array<{ tempC: number; dutyCycle: number }>; atMs: number };
+    const body = reply.body as {
+      current: Array<{ tempC: number; dutyCycle: number }>;
+      atMs: number;
+    };
     expect(body.current[0]!.tempC).toBe(70); // the latest live reading wins
     expect(body.current[0]!.dutyCycle).toBe(40);
     expect(body).not.toHaveProperty("history");
@@ -178,8 +189,25 @@ describe("routeApiRequest", () => {
     const minute = Math.floor(t / 60_000) * 60;
     await store.putClientMinutes(
       [
-        { minute, key: "42", macAddress: "aa", name: "Laptop", downMbps: 5, upMbps: 1, rxBytes: 100, txBytes: 20 },
-        { minute: minute - 60, key: "7", macAddress: "bb", downMbps: 2, upMbps: 3, rxBytes: 50, txBytes: 10 },
+        {
+          minute,
+          key: "42",
+          macAddress: "aa",
+          name: "Laptop",
+          downMbps: 5,
+          upMbps: 1,
+          rxBytes: 100,
+          txBytes: 20,
+        },
+        {
+          minute: minute - 60,
+          key: "7",
+          macAddress: "bb",
+          downMbps: 2,
+          upMbps: 3,
+          rxBytes: 50,
+          txBytes: 10,
+        },
       ],
       t,
     );
@@ -295,8 +323,24 @@ describe("routeApiRequest", () => {
     // Throughput recorded under the old identity (1), then the new one (2).
     await store.putClientMinutes(
       [
-        { minute: minute - 120, key: "1", macAddress: "aa", downMbps: 5, upMbps: 1, rxBytes: 0, txBytes: 0 },
-        { minute: minute - 60, key: "2", macAddress: "bb", downMbps: 8, upMbps: 2, rxBytes: 0, txBytes: 0 },
+        {
+          minute: minute - 120,
+          key: "1",
+          macAddress: "aa",
+          downMbps: 5,
+          upMbps: 1,
+          rxBytes: 0,
+          txBytes: 0,
+        },
+        {
+          minute: minute - 60,
+          key: "2",
+          macAddress: "bb",
+          downMbps: 8,
+          upMbps: 2,
+          rxBytes: 0,
+          txBytes: 0,
+        },
       ],
       t,
     );
@@ -344,7 +388,9 @@ describe("routeApiRequest", () => {
   it("stores posted 1 Hz client samples that a since-tail read then returns", async () => {
     const store = new InMemoryHistory();
     const t = NOW.getTime();
-    const body = JSON.stringify([{ key: "42", macAddress: "aa", atMs: t - 1_000, downMbps: 9, upMbps: 2 }]);
+    const body = JSON.stringify([
+      { key: "42", macAddress: "aa", atMs: t - 1_000, downMbps: 9, upMbps: 2 },
+    ]);
     const post = await routeApiRequest(store, "/api/clients/samples", NOW, "POST", body);
     expect(post.body).toEqual({ stored: 1 });
     const read = await routeApiRequest(store, `/api/clients?samples=1&since=${t - 5_000}`, NOW);

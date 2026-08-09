@@ -41,7 +41,9 @@ export function startUpdateChecks(): void {
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
 
-  autoUpdater.on("update-available", (info) => setState({ available: true, version: info.version }));
+  autoUpdater.on("update-available", (info) =>
+    setState({ available: true, version: info.version }),
+  );
   autoUpdater.on("update-not-available", () => setState({ available: false, version: null }));
   // A failed check (offline, rate-limited, no releases published yet) leaves the
   // last known state as-is rather than surfacing an error to the user.

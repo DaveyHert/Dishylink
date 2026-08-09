@@ -28,7 +28,12 @@ function res(status: number, body: unknown = {}): Response {
  *  service-line call but the auth host still refuses the profile, blanking
  *  Name/Email. Counts refreshes and identity reads so a test can prove a retry did
  *  or didn't happen. */
-function backend({ authFailures = 0, authAlwaysFail = false, idFailures = 0, idAlwaysFail = false } = {}) {
+function backend({
+  authFailures = 0,
+  authAlwaysFail = false,
+  idFailures = 0,
+  idAlwaysFail = false,
+} = {}) {
   let refreshCalls = 0;
   let idCalls = 0;
   const doFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -46,7 +51,9 @@ function backend({ authFailures = 0, authAlwaysFail = false, idFailures = 0, idA
       return res(200, { name: "Ada", email: "ada@example.com", accountId: "ACC-1" });
     }
     if (url.includes("/webagg/v2/accounts/service-lines")) {
-      return res(200, { content: { results: [{ serviceLineNumber: "SL-1", accountReferenceId: "ACC-1" }] } });
+      return res(200, {
+        content: { results: [{ serviceLineNumber: "SL-1", accountReferenceId: "ACC-1" }] },
+      });
     }
     if (url.includes("/webagg/v2/accounts/service-line/")) {
       return res(200, { content: { serviceLineNumber: "SL-1" } });

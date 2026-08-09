@@ -258,7 +258,13 @@ export default defineBackground(() => {
     }
     if (request.type !== "api") return false;
     return IndexedDbHistory.open().then((store) =>
-      routeApiRequest(store, request.path!, new Date(), request.method ?? "GET", request.body as string | undefined),
+      routeApiRequest(
+        store,
+        request.path!,
+        new Date(),
+        request.method ?? "GET",
+        request.body as string | undefined,
+      ),
     );
   });
 
@@ -272,7 +278,12 @@ export default defineBackground(() => {
       void browser.windows.get(windowId).then((win) => {
         if (win.top == null || win.left == null || win.width == null || win.height == null) return;
         void browser.storage.local.set({
-          [WINDOW_BOUNDS_KEY]: { top: win.top, left: win.left, width: win.width, height: win.height },
+          [WINDOW_BOUNDS_KEY]: {
+            top: win.top,
+            left: win.left,
+            width: win.width,
+            height: win.height,
+          },
         });
       });
     });

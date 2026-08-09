@@ -124,7 +124,15 @@ describe("compactEnergy", () => {
   it("folds minutes from a past year into a month row and drops them from the minute store", async () => {
     const store = new InMemoryHistory();
     await store.commit(
-      [{ minute: OLD_YEAR_MINUTE, wattSeconds: 120, samples: 60, downlinkBits: 8e6, uplinkBits: 1e6 }],
+      [
+        {
+          minute: OLD_YEAR_MINUTE,
+          wattSeconds: 120,
+          samples: 60,
+          downlinkBits: 8e6,
+          uplinkBits: 1e6,
+        },
+      ],
       EMPTY_CURSOR,
     );
 
@@ -142,7 +150,15 @@ describe("compactEnergy", () => {
   it("leaves minutes from the current year alone", async () => {
     const store = new InMemoryHistory();
     await store.commit(
-      [{ minute: CURRENT_YEAR_MINUTE, wattSeconds: 50, samples: 60, downlinkBits: 0, uplinkBits: 0 }],
+      [
+        {
+          minute: CURRENT_YEAR_MINUTE,
+          wattSeconds: 50,
+          samples: 60,
+          downlinkBits: 0,
+          uplinkBits: 0,
+        },
+      ],
       EMPTY_CURSOR,
     );
 
@@ -156,7 +172,15 @@ describe("compactEnergy", () => {
   it("running it again after everything is already archived is a no-op", async () => {
     const store = new InMemoryHistory();
     await store.commit(
-      [{ minute: OLD_YEAR_MINUTE, wattSeconds: 120, samples: 60, downlinkBits: 8e6, uplinkBits: 1e6 }],
+      [
+        {
+          minute: OLD_YEAR_MINUTE,
+          wattSeconds: 120,
+          samples: 60,
+          downlinkBits: 8e6,
+          uplinkBits: 1e6,
+        },
+      ],
       EMPTY_CURSOR,
     );
     await store.compactEnergy(NOW_MS);

@@ -37,7 +37,11 @@ import {
   NOTIFICATIONS_ON_CONFIRMATION,
   type NotificationState,
 } from "../core/alertNotification";
-import { NOTIFICATION_STATE_CHANNEL, MENUBAR_THROUGHPUT_CHANNEL, UPDATE_STATE_CHANNEL } from "./ipc";
+import {
+  NOTIFICATION_STATE_CHANNEL,
+  MENUBAR_THROUGHPUT_CHANNEL,
+  UPDATE_STATE_CHANNEL,
+} from "./ipc";
 import { formatMenuBarRate, formatSpacedRate } from "./menuBarThroughput";
 import {
   showThroughputWidget,
@@ -76,8 +80,7 @@ let throughputItem: MenuItem | null = null;
 // (throughputWidget.ts) — one preference, two paint targets, nothing on Linux.
 // Registered in dev too, but the window-closed feed is dark there since its
 // recorder runs only in the packaged app.
-const MENU_BAR_THROUGHPUT_SUPPORTED =
-  process.platform === "darwin" || process.platform === "win32";
+const MENU_BAR_THROUGHPUT_SUPPORTED = process.platform === "darwin" || process.platform === "win32";
 const THROUGHPUT_TICK_MS = 1_000;
 // Older than this, the feed is dead and the readout falls back to 0. Kept above
 // RENDERER_REPORT_STALE_MS so a window-close handoff doesn't flash zero.

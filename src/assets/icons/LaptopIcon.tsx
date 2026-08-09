@@ -1,6 +1,9 @@
 // Laptop — the theme toggle's system face.
 
-export function LaptopIcon({ size = 14, ...props }: React.ComponentProps<"svg"> & { size?: number }) {
+export function LaptopIcon({
+  size = 14,
+  ...props
+}: React.ComponentProps<"svg"> & { size?: number }) {
   return (
     <svg
       width={size}

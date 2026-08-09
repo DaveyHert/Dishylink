@@ -34,7 +34,10 @@ export function planDrain(window: DishWindow, cursor: SampleCursor): DrainPlan {
   // counts back past it — the one place a reset could otherwise re-drain samples.
   const cursorNext: SampleCursor = {
     counter: Math.max(cursor.counter, window.newestCounter),
-    newestSampleMs: fresh.reduce((max, sample) => Math.max(max, sample.timestampMs), cursor.newestSampleMs),
+    newestSampleMs: fresh.reduce(
+      (max, sample) => Math.max(max, sample.timestampMs),
+      cursor.newestSampleMs,
+    ),
   };
   return { deltas, cursor: cursorNext };
 }

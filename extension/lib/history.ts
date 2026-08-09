@@ -247,11 +247,13 @@ function openDatabase(name: string): Promise<IDBDatabase> {
       const db = open.result;
       // minute is the key, so a re-drained minute updates its row instead of
       // appending a duplicate — the additive merge reads it back before writing.
-      if (!db.objectStoreNames.contains(MINUTES)) db.createObjectStore(MINUTES, { keyPath: "minute" });
+      if (!db.objectStoreNames.contains(MINUTES))
+        db.createObjectStore(MINUTES, { keyPath: "minute" });
       if (!db.objectStoreNames.contains(META)) db.createObjectStore(META);
       // startMs is the key, so an outage the ring buffer replays each drain
       // updates its row rather than appending a duplicate.
-      if (!db.objectStoreNames.contains(OUTAGES)) db.createObjectStore(OUTAGES, { keyPath: "startMs" });
+      if (!db.objectStoreNames.contains(OUTAGES))
+        db.createObjectStore(OUTAGES, { keyPath: "startMs" });
       // One row per alert episode, keyed by `${source}:${key}:${startMs}`.
       if (!db.objectStoreNames.contains(ALERTS)) db.createObjectStore(ALERTS, { keyPath: "id" });
       // One row per hourly snapshot, keyed by capture time.
@@ -309,7 +311,9 @@ export class IndexedDbHistory implements HistoryStore {
 
   async readMinutes(startSec: number, endSec: number): Promise<MinuteBucket[]> {
     const tx = this.db.transaction(MINUTES, "readonly");
-    return request<MinuteBucket[]>(tx.objectStore(MINUTES).getAll(IDBKeyRange.bound(startSec, endSec)));
+    return request<MinuteBucket[]>(
+      tx.objectStore(MINUTES).getAll(IDBKeyRange.bound(startSec, endSec)),
+    );
   }
 
   async compactEnergy(nowMs: number = Date.now()): Promise<number> {
@@ -532,7 +536,8 @@ export class InMemoryHistory implements HistoryStore {
     for (const [month, delta] of foldMinutesToMonths(expired)) {
       this.months.set(month, addMonthBucket(this.months.get(month), delta));
     }
-    for (const [minute, bucket] of this.minutes) if (bucket.minute < cutoffSec) this.minutes.delete(minute);
+    for (const [minute, bucket] of this.minutes)
+      if (bucket.minute < cutoffSec) this.minutes.delete(minute);
     return expired.length;
   }
 
@@ -569,7 +574,8 @@ export class InMemoryHistory implements HistoryStore {
     for (const episode of episodesForTransitions([...this.alerts.values()], transitions))
       this.alerts.set(episode.id, episode);
     const cutoff = nowMs - ALERT_RETENTION_MS;
-    for (const [id, e] of this.alerts) if (e.endMs !== null && e.startMs < cutoff) this.alerts.delete(id);
+    for (const [id, e] of this.alerts)
+      if (e.endMs !== null && e.startMs < cutoff) this.alerts.delete(id);
   }
 
   async readAlerts(nowMs: number = Date.now()): Promise<AlertEpisode[]> {
@@ -595,7 +601,8 @@ export class InMemoryHistory implements HistoryStore {
   async putClientMinutes(rows: ClientMinuteRow[], nowMs: number = Date.now()): Promise<void> {
     for (const row of rows) this.clientMinutes.set(`${row.minute}:${row.key}`, row);
     const cutoff = Math.floor((nowMs - CLIENT_MINUTE_RETENTION_MS) / 1000);
-    for (const [id, row] of this.clientMinutes) if (row.minute < cutoff) this.clientMinutes.delete(id);
+    for (const [id, row] of this.clientMinutes)
+      if (row.minute < cutoff) this.clientMinutes.delete(id);
   }
 
   async readClientMinutes(
@@ -612,7 +619,8 @@ export class InMemoryHistory implements HistoryStore {
   async putClientSamples(rows: ClientSampleRow[], nowMs: number = Date.now()): Promise<void> {
     for (const row of rows) this.clientSamples.set(`${row.atMs}:${row.key}`, row);
     const cutoff = nowMs - CLIENT_SAMPLE_RETENTION_MS;
-    for (const [id, row] of this.clientSamples) if (row.atMs < cutoff) this.clientSamples.delete(id);
+    for (const [id, row] of this.clientSamples)
+      if (row.atMs < cutoff) this.clientSamples.delete(id);
   }
 
   async readClientSamples(

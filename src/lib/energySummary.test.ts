@@ -20,7 +20,14 @@ describe("summarizeEnergy", () => {
 
   it("converts totals: watt-seconds → kWh and bits → GB", () => {
     const summary = summarizeEnergy(
-      [bucket(1_599_998_400, { wattSeconds: 3_600_000, samples: 60, downlinkBits: 8e9, uplinkBits: 16e9 })],
+      [
+        bucket(1_599_998_400, {
+          wattSeconds: 3_600_000,
+          samples: 60,
+          downlinkBits: 8e9,
+          uplinkBits: 16e9,
+        }),
+      ],
       "1h",
       NOW,
     );

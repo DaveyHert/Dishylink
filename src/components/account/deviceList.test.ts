@@ -18,10 +18,7 @@ const terminals: CloudTerminal[] = [
   {
     userTerminalId: "0158168c-42207c02-5946ca71",
     lastConnected: "2026-07-14T00:00:00Z",
-    routers: [
-      { routerId: "010000000000000001B31340" },
-      { routerId: "01000000000000000049375B" },
-    ],
+    routers: [{ routerId: "010000000000000001B31340" }, { routerId: "01000000000000000049375B" }],
   } as CloudTerminal,
 ];
 

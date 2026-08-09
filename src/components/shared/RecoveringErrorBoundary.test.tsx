@@ -28,7 +28,10 @@ test("a transient throw recovers silently — no notice, content returns", async
     </RecoveringErrorBoundary>,
   );
   await settle();
-  expect(document.querySelector('[data-testid="ok"]'), "child should have remounted").not.toBeNull();
+  expect(
+    document.querySelector('[data-testid="ok"]'),
+    "child should have remounted",
+  ).not.toBeNull();
   expect(document.body.textContent).not.toContain("Reload");
 });
 

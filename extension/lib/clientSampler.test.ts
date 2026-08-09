@@ -4,7 +4,9 @@ import type { WifiClientJson } from "@core/dishClient";
 import { buildSamples } from "./clientSampler";
 
 /** A roster entry with byte counters and a 15s fallback rate. */
-function client(over: Partial<WifiClientJson> & { clientId: number; macAddress: string }): WifiClientJson {
+function client(
+  over: Partial<WifiClientJson> & { clientId: number; macAddress: string },
+): WifiClientJson {
   return {
     rxStats: { bytes: "0", throughputMbpsLast15sAvg: 0 },
     txStats: { bytes: "0", throughputMbpsLast15sAvg: 0 },
@@ -26,7 +28,11 @@ describe("buildSamples", () => {
   it("measures the rate from the counter edge across two polls", () => {
     const tracker = new ThroughputTracker();
     const at = (rxBytes: string) =>
-      client({ clientId: 42, macAddress: "aa", rxStats: { bytes: rxBytes, throughputMbpsLast15sAvg: 0 } });
+      client({
+        clientId: 42,
+        macAddress: "aa",
+        rxStats: { bytes: rxBytes, throughputMbpsLast15sAvg: 0 },
+      });
     // First poll seeds; nothing to subtract yet, so it reports the (zero) fallback.
     expect(buildSamples([at("0")], tracker, 0)[0]!.downMbps).toBe(0);
     // One refresh period later, 1_005_000 bytes moved → 8 Mbps down.

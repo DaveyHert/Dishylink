@@ -85,21 +85,17 @@ export function ObstructionTimeLapse({
               minute: "2-digit",
             })}
           </span>
+        ) : stale ? (
+          <span className='font-semibold tracking-wide text-status-critical'>OFFLINE</span>
         ) : (
-          stale ? (
-            <span className='font-semibold tracking-wide text-status-critical'>
-              OFFLINE
-            </span>
-          ) : (
-            <>
-              <span className='font-semibold tracking-wide text-status-good'>LIVE</span>
-              {/* The one moving thing in the row — a live pulse, not just a word. */}
-              <span
-                className='size-1.5 animate-pulse rounded-full bg-status-good'
-                aria-hidden='true'
-              />
-            </>
-          )
+          <>
+            <span className='font-semibold tracking-wide text-status-good'>LIVE</span>
+            {/* The one moving thing in the row — a live pulse, not just a word. */}
+            <span
+              className='size-1.5 animate-pulse rounded-full bg-status-good'
+              aria-hidden='true'
+            />
+          </>
         )}
       </span>
     </div>

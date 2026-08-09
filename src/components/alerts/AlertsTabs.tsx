@@ -141,9 +141,7 @@ export function StatusTab({
                         : "var(--status-good)",
                   }}
                 />
-                <span className='truncate text-[14px] text-ink'>
-                  {c.active ? c.firing : c.ok}
-                </span>
+                <span className='truncate text-[14px] text-ink'>{c.active ? c.firing : c.ok}</span>
               </div>
             ))}
           </div>

@@ -6,7 +6,11 @@
 
 import { contextBridge, ipcRenderer } from "electron";
 import type { NotificationState } from "../core/alertNotification";
-import { NOTIFICATION_STATE_CHANNEL, MENUBAR_THROUGHPUT_CHANNEL, UPDATE_STATE_CHANNEL } from "./ipc";
+import {
+  NOTIFICATION_STATE_CHANNEL,
+  MENUBAR_THROUGHPUT_CHANNEL,
+  UPDATE_STATE_CHANNEL,
+} from "./ipc";
 import type { UpdateState } from "./updater";
 
 contextBridge.exposeInMainWorld("dishlink", {

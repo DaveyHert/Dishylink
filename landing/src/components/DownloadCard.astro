@@ -21,11 +21,13 @@ const PILL =
 const CHIP =
   "rounded-lg bg-paper px-3 py-1.5 font-mono text-[12px] whitespace-nowrap ring-1 ring-rule dark:bg-white/[0.05] dark:ring-white/[0.07]";
 const LABEL = "font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-ink-3";
+const CTA =
+  "ml-auto aria-disabled:cursor-default aria-disabled:border-dashed aria-disabled:border-rule-2 aria-disabled:bg-transparent aria-disabled:text-ink-3 aria-disabled:hover:bg-transparent";
 ---
 
 <div
   data-download-card
-  class="relative overflow-hidden rounded-2xl border border-rule bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.04),0_18px_40px_-20px_rgba(0,0,0,0.18)] before:absolute before:inset-x-0 before:top-0 before:z-10 before:h-px before:[background:linear-gradient(90deg,transparent,var(--color-rule-2)_50%,transparent)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_24px_60px_-24px_rgba(0,0,0,0.9)]"
+  class="relative overflow-hidden rounded-2xl border border-rule bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.04),0_18px_40px_-20px_rgba(0,0,0,0.18)] before:absolute before:inset-x-0 before:top-0 before:z-10 before:h-px before:[background:var(--gradient-rule)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_24px_60px_-24px_rgba(0,0,0,0.9)]"
 >
   <div class="card-canvas" aria-hidden="true">
     <span class="dots"></span>
@@ -43,6 +45,9 @@ const LABEL = "font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-
             <button
               type="button"
               role="tab"
+              id={`tab-${platform.id}`}
+              aria-controls={`panel-${platform.id}`}
+              tabindex={index === 0 ? 0 : -1}
               data-platform-tab={platform.id}
               aria-selected={index === 0 ? "true" : "false"}
               class={TAB}
@@ -58,7 +63,13 @@ const LABEL = "font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-
     <div class="p-5 md:p-8">
       {
         platforms.map((platform, index) => (
-          <div data-panel={platform.id} hidden={index !== 0}>
+          <div
+            id={`panel-${platform.id}`}
+            role="tabpanel"
+            aria-labelledby={`tab-${platform.id}`}
+            data-panel={platform.id}
+            hidden={index !== 0}
+          >
             <p class={LABEL}>{platform.choiceLabel}</p>
 
             <div class="mt-4 flex flex-wrap gap-2">
@@ -100,11 +111,15 @@ const LABEL = "font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-
               <Button
                 data-cta
                 href={platform.options[0].href ?? undefined}
-                variant={platform.options[0].href ? "primary" : "soon"}
-                class="ml-auto"
+                newTab={false}
+                variant="primary"
+                aria-disabled={platform.options[0].href ? undefined : "true"}
+                class={CTA}
               >
                 <Icon name="download" class="size-[18px]" />
-                {platform.options[0].href ? "Download" : "Coming soon"}
+                <span data-cta-label>
+                  {platform.options[0].href ? "Download" : "Coming soon"}
+                </span>
               </Button>
             </div>
 
@@ -179,10 +194,14 @@ const LABEL = "font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-
     const tabs = [...card.querySelectorAll<HTMLButtonElement>("[data-platform-tab]")];
     const panels = [...card.querySelectorAll<HTMLElement>("[data-panel]")];
 
-    function selectPlatform(id: string): void {
+    function selectPlatform(id: string, focus = false): void {
       if (!tabs.some((tab) => tab.dataset.platformTab === id)) return;
       for (const tab of tabs) {
-        tab.setAttribute("aria-selected", String(tab.dataset.platformTab === id));
+        const chosen = tab.dataset.platformTab === id;
+        tab.setAttribute("aria-selected", String(chosen));
+        // Only the selected tab takes tab stops; the arrows walk the rest.
+        tab.tabIndex = chosen ? 0 : -1;
+        if (chosen && focus) tab.focus();
       }
       for (const panel of panels) panel.hidden = panel.dataset.panel !== id;
     }
@@ -200,15 +219,47 @@ const LABEL = "font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-
       if (sizeChip) sizeChip.hidden = !size;
       if (sizeValue && size) sizeValue.textContent = size;
 
+      // A build we don't ship yet has no URL, so the link stands down to a label
+      // rather than staying a Download button that goes nowhere.
       const cta = panel.querySelector<HTMLAnchorElement>("[data-cta]");
+      const ctaLabel = cta?.querySelector<HTMLElement>("[data-cta-label]");
       if (cta) {
-        if (href) cta.setAttribute("href", href);
-        else cta.removeAttribute("href");
+        if (href) {
+          cta.setAttribute("href", href);
+          cta.removeAttribute("aria-disabled");
+        } else {
+          cta.removeAttribute("href");
+          cta.setAttribute("aria-disabled", "true");
+        }
+        if (ctaLabel) ctaLabel.textContent = href ? "Download" : "Coming soon";
       }
     }
 
+    // The rail is a row on mobile and a column from md up, so both axes step.
+    const STEPS: Record<string, number> = {
+      ArrowRight: 1,
+      ArrowDown: 1,
+      ArrowLeft: -1,
+      ArrowUp: -1,
+    };
+
     for (const tab of tabs) {
       tab.addEventListener("click", () => selectPlatform(tab.dataset.platformTab ?? ""));
+
+      tab.addEventListener("keydown", (event) => {
+        const step = STEPS[event.key];
+        let target: HTMLButtonElement | undefined;
+        if (step !== undefined) {
+          target = tabs[(tabs.indexOf(tab) + step + tabs.length) % tabs.length];
+        } else if (event.key === "Home") {
+          target = tabs[0];
+        } else if (event.key === "End") {
+          target = tabs[tabs.length - 1];
+        }
+        if (!target) return;
+        event.preventDefault();
+        selectPlatform(target.dataset.platformTab ?? "", true);
+      });
     }
 
     for (const panel of panels) {

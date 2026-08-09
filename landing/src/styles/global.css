@@ -35,6 +35,8 @@
   --color-rule: #e7e5dc;
   --color-rule-2: #c9c7bc;
 
+  --gradient-rule: linear-gradient(90deg, transparent, var(--color-rule-2) 50%, transparent);
+
   --color-warm: #0f766e;
   --color-gold: #b7791f;
   --color-down: #2f6fed;

@@ -21,8 +21,9 @@ describe("resolveRows", () => {
 
   it("re-keys a row to the identity a merge moved it onto", () => {
     const alias = new Map([["13011248", "42"]]);
-    const out = resolveRows([minute({ key: "13011248", minute: 1 })], (r) =>
-      alias.get(r.key!) ?? r.key,
+    const out = resolveRows(
+      [minute({ key: "13011248", minute: 1 })],
+      (r) => alias.get(r.key!) ?? r.key,
     );
     expect(out[0].key).toBe("42");
   });
@@ -79,7 +80,13 @@ describe("foldMinuteCollisions", () => {
   });
 
   it("folds rows that carry no peak (the extension shape) without inventing one", () => {
-    type NoPeak = { key: string; macAddress: string; minute: number; downMbps: number; upMbps: number };
+    type NoPeak = {
+      key: string;
+      macAddress: string;
+      minute: number;
+      downMbps: number;
+      upMbps: number;
+    };
     const row = (downMbps: number): NoPeak => ({
       key: "42",
       macAddress: "60:74:f4:XX:XX:XX",

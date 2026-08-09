@@ -54,8 +54,6 @@ export function SettingsModal({
 
   const isMotorized = specForHardware(hardwareVersion).mount === "mast";
 
-
-
   const copyDiagnostics = async (): Promise<"copied" | "failed"> => {
     try {
       const client = await loadDishClient();

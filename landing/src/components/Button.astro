@@ -12,6 +12,7 @@ type Props = Omit<HTMLAttributes<"a">, "type"> &
   Omit<HTMLAttributes<"button">, "type"> & {
     type?: HTMLAttributes<"button">["type"];
     href?: string;
+    newTab?: boolean;
     variant?: keyof typeof variants;
     size?: keyof typeof sizes;
     class?: string;
@@ -29,8 +30,6 @@ const variants = {
   secondary: "border-rule-2 hover:border-ink/40",
   /** Soft grey fill — reads on both themes, so it takes a literal rather than a token. */
   tinted: "border-transparent bg-[#aeaeae59] hover:bg-[#aeaeae80]",
-  /** Dashed and inert — a platform we don't ship to yet. */
-  soon: "border-dashed border-rule-2 text-ink-3",
   ghost: "border-transparent text-ink-2 hover:bg-surface hover:text-ink",
   /** For the icon squares that sit on the lightbox's dark backdrop. */
   overlay: "border-transparent text-white/80 hover:bg-white/10 hover:text-white",
@@ -38,6 +37,7 @@ const variants = {
 
 const {
   href,
+  newTab,
   variant = "secondary",
   size = "md",
   class: className = "",
@@ -45,7 +45,7 @@ const {
 } = Astro.props;
 
 const Tag = href ? "a" : rest.type ? "button" : "span";
-const external = href?.startsWith("http") ?? false;
+const external = newTab ?? (href?.startsWith("http") || false);
 ---
 
 <Tag

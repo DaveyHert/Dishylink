@@ -70,7 +70,9 @@ describe("dishStatus", () => {
   });
   it("is online when the LAN answers, outranking both staleness and inactivity", () => {
     expect(dishStatus({ lastConnected: recent } as CloudTerminal, stale, true)).toBe("online");
-    expect(dishStatus({ lastConnected: longGone } as CloudTerminal, undefined, true)).toBe("online");
+    expect(dishStatus({ lastConnected: longGone } as CloudTerminal, undefined, true)).toBe(
+      "online",
+    );
   });
 });
 

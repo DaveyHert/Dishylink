@@ -214,11 +214,23 @@ export class AlertEngine {
 
     for (const [id, alert] of current) {
       if (!this.firing.has(id))
-        transitions.push({ kind: "fired", source: alert.source, key: alert.key, atMs, spec: alert });
+        transitions.push({
+          kind: "fired",
+          source: alert.source,
+          key: alert.key,
+          atMs,
+          spec: alert,
+        });
     }
     for (const [id, alert] of this.firing) {
       if (!scope.has(id) || current.has(id)) continue;
-      transitions.push({ kind: "cleared", source: alert.source, key: alert.key, atMs, spec: alert });
+      transitions.push({
+        kind: "cleared",
+        source: alert.source,
+        key: alert.key,
+        atMs,
+        spec: alert,
+      });
     }
 
     for (const id of scope) if (!current.has(id)) this.firing.delete(id);

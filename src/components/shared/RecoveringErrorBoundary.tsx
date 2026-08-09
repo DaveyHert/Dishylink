@@ -54,8 +54,7 @@ export class RecoveringErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.failed) {
       const now = Date.now();
-      const recurring =
-        this.state.failures.filter((t) => now - t < CALM_MS).length > RETRY_BUDGET;
+      const recurring = this.state.failures.filter((t) => now - t < CALM_MS).length > RETRY_BUDGET;
       // Transient: render nothing for the single frame before the remount — a
       // gap too short to see. Recurring: a notice the user can act on.
       if (!recurring) return null;

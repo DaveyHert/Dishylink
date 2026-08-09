@@ -80,9 +80,15 @@ describe("IndexedDbHistory across a simulated teardown", () => {
 
   it("totals a minute split across two workers without double-counting", async () => {
     const name = await freshStoreName();
-    await applyDrain(await IndexedDbHistory.open(name), { samples: window(30, 10).samples, newestCounter: 30 });
+    await applyDrain(await IndexedDbHistory.open(name), {
+      samples: window(30, 10).samples,
+      newestCounter: 30,
+    });
     // A teardown here loses the in-memory cursor; the fresh instance recovers it.
-    await applyDrain(await IndexedDbHistory.open(name), { samples: window(60, 10).samples, newestCounter: 60 });
+    await applyDrain(await IndexedDbHistory.open(name), {
+      samples: window(60, 10).samples,
+      newestCounter: 60,
+    });
     const store = await IndexedDbHistory.open(name);
     const [bucket] = await store.readMinutes(MINUTE, MINUTE);
     expect(bucket?.samples).toBe(60);
@@ -113,8 +119,24 @@ describe("IndexedDbHistory client-row pruning", () => {
     const stale = fresh - 7 * 3_600; // 7h earlier — outside 6h
     await store.putClientMinutes(
       [
-        { minute: stale, key: "1", macAddress: "aa", downMbps: 0, upMbps: 0, rxBytes: 0, txBytes: 0 },
-        { minute: fresh, key: "1", macAddress: "aa", downMbps: 5, upMbps: 1, rxBytes: 0, txBytes: 0 },
+        {
+          minute: stale,
+          key: "1",
+          macAddress: "aa",
+          downMbps: 0,
+          upMbps: 0,
+          rxBytes: 0,
+          txBytes: 0,
+        },
+        {
+          minute: fresh,
+          key: "1",
+          macAddress: "aa",
+          downMbps: 5,
+          upMbps: 1,
+          rxBytes: 0,
+          txBytes: 0,
+        },
       ],
       NOW,
     );
@@ -148,8 +170,20 @@ describe("IndexedDbHistory energy compaction", () => {
     const store = await IndexedDbHistory.open(await freshStoreName());
     await store.commit(
       [
-        { minute: OLD_YEAR_MINUTE, wattSeconds: 120, samples: 60, downlinkBits: 8e6, uplinkBits: 1e6 },
-        { minute: CURRENT_YEAR_MINUTE, wattSeconds: 50, samples: 60, downlinkBits: 0, uplinkBits: 0 },
+        {
+          minute: OLD_YEAR_MINUTE,
+          wattSeconds: 120,
+          samples: 60,
+          downlinkBits: 8e6,
+          uplinkBits: 1e6,
+        },
+        {
+          minute: CURRENT_YEAR_MINUTE,
+          wattSeconds: 50,
+          samples: 60,
+          downlinkBits: 0,
+          uplinkBits: 0,
+        },
       ],
       { counter: 0, newestSampleMs: 0 },
     );

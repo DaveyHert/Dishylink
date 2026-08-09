@@ -17,7 +17,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SettingRow, selectContentClass, selectItemClass, triggerClass } from "./settingsChrome";
-import { readToolbarStyle, setToolbarStyle, subscribeToToolbarStyle, type ToolbarStyle } from "../../lib/toolbarStyle";
+import {
+  readToolbarStyle,
+  setToolbarStyle,
+  subscribeToToolbarStyle,
+  type ToolbarStyle,
+} from "../../lib/toolbarStyle";
 
 /** The desktop host's throughput-readout bridge, exposed only in the macOS and
  *  Windows desktop apps (the preload gates it on those platforms). Null everywhere
@@ -69,7 +74,10 @@ export function AppSettingsTab() {
   return (
     <>
       <SettingRow title='App toolbar' caption='Floating dock or a left rail for the section links'>
-        <Select value={toolbarStyle} onValueChange={(value) => setToolbarStyle(value as ToolbarStyle)}>
+        <Select
+          value={toolbarStyle}
+          onValueChange={(value) => setToolbarStyle(value as ToolbarStyle)}
+        >
           <SelectTrigger className={triggerClass} style={{ width: 118 }}>
             <SelectValue />
           </SelectTrigger>

@@ -38,14 +38,8 @@ import { useTheme } from "./hooks/useTheme";
 
 export default function App() {
   const { theme, cycleTheme } = useTheme();
-  const {
-    openPanel,
-    setOpenPanel,
-    skyViewOpen,
-    setSkyViewOpen,
-    openNav,
-    openSkyView,
-  } = usePanelRouting();
+  const { openPanel, setOpenPanel, skyViewOpen, setSkyViewOpen, openNav, openSkyView } =
+    usePanelRouting();
   const [windowMinutes, setWindowMinutes] = useState(15);
   const notificationsOn = useSyncExternalStore(subscribeToNotifications, readNotificationsOn);
   const notificationsBlockedReason = useSyncExternalStore(
@@ -155,11 +149,7 @@ export default function App() {
       {/* Terminal modal */}
       {openPanel === "terminal" && status && (
         <DetailsModal title='Starlink Dish Terminal' onClose={() => setOpenPanel(null)} size='xxl'>
-          <DishTerminalCard
-            status={status}
-            stale={telemetry.stale}
-            expanded
-          />
+          <DishTerminalCard status={status} stale={telemetry.stale} expanded />
         </DetailsModal>
       )}
       {/* Speed test modal */}

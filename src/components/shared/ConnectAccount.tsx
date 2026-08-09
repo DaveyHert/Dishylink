@@ -135,10 +135,7 @@ function PasteConnect({ onConnected }: { onConnected: () => void }) {
 
       <ol className='m-0 flex list-none flex-col gap-1.5 p-0'>
         {STEPS.map((step, index) => (
-          <li
-            key={index}
-            className='flex gap-2.5 text-[12.5px] leading-snug text-ink-secondary'
-          >
+          <li key={index} className='flex gap-2.5 text-[12.5px] leading-snug text-ink-secondary'>
             <span className='mt-[1px] flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--ink)_10%,var(--surface))] text-[11px] font-semibold text-foreground'>
               {index + 1}
             </span>

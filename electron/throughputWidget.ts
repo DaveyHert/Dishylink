@@ -84,13 +84,13 @@ function savePositionDebounced(): void {
     saveTimer = null;
     isDragging = false;
     if (widget === null || widget.isDestroyed()) return;
-    
+
     // Apply any resizes that were deferred while dragging.
     if (pendingSize !== null) {
       widget.setContentSize(pendingSize.w, pendingSize.h);
       pendingSize = null;
     }
-    
+
     clampToScreen();
     const { x, y } = widget.getBounds();
     try {

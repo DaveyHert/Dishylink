@@ -1,4 +1,7 @@
-export function ShieldIcon({ size = 14, ...props }: React.ComponentProps<"svg"> & { size?: number }) {
+export function ShieldIcon({
+  size = 14,
+  ...props
+}: React.ComponentProps<"svg"> & { size?: number }) {
   return (
     <svg
       width={size}

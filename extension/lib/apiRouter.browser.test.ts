@@ -53,7 +53,11 @@ describe("routeApiRequest over real IndexedDB", () => {
     // 60 samples at 10 W = 600 watt-seconds recorded for the minute.
     await applyDrain(await IndexedDbHistory.open(name), window(60, 10));
 
-    const reply = await routeApiRequest(await IndexedDbHistory.open(name), "/api/energy?range=1h", NOW);
+    const reply = await routeApiRequest(
+      await IndexedDbHistory.open(name),
+      "/api/energy?range=1h",
+      NOW,
+    );
 
     expect(reply.status).toBe(200);
     const summary = reply.body as { totalKWh: number; range: string };
@@ -63,7 +67,11 @@ describe("routeApiRequest over real IndexedDB", () => {
 
   it("reports zero from an empty store, not an error", async () => {
     const name = await freshStoreName();
-    const reply = await routeApiRequest(await IndexedDbHistory.open(name), "/api/energy?range=1h", NOW);
+    const reply = await routeApiRequest(
+      await IndexedDbHistory.open(name),
+      "/api/energy?range=1h",
+      NOW,
+    );
     expect(reply.status).toBe(200);
     expect((reply.body as { totalKWh: number }).totalKWh).toBe(0);
   });

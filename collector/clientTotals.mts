@@ -8,7 +8,12 @@
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { ClientTotalsCore, VERSION, type ClientTotal, type Snapshot } from "../core/clientTotals.ts";
+import {
+  ClientTotalsCore,
+  VERSION,
+  type ClientTotal,
+  type Snapshot,
+} from "../core/clientTotals.ts";
 
 export type { ClientTotal };
 

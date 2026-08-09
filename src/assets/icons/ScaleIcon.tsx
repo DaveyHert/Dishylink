@@ -1,4 +1,7 @@
-export function ScaleIcon({ size = 14, ...props }: React.ComponentProps<"svg"> & { size?: number }) {
+export function ScaleIcon({
+  size = 14,
+  ...props
+}: React.ComponentProps<"svg"> & { size?: number }) {
   return (
     <svg
       width={size}

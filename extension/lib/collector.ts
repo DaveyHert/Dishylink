@@ -39,9 +39,7 @@ const OBSTRUCTION_INTERVAL_MS = 3_600_000; // one snapshot an hour, as the histo
 // the counter did not reset. Tune against real inter-drain gaps if they run wide.
 const CLIENT_MAX_GAP_MS = 5 * 60_000;
 
-export type DrainStatus =
-  | { ok: true; at: number }
-  | { ok: false; at: number; message: string };
+export type DrainStatus = { ok: true; at: number } | { ok: false; at: number; message: string };
 
 /** A tick's outcome, plus whatever crossed a threshold during it. The caller
  *  stores the status for the dashboard, announces the transitions, and reflects
@@ -86,7 +84,11 @@ export async function drainOnce(): Promise<DrainResult> {
   } catch (error) {
     // No store means nowhere to record alerts and nowhere to read the open
     // episodes that seed the engine — the tick can do nothing at all.
-    return { status: { ok: false, at, message: describeDrainError(error) }, alerts: [], active: [] };
+    return {
+      status: { ok: false, at, message: describeDrainError(error) },
+      alerts: [],
+      active: [],
+    };
   }
 
   // The history drain is best-effort and isolated from alerting: the fetch and
@@ -210,7 +212,11 @@ async function readRouterAlerts(store: HistoryStore): Promise<DeviceReading> {
  *  later reading of that minute's rolling average. The odometer deltas the byte
  *  counters, loading and re-saving its state each drain so it survives the
  *  service worker being torn down between alarms. */
-async function recordClients(store: HistoryStore, clients: WifiClientJson[], now: number): Promise<void> {
+async function recordClients(
+  store: HistoryStore,
+  clients: WifiClientJson[],
+  now: number,
+): Promise<void> {
   const identified = clients.filter((c) => c.clientId !== undefined || c.macAddress);
   const minute = Math.floor(now / 60_000) * 60;
   const rxOf = (c: WifiClientJson) => Number(c.rxStats?.bytes ?? 0);

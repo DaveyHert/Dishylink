@@ -40,8 +40,18 @@ function total(over: Partial<ClientUsageTotal> & { clientId: number }): ClientUs
 
 /** The real fork: an idle 542 GB record and a live 48 GB one, both in July. */
 const sameMonthTotals = [
-  total({ clientId: 13011248, rxBytes: 542_000_000_000, txBytes: 44_000_000_000, lastSeenMs: NOW - 36 * 3_600_000 }),
-  total({ clientId: 2806438232, macAddress: "ea:17:b5:XX:XX:XX", rxBytes: 48_000_000_000, txBytes: 3_000_000_000 }),
+  total({
+    clientId: 13011248,
+    rxBytes: 542_000_000_000,
+    txBytes: 44_000_000_000,
+    lastSeenMs: NOW - 36 * 3_600_000,
+  }),
+  total({
+    clientId: 2806438232,
+    macAddress: "ea:17:b5:XX:XX:XX",
+    rxBytes: 48_000_000_000,
+    txBytes: 3_000_000_000,
+  }),
 ];
 
 const text = () => document.body.textContent ?? "";
@@ -139,7 +149,12 @@ describe("DeviceMergePrompt", () => {
   test("promises no combined figure across a month boundary", async () => {
     const totals = [
       sameMonthTotals[0],
-      total({ clientId: 2806438232, macAddress: "ea:17:b5:XX:XX:XX", rxBytes: 7_000, sinceMs: AUGUST }),
+      total({
+        clientId: 2806438232,
+        macAddress: "ea:17:b5:XX:XX:XX",
+        rxBytes: 7_000,
+        sinceMs: AUGUST,
+      }),
     ];
     const split: MergeCandidate = {
       ...candidate,
@@ -190,7 +205,12 @@ describe("DeviceMergePrompt", () => {
 
   test("says nothing when there is nothing to ask", async () => {
     render(
-      <DeviceMergePrompt candidates={[]} totals={sameMonthTotals} nowMs={NOW} onAnswer={() => {}} />,
+      <DeviceMergePrompt
+        candidates={[]}
+        totals={sameMonthTotals}
+        nowMs={NOW}
+        onAnswer={() => {}}
+      />,
     );
     await settle();
     expect(text()).not.toContain("Possible duplicate device");

@@ -107,7 +107,13 @@ export function foldMinutesToMonths(buckets: MinuteBucket[]): Map<number, MonthB
   const months = new Map<number, MonthBucket>();
   for (const bucket of buckets) {
     const month = monthKeyOf(bucket.minute);
-    const row = months.get(month) ?? { month, wattSeconds: 0, samples: 0, downlinkBits: 0, uplinkBits: 0 };
+    const row = months.get(month) ?? {
+      month,
+      wattSeconds: 0,
+      samples: 0,
+      downlinkBits: 0,
+      uplinkBits: 0,
+    };
     row.wattSeconds += bucket.wattSeconds;
     row.samples += bucket.samples;
     row.downlinkBits += bucket.downlinkBits ?? 0;

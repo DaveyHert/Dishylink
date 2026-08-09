@@ -69,7 +69,10 @@ export async function routeApiRequest(
   }
 
   if (url.pathname === "/api/obstruction/snapshots") {
-    return { status: 200, body: { snapshots: await store.readObstructionSnapshots(now.getTime()) } };
+    return {
+      status: 200,
+      body: { snapshots: await store.readObstructionSnapshots(now.getTime()) },
+    };
   }
 
   // Zero one device's total but keep it listed — a reset, distinct from delete.
@@ -103,7 +106,9 @@ export async function routeApiRequest(
     if (method === "DELETE") {
       const key = url.searchParams.get("client");
       const odometer = await loadOdometer(store);
-      const result = key ? { removed: odometer.remove(key) } : (odometer.clear(), { cleared: true });
+      const result = key
+        ? { removed: odometer.remove(key) }
+        : (odometer.clear(), { cleared: true });
       await store.writeTotalsSnapshot(odometer.toSnapshot());
       return { status: 200, body: result };
     }
