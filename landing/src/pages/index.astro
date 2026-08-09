@@ -10,8 +10,9 @@ import Figure from "../components/Figure.astro";
 import Button from "../components/Button.astro";
 import ShootingStars from "../components/ShootingStars.astro";
 import HeroGlow from "../components/HeroGlow.astro";
+import DownloadCard from "../components/DownloadCard.astro";
 import { readFileSync } from "node:fs";
-import { GITHUB, STORES, SPONSOR, EMAIL, latestVersion, downloadsFor } from "../constants";
+import { GITHUB, SPONSOR, EMAIL, downloadPlatforms } from "../constants";
 import { sections } from "../data/sections";
 
 // Real captures of the running app — no mockups, no illustrations. If a surface
@@ -23,36 +24,22 @@ const title = "Dishylink — The opensource Starlink desktop app (unofficial)";
 const description =
   "A free, open-source Starlink desktop app that monitors the performance and health of your Starlink system. Features live throughput, latency, power draw, obstruction maps, satellite tracking and per-device data usage — on macOS, Windows, Chrome, Edge and Firefox.";
 
-// Every hero button jumps to the chooser below rather than downloading, so a
-// visitor picks their architecture instead of guessing at it.
-const desktopDownloads = [
-  { icon: "apple", label: "Download for Mac", href: "#get", variant: "primary" },
-  { icon: "windows", label: "Download for Windows", href: "#get", variant: "tinted" },
-] as const;
-
-const version = await latestVersion(
+const { version, platforms } = await downloadPlatforms(
   JSON.parse(readFileSync(new URL("../../../package.json", import.meta.url), "utf-8")).version,
 );
-const downloads = downloadsFor(version);
 
-const desktopBuilds = [
-  { icon: "apple", label: "Apple Silicon", href: downloads.macArm, variant: "primary" },
-  { icon: "apple", label: "Mac Intel", href: downloads.macIntel, variant: "tinted" },
-  { icon: "windows", label: "Windows", href: downloads.windows, variant: "secondary" },
-] as const;
-
+// Each hero button scrolls to the chooser and opens the platform it names, so a
+// visitor lands on their own builds rather than guessing at an architecture.
 const downloadLinks = [
-  ...desktopDownloads,
-  { icon: "browsers", label: "Download for Browser", href: "#get", variant: "secondary" },
+  { icon: "apple", label: "Download for Mac", platform: "macos", variant: "primary" },
+  { icon: "windows", label: "Download for Windows", platform: "windows", variant: "tinted" },
+  { icon: "browsers", label: "Download for Browser", platform: "web", variant: "secondary" },
 ] as const;
 
-// Brand logos live in public/ rather than src/assets so each renders as its own
-// <img> document — three inlined SVGs would collide on their gradient ids.
-// Variants descend in weight the way the hero's three download buttons do.
 const browsers = [
-  { name: "Chrome", logo: "/browsers/chrome.svg", href: STORES.chrome, variant: "primary" },
-  { name: "Firefox", logo: "/browsers/firefox.svg", href: STORES.firefox, variant: "tinted" },
-  { name: "Edge", logo: "/browsers/edge.svg", href: STORES.edge, variant: "secondary" },
+  { name: "Chrome", logo: "/browsers/chrome.svg", href: null, variant: "primary" },
+  { name: "Firefox", logo: "/browsers/firefox.svg", href: null, variant: "tinted" },
+  { name: "Edge", logo: "/browsers/edge.svg", href: null, variant: "secondary" },
 ] as const;
 
 // Answers are escaped text. Only `aside` is rendered as markup, so a link can
@@ -114,8 +101,8 @@ const faqs: { q: string; a: string; aside?: string }[] = [
 
         <div class="mt-10 flex flex-wrap items-center justify-center gap-3">
           {
-            downloadLinks.map(({ icon, label, href, variant }) => (
-              <Button href={href} variant={variant}>
+            downloadLinks.map(({ icon, label, platform, variant }) => (
+              <Button href="#get" variant={variant} data-goto-platform={platform}>
                 <Icon name={icon} />
                 {label}
               </Button>
@@ -159,51 +146,8 @@ const faqs: { q: string; a: string; aside?: string }[] = [
           Same dashboard, same live readings, same alerts, either way you run it.
         </p>
 
-        <div class="mx-auto mt-12 grid max-w-5xl gap-5 text-left md:grid-cols-2">
-          <div class="relative flex flex-col overflow-hidden rounded-2xl border border-rule p-8 before:absolute before:inset-x-0 before:top-0 before:h-px before:[background:linear-gradient(90deg,transparent,var(--color-rule-2)_50%,transparent)]">
-            <h3 class="text-center font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-ink">
-              The native Desktop experience
-            </h3>
-            <p class="mt-4 text-ink-2">
-              Runs in the tray, starts at login, and keeps a permanent history with menu-bar and
-              taskbar readouts.
-            </p>
-            <div class="mt-6 grid gap-3 sm:grid-cols-3">
-              {
-                desktopBuilds.map(({ icon, label, href, variant }) => (
-                  <Button href={href} variant={variant} size="sm">
-                    <Icon name={icon} class="size-4" />
-                    {label}
-                  </Button>
-                ))
-              }
-            </div>
-            <p class="mt-auto pt-4 font-mono text-[11px] text-ink-3">
-              v{version} · macOS 12+ · Windows 10+
-            </p>
-          </div>
-
-          <div class="relative flex flex-col overflow-hidden rounded-2xl border border-rule p-8 before:absolute before:inset-x-0 before:top-0 before:h-px before:[background:linear-gradient(90deg,transparent,var(--color-rule-2)_50%,transparent)]">
-            <h3 class="text-center font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-ink">
-              The Browser experience
-            </h3>
-            <p class="mt-4 text-ink-2">
-              The full dashboard in its own window, with live alerts on your toolbar.
-            </p>
-            <div class="mt-6 grid grid-cols-3 gap-2.5">
-              {
-                browsers.map((browser) => (
-                  <Button href={browser.href ?? undefined} variant={browser.variant} size="sm">
-                    <img src={browser.logo} alt="" width="16" height="16" class="size-4" />
-                    {browser.name}
-                  </Button>
-                ))
-              }
-            </div>
-            <p class="mt-auto pt-4 font-mono text-[11px] text-ink-3">
-              Chrome 144+ · Store listings in review
-            </p>
-          </div>
+        <div class="mx-auto mt-12 max-w-5xl text-left">
+          <DownloadCard platforms={platforms} version={version} />
         </div>
 
         <p class="mt-10 text-ink-2">

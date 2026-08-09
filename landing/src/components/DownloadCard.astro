@@ -1,0 +1,232 @@
+---
+import Icon from "./Icon.astro";
+import Button from "./Button.astro";
+import type { DownloadPlatform } from "../constants";
+
+interface Props {
+  platforms: DownloadPlatform[];
+  version: string;
+}
+
+const { platforms, version } = Astro.props;
+
+// Selected state is expressed as aria-selected / aria-pressed and styled from
+// those, so the script toggles one attribute and never a list of classes.
+const TAB =
+  "group flex flex-1 cursor-pointer items-center gap-2.5 rounded-xl px-3.5 py-3 text-left text-[15px] font-semibold text-ink-2 transition-colors hover:bg-ink/[0.04] hover:text-ink aria-selected:bg-paper aria-selected:text-ink aria-selected:shadow-[0_1px_2px_rgba(0,0,0,0.07)] md:flex-none dark:hover:bg-white/[0.04] dark:aria-selected:bg-white/[0.08] dark:aria-selected:shadow-none";
+const TAB_ICON =
+  "size-[18px] shrink-0 text-ink-3 transition-colors group-hover:text-ink-2 group-aria-selected:text-ink";
+const PILL =
+  "inline-flex cursor-pointer items-center gap-2 rounded-lg border border-rule-2 px-4 py-2 font-mono text-[13px] font-semibold text-ink-2 transition-colors hover:border-ink/40 hover:text-ink aria-pressed:border-transparent aria-pressed:bg-ink aria-pressed:text-paper";
+const CHIP =
+  "rounded-lg bg-paper px-3 py-1.5 font-mono text-[12px] whitespace-nowrap ring-1 ring-rule dark:bg-white/[0.05] dark:ring-white/[0.07]";
+const LABEL = "font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-ink-3";
+---
+
+<div
+  data-download-card
+  class="relative overflow-hidden rounded-2xl border border-rule bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.04),0_18px_40px_-20px_rgba(0,0,0,0.18)] before:absolute before:inset-x-0 before:top-0 before:z-10 before:h-px before:[background:linear-gradient(90deg,transparent,var(--color-rule-2)_50%,transparent)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_24px_60px_-24px_rgba(0,0,0,0.9)]"
+>
+  <div class="card-canvas" aria-hidden="true">
+    <span class="dots"></span>
+    <span class="bloom"></span>
+  </div>
+
+  <div class="relative z-10 grid md:grid-cols-[15.5rem_1fr]">
+    <div
+      class="border-b border-rule bg-ink/[0.02] p-5 md:border-r md:border-b-0 md:p-6 dark:bg-black/30"
+    >
+      <p class={LABEL}>Platform</p>
+      <div class="mt-4 flex gap-2 md:flex-col" role="tablist" aria-label="Platform">
+        {
+          platforms.map((platform, index) => (
+            <button
+              type="button"
+              role="tab"
+              data-platform-tab={platform.id}
+              aria-selected={index === 0 ? "true" : "false"}
+              class={TAB}
+            >
+              <Icon name={platform.icon} class={TAB_ICON} />
+              <span>{platform.label}</span>
+            </button>
+          ))
+        }
+      </div>
+    </div>
+
+    <div class="p-5 md:p-8">
+      {
+        platforms.map((platform, index) => (
+          <div data-panel={platform.id} hidden={index !== 0}>
+            <p class={LABEL}>{platform.choiceLabel}</p>
+
+            <div class="mt-4 flex flex-wrap gap-2">
+              {platform.options.map((option, optionIndex) => (
+                <button
+                  type="button"
+                  data-option={option.id}
+                  data-href={option.href ?? ""}
+                  data-file={option.fileType}
+                  data-size={option.size ?? ""}
+                  aria-pressed={optionIndex === 0 ? "true" : "false"}
+                  class={PILL}
+                >
+                  {option.logo && (
+                    <img src={option.logo} alt="" width="16" height="16" class="size-4" />
+                  )}
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            <div class="mt-7 flex flex-wrap items-center gap-3 border-t border-rule pt-6">
+              <span class={CHIP}>
+                <span class="text-ink-3">Version:</span> <span class="text-ink">v{version}</span>
+              </span>
+              <span class={CHIP} data-meta="file">
+                <span class="text-ink-3">File:</span>{" "}
+                <span class="text-ink" data-value>
+                  {platform.options[0].fileType}
+                </span>
+              </span>
+              <span class={CHIP} data-meta="size" hidden={!platform.options[0].size}>
+                <span class="text-ink-3">Size:</span>{" "}
+                <span class="text-ink" data-value>
+                  {platform.options[0].size}
+                </span>
+              </span>
+
+              <Button
+                data-cta
+                href={platform.options[0].href ?? undefined}
+                variant={platform.options[0].href ? "primary" : "soon"}
+                class="ml-auto"
+              >
+                <Icon name="download" class="size-[18px]" />
+                {platform.options[0].href ? "Download" : "Coming soon"}
+              </Button>
+            </div>
+
+            <p class="mt-4 text-[13px] text-ink-3">{platform.requirement}</p>
+          </div>
+        ))
+      }
+    </div>
+  </div>
+</div>
+
+<style>
+  .card-canvas {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    --glow: rgb(17 17 16 / 0.06);
+  }
+
+  :global([data-theme="dark"]) .card-canvas {
+    --glow: rgb(255 255 255 / 0.1);
+  }
+
+  /* The section backdrop's dot field, faded away from the rail corner so it
+     never competes with the panel's own text. */
+  .dots {
+    position: absolute;
+    inset: 0;
+    opacity: 0.6;
+    background-image: radial-gradient(var(--color-rule-2) 0.5px, transparent 0.5px);
+    background-size: 22px 22px;
+    -webkit-mask-image: radial-gradient(120% 120% at 8% 0%, #000 0%, transparent 68%);
+    mask-image: radial-gradient(120% 120% at 8% 0%, #000 0%, transparent 68%);
+  }
+
+  .bloom {
+    position: absolute;
+    left: -8%;
+    top: -70%;
+    width: 62%;
+    aspect-ratio: 1;
+    background: radial-gradient(circle, var(--glow) 0, transparent 70%);
+  }
+</style>
+
+<noscript>
+  <div class="mt-4 rounded-2xl border border-rule bg-surface p-6">
+    <p class={LABEL}>All downloads</p>
+    <ul class="mt-4 grid gap-2 text-[15px] sm:grid-cols-2">
+      {
+        platforms.flatMap((platform) =>
+          platform.options
+            .filter((option) => option.href)
+            .map((option) => (
+              <li>
+                <a class="text-ink underline underline-offset-2" href={option.href}>
+                  {platform.label} · {option.label}
+                  {option.size ? ` (${option.size})` : ""}
+                </a>
+              </li>
+            )),
+        )
+      }
+    </ul>
+  </div>
+</noscript>
+
+<script>
+  const card = document.querySelector<HTMLElement>("[data-download-card]");
+  if (card) {
+    const tabs = [...card.querySelectorAll<HTMLButtonElement>("[data-platform-tab]")];
+    const panels = [...card.querySelectorAll<HTMLElement>("[data-panel]")];
+
+    function selectPlatform(id: string): void {
+      if (!tabs.some((tab) => tab.dataset.platformTab === id)) return;
+      for (const tab of tabs) {
+        tab.setAttribute("aria-selected", String(tab.dataset.platformTab === id));
+      }
+      for (const panel of panels) panel.hidden = panel.dataset.panel !== id;
+    }
+
+    function selectOption(panel: HTMLElement, chosen: HTMLButtonElement): void {
+      for (const pill of panel.querySelectorAll<HTMLButtonElement>("[data-option]")) {
+        pill.setAttribute("aria-pressed", String(pill === chosen));
+      }
+
+      const { href = "", file = "", size = "" } = chosen.dataset;
+      const fileValue = panel.querySelector<HTMLElement>('[data-meta="file"] [data-value]');
+      const sizeChip = panel.querySelector<HTMLElement>('[data-meta="size"]');
+      const sizeValue = sizeChip?.querySelector<HTMLElement>("[data-value]");
+      if (fileValue) fileValue.textContent = file;
+      if (sizeChip) sizeChip.hidden = !size;
+      if (sizeValue && size) sizeValue.textContent = size;
+
+      const cta = panel.querySelector<HTMLAnchorElement>("[data-cta]");
+      if (cta) {
+        if (href) cta.setAttribute("href", href);
+        else cta.removeAttribute("href");
+      }
+    }
+
+    for (const tab of tabs) {
+      tab.addEventListener("click", () => selectPlatform(tab.dataset.platformTab ?? ""));
+    }
+
+    for (const panel of panels) {
+      for (const pill of panel.querySelectorAll<HTMLButtonElement>("[data-option]")) {
+        pill.addEventListener("click", () => selectOption(panel, pill));
+      }
+    }
+
+    // The hero's buttons scroll here and open the platform they name; #get-macos
+    // and friends do the same as a shareable link.
+    for (const link of document.querySelectorAll<HTMLElement>("[data-goto-platform]")) {
+      link.addEventListener("click", () => selectPlatform(link.dataset.gotoPlatform ?? ""));
+    }
+
+    const fromHash = location.hash.match(/^#get-(\w+)$/)?.[1];
+    if (fromHash) {
+      selectPlatform(fromHash);
+      document.getElementById("get")?.scrollIntoView();
+    }
+  }
+</script>
