@@ -80,6 +80,23 @@ const faqSchema = {
 <!doctype html>
 <html lang="en" data-theme="dark">
   <head>
+    {/* Left out of `astro dev` so local sessions stay out of the reports. */}
+    {
+      import.meta.env.PROD && (
+        <>
+          {/* Google tag (gtag.js) */}
+          <script is:inline async src="https://www.googletagmanager.com/gtag/js?id=G-60WP4LGYWP" />
+          <script is:inline>
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+
+            gtag('config', 'G-60WP4LGYWP');
+          </script>
+        </>
+      )
+    }
+
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>

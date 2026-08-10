@@ -20,11 +20,17 @@ on your device only:
 
 - On desktop, the session is stored in your app's local data directory,
   encrypted with your OS's keychain where available.
+- In the browser extension, the session is stored in the extension's own
+  storage area, inside your browser profile. No website and no other
+  extension can read it. It is not encrypted at rest, so anything with
+  access to your browser profile on disk could.
 - The session is used solely to read your own plan, billing, and usage data
   directly from `starlink.com` on your behalf, in response to your own
   requests.
 - It is never sent to us or to any third party — we have no server that
   could receive it. Disconnecting the account clears the stored session.
+  In the extension, disconnecting clears only Dishylink's copy — your own
+  starlink.com login in the browser is left signed in.
 
 This feature is entirely opt-in. If you never sign in, no Starlink account
 session is created or stored.
