@@ -1,7 +1,3 @@
-// Every outbound link on the site, in one place — the store listings do not
-// exist yet, so they are marked and rendered as "coming soon" rather than as
-// dead buttons. Fill these in and the buttons activate on their own.
-
 export const GITHUB = "https://github.com/DaveyHert/dishylink";
 export const RELEASES = `${GITHUB}/releases/latest`;
 export const ISSUES = `${GITHUB}/issues`;
@@ -19,7 +15,7 @@ export const SPONSOR = {
 
 /** null = listing not published yet; the UI renders a disabled control instead. */
 export const STORES: Record<string, string | null> = {
-  chrome: null,
+  chrome: "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna",
   edge: null,
   firefox: null,
 };
