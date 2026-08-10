@@ -1,4 +1,16 @@
 User-agent: *
 Allow: /
 
+User-agent: Googlebot
+User-agent: Bingbot
+Allow: /
+
+User-agent: GPTBot
+User-agent: ChatGPT-User
+User-agent: OAI-SearchBot
+User-agent: ClaudeBot
+User-agent: PerplexityBot
+User-agent: Google-Extended
+Allow: /
+
 Sitemap: https://dishylink.com/sitemap-index.xml

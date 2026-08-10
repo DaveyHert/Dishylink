@@ -1,0 +1,47 @@
+# Dishylink
+
+> A free, open-source desktop app and browser extension that monitors the performance and health of your Starlink. It reads your dish and router directly over your local network, so it keeps working during an outage — which is exactly when you want to see what happened.
+
+No account and no internet connection are required. There is no backend, no analytics and no telemetry collection: everything Dishylink records is written to the user's own machine and stays there. Connecting a Starlink account is optional, opt-in and read-only, and only adds plan and billing figures.
+
+Dishylink is an unofficial, independent project with no affiliation to SpaceX or Starlink. Starlink is a trademark of Space Exploration Technologies Corp.
+
+## What it does
+
+- [Live dashboard](https://dishylink.com/#features): downlink/uplink throughput, pop-ping latency, power draw in watts, ping-success rate and sky-obstruction fraction, each with a sparkline and an expandable detail panel. Throughput and latency charts cover 15m/1h/6h live, and day/week/month from recorded history.
+- Dish alignment: rotation and tilt dials read against the desired azimuth/elevation band, ported from the dish's own web app, so a misaligned kit is something you can act on rather than guess at.
+- Speed test: a real download/upload/latency test run from the app against Cloudflare's public speed-test infrastructure, for settling whether the line is delivering what it should.
+- Network and nodes: every connected client device with vendor, device type and last-seen time, per-client throughput, mesh node status, router radio temperatures and the router's own event log.
+- [Data usage](https://dishylink.com/#data): self-measured download/upload volume by day, week and month, plus per-device usage for the billing month from the router's own per-client counters.
+- [Power usage](https://dishylink.com/#power): the dish's actual draw over time with kWh totals per day, week and month, honest about any recording gaps.
+- Latency analytics: latency bucketed by maximum so spikes survive downsampling, outages drawn as red bands, and the router's own ping alongside Starlink's — which tells you whether the lag is Starlink or your own router.
+- [Alerts and event log](https://dishylink.com/#alerts): outage, thermal and link events with severity and an in-app bell, over a log that separates a real outage from a degraded link.
+- OS notifications and live throughput: live download and upload rates in the macOS menu bar or a draggable always-on-top pill on Windows, plus native OS notifications — all of it working with the app's window closed.
+- [Control settings](https://dishylink.com/#controls): snow melt, sleep schedule, software-update window, reboot, obstruction-map reset, stow/unstow on motorised kits, and router settings.
+- [Satellite and obstruction map](https://dishylink.com/#satellite): the dish's 123x123 SNR grid rendered as a polar sky dome, an hourly obstruction time-lapse, and the live satellite constellation overhead with pass details per satellite.
+- Optional cloud account tab: your Starlink plan, billing cycles and authoritative monthly data usage, read-only and opt-in.
+
+## Platforms
+
+- [Download](https://dishylink.com/#get): all builds, matched to the newest published release.
+- Desktop app for macOS 12+ and Windows 10+. It lives in the tray or menu bar and keeps recording after its window is closed, so collection covers outages that happen while nobody is looking.
+- [Chrome extension](https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna): requires Chrome 144 or later. Edge and Firefox builds ship as ZIPs from the releases page; store listings are not published yet.
+
+## Documentation
+
+- [README](https://github.com/DaveyHert/dishylink/blob/master/README.md): full feature list, how the three builds are run, and how the app talks to the dish and router.
+- [Local API notes](https://github.com/DaveyHert/dishylink/blob/master/LOCAL-API.md): measured behaviour of the dish's and router's undocumented local gRPC API — sample clocks, poll costs, fields that exist but are never populated, and hardware-safety findings.
+- [History recorder](https://github.com/DaveyHert/dishylink/blob/master/collector/README.md): how the always-on recording service runs and its on-disk format.
+- [Contributing](https://github.com/DaveyHert/dishylink/blob/master/CONTRIBUTING.md)
+- [Privacy policy](https://github.com/DaveyHert/dishylink/blob/master/PRIVACY.md): what stays on the machine, and what the optional account feature does.
+- [Disclaimer](https://github.com/DaveyHert/dishylink/blob/master/DISCLAIMER.md): independence from SpaceX/Starlink, no warranty, no liability.
+- [FAQ](https://dishylink.com/#faq)
+
+## Source and contact
+
+- [Source code](https://github.com/DaveyHert/dishylink): MIT licensed.
+- [Releases](https://github.com/DaveyHert/dishylink/releases/latest)
+- [Issues and bug reports](https://github.com/DaveyHert/dishylink/issues)
+- Email: hello@dishylink.com
+- [X/Twitter](https://x.com/daveyhert)
+- [Sponsor the project](https://github.com/sponsors/daveyhert)

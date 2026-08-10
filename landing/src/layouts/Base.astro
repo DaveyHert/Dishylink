@@ -14,6 +14,43 @@ const { title, description, path = "/" } = Astro.props;
 const canonical = new URL(path, Astro.site ?? "https://dishylink.com").toString();
 const ogImage = new URL("/og.png", Astro.site ?? "https://dishylink.com").toString();
 
+const site = Astro.site?.toString().replace(/\/$/, "") ?? "https://dishylink.com";
+const ORGANIZATION_ID = `${site}/#organization`;
+
+// The publisher behind the app and the site. Dishylink is an independent
+// open-source project, not a registered company, so this carries only what the
+// repo can evidence — no address, no founding date, no employee count.
+const organizationSchema = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "@id": ORGANIZATION_ID,
+  name: "Dishylink",
+  url: site,
+  logo: new URL("/apple-touch-icon.png", `${site}/`).toString(),
+  email: "hello@dishylink.com",
+  description:
+    "Independent open-source project building Dishylink, a local-first monitoring app for Starlink. Not affiliated with, endorsed by or sponsored by SpaceX or Starlink.",
+  sameAs: ["https://github.com/DaveyHert/dishylink", "https://x.com/daveyhert"],
+  founder: {
+    "@type": "Person",
+    name: "David Herbert",
+    alternateName: "daveyhert",
+    url: "https://github.com/DaveyHert",
+    sameAs: ["https://github.com/DaveyHert", "https://x.com/daveyhert"],
+  },
+};
+
+const websiteSchema = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "@id": `${site}/#website`,
+  name: "Dishylink",
+  url: site,
+  description,
+  inLanguage: "en",
+  publisher: { "@id": ORGANIZATION_ID },
+};
+
 // Marked up as an application rather than a product page: it is what earns the
 // rich result for brand queries, and "free" is a fact search engines can show.
 const appSchema = {
@@ -27,6 +64,7 @@ const appSchema = {
   isAccessibleForFree: true,
   license: "https://opensource.org/licenses/MIT",
   offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  publisher: { "@id": ORGANIZATION_ID },
 };
 
 const faqSchema = {
@@ -132,6 +170,8 @@ const faqSchema = {
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImage} />
 
+    <script is:inline set:html={JSON.stringify(organizationSchema)} type="application/ld+json" />
+    <script is:inline set:html={JSON.stringify(websiteSchema)} type="application/ld+json" />
     <script is:inline set:html={JSON.stringify(appSchema)} type="application/ld+json" />
     <script is:inline set:html={JSON.stringify(faqSchema)} type="application/ld+json" />
 

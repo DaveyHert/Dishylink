@@ -20,9 +20,9 @@ import { sections } from "../data/sections";
 import dashboardLight from "../assets/shots/dashboard-light.png";
 import dashboardDark from "../assets/shots/dashboard-dark.png";
 
-const title = "Dishylink — Starlink monitoring app for macOS & Windows";
+const title = "Dishylink — Starlink monitoring app for Mac, Windows & browsers";
 const description =
-  "Monitor your Starlink's speed, latency, power draw and obstructions in real time — and see exactly what happened during an outage. Free and open source.";
+  "Monitor your Starlink's speed, latency, power draw and obstructions in real time, and see exactly what happened during an outage. Free and open source.";
 
 const { version, platforms } = await downloadPlatforms(
   JSON.parse(readFileSync(new URL("../../../package.json", import.meta.url), "utf-8")).version,
