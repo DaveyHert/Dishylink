@@ -1029,9 +1029,22 @@ function isLocalOrigin(origin?: string): boolean {
   return /^f[cd][0-9a-f]{2}:/i.test(hostname);
 }
 
+/** Whether a request was addressed to this machine by a loopback name. */
+function isLocalHost(host?: string): boolean {
+  if (!host) return false;
+  const hostname = host.replace(/:\d+$/, "").replace(/^\[|\]$/g, "");
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+}
+
 export function handleRequest(request: IncomingMessage, response: ServerResponse): void {
   const url = new URL(request.url ?? "/", `http://localhost:${PORT}`);
-  response.setHeader("Access-Control-Allow-Origin", "*");
+  const origin = request.headers.origin;
+  const local = isLocalOrigin(origin);
+  // The recording names every device on the network, its MAC and its traffic, so
+  // only a local origin may read it. The dashboard reaches /api through its own
+  // server, so nothing legitimate is cross-origin.
+  if (local && origin) response.setHeader("Access-Control-Allow-Origin", origin);
+  response.setHeader("Vary", "Origin");
   // The usage list can reset (POST) and delete (DELETE) records — allow both,
   // plus answer the preflight.
   response.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
@@ -1040,11 +1053,9 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
     response.end();
     return;
   }
-  // Reads stay open to anything. Writes do not: a wildcard policy in front of
-  // DELETE /api/clients/totals would let any page the user happens to visit wipe
-  // their usage history from across the internet. Only a page served from this
-  // machine or the LAN may mutate.
-  if (request.method !== "GET" && !isLocalOrigin(request.headers.origin)) {
+  // A browser honours the missing header above; curl does not, and DELETE
+  // /api/clients/totals wipes the usage history outright.
+  if (request.method !== "GET" && !local) {
     response.statusCode = 403;
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify({ error: "cross-origin write refused" }));
@@ -1324,7 +1335,16 @@ process.on("exit", releaseDataDir);
 // Electron app) sets HISTORIAN_EMBED and calls handleRequest directly instead, so
 // there is no open port.
 if (process.env.HISTORIAN_EMBED !== "1") {
-  createServer(handleRequest).listen(PORT, () => {
+  createServer((request, response) => {
+    // A foreign name pointed at this address would be same-origin here, so the
+    // origin rules in handleRequest would not apply to it.
+    if (!isLocalHost(request.headers.host)) {
+      response.statusCode = 403;
+      response.end("forbidden");
+      return;
+    }
+    handleRequest(request, response);
+  }).listen(PORT, "127.0.0.1", () => {
     console.log(`[historian] API on http://localhost:${PORT}  (dish: ${DISH_URL})`);
     console.log(`[historian] persisting to ${DATA_FILE}`);
   });

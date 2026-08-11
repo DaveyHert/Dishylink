@@ -130,8 +130,10 @@ export default defineConfig(({ command }) => ({
       // Long-term energy totals from the local historian service (collector/).
       // xfwd adds x-forwarded-for so /api/whoami sees the browser's LAN IP, not
       // this proxy's loopback address.
+      // 127.0.0.1, not localhost: the historian binds v4 loopback, and Node
+      // resolves localhost verbatim — often to ::1 first, which nothing answers.
       "/api": {
-        target: "http://localhost:8088",
+        target: "http://127.0.0.1:8088",
         changeOrigin: true,
         xfwd: true,
       },

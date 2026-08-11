@@ -17,6 +17,9 @@ collector/data
 # Claude Code's local settings/session state — machine-specific, not shared config.
 .claude/
 
+# Local working notes. Open security TODOs live here rather than in a public file.
+*.local.md
+
 # Rasterized from build/icon.svg by scripts/make-icon.mjs. The SVG is the only committed form of the mark.
 build/icon.icns
 build/icon.png
