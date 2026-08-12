@@ -110,6 +110,10 @@ npm run build:extension:edge
 
 ### Browser extension (Chrome, Edge, Firefox)
 
+Install it from the
+[Chrome Web Store](https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna)
+or [Firefox Add-ons](https://addons.mozilla.org/addon/dishylink/).
+
 - The toolbar icon opens the dashboard as a chromeless window (default) or an
   ordinary tab — never a cramped toolbar popup.
 - **Toolbar badge** — the number of alerts firing right now, tinted by the worst

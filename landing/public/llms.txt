@@ -25,7 +25,7 @@ Dishylink is an unofficial, independent project with no affiliation to SpaceX or
 
 - [Download](https://dishylink.com/#get): all builds, matched to the newest published release.
 - Desktop app for macOS 12+ and Windows 10+. It lives in the tray or menu bar and keeps recording after its window is closed, so collection covers outages that happen while nobody is looking.
-- [Chrome extension](https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna): requires Chrome 144 or later. Edge and Firefox builds ship as ZIPs from the releases page; store listings are not published yet.
+- Browser extension for [Chrome](https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna), which requires Chrome 144 or later, and [Firefox](https://addons.mozilla.org/addon/dishylink/).
 
 ## Documentation
 

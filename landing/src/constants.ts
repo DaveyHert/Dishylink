@@ -17,7 +17,7 @@ export const SPONSOR = {
 export const STORES: Record<string, string | null> = {
   chrome: "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna",
   edge: null,
-  firefox: null,
+  firefox: "https://addons.mozilla.org/addon/dishylink/",
 };
 
 export interface DownloadOption {
