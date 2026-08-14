@@ -1,4 +1,6 @@
-// Typed client for the user's own starlink.com account data, read-only.
+// Typed client for the user's own starlink.com account data and session lifecycle.
+// Supported router mutations use the same optional session through cloudHost,
+// while their request payloads are prepared by the trusted host from LAN state.
 //
 // The UI only ever talks to /cloud/* (served by the host's cloud binding — the
 // Vite dev proxy, Electron main, the extension background worker later). It

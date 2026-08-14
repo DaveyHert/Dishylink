@@ -46,10 +46,19 @@ export async function grpcWebUnaryCall(
   methodUrl: string,
   requestBytes: Uint8Array,
   abortSignal?: AbortSignal,
+  options: {
+    fetch?: typeof fetch;
+    headers?: Record<string, string>;
+  } = {},
 ): Promise<Uint8Array> {
-  const httpResponse = await fetch(methodUrl, {
+  const doFetch = options.fetch ?? fetch;
+  const httpResponse = await doFetch(methodUrl, {
     method: "POST",
-    headers: { "Content-Type": "application/grpc-web+proto", "X-Grpc-Web": "1" },
+    headers: {
+      "Content-Type": "application/grpc-web+proto",
+      "X-Grpc-Web": "1",
+      ...options.headers,
+    },
     body: encodeFrame(requestBytes) as unknown as BodyInit,
     signal: abortSignal ?? null,
   });
@@ -63,7 +72,10 @@ export async function grpcWebUnaryCall(
     );
   }
   if (!httpResponse.ok) {
-    throw new GrpcWebError(2, `HTTP ${httpResponse.status}`);
+    throw new GrpcWebError(
+      httpResponse.status === 401 || httpResponse.status === 403 ? 16 : 2,
+      `HTTP ${httpResponse.status}`,
+    );
   }
 
   const body = new Uint8Array(await httpResponse.arrayBuffer());

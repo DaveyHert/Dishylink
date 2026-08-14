@@ -17,6 +17,10 @@ import { DeviceThroughput } from "./DeviceThroughput";
 import { buildDeviceFacts } from "./deviceFacts";
 import { deviceRowSubtitle } from "./deviceRowSubtitle";
 import { displayName, signalQuality } from "./networkFormat";
+import { Button } from "../ui/button";
+import { clientPauseControlAvailable, setRouterClientPaused } from "../../lib/routerPause";
+import { useCloudAccount } from "../../hooks/useCloudAccount";
+import { supportsRouterClientPause } from "../../lib/cloudHost";
 
 export function DeviceDetail({
   client,
@@ -40,6 +44,37 @@ export function DeviceDetail({
   onRename: (macAddress: string, givenName: string) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
+  const [pauseBusy, setPauseBusy] = useState(false);
+  const [pauseError, setPauseError] = useState<string | null>(null);
+  const paused = client.blocked === true;
+  const { status: cloudStatus } = useCloudAccount(true);
+  const showPauseControl = clientPauseControlAvailable(
+    client.clientId,
+    isThisDevice,
+    cloudStatus === "ready",
+    supportsRouterClientPause(),
+  );
+
+  const togglePaused = async () => {
+    if (
+      client.clientId === undefined ||
+      pauseBusy ||
+      isThisDevice ||
+      cloudStatus !== "ready" ||
+      !supportsRouterClientPause()
+    )
+      return;
+    const next = !paused;
+    setPauseBusy(true);
+    setPauseError(null);
+    try {
+      await setRouterClientPaused(client.clientId, next);
+    } catch (error) {
+      setPauseError((error as Error).message);
+    } finally {
+      setPauseBusy(false);
+    }
+  };
 
   const quality = signalQuality(client);
   const name = displayName(client);
@@ -95,11 +130,28 @@ export function DeviceDetail({
               {client.clientId}
             </span>
           )}
-          {client.blocked && <Badge className='mt-1'>Paused</Badge>}
+          {paused && <Badge className='mt-1'>Paused</Badge>}
         </div>
-        {/* Empty flank balances the left one so the glyph column stays centred. */}
-        <div aria-hidden />
+        <div className='flex justify-end'>
+          {showPauseControl && (
+            <Button
+              variant={paused ? "outline" : "secondary"}
+              size='sm'
+              className='cursor-pointer disabled:cursor-not-allowed'
+              disabled={pauseBusy}
+              onClick={() => void togglePaused()}
+            >
+              {pauseBusy ? (paused ? "Unpausing…" : "Pausing…") : paused ? "Unpause" : "Pause"}
+            </Button>
+          )}
+        </div>
       </div>
+
+      {pauseError && (
+        <div className='mb-3 rounded-md border border-destructive/30 bg-destructive/8 px-3 py-2 text-[12px] text-destructive'>
+          {pauseError}
+        </div>
+      )}
 
       {editing && (
         <DeviceNameEditor

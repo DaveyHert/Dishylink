@@ -1,6 +1,6 @@
-// Portal-style account view from the user's own starlink.com session (read-only):
-// identity, plan, service address, and the dish/router device list. Mirrors
-// starlink.com/account. Cloud-only, entirely separate from the local dish surfaces.
+// Portal-style account view from the user's own starlink.com session: identity,
+// plan, service address, and the dish/router device list. The same optional
+// session also authorizes supported router controls from local device surfaces.
 //
 // What is left here is the page: fetch state, and the four cards. The device
 // browser is its own component, and the list it renders is built by a pure

@@ -98,11 +98,51 @@ July 2026 firmware rejects **all** LAN write RPCs — rename, `set_config` —
 with grpc status 7. The official app performs writes via Starlink's cloud,
 not over the LAN. No local elevation path exists.
 
+## Authenticated cloud router writes
+
+Pause and unpause were measured through Starlink's authenticated grpc-web
+`SpaceX.API.Device.Device/Handle` endpoint. This is an unofficial, observed
+interface rather than a published API and may change with Starlink firmware or
+service updates. The behavior was verified on the same installation described
+at the top of this document; record the router hardware and firmware from
+**Copy debug data** when reporting or re-testing it.
+
+The accepted request uses `wifiSetConfig.wifiConfig.clientConfigs` with
+`applyClientConfigs: true`. A permanently paused client has a
+`weeklyBlockSchedules` entry whose `groupId` is `_permanent` and whose single
+range covers the full week (`0` through `10080` minutes). Unpausing removes
+only that entry so unrelated schedules remain intact.
+
+This is a whole-list update, not a single-client patch. Dishylink therefore
+reads the current router configuration over the LAN immediately before each
+write, preserves every client and unrelated schedule, changes only the selected
+client, and serializes mutations so concurrent writes cannot overwrite one
+another. The encoded request is built by the trusted host; renderer-provided
+protobuf is never accepted.
+
+The write requires a current Starlink account session and is available only for
+a device present in the router's live client list. Dishylink does not expose the
+control for the device it is running on, avoiding a self-inflicted disconnect.
+The browser extension disables the control entirely because it cannot reliably
+identify its own LAN client; desktop and the web development host can establish
+that identity before offering the write. Electron reads the host's network
+interfaces, while the web development server answers `/api/whoami` from its local
+host or caller address. The extension has neither path: its `/api/*` requests are
+messages to an internal service worker/IndexedDB router, and ordinary desktop
+Chrome extensions do not expose a reliable host LAN IP or MAC. The cloud mutation
+itself works, but enabling it without self-identity could let a user pause the
+computer running Dishylink, so both the extension UI capability and background
+mutation route are disabled.
+Use `scripts/probe-client-pause-state.mts` for a read-only snapshot of persisted
+block schedules and effective connected-client state.
+
 ## Probing
 
 `scripts/probe-rpcs.mts` — which optional RPCs this firmware implements.
 `scripts/probe-client-history.mts` — buffer depth and sample interval for
 the per-client history RPC.
+`scripts/probe-client-pause-state.mts` — read-only persisted pause schedules
+and effective state for connected clients.
 
 Two lessons worth keeping, both learned the hard way:
 

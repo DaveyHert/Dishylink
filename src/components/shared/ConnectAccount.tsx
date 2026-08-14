@@ -57,9 +57,9 @@ function SignInConnect({
           Connect your Starlink account
         </h2>
         <p className='m-0 text-[13.5px] leading-relaxed text-ink-secondary'>
-          See your plan, data usage, service address, and every dish and router on the account —
-          read-only, straight from starlink.com. Your session stays encrypted on this device and is
-          only ever sent to Starlink.
+          See your plan, data usage, service address, and every dish and router on the account, and
+          enable supported router controls such as pausing connected devices. Your session stays
+          encrypted on this device and is only ever sent to Starlink.
         </p>
       </div>
 
@@ -128,7 +128,7 @@ function PasteConnect({ onConnected }: { onConnected: () => void }) {
       <div>
         <div className='text-[14px] font-semibold'>Connect your Starlink account</div>
         <div className='mt-0.5 text-[12.5px] leading-normal text-ink-secondary'>
-          Read-only — your account, your data. The session is written to a local{" "}
+          Adds account details and supported router controls. The session is written to a local{" "}
           <code>.starlink-cookie</code> file on this machine and only ever sent to Starlink.
         </div>
       </div>

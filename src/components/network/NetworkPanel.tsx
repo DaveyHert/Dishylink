@@ -68,7 +68,7 @@ function NetworkPanelBody({
   selectedKey: string | null;
   onSelect: (entryKey: string | null) => void;
 }) {
-  const [tab, setTab] = useState<"devices" | "nodes">("devices");
+  const [tab, setTab] = useState<"connected" | "nodes">("connected");
   useOuiRegistry();
   // Radio temps come from the historian, not the router directly. Poll only
   // while the panel is mounted (i.e. the Network panel is open).
@@ -157,12 +157,12 @@ function NetworkPanelBody({
         value={tab}
         onChange={setTab}
         options={[
-          { value: "devices", label: <TabLabel text='Devices' count={devices.length} /> },
+          { value: "connected", label: <TabLabel text='Connected' count={devices.length} /> },
           { value: "nodes", label: <TabLabel text='Nodes' count={nodes.length} /> },
         ]}
       />
 
-      {tab === "devices" && (
+      {tab === "connected" && (
         <>
           <ListSection
             caption={`${devices.length} device${devices.length === 1 ? "" : "s"} · live from the router, refreshed every 5 s`}

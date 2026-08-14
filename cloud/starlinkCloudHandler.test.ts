@@ -4,7 +4,7 @@
 // attached and come back 401. That must self-heal into a loaded account, not a
 // hard "not connected".
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createCloudHandler } from "./starlinkCloudHandler";
 
 const AUTH_URL = "https://api.starlink.com/auth-rp/auth/user";
@@ -125,5 +125,196 @@ describe("createCloudHandler token refresh", () => {
     expect(result.status).toBe(200);
     expect((result.body as { identity: unknown }).identity).toBeNull();
     expect((result.body as { serviceLine: unknown }).serviceLine).not.toBeNull();
+  });
+});
+
+describe("createCloudHandler pauseClient", () => {
+  it("given: a trusted host request, should: send framed protobuf with its cookie", async () => {
+    const request = new Uint8Array([8, 1, 18, 0]);
+    const responseMessage = new Uint8Array([10, 0]);
+    const responseFrame = new Uint8Array([0, 0, 0, 0, responseMessage.length, ...responseMessage]);
+    const captured: { url: string; init?: RequestInit } = { url: "" };
+    const doFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === AUTH_URL) return res(200);
+      captured.url = url;
+      captured.init = init;
+      return {
+        status: 200,
+        ok: true,
+        headers: { get: () => null },
+        arrayBuffer: async () => responseFrame.buffer,
+      } as unknown as Response;
+    }) as typeof fetch;
+    const handler = createCloudHandler({
+      fetch: doFetch,
+      readCookie: () => SESSION,
+      retryDelayMs: 0,
+      prepareDevicePause: async (clientId, paused) => {
+        expect({ clientId, paused }).toEqual({ clientId: 7, paused: true });
+        return request;
+      },
+    });
+
+    await expect(handler.pauseClient(7, true)).resolves.toEqual({
+      status: 200,
+      body: { ok: true },
+    });
+    expect(captured.url).toBe("https://starlink.com/api/SpaceX.API.Device.Device/Handle");
+    const headers = captured.init?.headers as Record<string, string>;
+    expect(headers.cookie).toBe(SESSION);
+    expect(headers["Content-Type"]).toBe("application/grpc-web+proto");
+    expect(new Uint8Array(captured.init?.body as ArrayBufferLike)).toEqual(
+      new Uint8Array([0, 0, 0, 0, request.length, ...request]),
+    );
+  });
+
+  it("given: the gateway rejects an expired token, should: refresh once and retry", async () => {
+    let authCalls = 0;
+    let deviceCalls = 0;
+    const responseFrame = new Uint8Array([0, 0, 0, 0, 0]);
+    const doFetch = (async (input: RequestInfo | URL) => {
+      if (String(input) === AUTH_URL) {
+        authCalls++;
+        return res(200);
+      }
+      deviceCalls++;
+      if (deviceCalls === 1) return res(401);
+      return {
+        status: 200,
+        ok: true,
+        headers: { get: () => null },
+        arrayBuffer: async () => responseFrame.buffer,
+      } as unknown as Response;
+    }) as typeof fetch;
+    const handler = createCloudHandler({
+      fetch: doFetch,
+      readCookie: () => SESSION,
+      retryDelayMs: 0,
+      prepareDevicePause: async () => new Uint8Array(),
+    });
+
+    await expect(handler.pauseClient(7, false)).resolves.toMatchObject({ status: 200 });
+    expect(deviceCalls).toBe(2);
+    expect(authCalls).toBe(2);
+  });
+
+  it("given: an expired session after retry, should: return the reconnect response", async () => {
+    const doFetch = (async () => res(401)) as typeof fetch;
+    const handler = createCloudHandler({
+      fetch: doFetch,
+      readCookie: () => SESSION,
+      retryDelayMs: 0,
+      prepareDevicePause: async () => new Uint8Array(),
+    });
+
+    await expect(handler.pauseClient(7, true)).resolves.toMatchObject({
+      status: 428,
+      body: { error: "not_connected" },
+    });
+  });
+
+  it("given: the device gateway stalls, should: abort and return a retryable timeout", async () => {
+    const doFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === AUTH_URL) return res(200);
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+      });
+    }) as typeof fetch;
+    const handler = createCloudHandler({
+      fetch: doFetch,
+      readCookie: () => SESSION,
+      retryDelayMs: 0,
+      deviceCallTimeoutMs: 5,
+      prepareDevicePause: async () => new Uint8Array(),
+    });
+
+    await expect(handler.pauseClient(7, true)).resolves.toEqual({
+      status: 504,
+      body: {
+        error: "device_call_timeout",
+        message: "Starlink did not answer the device update in time. Try again.",
+      },
+    });
+  });
+
+  it("given: token refresh stalls, should: abort the complete device operation", async () => {
+    const doFetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+      });
+    }) as typeof fetch;
+    const handler = createCloudHandler({
+      fetch: doFetch,
+      readCookie: () => SESSION,
+      retryDelayMs: 0,
+      deviceCallTimeoutMs: 5,
+      prepareDevicePause: async () => new Uint8Array(),
+    });
+
+    await expect(handler.pauseClient(7, true)).resolves.toMatchObject({
+      status: 504,
+      body: { error: "device_call_timeout" },
+    });
+  });
+
+  it("given: two device updates overlap, should: prepare the second after the first write", async () => {
+    const responseFrame = new Uint8Array([0, 0, 0, 0, 0]);
+    let releaseFirstWrite: (() => void) | undefined;
+    let deviceCalls = 0;
+    const doFetch = (async (input: RequestInfo | URL) => {
+      if (String(input) === AUTH_URL) return res(200);
+      deviceCalls++;
+      if (deviceCalls === 1) {
+        await new Promise<void>((resolve) => {
+          releaseFirstWrite = resolve;
+        });
+      }
+      return {
+        status: 200,
+        ok: true,
+        headers: { get: () => null },
+        arrayBuffer: async () => responseFrame.buffer,
+      } as unknown as Response;
+    }) as typeof fetch;
+    const prepared: number[] = [];
+    const handler = createCloudHandler({
+      fetch: doFetch,
+      readCookie: () => SESSION,
+      retryDelayMs: 0,
+      prepareDevicePause: async (clientId) => {
+        prepared.push(clientId);
+        return new Uint8Array();
+      },
+    });
+
+    const first = handler.pauseClient(7, true);
+    const second = handler.pauseClient(8, true);
+    await vi.waitFor(() => expect(deviceCalls).toBe(1));
+    expect(prepared).toEqual([7]);
+
+    releaseFirstWrite?.();
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      { status: 200, body: { ok: true } },
+      { status: 200, body: { ok: true } },
+    ]);
+    expect(prepared).toEqual([7, 8]);
+  });
+
+  it("given: invalid renderer input, should: reject it before preparing a request", async () => {
+    let prepared = false;
+    const handler = createCloudHandler({
+      readCookie: () => SESSION,
+      prepareDevicePause: async () => {
+        prepared = true;
+        return new Uint8Array();
+      },
+    });
+
+    await expect(handler.pauseClient(Number.NaN, true)).resolves.toMatchObject({ status: 400 });
+    await expect(handler.pauseClient(7, "yes" as unknown as boolean)).resolves.toMatchObject({
+      status: 400,
+    });
+    expect(prepared).toBe(false);
   });
 });
