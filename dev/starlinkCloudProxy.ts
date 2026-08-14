@@ -12,6 +12,8 @@ import { resolve } from "node:path";
 import type { Plugin } from "vite";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createCloudHandler } from "../cloud/starlinkCloudHandler.ts";
+import { DishClient, ROUTER_LAN_HANDLE_URL } from "../core/dishClient.ts";
+import { prepareRouterPauseRequest } from "../core/routerPause.ts";
 
 const COOKIE_FILE = resolve(process.cwd(), ".starlink-cookie");
 
@@ -56,7 +58,21 @@ export function starlinkCloudProxy(): Plugin {
   return {
     name: "starlink-cloud-proxy",
     configureServer(server) {
-      const handler = createCloudHandler({ readCookie, writeCookie, clearCookie });
+      let routerPromise: Promise<DishClient> | null = null;
+      const handler = createCloudHandler({
+        readCookie,
+        writeCookie,
+        clearCookie,
+        prepareDevicePause: async (clientId, paused) => {
+          routerPromise ??= DishClient.load("router", {
+            handleUrl: ROUTER_LAN_HANDLE_URL,
+            protosetBytes: new Uint8Array(
+              readFileSync(resolve(process.cwd(), "public/dish.protoset")),
+            ),
+          });
+          return prepareRouterPauseRequest(await routerPromise, clientId, paused);
+        },
+      });
       server.middlewares.use(async (req: IncomingMessage, res: ServerResponse, next) => {
         const url = req.url ?? "";
         if (!url.startsWith("/cloud/")) return next();
@@ -81,6 +97,19 @@ export function starlinkCloudProxy(): Plugin {
             }
           }
           return sendJson(res, 405, { error: "method_not_allowed" });
+        }
+
+        if (route === "/cloud/device" && req.method === "POST") {
+          try {
+            const { clientId, paused } = JSON.parse((await readBody(req)) || "{}") as {
+              clientId?: number;
+              paused?: boolean;
+            };
+            const result = await handler.pauseClient(clientId as number, paused as boolean);
+            return sendJson(res, result.status, result.body);
+          } catch (error) {
+            return sendJson(res, 400, { error: "bad_request", message: (error as Error).message });
+          }
         }
 
         const { status, body } = await handler.handle(route);

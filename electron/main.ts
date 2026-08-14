@@ -553,7 +553,7 @@ void app.whenReady().then(async () => {
   }
   // The cloud account belongs to this host, not to packaging; bound before the window
   // loads so the renderer's first /cloud/* call has somewhere to land.
-  startCloud();
+  startCloud(rendererRoot);
   registerCloudHandlers();
   // Only the packaged app serves itself; in dev Vite proxies /api to the dev historian,
   // so a second collector here would double-poll the dish.

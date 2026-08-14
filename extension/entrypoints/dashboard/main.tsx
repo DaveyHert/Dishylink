@@ -24,7 +24,14 @@ setApiHost({ transport: extensionApiTransport });
 
 // Account features read starlink.com over the internet, carried to the service
 // worker which holds the browser's own session; the app never learns the host.
-setCloudHost({ transport: extensionCloudTransport, signIn: extensionCloudSignIn });
+setCloudHost({
+  transport: extensionCloudTransport,
+  signIn: extensionCloudSignIn,
+  // Chrome extensions cannot reliably resolve the viewer's LAN IP or MAC on
+  // desktop platforms. Disable the control so the extension can never offer to
+  // pause the device it is running on.
+  supportsRouterClientPause: false,
+});
 
 // The background worker posts OS notifications for alerts the user is not looking
 // at — its alarm fires with no dashboard open. So the extension declares itself an

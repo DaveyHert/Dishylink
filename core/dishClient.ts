@@ -44,6 +44,7 @@ export function setDishHost(binding: DishHost): void {
  *  collidable with another router's default. lib/routerDiagnosis turns a failure
  *  to reach it into the one wording every surface reports. */
 export const ROUTER_LAN_ADDRESS = "192.168.1.1";
+export const ROUTER_LAN_HANDLE_URL = `http://${ROUTER_LAN_ADDRESS}:9001/SpaceX.API.Device.Device/Handle`;
 
 // Oneof field numbers inside SpaceX.API.Device.Request (from the dish schema).
 const REQUEST_FIELD = {
@@ -273,8 +274,27 @@ export interface WifiNetworkConfigJson {
   countryCode?: string;
   networks?: WifiLanNetworkJson[];
   meshConfigs?: Record<string, WifiMeshNodeJson>;
-  clientConfigs?: Array<{ clientId?: number; macAddress?: string; givenName?: string }>;
+  clientConfigs?: WifiClientConfigJson[];
   boot?: { evenSideSoftwareVersion?: string; oddSideSoftwareVersion?: string; lastReason?: string };
+  [key: string]: unknown;
+}
+
+export interface WifiBlockRangeJson {
+  startMinutes?: number;
+  endMinutes?: number;
+}
+
+export interface WifiWeeklyBlockScheduleJson {
+  blockRanges?: WifiBlockRangeJson[];
+  groupId?: string;
+}
+
+export interface WifiClientConfigJson {
+  clientId?: number;
+  macAddress?: string;
+  givenName?: string;
+  weeklyBlockSchedules?: WifiWeeklyBlockScheduleJson[];
+  groupId?: string;
   [key: string]: unknown;
 }
 
@@ -455,12 +475,15 @@ export class DishClient {
    */
   static async load(
     target: "dish" | "router" = "dish",
-    options: { handleUrl?: string; protosetUrl?: string } = {},
+    options: { handleUrl?: string; protosetUrl?: string; protosetBytes?: Uint8Array } = {},
   ): Promise<DishClient> {
-    const protosetResponse = await fetch(
-      options.protosetUrl ?? dishHost.protosetUrl ?? "/dish.protoset",
-    );
-    const protosetBytes = new Uint8Array(await protosetResponse.arrayBuffer());
+    const protosetBytes = options.protosetBytes
+      ? options.protosetBytes
+      : new Uint8Array(
+          await (
+            await fetch(options.protosetUrl ?? dishHost.protosetUrl ?? "/dish.protoset")
+          ).arrayBuffer(),
+        );
     const fileDescriptorSet = fromBinary(FileDescriptorSetSchema, protosetBytes);
     const registry = createFileRegistry(fileDescriptorSet);
     const requestSchema = registry.getMessage("SpaceX.API.Device.Request");
@@ -568,6 +591,15 @@ export class DishClient {
     return toJson(this.responseSchema, responseMessage, {
       registry: this.registry,
     }) as DishResponseJson;
+  }
+
+  /** Encode a Device.Request for an authenticated host to send through the cloud
+   *  gateway. This does not perform a local router write. */
+  encodeRequest(requestJson: object): Uint8Array {
+    return toBinary(
+      this.requestSchema,
+      fromJson(this.requestSchema, requestJson as JsonValue, { registry: this.registry }),
+    );
   }
 
   /** Current dish configuration (sleep schedule, snow melt, update window …). */

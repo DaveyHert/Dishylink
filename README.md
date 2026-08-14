@@ -19,8 +19,10 @@ the performance and health of your Starlink.
 It reads your dish and router directly over your local network, so it keeps
 working during an outage — which is exactly when you want to see what happened.
 No account, no cloud, no telemetry: everything it records is written to your own
-machine and stays there. Connecting a Starlink account is optional, read-only,
-and only adds your plan and billing figures.
+machine and stays there. Connecting a Starlink account is optional. It adds
+your plan and billing figures and enables supported router controls such as
+pausing connected devices. Your session remains stored locally and is sent
+only to Starlink.
 
 ## What it shows
 
@@ -51,12 +53,14 @@ and only adds your plan and billing figures.
 - **Speed test**, **alerts** with severity and an in-app bell, light/dark/system
   instrument themes.
 - **Cloud account tab** (optional, opt-in) — your Starlink plan, billing
-  cycles, and authoritative monthly data usage, read-only.
+  cycles, and authoritative monthly data usage, plus authenticated controls
+  supported by the connected router.
 
 ## What it controls
 
-Monitoring is only half of it — the settings panel writes to the dish over the
-same LAN API:
+Monitoring is only half of it. Most settings write to the dish or router over
+the same LAN API; controls that current firmware rejects locally are identified
+below as requiring an optional Starlink account connection:
 
 - **Snow melt** — automatic, always on, or off.
 - **Sleep schedule** — power the dish down for a set number of hours each day.
@@ -65,6 +69,15 @@ same LAN API:
   stow/unstow motorized kits.
 - **Router** — SSIDs and their bands, mesh node trust, firmware and country, and
   a router reboot.
+- **Connected devices** — pause or unpause another device while it is connected.
+  Available in the desktop app and web development harness, this control requires
+  an optional Starlink account sign-in: Dishylink reads the router configuration
+  locally, prepares the smallest accepted client update on the trusted host, and
+  sends it only to Starlink's authenticated device endpoint. The device running
+  Dishylink cannot pause itself. The browser extension does not expose this control
+  because ordinary desktop extensions cannot reliably read the host computer's LAN
+  IP or MAC address. Although the extension can send the update, it cannot prove
+  which router client is itself and therefore cannot safely prevent self-pausing.
 - **Copy debug data** — diagnostics + status + config as JSON, for bug reports.
 
 Custom DNS, bypass mode, and content filtering are deliberately _not_ exposed: a
