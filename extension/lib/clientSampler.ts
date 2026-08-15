@@ -21,7 +21,7 @@ import { ThroughputTracker } from "@core/throughputTracker";
 import { usageKey } from "@core/clientUsage";
 import { apiRequest } from "@/lib/apiHost";
 import type { ClientSampleRow } from "./history";
-import { ROUTER_HANDLE_URL } from "./endpoints";
+import { routerHandleUrl } from "./endpoints";
 
 // Faster than the router's ~1005 ms counter refresh, so every edge is caught as
 // it lands — the rate the tracker needs. Only runs while the dashboard is on
@@ -96,7 +96,7 @@ export function buildSamples(
  */
 export function startClientSampler(): () => void {
   const tracker = new ThroughputTracker();
-  const router = DishClient.load("router", { handleUrl: ROUTER_HANDLE_URL });
+  const router = DishClient.load("router", { handleUrl: routerHandleUrl() });
   let inFlight = false;
   let latest: ClientSampleRow[] = [];
 

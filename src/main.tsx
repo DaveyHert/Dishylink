@@ -7,6 +7,7 @@ import { RecoveringErrorBoundary } from "./components/shared/RecoveringErrorBoun
 import { setCloudHost } from "./lib/cloudHost.ts";
 import { bindNotifications } from "./lib/notifications.ts";
 import { setRecorderInProcess } from "./lib/apiHost.ts";
+import { setRouterAddressHost } from "./lib/routerAddressHost.ts";
 
 // The Electron preload exposes window.dishlink. Marking the root lets the desktop
 // build reserve space for the macOS traffic lights and make its top bar draggable,
@@ -26,6 +27,21 @@ if (desktop) {
   // Only a build serving its own /api has the recorder in this process, where it
   // cannot be down while this window is asking — see recorderRunsInHostProcess.
   void desktop.recorderInProcess().then(setRecorderInProcess);
+  // Main owns where the router is dialled, because the recorder there dials it
+  // with no window open.
+  if (desktop.routerAddress && desktop.setRouterAddress) {
+    const read = desktop.routerAddress;
+    const write = desktop.setRouterAddress;
+    setRouterAddressHost({
+      read: () => read(),
+      // Main reaches any LAN address it is given, so the only way a write fails
+      // here is an address it could not parse.
+      write: async (address) => {
+        const addresses = await write(address);
+        return addresses ? { ok: true, addresses } : { ok: false, reason: "invalid" };
+      },
+    });
+  }
 }
 
 // Bound for every host, desktop or plain tab, since each keeps the notification

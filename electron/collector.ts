@@ -9,6 +9,7 @@ import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { AlertTransition } from "../core/alertEngine";
+import { preferences } from "./preferences";
 import type { ThroughputSample } from "../collector/historian.mts";
 
 export type { ThroughputSample };
@@ -33,6 +34,9 @@ export async function startCollector(rendererRoot: string): Promise<void> {
   // rather than its dev-tree default under public/.
   process.env.HISTORIAN_PROTOSET = join(rendererRoot, "dish.protoset");
   const historian = await import("../collector/historian.mts");
+  // The recorder dials the router with no window open, so it reads the same
+  // preference the window edits rather than the default it was built with.
+  historian.setRouterAddressReader(() => preferences().routerAddress);
   handleRequest = historian.handleRequest;
   subscribeToAlerts = historian.onAlertTransitions;
   subscribeToThroughput = historian.onThroughput;

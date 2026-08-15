@@ -14,6 +14,7 @@ import {
   viewerOnRouterSubnet,
   type RouterUnreachable,
 } from "../lib/routerDiagnosis";
+import { useRouterAddress } from "./useRouterAddress";
 
 /**
  * How long the router must stay silent before the specific causes are allowed.
@@ -83,13 +84,22 @@ export function useRouterUnreachable(
   // anything about why that request failed. A phone viewing this dashboard over
   // the LAN is answered with its own address, which is not where the request
   // comes from, so it is no evidence and the diagnosis stays general.
-  const onRouterSubnet = viewerOnRouterSubnet(identity?.describesHost ? identity.ips : undefined);
+  // The address actually being dialled, so the wording names what failed rather
+  // than the default this host may not be using.
+  const routerAddress = useRouterAddress();
+  const onRouterSubnet = viewerOnRouterSubnet(
+    identity?.describesHost ? identity.ips : undefined,
+    routerAddress,
+  );
 
   return useMemo(
     () =>
       unreachable
-        ? diagnoseRouterUnreachable(settled ? { routerPresent, onRouterSubnet } : UNSETTLED)
+        ? diagnoseRouterUnreachable(
+            settled ? { routerPresent, onRouterSubnet } : UNSETTLED,
+            routerAddress,
+          )
         : null,
-    [unreachable, settled, routerPresent, onRouterSubnet],
+    [unreachable, settled, routerPresent, onRouterSubnet, routerAddress],
   );
 }

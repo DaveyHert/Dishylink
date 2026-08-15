@@ -77,6 +77,21 @@ export default defineConfig({
       "https://*.starlink.com/*",
       "https://celestrak.org/*",
     ],
+    // A kit whose subnet was moved in the official app, or one in bypass mode,
+    // puts the boxes at an address no static manifest can name. MV3 host
+    // permissions are fixed at build time, so reaching an arbitrary address is
+    // only possible as an optional permission the user grants at the moment they
+    // save one.
+    //
+    // Written out as the three private ranges rather than <all_urls>, and 172 as
+    // its sixteen real blocks rather than "172.*": match patterns have no CIDR,
+    // so the short form would ask for 172.0-172.255 — most of which is public
+    // address space this extension has no business reaching.
+    optional_host_permissions: [
+      "http://10.*/*",
+      "http://192.168.*/*",
+      ...Array.from({ length: 16 }, (_, block) => `http://172.${16 + block}.*/*`),
+    ],
     // 'wasm-unsafe-eval' for satellite.js. No declarativeNetRequest: an extension
     // never sends the Referer the dish's guard rejects, so no ruleset is needed.
     content_security_policy: {

@@ -25,7 +25,7 @@ import { DishClient, type DishConfigJson } from "@core/dishClient";
 import { prepareDishConfigUpdate } from "@core/dishConfigUpdate";
 import { prepareRouterClientUpdate, type RouterClientUpdate } from "@core/routerClientUpdate";
 import type { CloudReply, CloudRequest } from "@/lib/cloudHost";
-import { DISH_HANDLE_URL, ROUTER_HANDLE_URL } from "./endpoints";
+import { dishHandleUrl, routerHandleUrl } from "./endpoints";
 
 const SESSION_KEY = "cloudSession";
 
@@ -34,6 +34,10 @@ const SESSION_KEY = "cloudSession";
 let ourCookie: string | null = null;
 let routerPromise: Promise<DishClient> | null = null;
 let dishPromise: Promise<DishClient> | null = null;
+// A client holds the URL it was loaded with, so one cached across an address
+// change would keep dialling the box the user just told us they had moved.
+let cachedRouterUrl = "";
+let cachedDishUrl = "";
 
 const cloudHandler = createCloudHandler({
   fetch: ((input: RequestInfo | URL, init?: RequestInit) =>
@@ -48,11 +52,21 @@ const cloudHandler = createCloudHandler({
     void browser.storage.local.remove(SESSION_KEY);
   },
   prepareDeviceUpdate: async (update) => {
-    routerPromise ??= DishClient.load("router", { handleUrl: ROUTER_HANDLE_URL });
+    const routerUrl = routerHandleUrl();
+    if (routerUrl !== cachedRouterUrl) {
+      cachedRouterUrl = routerUrl;
+      routerPromise = null;
+    }
+    routerPromise ??= DishClient.load("router", { handleUrl: routerUrl });
     return prepareRouterClientUpdate(await routerPromise, update);
   },
   prepareDishConfigUpdate: async (changes) => {
-    dishPromise ??= DishClient.load("dish", { handleUrl: DISH_HANDLE_URL });
+    const dishUrl = dishHandleUrl();
+    if (dishUrl !== cachedDishUrl) {
+      cachedDishUrl = dishUrl;
+      dishPromise = null;
+    }
+    dishPromise ??= DishClient.load("dish", { handleUrl: dishUrl });
     return prepareDishConfigUpdate(await dishPromise, changes);
   },
 });

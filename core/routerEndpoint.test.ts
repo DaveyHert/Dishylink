@@ -99,6 +99,22 @@ describe("routerOriginsFrom", () => {
   it("offers IPv4 alone when nothing can be derived", () => {
     expect(routerOriginsFrom([])).toEqual([ROUTER_IPV4_ORIGIN]);
   });
+
+  it("replaces the whole list with a configured address", () => {
+    expect(routerOriginsFrom([GLOBAL], "192.168.2.1")).toEqual(["http://192.168.2.1:9001"]);
+  });
+
+  it("brackets a configured IPv6 address", () => {
+    expect(routerOriginsFrom([], "fdc1:5296:c0f2:10::1")).toEqual([
+      "http://[fdc1:5296:c0f2:10::1]:9001",
+    ]);
+  });
+
+  it("falls back to the defaults when the configured address is unusable", () => {
+    expect(routerOriginsFrom([], "192.168.2")).toEqual([ROUTER_IPV4_ORIGIN]);
+    expect(routerOriginsFrom([], "")).toEqual([ROUTER_IPV4_ORIGIN]);
+    expect(routerOriginsFrom([], null)).toEqual([ROUTER_IPV4_ORIGIN]);
+  });
 });
 
 describe("createRouterOrigins", () => {
@@ -124,6 +140,24 @@ describe("createRouterOrigins", () => {
     });
     expect(result).toBe("clients");
     expect(tried).toEqual([ROUTER_IPV4_ORIGIN, "http://[2605:59c1:19af:3710::1]:9001"]);
+  });
+
+  it("dials only the configured address, and re-reads it per call", async () => {
+    let configured: string | null = null;
+    const tried: string[] = [];
+    const origins = createRouterOrigins(ips, () => configured);
+
+    await origins.run(async (origin) => {
+      tried.push(origin);
+      return "ok";
+    });
+    configured = "192.168.2.1";
+    await origins.run(async (origin) => {
+      tried.push(origin);
+      return "ok";
+    });
+
+    expect(tried).toEqual([ROUTER_IPV4_ORIGIN, "http://192.168.2.1:9001"]);
   });
 
   it("remembers the working origin so the next call skips the dead one", async () => {

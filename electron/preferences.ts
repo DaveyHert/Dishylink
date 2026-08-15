@@ -13,6 +13,7 @@
 import { app } from "electron";
 import { join } from "node:path";
 import { readFileSync, writeFileSync } from "node:fs";
+import { normalizeRouterAddress } from "../core/routerAddress";
 
 export interface WindowBounds {
   x: number;
@@ -49,9 +50,25 @@ export interface Preferences {
    * where it was left. null until the window has moved or resized at least once.
    */
   windowBounds: WindowBounds | null;
+
+  /**
+   * Where to reach the router. null means 192.168.1.1, which is right for almost
+   * every kit; a value is for the setups it cannot serve — a router whose subnet
+   * was moved in the official app, or a kit in bypass mode behind a third-party
+   * router. The dish has no equivalent: its 192.168.100.1 is fixed in firmware.
+   *
+   * Owned by main for the same reason `notifications` is: the recorder in this
+   * process dials the router with no window open.
+   */
+  routerAddress: string | null;
 }
 
-const DEFAULTS: Preferences = { notifications: null, menuBarThroughput: false, windowBounds: null };
+const DEFAULTS: Preferences = {
+  notifications: null,
+  menuBarThroughput: false,
+  windowBounds: null,
+  routerAddress: null,
+};
 
 function isWindowBounds(value: unknown): value is WindowBounds {
   if (typeof value !== "object" || value === null) return false;
@@ -62,6 +79,12 @@ function isWindowBounds(value: unknown): value is WindowBounds {
     typeof bounds.width === "number" &&
     typeof bounds.height === "number"
   );
+}
+
+/** A hand-edited settings file must not send this process dialling something that
+ *  is not an address at all, so what comes off disk is validated like typed input. */
+function storedAddress(value: unknown): string | null {
+  return typeof value === "string" ? normalizeRouterAddress(value) : null;
 }
 
 let cached: Preferences | null = null;
@@ -83,6 +106,7 @@ export function preferences(): Preferences {
       menuBarThroughput:
         typeof parsed.menuBarThroughput === "boolean" ? parsed.menuBarThroughput : false,
       windowBounds: isWindowBounds(parsed.windowBounds) ? parsed.windowBounds : null,
+      routerAddress: storedAddress(parsed.routerAddress),
     };
   } catch {
     // No file yet, or unreadable. Either way the defaults are the answer.

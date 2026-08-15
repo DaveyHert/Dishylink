@@ -26,7 +26,7 @@ import { ClientTotalsCore } from "@core/clientTotals";
 import { usageKey } from "@core/clientUsage";
 import { applyDrain, IndexedDbHistory, type ClientMinuteRow, type HistoryStore } from "./history";
 import { packObstructionCells } from "./obstruction";
-import { DISH_HANDLE_URL, ROUTER_HANDLE_URL } from "./endpoints";
+import { dishHandleUrl, routerHandleUrl } from "./endpoints";
 
 const DRAIN_TIMEOUT_MS = 8_000;
 const OBSTRUCTION_INTERVAL_MS = 3_600_000; // one snapshot an hour, as the historian records
@@ -79,7 +79,7 @@ export async function drainOnce(): Promise<DrainResult> {
   try {
     [store, client] = await Promise.all([
       IndexedDbHistory.open(),
-      DishClient.load("dish", { handleUrl: DISH_HANDLE_URL }),
+      DishClient.load("dish", { handleUrl: dishHandleUrl() }),
     ]);
   } catch (error) {
     // No store means nowhere to record alerts and nowhere to read the open
@@ -184,7 +184,7 @@ async function drainObstruction(store: HistoryStore, dish: DishClient): Promise<
  *  rather than as clear, the same as one that is merely unreachable. */
 async function readRouterAlerts(store: HistoryStore): Promise<DeviceReading> {
   try {
-    const router = await DishClient.load("router", { handleUrl: ROUTER_HANDLE_URL });
+    const router = await DishClient.load("router", { handleUrl: routerHandleUrl() });
     // Settled, not all-or-nothing: one RPC faltering (an unreachable client poll)
     // must not drop the radio and status feeds that shared the round trip.
     const [stats, status, clients] = await Promise.allSettled([

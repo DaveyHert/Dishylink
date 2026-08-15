@@ -1,6 +1,7 @@
 // Why the Starlink router isn't answering, in words the user can act on.
 //
-// The router answers only on 192.168.1.1, and that address is also the factory
+// The router answers on one address, 192.168.1.1 unless its subnet was moved in
+// the official app, and that address is also the factory
 // default of most consumer routers. Plug a kit in behind one of those — a
 // TP-Link, a mesh base, an ISP box — and that router owns 192.168.1.1 on the
 // viewer's own wire, leaving the Starlink router one hop upstream wearing the
@@ -16,8 +17,8 @@
 //
 //   • the dish's get_status lists the routers downstream of it, so the dish
 //     itself says whether this kit has a router that is up;
-//   • the viewer's own LAN address says whether 192.168.1.1 is local to this
-//     machine or somewhere it would have to route to.
+//   • the viewer's own LAN address says whether the router's address is local to
+//     this machine or somewhere it would have to route to.
 //
 // Router up + we are inside its subnet  → something else here holds the address.
 // Router up + we are outside it         → we are simply not on its network.
@@ -64,8 +65,8 @@ function isIpv4(ip: string): boolean {
 
 /** The router's LAN is a /24 (192.168.1.0/24, read off a kit's own DHCP lease),
  *  so a machine shares its wire exactly when the first three octets match. */
-function inRouterSubnet(ip: string): boolean {
-  const routerPrefix = ROUTER_LAN_ADDRESS.split(".").slice(0, 3).join(".");
+function inRouterSubnet(ip: string, routerAddress: string): boolean {
+  const routerPrefix = routerAddress.split(".").slice(0, 3).join(".");
   return ip.split(".").slice(0, 3).join(".") === routerPrefix;
 }
 
@@ -78,33 +79,45 @@ function inRouterSubnet(ip: string): boolean {
  * quad, and a remote viewer's address is withheld by the caller — and a
  * diagnosis built on a guess there would be confidently wrong.
  */
-export function viewerOnRouterSubnet(selfIps: readonly string[] = []): boolean | null {
+export function viewerOnRouterSubnet(
+  selfIps: readonly string[] = [],
+  routerAddress: string = ROUTER_LAN_ADDRESS,
+): boolean | null {
+  // A configured IPv6 router address describes no /24 to compare against, so the
+  // subnet question has no answer rather than a wrong one.
+  if (!isIpv4(routerAddress)) return null;
   const v4 = selfIps.filter(isIpv4);
   if (v4.length === 0) return null;
-  return v4.some(inRouterSubnet);
+  return v4.some((ip) => inRouterSubnet(ip, routerAddress));
 }
 
-const MESSAGES: Record<RouterUnreachableCause, string> = {
-  addressTaken:
-    `Another device on this network is using ${ROUTER_LAN_ADDRESS}, the address the Starlink ` +
-    `router answers on, so the router is hidden behind it. To fix it, either connect to your ` +
-    `Starlink WiFi or give the other router a different address (like 192.168.2.1) — then the ` +
-    `details fill in here.`,
-  differentNetwork:
-    `Your Starlink router is running, but this device isn't on its network. Connect to your ` +
-    `Starlink WiFi to see its settings and the devices using it.`,
-  noRouter:
-    `The dish isn't reporting a Starlink router — it's in bypass mode, or the router is off. ` +
-    `WiFi and connected devices come from the router, so there's nothing to show here. ` +
-    `Everything on the dish is unaffected.`,
-  unknown:
-    `Couldn't reach the Starlink router at ${ROUTER_LAN_ADDRESS}. Another device may be using ` +
-    `that address, or the router may be in bypass mode or on a different network.`,
-};
+function messagesFor(routerAddress: string): Record<RouterUnreachableCause, string> {
+  return {
+    addressTaken:
+      `Another device on this network is using ${routerAddress}, the address the Starlink ` +
+      `router answers on, so the router is hidden behind it. To fix it, connect to your ` +
+      `Starlink WiFi, give the other router a different address (like 192.168.2.1), or set the ` +
+      `router address below to wherever your Starlink router actually is.`,
+    differentNetwork:
+      `Your Starlink router is running, but this device isn't on its network. Connect to your ` +
+      `Starlink WiFi to see its settings and the devices using it.`,
+    noRouter:
+      `The dish isn't reporting a Starlink router — it's in bypass mode, or the router is off. ` +
+      `WiFi and connected devices come from the router, so there's nothing to show here. ` +
+      `Everything on the dish is unaffected.`,
+    unknown:
+      `Couldn't reach the Starlink router at ${routerAddress}. Another device may be using ` +
+      `that address, the router may be in bypass mode or on a different network, or it may be ` +
+      `at an address other than the one set below.`,
+  };
+}
 
 /** Name the most likely reason the router is silent, erring towards `unknown`
  *  rather than towards a confident answer the signals do not support. */
-export function diagnoseRouterUnreachable(signals: RouterUnreachableSignals): RouterUnreachable {
+export function diagnoseRouterUnreachable(
+  signals: RouterUnreachableSignals,
+  routerAddress: string = ROUTER_LAN_ADDRESS,
+): RouterUnreachable {
   const { routerPresent, onRouterSubnet } = signals;
   let cause: RouterUnreachableCause = "unknown";
   if (routerPresent === false) {
@@ -114,5 +127,5 @@ export function diagnoseRouterUnreachable(signals: RouterUnreachableSignals): Ro
     // from, and that is the one thing our own address settles.
     cause = onRouterSubnet ? "addressTaken" : "differentNetwork";
   }
-  return { cause, message: MESSAGES[cause] };
+  return { cause, message: messagesFor(routerAddress)[cause] };
 }

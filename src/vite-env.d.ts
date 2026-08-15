@@ -4,6 +4,11 @@
 // "version" — the one field a release actually keys off.
 declare const __APP_VERSION__: string;
 
+interface RouterAddress {
+  router: string | null;
+  routerDefault: string;
+}
+
 // Exposed by the Electron preload bridge; absent in the browser and extension.
 interface Window {
   dishlink?: {
@@ -21,6 +26,11 @@ interface Window {
     }) => Promise<{ status: number; body: unknown }>;
     selfIdentity: () => Promise<{ ipAddresses: string[]; macAddresses: string[] }>;
     recorderInProcess: () => Promise<boolean>;
+    // Where the host dials the router, with the default it falls back to. Absent
+    // on hosts that reach it some other way, which is what keeps the setting from
+    // rendering there.
+    routerAddress?: () => Promise<RouterAddress>;
+    setRouterAddress?: (address: string | null) => Promise<RouterAddress | null>;
     // The throughput-readout controls — macOS menu bar or Windows taskbar —
     // exposed by the preload only on those platforms, so they are optional, and
     // the settings toggle renders only where `setMenuBarThroughput` is present.

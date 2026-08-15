@@ -29,6 +29,8 @@ import {
 } from "./collector";
 import { startCloud, handleCloudRequest, signIn } from "./cloud";
 import { localNetworkIdentity } from "../core/hostNetworkIdentity";
+import { normalizeRouterAddress, type RouterAddress } from "../core/routerAddress";
+import { ROUTER_LAN_ADDRESS } from "../core/dishClient";
 import { preferences, setPreference, onPreferencesChanged, type WindowBounds } from "./preferences";
 import {
   describeTransition,
@@ -503,6 +505,21 @@ function registerHostHandlers(): void {
   // from the host's own interfaces.
   ipcMain.handle("get-self-identity", () => localNetworkIdentity());
   ipcMain.handle("get-recorder-in-process", () => !devServerUrl);
+  ipcMain.handle("get-router-address", () => routerAddress());
+  // An address that does not parse is rejected here rather than stored and
+  // silently ignored later, so the window can tell the user it was refused.
+  ipcMain.handle("set-router-address", (_event, address: string | null): RouterAddress | null => {
+    const normalized = address === null ? null : normalizeRouterAddress(address);
+    if (address !== null && normalized === null) return null;
+    setPreference("routerAddress", normalized);
+    return routerAddress();
+  });
+}
+
+/** The window shows the default as a placeholder, so it is told it rather than
+ *  keeping its own copy that could drift from what this process actually dials. */
+function routerAddress(): RouterAddress {
+  return { router: preferences().routerAddress, routerDefault: ROUTER_LAN_ADDRESS };
 }
 
 function registerExternalLinkHandler(): void {
