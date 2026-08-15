@@ -1,10 +1,14 @@
 // Dish configuration and maintenance — the Starlink half of the settings panel.
 
 import { useState } from "react";
+import { CheckIcon, InfoIcon } from "lucide-react";
+import { Select as SelectPrimitive } from "radix-ui";
 import { Callout } from "@/components/ui/callout";
 import { Loading } from "@/components/ui/loading";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { actionButton } from "@/components/ui/action-button";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -14,6 +18,8 @@ import {
 } from "@/components/ui/select";
 import type { DishClient, DishStatusJson, SnowMeltMode } from "@core/dishClient";
 import type { useDishSettings } from "../../hooks/useDishSettings";
+import { AccountRequiredError } from "../../lib/dishConfigUpdate";
+import { AccountRequiredNotice } from "../shared/AccountRequiredNotice";
 import {
   DangerAction,
   SectionLabel,
@@ -22,7 +28,8 @@ import {
   selectItemClass,
   triggerClass,
 } from "./settingsChrome";
-import { localTimeToUtcMinutes, utcMinutesToLocalTime } from "./sleepSchedule";
+import { formatClock12, localMinutesToUtcMinutes, utcMinutesToLocalMinutes } from "./sleepSchedule";
+import { TimePicker } from "./TimePicker";
 import { UPDATE_WINDOWS, updateWindowFor } from "./updateWindow";
 
 const SNOW_MELT_LABEL: Record<SnowMeltMode, string> = {
@@ -30,6 +37,46 @@ const SNOW_MELT_LABEL: Record<SnowMeltMode, string> = {
   ALWAYS_ON: "Always on",
   ALWAYS_OFF: "Off",
 };
+
+const SNOW_MELT_DESCRIPTION: Record<SnowMeltMode, string> = {
+  AUTO: "Automatically detect snow and heat up when needed.",
+  ALWAYS_ON:
+    "Keep warm to better resist snow build-up. This option may increase power consumption.",
+  ALWAYS_OFF: "Never use extra power to melt snow.",
+};
+
+function SnowMeltOption({ mode }: { mode: SnowMeltMode }) {
+  return (
+    <SelectPrimitive.Item
+      value={mode}
+      className={cn(
+        selectItemClass,
+        "relative flex w-full cursor-default items-center gap-2 rounded-sm py-1.5 pr-12 pl-2 outline-hidden select-none focus:bg-accent focus:text-accent-foreground",
+      )}
+    >
+      <span className='absolute right-2 flex items-center gap-1.5'>
+        <SelectPrimitive.ItemIndicator className='flex size-3.5 items-center justify-center'>
+          <CheckIcon className='size-4' />
+        </SelectPrimitive.ItemIndicator>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              className='flex size-3.5 shrink-0 items-center justify-center text-muted-foreground'
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <InfoIcon className='size-3.5' />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side='left' className='max-w-56'>
+            {SNOW_MELT_DESCRIPTION[mode]}
+          </TooltipContent>
+        </Tooltip>
+      </span>
+      <SelectPrimitive.ItemText>{SNOW_MELT_LABEL[mode]}</SelectPrimitive.ItemText>
+    </SelectPrimitive.Item>
+  );
+}
 
 export function StarlinkSettingsTab({
   settings,
@@ -49,8 +96,9 @@ export function StarlinkSettingsTab({
   const config = settings.config;
 
   const sleepEnabled = Boolean(config?.powerSaveMode);
-  const sleepStart = utcMinutesToLocalTime(config?.powerSaveStartMinutes ?? 0);
-  const sleepDurationH = Math.round((config?.powerSaveDurationMinutes ?? 360) / 60);
+  const sleepStartLocal = utcMinutesToLocalMinutes(config?.powerSaveStartMinutes ?? 60);
+  const sleepDurationMinutes = config?.powerSaveDurationMinutes ?? 360;
+  const wakeLocal = (sleepStartLocal + sleepDurationMinutes) % 1440;
   const updateWindow = updateWindowFor(config?.swupdateRebootHour);
 
   // Every write is fire-and-forget with the failure swallowed: the hook already
@@ -63,7 +111,15 @@ export function StarlinkSettingsTab({
       {settings.loading && <Loading message='Reading dish configuration…' />}
       {/* Same Callout the Router tab uses for its failures — the two tabs are
           siblings and their errors must not read as two different apps. */}
-      {settings.error && <Callout tone='error'>{settings.error}</Callout>}
+      {settings.error && (
+        <Callout tone='error'>
+          {settings.error instanceof AccountRequiredError ? (
+            <AccountRequiredNotice />
+          ) : (
+            settings.error.message
+          )}
+        </Callout>
+      )}
       {config && (
         <>
           <SettingRow
@@ -80,9 +136,7 @@ export function StarlinkSettingsTab({
               </SelectTrigger>
               <SelectContent className={selectContentClass}>
                 {(Object.keys(SNOW_MELT_LABEL) as SnowMeltMode[]).map((mode) => (
-                  <SelectItem key={mode} value={mode} className={selectItemClass}>
-                    {SNOW_MELT_LABEL[mode]}
-                  </SelectItem>
+                  <SnowMeltOption key={mode} mode={mode} />
                 ))}
               </SelectContent>
             </Select>
@@ -92,7 +146,7 @@ export function StarlinkSettingsTab({
             title='Sleep schedule'
             caption={
               sleepEnabled
-                ? `Dish powers down daily at ${sleepStart} for ${sleepDurationH} h`
+                ? `Dish powers down daily at ${formatClock12(sleepStartLocal)} and wakes at ${formatClock12(wakeLocal)}`
                 : "Power the dish down for part of every day"
             }
           >
@@ -105,7 +159,7 @@ export function StarlinkSettingsTab({
                     ? {
                         powerSaveMode: true,
                         powerSaveStartMinutes:
-                          config.powerSaveStartMinutes ?? localTimeToUtcMinutes("01:00"),
+                          config.powerSaveStartMinutes ?? localMinutesToUtcMinutes(60),
                         powerSaveDurationMinutes: config.powerSaveDurationMinutes || 360,
                       }
                     : { powerSaveMode: false },
@@ -116,32 +170,27 @@ export function StarlinkSettingsTab({
           {sleepEnabled && (
             <div className='flex items-center gap-2 pb-[8px] pl-0.5'>
               <span className='mt-px block text-[12px] text-muted-foreground'>from</span>
-              <input
-                type='time'
-                className='h-7 rounded-sm border border-hairline bg-transparent px-2 font-mono text-[12px] text-ink tabular-nums hover:border-input'
-                value={sleepStart}
+              <TimePicker
+                minutes={sleepStartLocal}
                 disabled={settings.saving}
-                onChange={(event) =>
-                  save({ powerSaveStartMinutes: localTimeToUtcMinutes(event.target.value) })
+                onChange={(newStartLocal) =>
+                  save({
+                    powerSaveStartMinutes: localMinutesToUtcMinutes(newStartLocal),
+                    powerSaveDurationMinutes: (wakeLocal - newStartLocal + 1440) % 1440 || 1440,
+                  })
                 }
               />
-              <span className='mt-px block text-[12px] text-muted-foreground'>for</span>
-              <Select
-                value={String(sleepDurationH)}
+              <span className='mt-px block text-[12px] text-muted-foreground'>to</span>
+              <TimePicker
+                minutes={wakeLocal}
                 disabled={settings.saving}
-                onValueChange={(hours) => save({ powerSaveDurationMinutes: Number(hours) * 60 })}
-              >
-                <SelectTrigger className={triggerClass} style={{ width: 72 }}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className={selectContentClass}>
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((hours) => (
-                    <SelectItem key={hours} value={String(hours)} className={selectItemClass}>
-                      {hours} h
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(newWakeLocal) =>
+                  save({
+                    powerSaveDurationMinutes:
+                      (newWakeLocal - sleepStartLocal + 1440) % 1440 || 1440,
+                  })
+                }
+              />
             </div>
           )}
 

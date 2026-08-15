@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { DishClient, type DishConfigJson } from "@core/dishClient";
-import { GrpcWebError } from "@core/grpcWeb";
+import { applyDishConfigUpdate } from "../lib/dishConfigUpdate";
 import {
   readDishSettings,
   setDishConfig,
@@ -15,7 +15,7 @@ import {
 export interface DishSettingsState {
   config: DishConfig | null;
   loading: boolean;
-  error: string | null;
+  error: Error | null;
   saving: boolean;
   /** Apply a partial change; resolves after the dish confirms + config reloads. */
   save: (changes: DishConfigJson) => Promise<void>;
@@ -44,7 +44,9 @@ export function useDishSettings(): DishSettingsState {
     loadConfig().catch(
       (loadError) =>
         !disposed &&
-        setDishSettingsError(`Couldn't read dish config: ${(loadError as Error).message}`),
+        setDishSettingsError(
+          new Error(`Couldn't read dish config: ${(loadError as Error).message}`),
+        ),
     );
     return () => {
       disposed = true;
@@ -56,22 +58,10 @@ export function useDishSettings(): DishSettingsState {
       setSaving(true);
       setDishSettingsError(null);
       try {
-        const dishClient = await loadDishClient();
-        await dishClient.setConfig(changes);
+        await applyDishConfigUpdate(changes);
         await loadConfig();
       } catch (saveError) {
-        // Status 7 = the firmware's LAN write lock (measured 2026-07: every
-        // write RPC on dish and router refuses LAN callers; only the official
-        // app's cloud path can write). Nothing local unlocks it — not a bug in
-        // the request, and no setting to flip.
-        if (saveError instanceof GrpcWebError && saveError.grpcStatus === 7) {
-          setDishSettingsError(
-            "The dish refused the write (permission denied). Starlink's current firmware only accepts config changes " +
-              "through its own cloud, so local tools are read-only here — use the official Starlink app to change this.",
-          );
-        } else {
-          setDishSettingsError(`Dish refused the change: ${(saveError as Error).message}`);
-        }
+        setDishSettingsError(saveError as Error);
         throw saveError;
       } finally {
         setSaving(false);

@@ -8,6 +8,7 @@
 // internet and a cookie, and must not depend on the dish poller's health.
 
 import { GrpcWebError, grpcWebUnaryCall } from "../core/grpcWeb";
+import type { DishConfigJson } from "../core/dishClient";
 import type { RouterClientUpdate } from "../core/routerClientUpdate";
 
 const AUTH_URL = "https://api.starlink.com/auth-rp/auth/user";
@@ -48,6 +49,9 @@ export interface CloudHandlerOptions {
   /** Trusted host callback: reads the local router and encodes exactly one
    *  client update. Renderer-provided protobuf is never accepted. */
   prepareDeviceUpdate?: (update: RouterClientUpdate) => Promise<Uint8Array>;
+  /** Trusted host callback: reads the local dish's identity and encodes exactly
+   *  one config change. Renderer-provided protobuf is never accepted. */
+  prepareDishConfigUpdate?: (changes: DishConfigJson) => Promise<Uint8Array>;
 }
 
 /** The durable half of the session — without it a token refresh can't happen, so
@@ -132,6 +136,7 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
   const retryDelayMs = options.retryDelayMs ?? 150;
   const deviceCallTimeoutMs = options.deviceCallTimeoutMs ?? 15_000;
   const prepareDeviceUpdate = options.prepareDeviceUpdate;
+  const prepareDishConfigUpdate = options.prepareDishConfigUpdate;
 
   let cachedCookie: string | null = null;
   let cachedAt = 0;
@@ -436,5 +441,83 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
     return mutation;
   }
 
-  return { handle, connect, disconnect, updateClient };
+  async function applyDishConfigUpdate(changes: DishConfigJson): Promise<CloudResult> {
+    if (!readCookie()) return NOT_CONNECTED;
+    try {
+      if (!prepareDishConfigUpdate)
+        return { status: 503, body: { error: "dish_config_update_unavailable" } };
+      const requestBytes = await prepareDishConfigUpdate(changes);
+      const abortSignal = AbortSignal.timeout(deviceCallTimeoutMs);
+      await withFreshCookie(async (cookie) => {
+        try {
+          await grpcWebUnaryCall(DEVICE_HANDLE, requestBytes, abortSignal, {
+            fetch: doFetch,
+            headers: { cookie },
+          });
+        } catch (error) {
+          if (error instanceof GrpcWebError && error.grpcStatus === 16)
+            throw new SessionExpiredError();
+          throw error;
+        }
+      }, abortSignal);
+      return { status: 200, body: { ok: true } };
+    } catch (error) {
+      if (error instanceof SessionExpiredError) return NOT_CONNECTED;
+      if (error instanceof DOMException && error.name === "TimeoutError") {
+        return {
+          status: 504,
+          body: {
+            error: "device_call_timeout",
+            message: "Starlink did not answer the config change in time. Try again.",
+          },
+        };
+      }
+      return {
+        status: 502,
+        body: { error: "device_call_failed", message: (error as Error).message },
+      };
+    }
+  }
+
+  // The four windows the app itself offers for swupdate_reboot_hour (see
+  // updateWindowFor in the settings UI) — the field is a uint32, but only these
+  // values are ones a renderer should ever be allowed to send.
+  const SWUPDATE_REBOOT_HOURS = [3, 9, 15, 21];
+
+  /** The renderer names dish config fields and their new values, never protobuf.
+   *  Anything outside these shapes is refused before the dish is read. */
+  function validDishConfig(changes: DishConfigJson): boolean {
+    if (changes === null || typeof changes !== "object") return false;
+    const entries = Object.entries(changes).filter(([, value]) => value !== undefined);
+    if (entries.length === 0) return false;
+    return entries.every(([field, value]) => {
+      switch (field) {
+        case "snowMeltMode":
+          return value === "AUTO" || value === "ALWAYS_ON" || value === "ALWAYS_OFF";
+        case "locationRequestMode":
+          return value === "NONE" || value === "LOCAL";
+        case "levelDishMode":
+          return value === "TILT_LIKE_NORMAL" || value === "FORCE_LEVEL";
+        case "powerSaveStartMinutes":
+          return Number.isInteger(value) && (value as number) >= 0 && (value as number) < 1_440;
+        case "powerSaveDurationMinutes":
+          return Number.isInteger(value) && (value as number) > 0 && (value as number) <= 1_440;
+        case "powerSaveMode":
+        case "swupdateThreeDayDeferralEnabled":
+          return typeof value === "boolean";
+        case "swupdateRebootHour":
+          return SWUPDATE_REBOOT_HOURS.includes(value as number);
+        default:
+          return false;
+      }
+    });
+  }
+
+  function updateDishConfig(changes: DishConfigJson): Promise<CloudResult> {
+    if (!validDishConfig(changes))
+      return Promise.resolve({ status: 400, body: { error: "bad_request" } });
+    return applyDishConfigUpdate(changes);
+  }
+
+  return { handle, connect, disconnect, updateClient, updateDishConfig };
 }

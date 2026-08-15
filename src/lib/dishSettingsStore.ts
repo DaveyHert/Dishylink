@@ -8,7 +8,7 @@ export type DishConfig = DishConfigJson & Record<string, unknown>;
 
 export interface DishSettingsSnapshot {
   config: DishConfig | null;
-  error: string | null;
+  error: Error | null;
 }
 
 let snapshot: DishSettingsSnapshot = { config: null, error: null };
@@ -34,7 +34,7 @@ export function setDishConfig(config: DishConfig): void {
   publish({ config, error: null });
 }
 
-export function setDishSettingsError(error: string | null): void {
+export function setDishSettingsError(error: Error | null): void {
   if (snapshot.error === error) return;
   publish({ config: snapshot.config, error });
 }

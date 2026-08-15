@@ -46,6 +46,13 @@ export function setDishHost(binding: DishHost): void {
 export const ROUTER_LAN_ADDRESS = "192.168.1.1";
 export const ROUTER_LAN_HANDLE_URL = `http://${ROUTER_LAN_ADDRESS}:9001/SpaceX.API.Device.Device/Handle`;
 
+/** The dish's LAN address. A relative handle URL resolves against a browser's
+ *  own origin through its dev/Electron proxy; code that runs outside a browser
+ *  (the dev server's own process, preparing a cloud write) has no such origin
+ *  and needs this absolute one instead. */
+export const DISH_LAN_ADDRESS = "192.168.100.1";
+export const DISH_LAN_HANDLE_URL = `http://${DISH_LAN_ADDRESS}:9201/SpaceX.API.Device.Device/Handle`;
+
 // Oneof field numbers inside SpaceX.API.Device.Request (from the dish schema).
 const REQUEST_FIELD = {
   reboot: 1001,
@@ -224,8 +231,10 @@ export interface DishConfigJson {
   swupdateThreeDayDeferralEnabled?: boolean;
 }
 
-/** config field → its apply_* flag (both sides proto3 JSON names) */
-const CONFIG_APPLY_FLAG: Record<keyof DishConfigJson, string> = {
+/** config field → its apply_* flag (both sides proto3 JSON names). Exported so
+ *  a cloud-authenticated write can build the identical payload — current
+ *  firmware refuses this config write over the LAN. */
+export const CONFIG_APPLY_FLAG: Record<keyof DishConfigJson, string> = {
   snowMeltMode: "applySnowMeltMode",
   locationRequestMode: "applyLocationRequestMode",
   levelDishMode: "applyLevelDishMode",
@@ -575,24 +584,6 @@ export class DishClient {
   // ---------- schema-encoded requests (config writes and richer payloads) ----------
 
   /** Encode a full Request from proto3 JSON via the bundled schema. */
-  private async callJson(
-    requestJson: Record<string, unknown>,
-    abortSignal?: AbortSignal,
-  ): Promise<DishResponseJson> {
-    const requestMessage = fromJson(this.requestSchema, requestJson as JsonValue, {
-      registry: this.registry,
-    });
-    const responseBytes = await grpcWebUnaryCall(
-      this.handleUrl,
-      toBinary(this.requestSchema, requestMessage),
-      abortSignal,
-    );
-    const responseMessage = fromBinary(this.responseSchema, responseBytes);
-    return toJson(this.responseSchema, responseMessage, {
-      registry: this.registry,
-    }) as DishResponseJson;
-  }
-
   /** Encode a Device.Request for an authenticated host to send through the cloud
    *  gateway. This does not perform a local router write. */
   encodeRequest(requestJson: object): Uint8Array {
@@ -609,20 +600,6 @@ export class DishClient {
     );
   }
 
-  /**
-   * Apply a partial config change. Only the fields present are written — the
-   * matching apply_* flags are set automatically so untouched knobs stay put.
-   */
-  async setConfig(changes: DishConfigJson, abortSignal?: AbortSignal): Promise<void> {
-    const dishConfig: Record<string, unknown> = {};
-    for (const [field, value] of Object.entries(changes)) {
-      if (value === undefined) continue;
-      dishConfig[field] = value;
-      dishConfig[CONFIG_APPLY_FLAG[field as keyof DishConfigJson]] = true;
-    }
-    await this.callJson({ dishSetConfig: { dishConfig } }, abortSignal);
-  }
-
   /** Dish self-diagnostics: disablement code, hardware self-test, alerts. */
   async getDiagnostics(abortSignal?: AbortSignal): Promise<DishDiagnosticsJson> {
     return (await this.call(REQUEST_FIELD.getDiagnostics, abortSignal)).dishGetDiagnostics ?? {};
@@ -637,18 +614,6 @@ export class DishClient {
   async getWifiConfig(abortSignal?: AbortSignal): Promise<WifiNetworkConfigJson> {
     return (
       (await this.call(REQUEST_FIELD.wifiGetConfig, abortSignal)).wifiGetConfig?.wifiConfig ?? {}
-    );
-  }
-
-  /** Rename a client device (persists in the router) — ROUTER target. */
-  async setClientGivenName(
-    macAddress: string,
-    givenName: string,
-    abortSignal?: AbortSignal,
-  ): Promise<void> {
-    await this.callJson(
-      { wifiSetClientGivenName: { clientName: { macAddress, givenName } } },
-      abortSignal,
     );
   }
 }
