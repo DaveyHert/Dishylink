@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { createCloudHandler } from "../cloud/starlinkCloudHandler";
 import { DishClient, ROUTER_LAN_HANDLE_URL } from "../core/dishClient";
 import { prepareRouterPauseRequest } from "../core/routerPause";
+import { localNetworkIdentity } from "../core/hostNetworkIdentity";
 
 const LOGIN_URL = "https://www.starlink.com/account";
 // The login window gets its own session, so signing out can wipe its Starlink
@@ -63,7 +64,12 @@ export function startCloud(rendererRoot: string): void {
         handleUrl: ROUTER_LAN_HANDLE_URL,
         protosetBytes: new Uint8Array(readFileSync(protosetPath)),
       });
-      return prepareRouterPauseRequest(await routerPromise, clientId, paused);
+      return prepareRouterPauseRequest(
+        await routerPromise,
+        clientId,
+        paused,
+        localNetworkIdentity(),
+      );
     },
   });
 }
