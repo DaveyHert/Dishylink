@@ -13,7 +13,8 @@ import type { Plugin } from "vite";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createCloudHandler } from "../cloud/starlinkCloudHandler.ts";
 import { DishClient, ROUTER_LAN_HANDLE_URL } from "../core/dishClient.ts";
-import { prepareRouterPauseRequest } from "../core/routerPause.ts";
+import { prepareRouterClientUpdate } from "../core/routerClientUpdate.ts";
+import type { RouterClientUpdate } from "../core/routerClientUpdate.ts";
 import { localNetworkIdentity } from "../core/hostNetworkIdentity.ts";
 
 const COOKIE_FILE = resolve(process.cwd(), ".starlink-cookie");
@@ -77,19 +78,14 @@ export function starlinkCloudProxy(): Plugin {
         readCookie,
         writeCookie,
         clearCookie,
-        prepareDevicePause: async (clientId, paused) => {
+        prepareDeviceUpdate: async (update) => {
           routerPromise ??= DishClient.load("router", {
             handleUrl: ROUTER_LAN_HANDLE_URL,
             protosetBytes: new Uint8Array(
               readFileSync(resolve(process.cwd(), "public/dish.protoset")),
             ),
           });
-          return prepareRouterPauseRequest(
-            await routerPromise,
-            clientId,
-            paused,
-            localNetworkIdentity(),
-          );
+          return prepareRouterClientUpdate(await routerPromise, update, localNetworkIdentity());
         },
       });
       server.middlewares.use(async (req: IncomingMessage, res: ServerResponse, next) => {
@@ -122,11 +118,8 @@ export function starlinkCloudProxy(): Plugin {
 
         if (route === "/cloud/device" && req.method === "POST") {
           try {
-            const { clientId, paused } = JSON.parse((await readBody(req)) || "{}") as {
-              clientId?: number;
-              paused?: boolean;
-            };
-            const result = await handler.pauseClient(clientId as number, paused as boolean);
+            const update = JSON.parse((await readBody(req)) || "{}") as RouterClientUpdate;
+            const result = await handler.updateClient(update);
             return sendJson(res, result.status, result.body);
           } catch (error) {
             return sendJson(res, 400, { error: "bad_request", message: (error as Error).message });

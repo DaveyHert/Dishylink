@@ -100,6 +100,15 @@ not over the LAN. No local elevation path exists.
 
 ## Authenticated cloud router writes
 
+Two things learned the hard way, both measured 2026-08-15:
+
+1. **Key client writes on `clientId`, never `macAddress`.** This firmware masks
+   the low three octets of every MAC it reports (`60:74:f4:XX:XX:XX`), so devices
+   behind one vendor share an address. A MAC-keyed rename renamed four devices.
+2. **The dish accepts writes on this path too** — `dishSetConfig` with the dish's
+   `ut…` targetId, not just `wifiSetConfig` with `Router-…`. Confirmed by setting
+   `swupdateRebootHour` and reading it back in the official app.
+
 Pause and unpause were measured through Starlink's authenticated grpc-web
 `SpaceX.API.Device.Device/Handle` endpoint. This is an unofficial, observed
 interface rather than a published API and may change with Starlink firmware or

@@ -8,6 +8,7 @@
 // internet and a cookie, and must not depend on the dish poller's health.
 
 import { GrpcWebError, grpcWebUnaryCall } from "../core/grpcWeb";
+import type { RouterClientUpdate } from "../core/routerClientUpdate";
 
 const AUTH_URL = "https://api.starlink.com/auth-rp/auth/user";
 const API = "https://starlink.com/api";
@@ -45,8 +46,8 @@ export interface CloudHandlerOptions {
   /** Maximum time for each remote router mutation attempt. */
   deviceCallTimeoutMs?: number;
   /** Trusted host callback: reads the local router and encodes exactly one
-   *  pause/unpause request. Renderer-provided protobuf is never accepted. */
-  prepareDevicePause?: (clientId: number, paused: boolean) => Promise<Uint8Array>;
+   *  client update. Renderer-provided protobuf is never accepted. */
+  prepareDeviceUpdate?: (update: RouterClientUpdate) => Promise<Uint8Array>;
 }
 
 /** The durable half of the session — without it a token refresh can't happen, so
@@ -57,7 +58,7 @@ const NOT_CONNECTED: CloudResult = {
   status: 428,
   body: {
     error: "not_connected",
-    message: "No Starlink session — sign in to connect your account.",
+    message: "An authorized account is required — sign in to use this feature.",
   },
 };
 
@@ -130,7 +131,7 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
   const clearCookie = options.clearCookie ?? (() => {});
   const retryDelayMs = options.retryDelayMs ?? 150;
   const deviceCallTimeoutMs = options.deviceCallTimeoutMs ?? 15_000;
-  const prepareDevicePause = options.prepareDevicePause;
+  const prepareDeviceUpdate = options.prepareDeviceUpdate;
 
   let cachedCookie: string | null = null;
   let cachedAt = 0;
@@ -357,14 +358,15 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
     return { status: 200, body: { ok: true } };
   }
 
-  async function applyClientPaused(clientId: number, paused: boolean): Promise<CloudResult> {
+  async function applyClientUpdate(update: RouterClientUpdate): Promise<CloudResult> {
     if (!readCookie()) return NOT_CONNECTED;
     try {
       // This callback reads the full client-config list. Keep preparation and
       // the corresponding write in one serialized critical section so a later
       // mutation cannot be built from a snapshot predating an earlier write.
-      if (!prepareDevicePause) return { status: 503, body: { error: "pause_unavailable" } };
-      const requestBytes = await prepareDevicePause(clientId, paused);
+      if (!prepareDeviceUpdate)
+        return { status: 503, body: { error: "device_update_unavailable" } };
+      const requestBytes = await prepareDeviceUpdate(update);
       const abortSignal = AbortSignal.timeout(deviceCallTimeoutMs);
       await withFreshCookie(async (cookie) => {
         try {
@@ -397,16 +399,35 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
     }
   }
 
-  function pauseClient(clientId: number, paused: boolean): Promise<CloudResult> {
-    if (
-      !Number.isInteger(clientId) ||
-      clientId < 0 ||
-      clientId > 0xffff_ffff ||
-      typeof paused !== "boolean"
-    )
+  /** The renderer names a device and a change, never protobuf. Anything outside
+   *  these shapes is refused before the router is read. */
+  function validUpdate(update: RouterClientUpdate): boolean {
+    if (update?.kind === "pause")
+      return (
+        Number.isInteger(update.clientId) &&
+        update.clientId >= 0 &&
+        update.clientId <= 0xffff_ffff &&
+        typeof update.paused === "boolean"
+      );
+    if (update?.kind === "rename")
+      return (
+        Number.isInteger(update.clientId) &&
+        update.clientId >= 0 &&
+        update.clientId <= 0xffff_ffff &&
+        typeof update.givenName === "string" &&
+        update.givenName.trim().length > 0 &&
+        update.givenName.length <= 64
+      );
+    return false;
+  }
+
+  /** Every update rewrites the router's whole client list, so two in flight would
+   *  each be built from a snapshot predating the other. One queue for all of them. */
+  function updateClient(update: RouterClientUpdate): Promise<CloudResult> {
+    if (!validUpdate(update))
       return Promise.resolve({ status: 400, body: { error: "bad_request" } });
 
-    const mutation = deviceMutationTail.then(() => applyClientPaused(clientId, paused));
+    const mutation = deviceMutationTail.then(() => applyClientUpdate(update));
     // A rejected mutation must not poison the queue for every later device.
     deviceMutationTail = mutation.then(
       () => undefined,
@@ -415,5 +436,5 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
     return mutation;
   }
 
-  return { handle, connect, disconnect, pauseClient };
+  return { handle, connect, disconnect, updateClient };
 }
