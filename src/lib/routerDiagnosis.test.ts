@@ -83,4 +83,26 @@ describe("diagnoseRouterUnreachable", () => {
       }
     }
   });
+
+  it("names the address actually being dialled, not the default", () => {
+    const message = diagnoseRouterUnreachable(
+      { routerPresent: null, onRouterSubnet: null },
+      "192.168.2.1",
+    ).message;
+    expect(message).toContain("192.168.2.1");
+    expect(message).not.toContain("192.168.1.1");
+  });
+});
+
+describe("viewerOnRouterSubnet with a configured address", () => {
+  it("places the viewer against the configured subnet", () => {
+    expect(viewerOnRouterSubnet(["192.168.2.40"], "192.168.2.1")).toBe(true);
+    expect(viewerOnRouterSubnet(["192.168.1.40"], "192.168.2.1")).toBe(false);
+  });
+
+  it("has no answer when the router address is IPv6", () => {
+    // No /24 to compare against, so the diagnosis must stay general rather than
+    // claim the viewer is off the router's network.
+    expect(viewerOnRouterSubnet(["192.168.1.40"], "fdc1:5296:c0f2:10::1")).toBeNull();
+  });
 });

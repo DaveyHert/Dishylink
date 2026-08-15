@@ -8,6 +8,7 @@ import { routeApiRequest } from "../lib/apiRouter";
 import { handleCloudRequest } from "../lib/cloudHandler";
 import { IndexedDbHistory } from "../lib/history";
 import { NOTIFICATIONS_ENABLED_KEY, type NotifyResult } from "../lib/notificationHost";
+import { loadRouterAddress, watchRouterAddress } from "../lib/endpoints";
 
 // The toolbar icon opens the full dashboard page, never a toolbar-anchored
 // dropdown (the dashboard is chart-heavy and wants room). Two user-selectable
@@ -220,6 +221,11 @@ async function updateBadge(active: AlertState[]): Promise<void> {
 }
 
 export default defineBackground(() => {
+  // The worker is torn down and re-woken constantly, so it re-reads where the
+  // boxes are on every wake rather than trusting anything held in memory.
+  watchRouterAddress();
+  void loadRouterAddress();
+
   // A notification about the dish is only useful if it can take you to the
   // dashboard showing why, the same as clicking one on the desktop.
   browser.notifications.onClicked.addListener(() => void openDashboard());
