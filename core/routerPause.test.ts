@@ -112,4 +112,35 @@ describe("buildRouterPauseRequest", () => {
       },
     });
   });
+
+  test("given: the target is the host itself, should: refuse to pause but allow unpause", async () => {
+    const router = {
+      getWifiConfig: async () => config,
+      getRouterStatus: async () => ({ deviceInfo: { id: TARGET } }),
+      getWifiClients: async () => [
+        { clientId: 7, macAddress: "AA:BB:CC:XX:XX:XX", ipAddress: "192.168.1.5" },
+      ],
+      encodeRequest: () => new Uint8Array([9]),
+    } as unknown as DishClient;
+    const host = { macAddresses: ["aa:bb:cc:XX:XX:XX"], ipAddresses: [] };
+
+    await expect(prepareRouterPauseRequest(router, 7, true, host)).rejects.toThrow(/Refusing/);
+    await expect(prepareRouterPauseRequest(router, 7, false, host)).resolves.toBeInstanceOf(
+      Uint8Array,
+    );
+  });
+
+  test("given: the host matches only by address, should: still refuse the pause", async () => {
+    const router = {
+      getWifiConfig: async () => config,
+      getRouterStatus: async () => ({ deviceInfo: { id: TARGET } }),
+      getWifiClients: async () => [
+        { clientId: 7, macAddress: "aa:bb:cc:XX:XX:XX", ipAddress: "192.168.1.5" },
+      ],
+      encodeRequest: () => new Uint8Array([9]),
+    } as unknown as DishClient;
+    const host = { macAddresses: [], ipAddresses: ["192.168.1.5"] };
+
+    await expect(prepareRouterPauseRequest(router, 7, true, host)).rejects.toThrow(/Refusing/);
+  });
 });
