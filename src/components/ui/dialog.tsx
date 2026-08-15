@@ -39,15 +39,19 @@ function DialogOverlay({
 
 function DialogContent({
   className,
+  overlayClassName,
   children,
   showCloseButton = true,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean;
+  /** For a dialog opened over a surface that already dims its own backdrop, where
+   *  the default scrim would stack into something much darker than one layer. */
+  overlayClassName?: string;
 }) {
   return (
     <DialogPortal data-slot='dialog-portal'>
-      <DialogOverlay />
+      <DialogOverlay className={overlayClassName} />
       <DialogPrimitive.Content
         data-slot='dialog-content'
         className={cn(
