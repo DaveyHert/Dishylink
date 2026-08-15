@@ -28,6 +28,7 @@ import {
   type ThroughputSample,
 } from "./collector";
 import { startCloud, handleCloudRequest, signIn } from "./cloud";
+import { localNetworkIdentity } from "../core/hostNetworkIdentity";
 import { preferences, setPreference, onPreferencesChanged, type WindowBounds } from "./preferences";
 import {
   describeTransition,
@@ -496,6 +497,14 @@ function startAlertNotifications(): void {
 
 // Restricted to http(s)/mailto so a compromised renderer can't hand main an exotic
 // scheme (file:, a custom protocol) and have it opened with the OS's privileges.
+/** Facts about this host that only main can answer. */
+function registerHostHandlers(): void {
+  // get_clients answers everyone identically, so "this device" can only be settled
+  // from the host's own interfaces.
+  ipcMain.handle("get-self-identity", () => localNetworkIdentity());
+  ipcMain.handle("get-recorder-in-process", () => !devServerUrl);
+}
+
 function registerExternalLinkHandler(): void {
   ipcMain.on("open-external", (_event, url: string) => {
     if (/^(https?:\/\/|mailto:)/.test(url)) {
@@ -570,6 +579,7 @@ void app.whenReady().then(async () => {
   registerMenuBarThroughputHandler();
   registerUpdateHandler();
   registerExternalLinkHandler();
+  registerHostHandlers();
   // checkForUpdates needs app-update.yml, which only a packaged build carries.
   if (app.isPackaged) startUpdateChecks();
   createTray();

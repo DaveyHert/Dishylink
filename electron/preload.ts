@@ -6,6 +6,7 @@
 
 import { contextBridge, ipcRenderer } from "electron";
 import type { NotificationState } from "../core/alertNotification";
+import type { HostNetworkIdentity } from "../core/hostNetworkIdentity";
 import {
   NOTIFICATION_STATE_CHANNEL,
   MENUBAR_THROUGHPUT_CHANNEL,
@@ -25,6 +26,8 @@ contextBridge.exposeInMainWorld("dishlink", {
   openExternal: (url: string): void => {
     ipcRenderer.send("open-external", url);
   },
+  selfIdentity: (): Promise<HostNetworkIdentity> => ipcRenderer.invoke("get-self-identity"),
+  recorderInProcess: (): Promise<boolean> => ipcRenderer.invoke("get-recorder-in-process"),
   // Opens the Starlink login window in the main process; resolves once the account
   // is connected, or with ok:false if the user closes it.
   signIn: (): Promise<{ ok: boolean; message?: string }> => ipcRenderer.invoke("starlink-signin"),

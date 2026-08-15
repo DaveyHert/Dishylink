@@ -60,17 +60,17 @@ function clean(ips: (string | undefined)[]): string[] {
     .filter(isRoutable);
 }
 
-interface ElectronBridge {
-  getSelfIdentity?: () => Promise<{ ips?: string[]; macs?: string[] }>;
+interface DishlinkBridge {
+  selfIdentity?: () => Promise<{ ipAddresses?: string[]; macAddresses?: string[] }>;
 }
 async function fromElectron(): Promise<SelfIdentity | null> {
-  const bridge = (globalThis as { electronAPI?: ElectronBridge }).electronAPI;
-  if (!bridge?.getSelfIdentity) return null;
+  const bridge = (globalThis as { dishlink?: DishlinkBridge }).dishlink;
+  if (!bridge?.selfIdentity) return null;
   try {
-    const id = await bridge.getSelfIdentity();
+    const identity = await bridge.selfIdentity();
     return {
-      ips: clean(id.ips ?? []),
-      macs: (id.macs ?? []).map((mac) => mac.toLowerCase()),
+      ips: clean(identity.ipAddresses ?? []),
+      macs: (identity.macAddresses ?? []).map((macAddress) => macAddress.toLowerCase()),
       // Read from this process's own os.networkInterfaces(), and the desktop
       // app makes its LAN requests from that same process.
       describesHost: true,
