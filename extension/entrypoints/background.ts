@@ -22,7 +22,7 @@ const LAST_DRAIN_KEY = "lastDrain";
 type Surface = "window" | "tab";
 type Bounds = { top: number; left: number; width: number; height: number };
 
-const DEFAULT_BOUNDS: Bounds = { top: 80, left: 120, width: 1320, height: 880 };
+const DEFAULT_BOUNDS: Bounds = { top: 80, left: 120, width: 1500, height: 970 };
 
 // The single open dashboard window, so a second click focuses it instead of
 // opening another. Held in memory as a same-wake fast path only — the service

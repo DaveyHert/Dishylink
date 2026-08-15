@@ -146,7 +146,7 @@ function createWindow(): void {
   const restoredBounds = savedBounds !== null && boundsOnConnectedDisplay(savedBounds);
 
   mainWindow = new BrowserWindow({
-    width: restoredBounds ? savedBounds.width : 1450,
+    width: restoredBounds ? savedBounds.width : 1500,
     height: restoredBounds ? savedBounds.height : 980,
     ...(restoredBounds ? { x: savedBounds.x, y: savedBounds.y } : {}),
     minWidth: 800,

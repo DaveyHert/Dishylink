@@ -177,7 +177,7 @@ export function DashboardView({
   ];
 
   return (
-    <main className='mx-auto flex max-w-[1400px] flex-col gap-3.5 px-6 pt-3.5 pb-12 animate-[rise_400ms_ease_both]'>
+    <main className='mx-auto flex max-w-[1400px] flex-col gap-3.5 px-6 pt-3.5 pb-16 animate-[rise_400ms_ease_both]'>
       {/* Stat tiles */}
       <section className='grid grid-cols-6 gap-3.5 max-[1080px]:grid-cols-3'>
         {statTiles.map((tile) => (
