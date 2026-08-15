@@ -19,6 +19,8 @@ interface Window {
       method?: string;
       body?: unknown;
     }) => Promise<{ status: number; body: unknown }>;
+    selfIdentity: () => Promise<{ ipAddresses: string[]; macAddresses: string[] }>;
+    recorderInProcess: () => Promise<boolean>;
     // The throughput-readout controls — macOS menu bar or Windows taskbar —
     // exposed by the preload only on those platforms, so they are optional, and
     // the settings toggle renders only where `setMenuBarThroughput` is present.

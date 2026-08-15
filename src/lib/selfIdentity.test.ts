@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { matchesSelf, type SelfIdentity } from "./selfIdentity";
+import { afterEach, describe, expect, it } from "vitest";
+import { matchesSelf, resolveSelfIdentity, type SelfIdentity } from "./selfIdentity";
 
 const self = (over: Partial<SelfIdentity> = {}): SelfIdentity => ({
   ips: [],
@@ -45,5 +45,39 @@ describe("matchesSelf", () => {
     expect(
       matchesSelf({ ipAddress: "192.168.1.45", macAddress: "5a:c9:44:55:f3:e9" }, self()),
     ).toBe(false);
+  });
+});
+
+describe("resolveSelfIdentity via the Electron bridge", () => {
+  const host = globalThis as { dishlink?: unknown };
+  afterEach(() => {
+    delete host.dishlink;
+  });
+
+  it("reads the host's own interfaces, which no /api call is needed for", async () => {
+    host.dishlink = {
+      selfIdentity: () =>
+        Promise.resolve({
+          ipAddresses: ["192.168.1.230", "::ffff:192.168.1.230", "127.0.0.1"],
+          macAddresses: ["EA:17:B5:92:E2:92"],
+        }),
+    };
+
+    await expect(resolveSelfIdentity()).resolves.toEqual({
+      // Loopback is dropped and the v4-mapped duplicate collapses to the bare v4.
+      ips: ["192.168.1.230", "192.168.1.230"],
+      macs: ["ea:17:b5:92:e2:92"],
+      describesHost: true,
+    });
+  });
+
+  it("falls through when the bridge is absent, as it is on every other host", async () => {
+    await expect(resolveSelfIdentity()).resolves.toMatchObject({ describesHost: false });
+  });
+
+  it("falls through when the bridge rejects", async () => {
+    host.dishlink = { selfIdentity: () => Promise.reject(new Error("no ipc")) };
+
+    await expect(resolveSelfIdentity()).resolves.toMatchObject({ describesHost: false });
   });
 });

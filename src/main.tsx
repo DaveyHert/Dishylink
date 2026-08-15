@@ -23,9 +23,9 @@ if (desktop) {
     transport: ({ path, method, body }) => desktop.cloud({ path, method, body }),
     signIn: desktop.signIn,
   });
-  // The recorder runs in the same process that serves /api here, so it cannot be
-  // down while this window is asking — see recorderRunsInHostProcess.
-  setRecorderInProcess(true);
+  // Only a build serving its own /api has the recorder in this process, where it
+  // cannot be down while this window is asking — see recorderRunsInHostProcess.
+  void desktop.recorderInProcess().then(setRecorderInProcess);
 }
 
 // Bound for every host, desktop or plain tab, since each keeps the notification
