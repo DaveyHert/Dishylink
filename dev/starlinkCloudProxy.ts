@@ -12,7 +12,9 @@ import { resolve } from "node:path";
 import type { Plugin } from "vite";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createCloudHandler } from "../cloud/starlinkCloudHandler.ts";
-import { DishClient, ROUTER_LAN_HANDLE_URL } from "../core/dishClient.ts";
+import { DishClient, DISH_LAN_HANDLE_URL, ROUTER_LAN_HANDLE_URL } from "../core/dishClient.ts";
+import type { DishConfigJson } from "../core/dishClient.ts";
+import { prepareDishConfigUpdate } from "../core/dishConfigUpdate.ts";
 import { prepareRouterClientUpdate } from "../core/routerClientUpdate.ts";
 import type { RouterClientUpdate } from "../core/routerClientUpdate.ts";
 import { localNetworkIdentity } from "../core/hostNetworkIdentity.ts";
@@ -74,6 +76,9 @@ export function starlinkCloudProxy(): Plugin {
     name: "starlink-cloud-proxy",
     configureServer(server) {
       let routerPromise: Promise<DishClient> | null = null;
+      let dishPromise: Promise<DishClient> | null = null;
+      const protosetBytes = () =>
+        new Uint8Array(readFileSync(resolve(process.cwd(), "public/dish.protoset")));
       const handler = createCloudHandler({
         readCookie,
         writeCookie,
@@ -81,11 +86,16 @@ export function starlinkCloudProxy(): Plugin {
         prepareDeviceUpdate: async (update) => {
           routerPromise ??= DishClient.load("router", {
             handleUrl: ROUTER_LAN_HANDLE_URL,
-            protosetBytes: new Uint8Array(
-              readFileSync(resolve(process.cwd(), "public/dish.protoset")),
-            ),
+            protosetBytes: protosetBytes(),
           });
           return prepareRouterClientUpdate(await routerPromise, update, localNetworkIdentity());
+        },
+        prepareDishConfigUpdate: async (changes) => {
+          dishPromise ??= DishClient.load("dish", {
+            handleUrl: DISH_LAN_HANDLE_URL,
+            protosetBytes: protosetBytes(),
+          });
+          return prepareDishConfigUpdate(await dishPromise, changes);
         },
       });
       server.middlewares.use(async (req: IncomingMessage, res: ServerResponse, next) => {
@@ -120,6 +130,16 @@ export function starlinkCloudProxy(): Plugin {
           try {
             const update = JSON.parse((await readBody(req)) || "{}") as RouterClientUpdate;
             const result = await handler.updateClient(update);
+            return sendJson(res, result.status, result.body);
+          } catch (error) {
+            return sendJson(res, 400, { error: "bad_request", message: (error as Error).message });
+          }
+        }
+
+        if (route === "/cloud/dish-config" && req.method === "POST") {
+          try {
+            const changes = JSON.parse((await readBody(req)) || "{}") as DishConfigJson;
+            const result = await handler.updateDishConfig(changes);
             return sendJson(res, result.status, result.body);
           } catch (error) {
             return sendJson(res, 400, { error: "bad_request", message: (error as Error).message });

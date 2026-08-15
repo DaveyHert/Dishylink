@@ -5,12 +5,14 @@ import type { CloudResult } from "../../cloud/starlinkCloudHandler";
 // stub it so these tests exercise only handleCloudRequest's own routing — whether a
 // device update reaches updateClient at all, not what updateClient then does with it.
 const updateClient = vi.fn<(update: unknown) => Promise<CloudResult>>();
+const updateDishConfig = vi.fn<(changes: unknown) => Promise<CloudResult>>();
 vi.mock("../../cloud/starlinkCloudHandler", () => ({
   createCloudHandler: () => ({
     handle: vi.fn(),
     connect: vi.fn(),
     disconnect: vi.fn(),
     updateClient,
+    updateDishConfig,
   }),
 }));
 
@@ -35,6 +37,22 @@ describe("handleCloudRequest /cloud/device", () => {
     const reply = await handleCloudRequest({ path: "/cloud/device", method: "POST", body: update });
 
     expect(updateClient).toHaveBeenCalledWith(update);
+    expect(reply).toEqual({ status: 200, body: { ok: true } });
+  });
+});
+
+describe("handleCloudRequest /cloud/dish-config", () => {
+  it("forwards the change to the cloud handler, unlike a pause", async () => {
+    updateDishConfig.mockResolvedValueOnce({ status: 200, body: { ok: true } });
+    const changes = { swupdateRebootHour: 15 };
+
+    const reply = await handleCloudRequest({
+      path: "/cloud/dish-config",
+      method: "POST",
+      body: changes,
+    });
+
+    expect(updateDishConfig).toHaveBeenCalledWith(changes);
     expect(reply).toEqual({ status: 200, body: { ok: true } });
   });
 });

@@ -21,10 +21,11 @@
 
 import { browser } from "wxt/browser";
 import { createCloudHandler } from "../../cloud/starlinkCloudHandler";
-import { DishClient } from "@core/dishClient";
+import { DishClient, type DishConfigJson } from "@core/dishClient";
+import { prepareDishConfigUpdate } from "@core/dishConfigUpdate";
 import { prepareRouterClientUpdate, type RouterClientUpdate } from "@core/routerClientUpdate";
 import type { CloudReply, CloudRequest } from "@/lib/cloudHost";
-import { ROUTER_HANDLE_URL } from "./endpoints";
+import { DISH_HANDLE_URL, ROUTER_HANDLE_URL } from "./endpoints";
 
 const SESSION_KEY = "cloudSession";
 
@@ -32,6 +33,7 @@ const SESSION_KEY = "cloudSession";
 // so our copy is mirrored here and reloaded before each request is served.
 let ourCookie: string | null = null;
 let routerPromise: Promise<DishClient> | null = null;
+let dishPromise: Promise<DishClient> | null = null;
 
 const cloudHandler = createCloudHandler({
   fetch: ((input: RequestInfo | URL, init?: RequestInit) =>
@@ -48,6 +50,10 @@ const cloudHandler = createCloudHandler({
   prepareDeviceUpdate: async (update) => {
     routerPromise ??= DishClient.load("router", { handleUrl: ROUTER_HANDLE_URL });
     return prepareRouterClientUpdate(await routerPromise, update);
+  },
+  prepareDishConfigUpdate: async (changes) => {
+    dishPromise ??= DishClient.load("dish", { handleUrl: DISH_HANDLE_URL });
+    return prepareDishConfigUpdate(await dishPromise, changes);
   },
 });
 
@@ -115,6 +121,13 @@ export async function handleCloudRequest(request: CloudRequest): Promise<CloudRe
     if (update?.kind !== "rename")
       return { status: 501, body: { error: "unsupported_on_extension" } };
     return cloudHandler.updateClient(update);
+  }
+
+  // Dish config carries no self-target hazard the way pausing a client does —
+  // sleep schedule, update window, and defer-updates apply to the dish as a
+  // whole, not to whichever device happens to be running the extension.
+  if (route === "/cloud/dish-config" && request.method === "POST") {
+    return cloudHandler.updateDishConfig(request.body as DishConfigJson);
   }
 
   // /cloud/session is connect (capture our copy) and disconnect (drop our copy).
