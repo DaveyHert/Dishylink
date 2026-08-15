@@ -143,6 +143,7 @@ function NetworkPanelBody({
           nodes.find((node) => node.client?.macAddress === selected.upstreamMacAddress)?.name
         }
         isThisDevice={matchesSelf(selected, self)}
+        viewerIdentified={self.ips.length > 0 || self.macs.length > 0}
         onRename={network.renameClient}
       />
     );

@@ -1,19 +1,31 @@
 import { describe, expect, test, vi } from "vitest";
 import { applyRouterClientPaused, clientPauseControlAvailable } from "./routerPause";
 
+const available = {
+  clientId: 7 as number | undefined,
+  isThisDevice: false,
+  viewerIdentified: true,
+  cloudConnected: true,
+  hostSupportsPause: true,
+};
+
 describe("clientPauseControlAvailable", () => {
   test("given: no Starlink session, should: hide the device control", () => {
-    expect(clientPauseControlAvailable(7, false, false)).toBe(false);
+    expect(clientPauseControlAvailable({ ...available, cloudConnected: false })).toBe(false);
   });
 
   test("given: a host cannot identify its own client, should: hide the device control", () => {
-    expect(clientPauseControlAvailable(7, false, true, false)).toBe(false);
+    expect(clientPauseControlAvailable({ ...available, hostSupportsPause: false })).toBe(false);
+  });
+
+  test("given: an unresolved viewer identity, should: hide the control on every device", () => {
+    expect(clientPauseControlAvailable({ ...available, viewerIdentified: false })).toBe(false);
   });
 
   test("given: a connected account, should: show only for another identified device", () => {
-    expect(clientPauseControlAvailable(7, false, true)).toBe(true);
-    expect(clientPauseControlAvailable(7, true, true)).toBe(false);
-    expect(clientPauseControlAvailable(undefined, false, true)).toBe(false);
+    expect(clientPauseControlAvailable(available)).toBe(true);
+    expect(clientPauseControlAvailable({ ...available, isThisDevice: true })).toBe(false);
+    expect(clientPauseControlAvailable({ ...available, clientId: undefined })).toBe(false);
   });
 });
 

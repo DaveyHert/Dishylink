@@ -1,12 +1,23 @@
 import { cloudRequest, type CloudRequest, type CloudReply } from "./cloudHost";
 
-export function clientPauseControlAvailable(
-  clientId: number | undefined,
-  isThisDevice: boolean,
-  cloudConnected: boolean,
-  hostSupportsPause = true,
-): boolean {
-  return hostSupportsPause && cloudConnected && !isThisDevice && clientId !== undefined;
+/** "Not your device" and "could not tell which device you are" both arrive as
+ *  `isThisDevice: false`, so `viewerIdentified` is what keeps an unresolved
+ *  identity from offering to pause every row including the viewer's own. A paused
+ *  device cannot undo its own pause; recovery needs a second machine. */
+export function clientPauseControlAvailable(options: {
+  clientId: number | undefined;
+  isThisDevice: boolean;
+  viewerIdentified: boolean;
+  cloudConnected: boolean;
+  hostSupportsPause?: boolean;
+}): boolean {
+  return (
+    (options.hostSupportsPause ?? true) &&
+    options.cloudConnected &&
+    options.viewerIdentified &&
+    !options.isThisDevice &&
+    options.clientId !== undefined
+  );
 }
 
 /** Send one pause/unpause request through Starlink cloud. The existing network
