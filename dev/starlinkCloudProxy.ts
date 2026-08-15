@@ -14,6 +14,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { createCloudHandler } from "../cloud/starlinkCloudHandler.ts";
 import { DishClient, ROUTER_LAN_HANDLE_URL } from "../core/dishClient.ts";
 import { prepareRouterPauseRequest } from "../core/routerPause.ts";
+import { localNetworkIdentity } from "../core/hostNetworkIdentity.ts";
 
 const COOKIE_FILE = resolve(process.cwd(), ".starlink-cookie");
 
@@ -43,6 +44,19 @@ function sendJson(res: ServerResponse, status: number, payload: unknown) {
   res.end(JSON.stringify(payload));
 }
 
+// A text/plain POST is a CORS simple request: no preflight, so a page on any site
+// lands the write without ever reading the reply. Loopback binding is no defence,
+// the request comes from a browser on this machine.
+function isLocalOrigin(origin?: string): boolean {
+  if (!origin) return true;
+  try {
+    const { hostname } = new URL(origin);
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  } catch {
+    return false;
+  }
+}
+
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolveBody, reject) => {
     let data = "";
@@ -70,12 +84,19 @@ export function starlinkCloudProxy(): Plugin {
               readFileSync(resolve(process.cwd(), "public/dish.protoset")),
             ),
           });
-          return prepareRouterPauseRequest(await routerPromise, clientId, paused);
+          return prepareRouterPauseRequest(
+            await routerPromise,
+            clientId,
+            paused,
+            localNetworkIdentity(),
+          );
         },
       });
       server.middlewares.use(async (req: IncomingMessage, res: ServerResponse, next) => {
         const url = req.url ?? "";
         if (!url.startsWith("/cloud/")) return next();
+        if (!isLocalOrigin(req.headers.origin))
+          return sendJson(res, 403, { error: "forbidden_origin" });
         const route = url.split("?")[0];
 
         // Connect / disconnect the session pasted from the UI.
