@@ -49,6 +49,10 @@ const link = (href: string, text: string, colour: string) =>
 
 const faqs: { q: string; a: string; aside?: string }[] = [
   {
+    q: "Is this an official Starlink app?",
+    a: "No. Dishylink is an unofficial, independent project with no affiliation to SpaceX or Starlink. Starlink is a trademark of SpaceX.",
+  },
+  {
     q: "Does it need an account or an internet connection?",
     a: "No. Dishylink talks to your dish and router directly over your local network, so it keeps working during an outage — which is exactly when you want to see what happened. Connecting a Starlink account is optional, read-only, and only adds your plan and billing data from the cloud.",
   },
@@ -59,10 +63,6 @@ const faqs: { q: string; a: string; aside?: string }[] = [
   {
     q: "Will it work with my dish?",
     a: "It reads the standard local API that Starlink terminals serve on your network, and renders the right hardware for Gen 1 through Gen 3, Mini and the Performance kits. Motorised kits additionally get stow and unstow.",
-  },
-  {
-    q: "Is this an official Starlink app?",
-    a: "No. Dishylink is an unofficial, independent project with no affiliation to SpaceX or Starlink. Starlink is a trademark of SpaceX.",
   },
   {
     q: "What does it cost?",
@@ -111,7 +111,7 @@ const faqs: { q: string; a: string; aside?: string }[] = [
         </div>
 
         <p class="mt-6 font-mono text-[12px] text-ink-3">
-          Free and open source · No account · Nothing leaves your machine
+          Free and open source · No account · Nothing leaves your machine · Unofficial, not affiliated with SpaceX
         </p>
 
         <Figure
