@@ -150,13 +150,15 @@ describe("createCloudHandler pauseClient", () => {
       fetch: doFetch,
       readCookie: () => SESSION,
       retryDelayMs: 0,
-      prepareDevicePause: async (clientId, paused) => {
-        expect({ clientId, paused }).toEqual({ clientId: 7, paused: true });
+      prepareDeviceUpdate: async (update) => {
+        expect(update).toEqual({ kind: "pause", clientId: 7, paused: true });
         return request;
       },
     });
 
-    await expect(handler.pauseClient(7, true)).resolves.toEqual({
+    await expect(
+      handler.updateClient({ kind: "pause", clientId: 7, paused: true }),
+    ).resolves.toEqual({
       status: 200,
       body: { ok: true },
     });
@@ -191,10 +193,12 @@ describe("createCloudHandler pauseClient", () => {
       fetch: doFetch,
       readCookie: () => SESSION,
       retryDelayMs: 0,
-      prepareDevicePause: async () => new Uint8Array(),
+      prepareDeviceUpdate: async () => new Uint8Array(),
     });
 
-    await expect(handler.pauseClient(7, false)).resolves.toMatchObject({ status: 200 });
+    await expect(
+      handler.updateClient({ kind: "pause", clientId: 7, paused: false }),
+    ).resolves.toMatchObject({ status: 200 });
     expect(deviceCalls).toBe(2);
     expect(authCalls).toBe(2);
   });
@@ -205,10 +209,12 @@ describe("createCloudHandler pauseClient", () => {
       fetch: doFetch,
       readCookie: () => SESSION,
       retryDelayMs: 0,
-      prepareDevicePause: async () => new Uint8Array(),
+      prepareDeviceUpdate: async () => new Uint8Array(),
     });
 
-    await expect(handler.pauseClient(7, true)).resolves.toMatchObject({
+    await expect(
+      handler.updateClient({ kind: "pause", clientId: 7, paused: true }),
+    ).resolves.toMatchObject({
       status: 428,
       body: { error: "not_connected" },
     });
@@ -226,10 +232,12 @@ describe("createCloudHandler pauseClient", () => {
       readCookie: () => SESSION,
       retryDelayMs: 0,
       deviceCallTimeoutMs: 5,
-      prepareDevicePause: async () => new Uint8Array(),
+      prepareDeviceUpdate: async () => new Uint8Array(),
     });
 
-    await expect(handler.pauseClient(7, true)).resolves.toEqual({
+    await expect(
+      handler.updateClient({ kind: "pause", clientId: 7, paused: true }),
+    ).resolves.toEqual({
       status: 504,
       body: {
         error: "device_call_timeout",
@@ -249,10 +257,12 @@ describe("createCloudHandler pauseClient", () => {
       readCookie: () => SESSION,
       retryDelayMs: 0,
       deviceCallTimeoutMs: 5,
-      prepareDevicePause: async () => new Uint8Array(),
+      prepareDeviceUpdate: async () => new Uint8Array(),
     });
 
-    await expect(handler.pauseClient(7, true)).resolves.toMatchObject({
+    await expect(
+      handler.updateClient({ kind: "pause", clientId: 7, paused: true }),
+    ).resolves.toMatchObject({
       status: 504,
       body: { error: "device_call_timeout" },
     });
@@ -282,14 +292,14 @@ describe("createCloudHandler pauseClient", () => {
       fetch: doFetch,
       readCookie: () => SESSION,
       retryDelayMs: 0,
-      prepareDevicePause: async (clientId) => {
-        prepared.push(clientId);
+      prepareDeviceUpdate: async (update) => {
+        if (update.kind === "pause") prepared.push(update.clientId);
         return new Uint8Array();
       },
     });
 
-    const first = handler.pauseClient(7, true);
-    const second = handler.pauseClient(8, true);
+    const first = handler.updateClient({ kind: "pause", clientId: 7, paused: true });
+    const second = handler.updateClient({ kind: "pause", clientId: 8, paused: true });
     await vi.waitFor(() => expect(deviceCalls).toBe(1));
     expect(prepared).toEqual([7]);
 
@@ -305,14 +315,18 @@ describe("createCloudHandler pauseClient", () => {
     let prepared = false;
     const handler = createCloudHandler({
       readCookie: () => SESSION,
-      prepareDevicePause: async () => {
+      prepareDeviceUpdate: async () => {
         prepared = true;
         return new Uint8Array();
       },
     });
 
-    await expect(handler.pauseClient(Number.NaN, true)).resolves.toMatchObject({ status: 400 });
-    await expect(handler.pauseClient(7, "yes" as unknown as boolean)).resolves.toMatchObject({
+    await expect(
+      handler.updateClient({ kind: "pause", clientId: Number.NaN, paused: true }),
+    ).resolves.toMatchObject({ status: 400 });
+    await expect(
+      handler.updateClient({ kind: "pause", clientId: 7, paused: "yes" as unknown as boolean }),
+    ).resolves.toMatchObject({
       status: 400,
     });
     expect(prepared).toBe(false);

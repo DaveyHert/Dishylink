@@ -14,6 +14,7 @@ import type { ThroughputRates } from "@core/throughputTracker";
 import type { TelemetrySample } from "@core/telemetry";
 import { usageKey, type ClientUsageTotal } from "@core/clientUsage";
 import { apiRequest } from "../lib/apiHost";
+import { setRouterClientName } from "../lib/routerClientUpdate";
 import { subscribeRouterStatus } from "../lib/routerStatusFeed";
 
 // Roster only — names, signal, addresses, link rates. These change on the order
@@ -216,7 +217,7 @@ export interface RouterNetwork {
   wifiConfig: WifiNetworkConfigJson | null;
   routerReachable: boolean | null; // null = still probing
   /** Rename a device on the router (persists across reconnects). */
-  renameClient: (macAddress: string, givenName: string) => Promise<void>;
+  renameClient: (clientId: number, givenName: string) => Promise<void>;
   /** Rolling per-MAC throughput samples (down/up in bps) built from each poll. */
   throughputHistory: Map<string, TelemetrySample[]>;
   /** Live per-MAC rate — the newest sample from the historian's window, which
@@ -385,16 +386,13 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
     return subscribeRouterStatus((snapshot) => setRouterStatus(snapshot.status));
   }, [active]);
 
-  const renameClient = useCallback(async (macAddress: string, givenName: string) => {
-    clientRef.current ??= DishClient.load("router");
-    const routerClient = await clientRef.current;
-    // Bounded so a dead router fails the Save button instead of hanging it.
-    await routerClient.setClientGivenName(macAddress, givenName, AbortSignal.timeout(10_000));
+  const renameClient = useCallback(async (clientId: number, givenName: string) => {
+    // Current firmware answers every LAN write with grpc status 7, so this goes
+    // through the account session like the other router writes — see LOCAL-API.md.
+    await setRouterClientName(clientId, givenName);
     // reflect immediately; the next poll confirms from the router
     setClients((current) =>
-      current.map((client) =>
-        client.macAddress === macAddress ? { ...client, givenName } : client,
-      ),
+      current.map((client) => (client.clientId === clientId ? { ...client, givenName } : client)),
     );
   }, []);
 

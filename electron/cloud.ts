@@ -10,7 +10,8 @@ import { existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { createCloudHandler } from "../cloud/starlinkCloudHandler";
 import { DishClient, ROUTER_LAN_HANDLE_URL } from "../core/dishClient";
-import { prepareRouterPauseRequest } from "../core/routerPause";
+import { prepareRouterClientUpdate } from "../core/routerClientUpdate";
+import type { RouterClientUpdate } from "../core/routerClientUpdate";
 import { localNetworkIdentity } from "../core/hostNetworkIdentity";
 
 const LOGIN_URL = "https://www.starlink.com/account";
@@ -59,17 +60,12 @@ export function startCloud(rendererRoot: string): void {
     readCookie,
     writeCookie,
     clearCookie,
-    prepareDevicePause: async (clientId, paused) => {
+    prepareDeviceUpdate: async (update) => {
       routerPromise ??= DishClient.load("router", {
         handleUrl: ROUTER_LAN_HANDLE_URL,
         protosetBytes: new Uint8Array(readFileSync(protosetPath)),
       });
-      return prepareRouterPauseRequest(
-        await routerPromise,
-        clientId,
-        paused,
-        localNetworkIdentity(),
-      );
+      return prepareRouterClientUpdate(await routerPromise, update, localNetworkIdentity());
     },
   });
 }
@@ -103,11 +99,8 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
   }
 
   if (route === "/cloud/device" && request.method === "POST") {
-    const { clientId, paused } = (await request.json().catch(() => ({}))) as {
-      clientId?: number;
-      paused?: boolean;
-    };
-    const { status, body } = await handler.pauseClient(clientId as number, paused as boolean);
+    const update = (await request.json().catch(() => ({}))) as RouterClientUpdate;
+    const { status, body } = await handler.updateClient(update);
     return json(status, body);
   }
 

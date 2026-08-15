@@ -2,12 +2,13 @@
 // row it opens, and the failure message the router's write lock produces.
 
 import { useState } from "react";
-import { GrpcWebError } from "@core/grpcWeb";
 import type { WifiClientJson } from "@core/dishClient";
 import { Input } from "@/components/ui/input";
 import { actionButton } from "../ui/action-button";
 import { PencilIcon } from "../../assets/icons/PencilIcon";
 import { displayName } from "./networkFormat";
+import { AccountRequiredError } from "../../lib/routerClientUpdate";
+import { AccountRequiredNotice } from "../shared/AccountRequiredNotice";
 
 export function RenameButton({ onClick }: { onClick: () => void }) {
   return (
@@ -27,32 +28,31 @@ export function DeviceNameEditor({
   onDone,
 }: {
   client: WifiClientJson;
-  onRename: (macAddress: string, givenName: string) => Promise<void>;
+  onRename: (clientId: number, givenName: string) => Promise<void>;
   onDone: () => void;
 }) {
   const [draftName, setDraftName] = useState(client.givenName ?? client.name ?? "");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+
+  const trimmedName = draftName.trim();
+  // Blank or unchanged has nothing to write, so Save is not offered for either.
+  const canSave =
+    client.clientId !== undefined && trimmedName !== "" && trimmedName !== displayName(client);
 
   const commit = async () => {
-    if (!client.macAddress || draftName.trim() === "" || draftName === displayName(client)) {
+    const { clientId } = client;
+    if (!canSave || clientId === undefined) {
       onDone();
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      await onRename(client.macAddress, draftName.trim());
+      await onRename(clientId, trimmedName);
       onDone();
     } catch (renameFailure) {
-      // Status 7 = the firmware's LAN write lock (measured 2026-07: the router
-      // refuses every rename shape from the LAN; only the official app's cloud
-      // path can write). Anything else really is a transport problem.
-      setError(
-        renameFailure instanceof GrpcWebError && renameFailure.grpcStatus === 7
-          ? "Starlink's current firmware blocks renames from the local network — rename this device in the official Starlink app instead."
-          : "The router refused the rename.",
-      );
+      setError(renameFailure as Error);
     } finally {
       setBusy(false);
     }
@@ -60,7 +60,7 @@ export function DeviceNameEditor({
 
   return (
     <>
-      <div className='mb-3.5 flex gap-2'>
+      <div className={`flex gap-2 ${error ? "mb-1.5" : "mb-3.5"}`}>
         <Input
           className='h-8 text-sm'
           autoFocus
@@ -76,14 +76,22 @@ export function DeviceNameEditor({
             if (event.key === "Escape") onDone();
           }}
         />
-        <button className={actionButton()} disabled={busy} onClick={() => void commit()}>
+        <button
+          className={actionButton()}
+          disabled={busy || !canSave}
+          onClick={() => void commit()}
+        >
           {busy ? "Saving…" : "Save"}
         </button>
         <button className={actionButton("subtle")} disabled={busy} onClick={onDone}>
           Cancel
         </button>
       </div>
-      {error && <div className='py-2 text-[12.5px] leading-[1.5] text-destructive'>{error}</div>}
+      {error && (
+        <div className='pb-3.5 text-[12.5px] leading-[1.5] text-destructive'>
+          {error instanceof AccountRequiredError ? <AccountRequiredNotice /> : error.message}
+        </div>
+      )}
     </>
   );
 }

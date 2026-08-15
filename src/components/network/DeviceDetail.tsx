@@ -18,7 +18,12 @@ import { buildDeviceFacts } from "./deviceFacts";
 import { deviceRowSubtitle } from "./deviceRowSubtitle";
 import { displayName, signalQuality } from "./networkFormat";
 import { Button } from "../ui/button";
-import { clientPauseControlAvailable, setRouterClientPaused } from "../../lib/routerPause";
+import {
+  AccountRequiredError,
+  clientPauseControlAvailable,
+  setRouterClientPaused,
+} from "../../lib/routerClientUpdate";
+import { AccountRequiredNotice } from "../shared/AccountRequiredNotice";
 import { useCloudAccount } from "../../hooks/useCloudAccount";
 import { supportsRouterClientPause } from "../../lib/cloudHost";
 import {
@@ -59,12 +64,12 @@ export function DeviceDetail({
   /** Whether the viewer's own device could be resolved at all. False makes
    *  `isThisDevice` meaningless, since nothing can match an unknown identity. */
   viewerIdentified: boolean;
-  onRename: (macAddress: string, givenName: string) => Promise<void>;
+  onRename: (clientId: number, givenName: string) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
   const [pendingPaused, setPendingPaused] = useState<boolean | null>(null);
   const [confirmingPause, setConfirmingPause] = useState(false);
-  const [pauseError, setPauseError] = useState<string | null>(null);
+  const [pauseError, setPauseError] = useState<Error | null>(null);
   const paused = client.blocked === true;
   // The roster agreeing with what was asked is what ends the pending state, and
   // adjusting it here rather than in an effect keeps the label from rendering one
@@ -84,7 +89,9 @@ export function DeviceDetail({
     if (pendingPaused === null) return;
     const timer = window.setTimeout(() => {
       setPendingPaused(null);
-      setPauseError("The router has not applied this yet. Give it a moment, then try again.");
+      setPauseError(
+        new Error("The router has not applied this yet. Give it a moment, then try again."),
+      );
     }, PAUSE_SETTLE_TIMEOUT_MS);
     return () => {
       window.clearTimeout(timer);
@@ -99,7 +106,7 @@ export function DeviceDetail({
       await setRouterClientPaused(client.clientId, next);
     } catch (error) {
       setPendingPaused(null);
-      setPauseError((error as Error).message);
+      setPauseError(error as Error);
     }
   };
 
@@ -221,7 +228,11 @@ export function DeviceDetail({
 
       {pauseError && (
         <div className='mb-3 rounded-md border border-destructive/30 bg-destructive/8 px-3 py-2 text-[12px] text-destructive'>
-          {pauseError}
+          {pauseError instanceof AccountRequiredError ? (
+            <AccountRequiredNotice />
+          ) : (
+            pauseError.message
+          )}
         </div>
       )}
 

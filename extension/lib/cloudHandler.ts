@@ -21,13 +21,17 @@
 
 import { browser } from "wxt/browser";
 import { createCloudHandler } from "../../cloud/starlinkCloudHandler";
+import { DishClient } from "@core/dishClient";
+import { prepareRouterClientUpdate, type RouterClientUpdate } from "@core/routerClientUpdate";
 import type { CloudReply, CloudRequest } from "@/lib/cloudHost";
+import { ROUTER_HANDLE_URL } from "./endpoints";
 
 const SESSION_KEY = "cloudSession";
 
 // readCookie/writeCookie are synchronous in the handler; chrome.storage is async,
 // so our copy is mirrored here and reloaded before each request is served.
 let ourCookie: string | null = null;
+let routerPromise: Promise<DishClient> | null = null;
 
 const cloudHandler = createCloudHandler({
   fetch: ((input: RequestInfo | URL, init?: RequestInit) =>
@@ -40,6 +44,10 @@ const cloudHandler = createCloudHandler({
   clearCookie: () => {
     ourCookie = null;
     void browser.storage.local.remove(SESSION_KEY);
+  },
+  prepareDeviceUpdate: async (update) => {
+    routerPromise ??= DishClient.load("router", { handleUrl: ROUTER_HANDLE_URL });
+    return prepareRouterClientUpdate(await routerPromise, update);
   },
 });
 
@@ -97,6 +105,17 @@ async function setCookieRule(cookie: string | null): Promise<void> {
 /** Answer one /cloud/* request from the dashboard. */
 export async function handleCloudRequest(request: CloudRequest): Promise<CloudReply> {
   const route = new URL(request.path, "http://extension.invalid").pathname;
+
+  // Renaming is safe from anywhere, but pausing is not: a desktop extension cannot
+  // read its host's LAN address or MAC, so it cannot tell whether the client it is
+  // about to cut off is the one it is running on. Refused here rather than left to
+  // the hidden control, so nothing that reaches this route can self-pause.
+  if (route === "/cloud/device" && request.method === "POST") {
+    const update = request.body as RouterClientUpdate;
+    if (update?.kind !== "rename")
+      return { status: 501, body: { error: "unsupported_on_extension" } };
+    return cloudHandler.updateClient(update);
+  }
 
   // /cloud/session is connect (capture our copy) and disconnect (drop our copy).
   if (route === "/cloud/session") {
