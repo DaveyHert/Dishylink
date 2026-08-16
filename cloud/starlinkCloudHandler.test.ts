@@ -6,6 +6,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { createCloudHandler } from "./starlinkCloudHandler";
+import { GrpcWebError } from "../core/grpcWeb";
 
 const AUTH_URL = "https://api.starlink.com/auth-rp/auth/user";
 const SESSION = "Starlink.Com.Sso=sso-value; Starlink.Com.Access.V1=old-token";
@@ -479,6 +480,56 @@ describe("updateRouterConfig", () => {
     await expect(handler.updateRouterConfig(SUBNET)).resolves.toMatchObject({
       status: 200,
       body: { applied: true },
+    });
+  });
+
+  it("given: the write dies with the network, should: report the subnet change as applied", async () => {
+    // What a service worker sees. Its fetch rejects the instant the LAN goes,
+    // rather than hanging until a deadline the way a desktop request does, so the
+    // same successful write arrives as a TypeError instead of a timeout.
+    const handler = createCloudHandler({
+      fetch: gateway(() => Promise.reject(new TypeError("Failed to fetch"))),
+      readCookie: () => SESSION,
+      retryDelayMs: 0,
+      prepareRouterConfigUpdate: async () => new Uint8Array(),
+    });
+
+    await expect(handler.updateRouterConfig(SUBNET)).resolves.toMatchObject({
+      status: 200,
+      body: { applied: true },
+    });
+  });
+
+  it("given: the far end refuses the write, should: report it as a failure", async () => {
+    // The one case that is genuinely a refusal: something answered. A dropped
+    // connection cannot say no, and this must not be swept up with it.
+    const handler = createCloudHandler({
+      fetch: gateway(() => Promise.reject(new GrpcWebError(3, "invalid argument"))),
+      readCookie: () => SESSION,
+      retryDelayMs: 0,
+      prepareRouterConfigUpdate: async () => new Uint8Array(),
+    });
+
+    await expect(handler.updateRouterConfig(SUBNET)).resolves.toMatchObject({
+      status: 502,
+      body: { error: "device_call_failed" },
+    });
+  });
+
+  it("given: the network dies before the write goes out, should: NOT claim the subnet moved", async () => {
+    const handler = createCloudHandler({
+      fetch: gateway(() => Promise.reject(new TypeError("Failed to fetch"))),
+      readCookie: () => SESSION,
+      retryDelayMs: 0,
+      // Consumes the gateway call standing in for the read, so the write never
+      // leaves and nothing has been asked of the router.
+      prepareRouterConfigUpdate: async (_update, _targetId, callGateway) =>
+        callGateway(new Uint8Array()),
+    });
+
+    await expect(handler.updateRouterConfig(SUBNET)).resolves.toMatchObject({
+      status: 502,
+      body: { error: "device_call_failed" },
     });
   });
 
