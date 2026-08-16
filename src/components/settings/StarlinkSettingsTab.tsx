@@ -168,7 +168,7 @@ export function StarlinkSettingsTab({
             />
           </SettingRow>
           {sleepEnabled && (
-            <div className='flex items-center gap-2 pb-[8px] pl-0.5'>
+            <div className='flex items-center justify-end gap-2 pb-[8px]'>
               <span className='mt-px block text-[12px] text-muted-foreground'>from</span>
               <TimePicker
                 minutes={sleepStartLocal}
