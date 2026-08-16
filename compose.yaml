@@ -1,7 +1,9 @@
-# Browser Dishylink on Apple Silicon. The Mac running Docker must be on the
-# Starlink LAN — dish (192.168.100.1) and router (192.168.1.1) are not inside
-# this compose network. Do not set network_mode: host; Docker Desktop attaches
-# that to the Linux VM, not the Mac's Wi-Fi.
+# Browser Dishylink. Builds for whatever CPU this machine is (amd64, arm64).
+# The host must be on the Starlink LAN — dish (192.168.100.1) and router
+# (192.168.1.1) are not inside this compose network. Do not set
+# network_mode: host on Docker Desktop; that attaches to the Linux VM, not
+# the host's Wi-Fi. On native Linux (a Pi on the LAN) published ports + NAT
+# are enough if the host can already reach those addresses.
 #
 # If launchd is already running com.dishylink.historian, stop it first. Two
 # recorders double the 200ms router client poll.
@@ -10,10 +12,7 @@ services:
   dishylink:
     build:
       context: .
-      platforms:
-        - linux/arm64
     image: dishylink:local
-    platform: linux/arm64
     ports:
       - "8080:8080"
     volumes:

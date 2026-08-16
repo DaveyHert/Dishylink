@@ -1,7 +1,8 @@
 # Browser-only Dishylink: SPA + historian + LAN/cloud proxies.
-# linux/arm64 for Apple Silicon. The host Mac must be on the Starlink LAN —
-# Docker Desktop has no real --network host, so the container reaches the dish
-# and router through the host's IPv4 NAT.
+# Architecture-neutral — node:22-bookworm-slim publishes amd64 and arm64, so
+# `docker compose build` produces an image for this machine. The host must be
+# on the Starlink LAN. Docker Desktop has no real --network host, so the
+# container reaches the dish and router through the host's IPv4 NAT.
 
 FROM node:22-bookworm-slim AS build
 WORKDIR /app

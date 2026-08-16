@@ -105,20 +105,33 @@ npm run pack:win        # Windows build
 npm run build:extension # Chromium extension bundle
 npm run build:extension:firefox
 npm run build:extension:edge
-docker compose up --build   # browser dashboard + recorder, Apple Silicon
+docker compose up --build   # browser dashboard + recorder (amd64 or arm64)
 ```
 
-### Docker (browser, Apple Silicon)
+### Docker (browser)
 
-Packages the web dashboard and the history recorder in one `linux/arm64`
-container. Open `http://localhost:8080`. The **Mac running Docker must be on
-the Starlink LAN** — the dish (`192.168.100.1`) and router (`192.168.1.1`) are
-reached through the host, not from inside Compose. Docker Desktop has no real
+Packages the web dashboard and the history recorder in one container. The
+image is built for **this machine's CPU** — `linux/amd64` or `linux/arm64`
+(Apple Silicon, a 64-bit Raspberry Pi, an x86 box). Open
+`http://localhost:8080`. The **host running Docker must be on the Starlink
+LAN** — the dish (`192.168.100.1`) and router (`192.168.1.1`) are reached
+through the host, not from inside Compose. Docker Desktop has no real
 `--network host`; do not set it.
 
 ```bash
 docker compose up --build
 ```
+
+To publish one image that runs on both architectures (build machine needs
+QEMU/`binfmt` for the foreign half):
+
+```bash
+docker buildx build --platform linux/amd64,linux/arm64 -t dishylink:local .
+```
+
+A Raspberry Pi 4/5 needs the 64-bit OS and enough RAM for the Vite build
+(4 GB is comfortable; 2 GB often OOMs). Building on a desktop and
+`docker save` / `docker load` onto the Pi avoids that.
 
 Recordings persist in the `historian-data` volume. If `com.dishylink.historian`
 is already running under launchd, stop it first — two recorders double the
@@ -126,12 +139,12 @@ router's 200 ms client poll.
 
 Optional, in `compose.yaml`:
 
-- `HOST_LAN_IP` / `HOST_MAC` — the Mac's LAN address, so "This device" and
+- `HOST_LAN_IP` / `HOST_MAC` — the host's LAN address, so "This device" and
   pause-self-protect still work through Docker Desktop's port publish.
 - `.starlink-cookie` bind-mount — keeps a pasted starlink.com session across
   restarts (or paste the session in the UI).
 
-Cloud session writes stay localhost-only. Opening the dashboard via the Mac's
+Cloud session writes stay localhost-only. Opening the dashboard via the host's
 LAN IP from a phone still shows live data and history.
 
 ### Desktop app (Mac, Windows)
