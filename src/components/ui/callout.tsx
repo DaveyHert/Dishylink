@@ -30,19 +30,22 @@ const callout = cva(
   },
 );
 
-const ICON: Record<NonNullable<VariantProps<typeof callout>["tone"]>, string> = {
-  info: "ⓘ",
-  error: "⚠",
-};
+const GLYPH = {
+  note: "ⓘ",
+  warning: "⚠",
+} as const;
 
 interface CalloutProps extends VariantProps<typeof callout> {
   children: ReactNode;
   /** How hard the icon presses, independent of the box it sits in. */
   iconSeverity?: Severity;
+  /** The glyph, for a warning that is not a failure: the triangle without the
+   *  red box behind it. Defaults to the one the tone implies. */
+  icon?: keyof typeof GLYPH;
   className?: string;
 }
 
-export function Callout({ children, tone, iconSeverity, className }: CalloutProps) {
+export function Callout({ children, tone, iconSeverity, icon, className }: CalloutProps) {
   const resolvedTone = tone ?? "info";
   // A broken thing is never quieter than its box, so the error tone settles this.
   const severity = resolvedTone === "error" ? "danger" : (iconSeverity ?? "normal");
@@ -54,7 +57,9 @@ export function Callout({ children, tone, iconSeverity, className }: CalloutProp
       role={resolvedTone === "error" ? "alert" : undefined}
       className={cn(callout({ tone }), className)}
     >
-      <SeverityIcon severity={severity}>{ICON[resolvedTone]}</SeverityIcon>
+      <SeverityIcon severity={severity}>
+        {GLYPH[icon ?? (resolvedTone === "error" ? "warning" : "note")]}
+      </SeverityIcon>
       <span>{children}</span>
     </div>
   );

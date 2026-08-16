@@ -11,6 +11,8 @@ import { CollapsibleSection, DangerAction, SectionLabel, SettingRow } from "./se
 import { RouterAddressRow } from "./RouterAddressRow";
 import { CustomDnsSection } from "./CustomDnsSection";
 import { SubnetSection } from "./SubnetSection";
+import { BypassSection } from "./BypassSection";
+import type { CloudAccount } from "../../lib/starlinkCloud";
 import { routerAddressForSubnet } from "@core/routerConfigUpdate";
 import { routerAddressHost } from "../../lib/routerAddressHost";
 import { applyRouterConfigUpdate } from "../../lib/routerConfigUpdate";
@@ -35,6 +37,16 @@ function ssidsWithBands(wifiConfig: WifiNetworkConfigJson | null): [string, stri
   return [...byName.entries()];
 }
 
+/** The controller's bypass state, or null when the account has not said. A mesh
+ *  node reports as a router too and is never the bypassed one, so the controller
+ *  is picked the way the cloud handler picks its write target: zero hops. */
+function controllerBypassed(account: CloudAccount | null): boolean | null {
+  for (const device of Object.values(account?.deviceTelemetry ?? {})) {
+    if (device.kind === "router" && device.hops === 0) return device.isBypassed ?? null;
+  }
+  return null;
+}
+
 export function RouterSettingsTab({
   wifiConfig,
   routerReachable,
@@ -54,7 +66,11 @@ export function RouterSettingsTab({
   const [addresses, setAddresses] = useRouterAddressState();
   // The DNS and subnet writes have no local path, so the controls are disabled up
   // front rather than failing at the moment Save is pressed.
-  const accountConnected = useCloudAccount(true).status === "ready";
+  const account = useCloudAccount(true);
+  const accountConnected = account.status === "ready";
+  // Read from the account rather than the router: a bypassed router answers
+  // nothing on the LAN, so `wifiConfig` is silent exactly when the answer is yes.
+  const bypassed = controllerBypassed(account.data);
   // The account is asked only when the router itself cannot answer, which costs a
   // round trip to Starlink for something the LAN gives away.
   const lanSubnet = wifiConfig?.networks?.[0]?.ipv4 ?? null;
@@ -174,6 +190,16 @@ export function RouterSettingsTab({
             );
             if (updatedAddresses?.ok) setAddresses(updatedAddresses.addresses);
             rereadCloudSubnet();
+          }}
+        />
+        <SectionLabel>Bypass</SectionLabel>
+        <BypassSection
+          reported={bypassed}
+          routerAnswering={answering}
+          disabled={!accountConnected}
+          onReload={account.reload}
+          onSave={async (enabled) => {
+            await applyRouterConfigUpdate({ kind: "bypass", enabled });
           }}
         />
       </CollapsibleSection>

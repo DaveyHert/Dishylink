@@ -216,6 +216,20 @@ body {
   }
 }
 
+/* The travel dots on a slide-to-confirm track: a drag is the only affordance
+   that control has, so something has to say it is draggable before it is
+   touched. Staggered per dot, and reversed when the track runs leftward. */
+
+@keyframes slide-hint {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
 /* ---------- thin scrollbar (scrollbar pseudo-elements aren't Tailwind utilities) ---------- */
 
 .thin-scroll {
