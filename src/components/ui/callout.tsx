@@ -14,6 +14,7 @@
 import type { ReactNode } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
+import { SeverityIcon, type Severity } from "./severity-icon";
 
 const callout = cva(
   "flex items-start gap-2.5 rounded-lg px-[13px] py-[11px] text-[12.5px] leading-normal",
@@ -36,11 +37,15 @@ const ICON: Record<NonNullable<VariantProps<typeof callout>["tone"]>, string> = 
 
 interface CalloutProps extends VariantProps<typeof callout> {
   children: ReactNode;
+  /** How hard the icon presses, independent of the box it sits in. */
+  iconSeverity?: Severity;
   className?: string;
 }
 
-export function Callout({ children, tone, className }: CalloutProps) {
+export function Callout({ children, tone, iconSeverity, className }: CalloutProps) {
   const resolvedTone = tone ?? "info";
+  // A broken thing is never quieter than its box, so the error tone settles this.
+  const severity = resolvedTone === "error" ? "danger" : (iconSeverity ?? "normal");
   return (
     <div
       data-slot='callout'
@@ -49,12 +54,7 @@ export function Callout({ children, tone, className }: CalloutProps) {
       role={resolvedTone === "error" ? "alert" : undefined}
       className={cn(callout({ tone }), className)}
     >
-      <span
-        aria-hidden='true'
-        className={resolvedTone === "error" ? "text-status-critical" : undefined}
-      >
-        {ICON[resolvedTone]}
-      </span>
+      <SeverityIcon severity={severity}>{ICON[resolvedTone]}</SeverityIcon>
       <span>{children}</span>
     </div>
   );

@@ -11,31 +11,23 @@
 
 import { Tooltip as TooltipPrimitive } from "radix-ui";
 import { cn } from "@/lib/utils";
+import { dotSeverityClass, type Severity } from "../ui/severity-icon";
 
 const infoDot =
   "relative inline-flex size-[13px] cursor-help items-center justify-center rounded-full border font-mono text-[9px] italic leading-none outline-none [transition:border-color_120ms_ease,color_120ms_ease,opacity_120ms_ease]";
-const infoDotTone = {
-  muted:
-    "border-input text-muted-foreground hover:border-(--accent) hover:text-(--accent) focus-visible:border-(--accent) focus-visible:text-(--accent)",
-  // Amber at rest marks a control that can cost the user their connection.
-  notable: "border-(--accent) text-(--accent) hover:opacity-80 focus-visible:opacity-80",
-  // For a field where a wrong value costs the user something they cannot undo
-  // from here. Reserved: everything else is amber at most.
-  critical: "border-status-critical text-status-critical hover:opacity-80 focus-visible:opacity-80",
-};
 // Portalled by Radix, so this is presentation only — the resets (not-italic,
 // normal-case, tracking-normal) guard against whatever context it lands in.
 const infoTip =
   "z-[60] w-max max-w-[360px] rounded-lg border border-hairline bg-secondary px-[13px] py-[11px] text-left text-[12.5px] not-italic normal-case leading-normal tracking-normal text-ink-secondary shadow-[0_6px_24px_rgba(0,0,0,0.28)]";
 
 /** Standalone ⓘ dot. Pair with any heading. */
-export function InfoDot({ tip, tone = "muted" }: { tip: string; tone?: keyof typeof infoDotTone }) {
+export function InfoDot({ tip, severity = "normal" }: { tip: string; severity?: Severity }) {
   return (
     <TooltipPrimitive.Provider delayDuration={120}>
       <TooltipPrimitive.Root>
         <TooltipPrimitive.Trigger asChild>
           <span
-            className={cn(infoDot, infoDotTone[tone])}
+            className={cn(infoDot, dotSeverityClass[severity])}
             tabIndex={0}
             role='note'
             aria-label={tip}
@@ -47,9 +39,7 @@ export function InfoDot({ tip, tone = "muted" }: { tip: string; tone?: keyof typ
           <TooltipPrimitive.Content
             className={infoTip}
             side='top'
-            // These dots sit at the right edge of a row, where a tip this wide
-            // would overhang the panel if it were centred on the dot.
-            align='end'
+            align='start'
             sideOffset={8}
             collisionPadding={12}
           >

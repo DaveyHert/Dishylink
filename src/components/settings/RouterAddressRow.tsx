@@ -7,7 +7,6 @@
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { InfoDot } from "../shared/InfoDot";
 import { SettingRow } from "./settingsChrome";
 import { normalizeIpAddress } from "@core/ipAddress";
 import {
@@ -68,6 +67,8 @@ export function RouterAddressRow({
     <>
       <SettingRow
         title='Router IP address'
+        info={`Dishylink looks for your router at this address. Change it only if the router's subnet was moved in the Starlink app, or your kit is in bypass mode behind a third-party router. Clearing the box returns to ${fallback}.`}
+        infoSeverity='warn'
         caption={`Default is ${fallback}`}
         note={
           refused ? (
@@ -99,10 +100,6 @@ export function RouterAddressRow({
         >
           {saving ? "Saving…" : "Save"}
         </Button>
-        <InfoDot
-          tone='notable'
-          tip={`Dishylink looks for your router at this address. Change it only if the router's subnet was moved in the Starlink app, or your kit is in bypass mode behind a third-party router. Clearing the box returns to ${fallback}.`}
-        />
       </SettingRow>
     </>
   );

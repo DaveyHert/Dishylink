@@ -5,6 +5,8 @@
 import { useState } from "react";
 import { ChevronRightIcon } from "lucide-react";
 import { actionButton } from "../ui/action-button";
+import { InfoDot } from "../shared/InfoDot";
+import type { Severity } from "../ui/severity-icon";
 
 /** Compact select trigger in the app's language (mono, hairline, small). */
 export const triggerClass =
@@ -13,14 +15,19 @@ export const selectContentClass = "min-w-[7rem] rounded-lg border-hairline";
 export const selectItemClass = "text-xs py-1.5";
 
 /** One settings row: label block on the left, control(s) pinned right, never
- *  wrapping. `note` is an outcome line that spans the full width underneath. */
+ *  wrapping. `note` is an outcome line that spans the full width underneath.
+ *  `info` puts the ⓘ beside the title. */
 export function SettingRow({
   title,
+  info,
+  infoSeverity,
   caption,
   note,
   children,
 }: {
   title: string;
+  info?: string;
+  infoSeverity?: Severity;
   caption?: string;
   note?: React.ReactNode;
   children: React.ReactNode;
@@ -29,7 +36,10 @@ export function SettingRow({
     <div data-settings-row className='py-[11px]'>
       <div className='flex items-center justify-between gap-5'>
         <div className='min-w-0'>
-          <span className='block text-[13.5px] font-semibold text-foreground'>{title}</span>
+          <span className='flex items-center gap-1.5 text-[13.5px] font-semibold text-foreground'>
+            {title}
+            {info && <InfoDot tip={info} severity={infoSeverity} />}
+          </span>
           {caption && (
             <span className='mt-px block text-[12px] text-muted-foreground'>{caption}</span>
           )}
