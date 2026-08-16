@@ -4,6 +4,7 @@ import {
   buildSubnetNetworks,
   normalizeNameservers,
   readCurrentNetworks,
+  readCurrentSubnet,
   routerAddressForSubnet,
   subnetRefusal,
   MAX_NAMESERVERS,
@@ -218,6 +219,32 @@ describe("buildRouterConfigRequest for a subnet", () => {
         ROUTER_NETWORKS,
       ),
     ).toThrow(/8 to 63 characters/);
+  });
+});
+
+describe("readCurrentSubnet", () => {
+  const codecReturning = (networks: unknown[] | undefined) => ({
+    encodeRequest: () => new Uint8Array([1]),
+    decodeResponse: () => ({ wifiGetConfig: { wifiConfig: { networks } } }),
+  });
+  const callGateway = async () => new Uint8Array();
+
+  it("reads the range off the first network the router names", async () => {
+    expect(await readCurrentSubnet(codecReturning(ROUTER_NETWORKS), TARGET, callGateway)).toBe(
+      "192.168.1.1/24",
+    );
+  });
+
+  it("has no answer for a router that names no networks", async () => {
+    // What a bypassed kit reports.
+    expect(await readCurrentSubnet(codecReturning([]), TARGET, callGateway)).toBeNull();
+    expect(await readCurrentSubnet(codecReturning(undefined), TARGET, callGateway)).toBeNull();
+  });
+
+  it("has no answer when the network carries no range", async () => {
+    expect(
+      await readCurrentSubnet(codecReturning([{ isGuest: false }]), TARGET, callGateway),
+    ).toBeNull();
   });
 });
 

@@ -67,8 +67,15 @@ export interface CloudHandlerOptions {
     /** Sends one encoded request through the same authenticated gateway and
      *  returns the raw reply. A subnet change needs it: the write has to carry
      *  the network block the router currently reports. */
-    send: (requestBytes: Uint8Array) => Promise<Uint8Array>,
+    callGateway: (requestBytes: Uint8Array) => Promise<Uint8Array>,
   ) => Promise<Uint8Array>;
+  /** Trusted host callback: reads the router's current subnet through the same
+   *  gateway. Like the write above it touches no LAN, so it answers for a router
+   *  the local network cannot see. */
+  readRouterSubnet?: (
+    targetId: string,
+    callGateway: (requestBytes: Uint8Array) => Promise<Uint8Array>,
+  ) => Promise<string | null>;
 }
 
 /** The durable half of the session — without it a token refresh can't happen, so
@@ -155,6 +162,7 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
   const prepareDeviceUpdate = options.prepareDeviceUpdate;
   const prepareDishConfigUpdate = options.prepareDishConfigUpdate;
   const prepareRouterConfigUpdate = options.prepareRouterConfigUpdate;
+  const readRouterSubnet = options.readRouterSubnet;
 
   let cachedCookie: string | null = null;
   let cachedAt = 0;
@@ -370,6 +378,20 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
         });
         return { status: 200, body };
       }
+      if (route === "/cloud/router-subnet") {
+        if (!readRouterSubnet) return { status: 503, body: { error: "router_subnet_unavailable" } };
+        const abortSignal = AbortSignal.timeout(deviceCallTimeoutMs);
+        const subnet = await withFreshCookie(async (cookie) => {
+          const targetId = await resolveControllerId(cookie);
+          return readRouterSubnet(targetId, (requestBytes) =>
+            grpcWebUnaryCall(DEVICE_HANDLE, requestBytes, abortSignal, {
+              fetch: doFetch,
+              headers: { cookie },
+            }),
+          );
+        }, abortSignal);
+        return { status: 200, body: { subnet } };
+      }
       return { status: 404, body: { error: "unknown_cloud_route", route } };
     } catch (error) {
       // A dead session is a reconnect prompt (428), not a network fault (502).
@@ -581,15 +603,15 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
       const abortSignal = AbortSignal.timeout(deviceCallTimeoutMs);
       await withFreshCookie(async (cookie) => {
         const targetId = await resolveControllerId(cookie);
-        const send = (requestBytes: Uint8Array) =>
+        const callGateway = (requestBytes: Uint8Array) =>
           grpcWebUnaryCall(DEVICE_HANDLE, requestBytes, abortSignal, {
             fetch: doFetch,
             headers: { cookie },
           });
-        const requestBytes = await prepareRouterConfigUpdate(update, targetId, send);
+        const requestBytes = await prepareRouterConfigUpdate(update, targetId, callGateway);
         try {
           configWriteDispatched = true;
-          await send(requestBytes);
+          await callGateway(requestBytes);
         } catch (error) {
           if (error instanceof GrpcWebError && error.grpcStatus === 16)
             throw new SessionExpiredError();

@@ -18,6 +18,7 @@ import { prepareDishConfigUpdate } from "../core/dishConfigUpdate.ts";
 import {
   buildRouterConfigRequest,
   readCurrentNetworks,
+  readCurrentSubnet,
   type RouterConfigUpdate,
 } from "../core/routerConfigUpdate.ts";
 import { prepareRouterClientUpdate } from "../core/routerClientUpdate.ts";
@@ -104,14 +105,21 @@ export function starlinkCloudProxy(): Plugin {
         },
         // Encoding only — the client is never dialled here, so this works on a
         // kit whose router answers nothing on the LAN.
-        prepareRouterConfigUpdate: async (update, targetId, send) => {
+        prepareRouterConfigUpdate: async (update, targetId, callGateway) => {
           routerPromise ??= DishClient.load("router", {
             handleUrl: ROUTER_LAN_HANDLE_URL,
             protosetBytes: protosetBytes(),
           });
           const client = await routerPromise;
-          const networks = await readCurrentNetworks(update, client, targetId, send);
+          const networks = await readCurrentNetworks(update, client, targetId, callGateway);
           return client.encodeRequest(buildRouterConfigRequest(targetId, update, networks));
+        },
+        readRouterSubnet: async (targetId, callGateway) => {
+          routerPromise ??= DishClient.load("router", {
+            handleUrl: ROUTER_LAN_HANDLE_URL,
+            protosetBytes: protosetBytes(),
+          });
+          return readCurrentSubnet(await routerPromise, targetId, callGateway);
         },
       });
       server.middlewares.use(async (req: IncomingMessage, res: ServerResponse, next) => {

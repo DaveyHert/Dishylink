@@ -5,7 +5,6 @@
 // invisible to the thing that needs it most.
 
 import { useEffect, useState } from "react";
-import { ROUTER_LAN_ADDRESS } from "@core/dishClient";
 import { routerAddressHost, type RouterAddress } from "../lib/routerAddressHost";
 
 /** Null until the host answers, and forever on hosts that cannot offer the
@@ -26,11 +25,4 @@ export function useRouterAddressState(): [RouterAddress | null, (next: RouterAdd
   }, [host]);
 
   return [host ? addresses : null, setAddresses];
-}
-
-/** The address the router is actually being dialled at, for the surfaces that
- *  name it. Falls back to the default, which is what an unconfigured host uses. */
-export function useRouterAddress(): string {
-  const [addresses] = useRouterAddressState();
-  return addresses?.router ?? ROUTER_LAN_ADDRESS;
 }

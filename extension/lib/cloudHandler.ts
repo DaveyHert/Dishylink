@@ -26,6 +26,7 @@ import { prepareDishConfigUpdate } from "@core/dishConfigUpdate";
 import {
   buildRouterConfigRequest,
   readCurrentNetworks,
+  readCurrentSubnet,
   type RouterConfigUpdate,
 } from "@core/routerConfigUpdate";
 import { prepareRouterClientUpdate, type RouterClientUpdate } from "@core/routerClientUpdate";
@@ -65,7 +66,7 @@ const cloudHandler = createCloudHandler({
     routerPromise ??= DishClient.load("router", { handleUrl: routerUrl });
     return prepareRouterClientUpdate(await routerPromise, update);
   },
-  prepareRouterConfigUpdate: async (update, targetId, send) => {
+  prepareRouterConfigUpdate: async (update, targetId, callGateway) => {
     const routerUrl = routerHandleUrl();
     if (routerUrl !== cachedRouterUrl) {
       cachedRouterUrl = routerUrl;
@@ -73,8 +74,17 @@ const cloudHandler = createCloudHandler({
     }
     routerPromise ??= DishClient.load("router", { handleUrl: routerUrl });
     const client = await routerPromise;
-    const networks = await readCurrentNetworks(update, client, targetId, send);
+    const networks = await readCurrentNetworks(update, client, targetId, callGateway);
     return client.encodeRequest(buildRouterConfigRequest(targetId, update, networks));
+  },
+  readRouterSubnet: async (targetId, callGateway) => {
+    const routerUrl = routerHandleUrl();
+    if (routerUrl !== cachedRouterUrl) {
+      cachedRouterUrl = routerUrl;
+      routerPromise = null;
+    }
+    routerPromise ??= DishClient.load("router", { handleUrl: routerUrl });
+    return readCurrentSubnet(await routerPromise, targetId, callGateway);
   },
   prepareDishConfigUpdate: async (changes) => {
     const dishUrl = dishHandleUrl();

@@ -233,6 +233,9 @@ export interface RouterNetwork {
   totals: Map<string, ClientUsageTotal>;
   /** From routerStatusFeed's shared poll — never poll the router directly here. */
   routerStatus: WifiStatusJson | null;
+  /** Re-read the router's config now. For callers that just changed it, and so
+   *  know it is stale without waiting for the router to go quiet and return. */
+  refreshConfig: () => void;
 }
 
 export function useRouterNetwork(active: boolean): RouterNetwork {
@@ -251,6 +254,9 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
   const lastSampleMsRef = useRef(0);
   const historyRef = useRef<Map<string, TelemetrySample[]>>(new Map());
   const clientRef = useRef<Promise<DishClient> | null>(null);
+  /** Set while the poll effect is live, so a caller outside it can ask for a
+   *  re-read without holding the router client itself. */
+  const readConfigRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     if (!active) return;
@@ -279,6 +285,19 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
         // an unanswering router must not stack hung requests until the
         // per-origin connection budget starves the dish poll too.
         let clientsInFlight = false;
+        // Read on each return to answering, never on the poll: this router is a
+        // small embedded box that has tripped its watchdog under added load. A kit
+        // that went quiet can come back on a different subnet, with different
+        // SSIDs, or off bypass, so the copy held from before the silence describes
+        // something that no longer exists.
+        let routerAnswering = false;
+        const readConfig = () => {
+          routerClient
+            .getWifiConfig(AbortSignal.timeout(4_000))
+            .then((config) => !disposed && setWifiConfig(config))
+            .catch(() => {});
+        };
+        readConfigRef.current = readConfig;
         const pollClients = async () => {
           if (clientsInFlight) return;
           clientsInFlight = true;
@@ -291,16 +310,18 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
             // mutating it, so this stays the set that arrived with this roster.
             setRatesAtRoster(ratesRef.current);
             setRouterReachable(true);
+            if (!routerAnswering) {
+              routerAnswering = true;
+              readConfig();
+            }
           } catch {
-            if (!disposed) setRouterReachable(false);
+            if (disposed) return;
+            setRouterReachable(false);
+            routerAnswering = false;
           } finally {
             clientsInFlight = false;
           }
         };
-        routerClient
-          .getWifiConfig(AbortSignal.timeout(4_000))
-          .then((config) => !disposed && setWifiConfig(config))
-          .catch(() => {});
         // Tail the historian's window: append what is new, drop what has aged
         // out. The historian is the only thing computing rates, so every tab
         // shows the same series and the router sees one poller, not one per tab.
@@ -376,6 +397,7 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
 
     return () => {
       disposed = true;
+      readConfigRef.current = () => {};
       window.clearInterval(timerId);
       window.clearInterval(samplesTimerId);
     };
@@ -396,6 +418,8 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
     );
   }, []);
 
+  const refreshConfig = useCallback(() => readConfigRef.current(), []);
+
   return {
     clients,
     wifiConfig,
@@ -406,5 +430,6 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
     ratesAtRoster,
     totals,
     routerStatus,
+    refreshConfig,
   };
 }

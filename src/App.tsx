@@ -200,6 +200,7 @@ export default function App() {
           wifiConfig={routerNetwork.wifiConfig}
           routerReachable={routerNetwork.routerReachable}
           routerUnreachable={routerUnreachable}
+          onRouterConfigChanged={routerNetwork.refreshConfig}
         />
       )}
       {/* Sky view (full-viewport) */}

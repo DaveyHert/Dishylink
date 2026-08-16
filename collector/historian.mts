@@ -31,6 +31,7 @@ import { createFileRegistry, fromBinary, toJson, type DescMessage } from "@bufbu
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { grpcWebUnaryCall } from "../core/grpcWeb.ts";
 import { createRouterOrigins } from "../core/routerEndpoint.ts";
+import { readDevRouterAddress } from "./devRouterAddress.mts";
 import {
   decodeHistoryWindow,
   decodeOutageEvents,
@@ -64,8 +65,14 @@ const DISH_URL =
  * user-facing setting installs a reader here, consulted per call: this process
  * runs for weeks, so a value read once at import would take effect at the next
  * restart, which is to say never.
+ *
+ * Standing alone, nothing installs one, so the default is the dev file the dev
+ * server dials through — a recording made beside a dev window then covers the
+ * same router that window shows.
  */
-let readConfiguredRouterAddress: () => string | null = () => null;
+let readConfiguredRouterAddress: () => string | null = process.env.HISTORIAN_EMBED
+  ? () => null
+  : readDevRouterAddress;
 
 export function setRouterAddressReader(reader: () => string | null): void {
   readConfiguredRouterAddress = reader;

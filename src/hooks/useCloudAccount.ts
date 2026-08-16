@@ -9,11 +9,12 @@
 // two fetches when two surfaces were open, and a satellite view still holding
 // "not connected" after the account panel had signed in.
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { subscribeCloudSession } from "../lib/cloudHost";
 import {
   fetchCloudAccount,
   fetchCloudUsage,
+  fetchCloudRouterSubnet,
   CloudNotConnectedError,
   type CloudAccount,
   type CloudUsage,
@@ -106,12 +107,14 @@ function createCloudStore<T>(fetcher: () => Promise<T>): CloudStore<T> {
 
 const cloudAccountStore = createCloudStore(() => fetchCloudAccount());
 const cloudUsageStore = createCloudStore(() => fetchCloudUsage());
+const cloudRouterSubnetStore = createCloudStore(() => fetchCloudRouterSubnet());
 
 // Connecting, disconnecting, or signing in through the host makes every cached
 // answer wrong at once — including a cached "not connected".
 subscribeCloudSession(() => {
   cloudAccountStore.invalidate();
   cloudUsageStore.invalidate();
+  cloudRouterSubnetStore.invalidate();
 });
 
 function useCloudStore<T>(
@@ -135,4 +138,32 @@ export function useCloudUsage(
   active: boolean,
 ): CloudStoreState<CloudUsage> & { reload: () => void } {
   return useCloudStore(cloudUsageStore, active);
+}
+
+/**
+ * Asked afresh whenever a surface needing it opens, not kept for the session the
+ * way the account is: the subnet is movable from the official app, so an answer
+ * from earlier in this page's life can describe a router that has since moved.
+ */
+export function useCloudRouterSubnet(
+  active: boolean,
+): CloudStoreState<string> & { reload: () => void } {
+  const snapshot = useSyncExternalStore(
+    cloudRouterSubnetStore.subscribe,
+    cloudRouterSubnetStore.getSnapshot,
+  );
+  // Once per mount, not once per change of `active`: a link flapping in and out
+  // of reach would otherwise turn one look at this panel into a stream of calls
+  // on someone else's API.
+  const requestedSinceMounted = useRef(false);
+  useEffect(() => {
+    if (!active || requestedSinceMounted.current) return;
+    requestedSinceMounted.current = true;
+    cloudRouterSubnetStore.reload();
+  }, [active]);
+  return {
+    data: snapshot.data,
+    status: snapshot.status,
+    reload: cloudRouterSubnetStore.reload,
+  };
 }

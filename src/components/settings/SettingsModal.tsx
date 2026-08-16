@@ -24,6 +24,8 @@ interface SettingsModalProps {
   wifiConfig: WifiNetworkConfigJson | null;
   routerReachable: boolean | null;
   routerUnreachable: RouterUnreachable | null;
+  /** Ask the poller to re-read the router config after a write changed it. */
+  onRouterConfigChanged: () => void;
 }
 
 export function SettingsModal({
@@ -33,6 +35,7 @@ export function SettingsModal({
   wifiConfig,
   routerReachable,
   routerUnreachable,
+  onRouterConfigChanged,
 }: SettingsModalProps) {
   const [tab, setTab] = useState<"starlink" | "router" | "app">("starlink");
   const settings = useDishSettings();
@@ -129,6 +132,7 @@ export function SettingsModal({
                 wifiConfig={wifiConfig}
                 routerReachable={routerReachable}
                 unreachable={routerUnreachable}
+                onConfigChanged={onRouterConfigChanged}
               />
             )}
             {tab === "app" && <AppSettingsTab />}

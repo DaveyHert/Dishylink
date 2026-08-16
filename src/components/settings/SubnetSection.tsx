@@ -7,6 +7,7 @@
 // two on a single form for the same reason.
 
 import { useState } from "react";
+import { EyeIcon, EyeOffIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,27 +47,37 @@ export function SubnetSection({
   disabled: boolean;
   onSave: (subnet: string, password: string) => Promise<void>;
 }) {
-  const [subnet, setSubnet] = useState(currentSubnet ?? SUBNET_PRESETS[0]);
+  // Null while the router has not said where it is: a preset sitting in the
+  // trigger reads as the range in use.
+  const [subnet, setSubnet] = useState<string | null>(currentSubnet);
   const [password, setPassword] = useState("");
+  // Shown by default: the whole risk here is a typo nobody can see, and the
+  // official app shows it too.
+  const [passwordVisible, setPasswordVisible] = useState(true);
   const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successNote, setSuccessNote] = useState<string | null>(null);
+  const [editInProgress, setEditInProgress] = useState(false);
 
   // Follow the router when it reports a different subnet, so a change made in
-  // the official app is not overwritten by a stale selection.
+  // the official app is not overwritten by a stale selection. Never mid-edit:
+  // this form renders before the router has answered, so its first answer can
+  // land while someone is part way through choosing.
   const [lastSeenSubnet, setLastSeenSubnet] = useState(currentSubnet);
   if (lastSeenSubnet !== currentSubnet) {
     setLastSeenSubnet(currentSubnet);
-    setSubnet(currentSubnet ?? SUBNET_PRESETS[0]);
-    setConfirming(false);
-    setSuccessNote(null);
+    if (!editInProgress) {
+      setSubnet(currentSubnet);
+      setConfirming(false);
+    }
   }
 
-  const subnetDiffersFromRouter = currentSubnet !== null && subnet !== currentSubnet;
-  const refusalMessage = subnetRefusal(subnet, password);
+  const subnetDiffersFromRouter = subnet !== null && subnet !== currentSubnet;
+  const refusalMessage = subnet === null ? null : subnetRefusal(subnet, password);
 
   const applySubnet = async () => {
+    if (subnet === null) return;
     setSaving(true);
     setError(null);
     try {
@@ -74,6 +85,7 @@ export function SubnetSection({
       setSuccessNote(`Moving to ${subnet}. Reconnect to the WiFi if this device drops.`);
       setConfirming(false);
       setPassword("");
+      setEditInProgress(false);
     } catch (saveError) {
       setError((saveError as Error).message);
     } finally {
@@ -88,7 +100,9 @@ export function SubnetSection({
         caption={
           disabled
             ? "Connect your Starlink account to change this"
-            : "The address range the router gives your devices"
+            : currentSubnet === null && !successNote
+              ? "Couldn't tell which subnet the router is on"
+              : "The address range the router gives your devices"
         }
         note={
           successNote && (
@@ -99,21 +113,26 @@ export function SubnetSection({
         }
       >
         <Select
-          value={subnet}
+          value={subnet ?? undefined}
           disabled={disabled || saving}
           onValueChange={(next) => {
             setSubnet(next);
+            setEditInProgress(true);
             setConfirming(false);
             setError(null);
             setSuccessNote(null);
           }}
         >
           <SelectTrigger size='sm' className='w-[168px] font-mono text-[12px] tabular-nums'>
-            <SelectValue />
+            <SelectValue placeholder='Not known' />
           </SelectTrigger>
           <SelectContent>
             {SUBNET_PRESETS.map((preset) => (
-              <SelectItem key={preset} value={preset} className='font-mono text-[12px]'>
+              <SelectItem
+                key={preset}
+                value={preset}
+                className='font-mono text-[12px] [&_[data-slot=select-item-indicator]]:hidden'
+              >
                 {preset}
                 {preset === currentSubnet && (
                   <span className='ml-2 font-sans text-[11px] text-muted-foreground'>Current</span>
@@ -131,20 +150,35 @@ export function SubnetSection({
             <ConnectorThread className='pointer-events-none absolute -top-[29px] right-[13px] h-[45px] w-2 animate-[rise_320ms_ease_both] text-ink/20' />
             <span className='text-[12px] text-muted-foreground'>WiFi password</span>
             <div className='flex shrink-0 items-center gap-2'>
-              <Input
-                type='password'
-                value={password}
-                disabled={disabled || saving}
-                onChange={(event) => {
-                  setPassword(event.target.value);
-                  setError(null);
-                }}
-                placeholder='Your current WiFi password'
-                spellCheck={false}
-                autoComplete='off'
-                aria-label='WiFi password'
-                className='h-8 w-[232px] text-[12px]'
-              />
+              <div className='relative'>
+                <Input
+                  type={passwordVisible ? "text" : "password"}
+                  value={password}
+                  disabled={disabled || saving}
+                  onChange={(event) => {
+                    setPassword(event.target.value);
+                    setEditInProgress(true);
+                    setError(null);
+                  }}
+                  placeholder='Your current WiFi password'
+                  spellCheck={false}
+                  autoComplete='off'
+                  aria-label='WiFi password'
+                  className='h-8 w-[232px] pr-8 text-[12px]'
+                />
+                <button
+                  type='button'
+                  aria-label={passwordVisible ? "Hide password" : "Show password"}
+                  onClick={() => setPasswordVisible(!passwordVisible)}
+                  className='absolute top-1/2 right-1 -translate-y-1/2 cursor-pointer rounded-sm border-0 bg-transparent p-1 text-muted-foreground transition-colors hover:text-foreground'
+                >
+                  {passwordVisible ? (
+                    <EyeOffIcon className='size-3.5' />
+                  ) : (
+                    <EyeIcon className='size-3.5' />
+                  )}
+                </button>
+              </div>
               <InfoDot tone='critical' tip={PASSWORD_TIP} />
             </div>
           </div>
