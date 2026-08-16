@@ -10,7 +10,11 @@
 import { GrpcWebError, grpcWebUnaryCall } from "../core/grpcWeb";
 import type { DishConfigJson } from "../core/dishClient";
 import type { RouterClientUpdate } from "../core/routerClientUpdate";
-import { normalizeNameservers, type RouterConfigUpdate } from "../core/routerConfigUpdate";
+import {
+  normalizeNameservers,
+  subnetRefusal,
+  type RouterConfigUpdate,
+} from "../core/routerConfigUpdate";
 
 const AUTH_URL = "https://api.starlink.com/auth-rp/auth/user";
 const API = "https://starlink.com/api";
@@ -57,7 +61,14 @@ export interface CloudHandlerOptions {
    *  target this handler resolved from the account. Unlike the callbacks above it
    *  reads nothing from the LAN, which is what lets a bypassed router — invisible
    *  on the local network by definition — still be configured. */
-  prepareRouterConfigUpdate?: (update: RouterConfigUpdate, targetId: string) => Promise<Uint8Array>;
+  prepareRouterConfigUpdate?: (
+    update: RouterConfigUpdate,
+    targetId: string,
+    /** Sends one encoded request through the same authenticated gateway and
+     *  returns the raw reply. A subnet change needs it: the write has to carry
+     *  the network block the router currently reports. */
+    send: (requestBytes: Uint8Array) => Promise<Uint8Array>,
+  ) => Promise<Uint8Array>;
 }
 
 /** The durable half of the session — without it a token refresh can't happen, so
@@ -563,18 +574,22 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
 
   async function applyRouterConfigUpdate(update: RouterConfigUpdate): Promise<CloudResult> {
     if (!readCookie()) return NOT_CONNECTED;
+    let configWriteDispatched = false;
     try {
       if (!prepareRouterConfigUpdate)
         return { status: 503, body: { error: "router_config_update_unavailable" } };
       const abortSignal = AbortSignal.timeout(deviceCallTimeoutMs);
       await withFreshCookie(async (cookie) => {
         const targetId = await resolveControllerId(cookie);
-        const requestBytes = await prepareRouterConfigUpdate(update, targetId);
-        try {
-          await grpcWebUnaryCall(DEVICE_HANDLE, requestBytes, abortSignal, {
+        const send = (requestBytes: Uint8Array) =>
+          grpcWebUnaryCall(DEVICE_HANDLE, requestBytes, abortSignal, {
             fetch: doFetch,
             headers: { cookie },
           });
+        const requestBytes = await prepareRouterConfigUpdate(update, targetId, send);
+        try {
+          configWriteDispatched = true;
+          await send(requestBytes);
         } catch (error) {
           if (error instanceof GrpcWebError && error.grpcStatus === 16)
             throw new SessionExpiredError();
@@ -585,6 +600,10 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
     } catch (error) {
       if (error instanceof SessionExpiredError) return NOT_CONNECTED;
       if (error instanceof DOMException && error.name === "TimeoutError") {
+        // A subnet change reconfigures the LAN carrying it, so a write that takes
+        // effect kills its own reply.
+        if (update.kind === "subnet" && configWriteDispatched)
+          return { status: 200, body: { ok: true, applied: true } };
         return {
           status: 504,
           body: {
@@ -603,6 +622,10 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
   /** The renderer names a field and its new value, never protobuf. Anything
    *  outside these shapes is refused before the account is touched. */
   function validRouterConfig(update: RouterConfigUpdate): boolean {
+    if (update?.kind === "subnet") {
+      if (typeof update.subnet !== "string" || typeof update.password !== "string") return false;
+      return subnetRefusal(update.subnet, update.password) === null;
+    }
     if (update?.kind !== "customDns") return false;
     if (!Array.isArray(update.nameservers)) return false;
     if (!update.nameservers.every((server) => typeof server === "string")) return false;

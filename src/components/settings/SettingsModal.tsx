@@ -114,7 +114,7 @@ export function SettingsModal({
           className='overflow-hidden transition-[height] duration-[240ms] ease-[cubic-bezier(0.4,0,0.2,1)]'
           style={{ height: bodyHeight }}
         >
-          <div className='thin-scroll max-h-[68vh] overflow-y-auto px-5 pt-1 pb-5' ref={panelRef}>
+          <div className='thin-scroll max-h-[68vh] overflow-y-auto px-5 pt-1 pb-7' ref={panelRef}>
             {tab === "starlink" && (
               <StarlinkSettingsTab
                 settings={settings}
