@@ -207,11 +207,17 @@ export interface DishLocationJson {
   source?: string;
 }
 
+/** How the obstruction grid is oriented. FRAME_EARTH is north-up; FRAME_UT
+ *  is dish-relative (bottom-center is the boresight azimuth). Mini kits on
+ *  roam typically report FRAME_UT; a Standard on a fixed site reports FRAME_EARTH. */
+export type ObstructionMapReferenceFrame = "FRAME_UNKNOWN" | "FRAME_EARTH" | "FRAME_UT";
+
 export interface DishObstructionMapJson {
   numRows?: number;
   numCols?: number;
   snr?: number[];
   maxThetaDeg?: number;
+  mapReferenceFrame?: ObstructionMapReferenceFrame;
 }
 
 // ---------- config / diagnostics shapes ----------
