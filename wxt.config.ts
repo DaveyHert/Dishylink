@@ -83,15 +83,15 @@ export default defineConfig({
     // only possible as an optional permission the user grants at the moment they
     // save one.
     //
-    // Written out as the three private ranges rather than <all_urls>, and 172 as
-    // its sixteen real blocks rather than "172.*": match patterns have no CIDR,
-    // so the short form would ask for 172.0-172.255 — most of which is public
-    // address space this extension has no business reaching.
-    optional_host_permissions: [
-      "http://10.*/*",
-      "http://192.168.*/*",
-      ...Array.from({ length: 16 }, (_, block) => `http://172.${16 + block}.*/*`),
-    ],
+    // It cannot be narrowed to the private ranges: a match pattern's host is "*",
+    // or "*." and a literal suffix, or a literal host, with no CIDR and no
+    // wildcard inside a host.
+    //
+    // A ceiling on what may be asked for, not a grant. The request happens as an
+    // address is saved and names that one address (lib/endpoints.ts), so a single
+    // origin is all the user is ever asked for. http only: the boxes speak plain
+    // grpc-web on the LAN.
+    optional_host_permissions: ["http://*/*"],
     // 'wasm-unsafe-eval' for satellite.js. No declarativeNetRequest: an extension
     // never sends the Referer the dish's guard rejects, so no ruleset is needed.
     content_security_policy: {

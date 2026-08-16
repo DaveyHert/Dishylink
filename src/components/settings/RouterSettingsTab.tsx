@@ -135,54 +135,48 @@ export function RouterSettingsTab({
           return "Reboot sent — the router is restarting.";
         }}
       />
-      {(addresses || showDns || accountConnected) && (
-        <CollapsibleSection title='Advanced'>
-          {addresses && (
-            <>
-              <SectionLabel>Connection</SectionLabel>
-              <RouterAddressRow
-                addresses={addresses}
-                onChanged={(next) => {
-                  setAddresses(next);
-                  onConfigChanged();
-                }}
-              />
-            </>
-          )}
-          {showDns && (
-            <>
-              <SectionLabel>DNS</SectionLabel>
-              <CustomDnsSection
-                nameservers={wifiConfig?.nameservers ?? []}
-                disabled={!accountConnected}
-                onSave={async (nameservers) => {
-                  await applyRouterConfigUpdate({ kind: "customDns", nameservers });
-                  onConfigChanged();
-                }}
-              />
-            </>
-          )}
-          {accountConnected && (
-            <>
-              <SectionLabel>Network</SectionLabel>
-              <SubnetSection
-                currentSubnet={lanSubnet ?? cloudSubnet}
-                disabled={!accountConnected}
-                onSave={async (subnet, password) => {
-                  await applyRouterConfigUpdate({ kind: "subnet", password, subnet });
-                  // The router is about to answer somewhere else, and this is the
-                  // setting that decides where the app looks for it.
-                  const updatedAddresses = await routerAddressHost()?.write(
-                    routerAddressForSubnet(subnet),
-                  );
-                  if (updatedAddresses?.ok) setAddresses(updatedAddresses.addresses);
-                  rereadCloudSubnet();
-                }}
-              />
-            </>
-          )}
-        </CollapsibleSection>
-      )}
+      <CollapsibleSection title='Advanced'>
+        {addresses && (
+          <>
+            <SectionLabel>Connection</SectionLabel>
+            <RouterAddressRow
+              addresses={addresses}
+              onChanged={(next) => {
+                setAddresses(next);
+                onConfigChanged();
+              }}
+            />
+          </>
+        )}
+        {showDns && (
+          <>
+            <SectionLabel>DNS</SectionLabel>
+            <CustomDnsSection
+              nameservers={wifiConfig?.nameservers ?? []}
+              disabled={!accountConnected}
+              onSave={async (nameservers) => {
+                await applyRouterConfigUpdate({ kind: "customDns", nameservers });
+                onConfigChanged();
+              }}
+            />
+          </>
+        )}
+        <SectionLabel>Network</SectionLabel>
+        <SubnetSection
+          currentSubnet={lanSubnet ?? cloudSubnet}
+          disabled={!accountConnected}
+          onSave={async (subnet, password) => {
+            await applyRouterConfigUpdate({ kind: "subnet", password, subnet });
+            // The router is about to answer somewhere else, and this is the
+            // setting that decides where the app looks for it.
+            const updatedAddresses = await routerAddressHost()?.write(
+              routerAddressForSubnet(subnet),
+            );
+            if (updatedAddresses?.ok) setAddresses(updatedAddresses.addresses);
+            rereadCloudSubnet();
+          }}
+        />
+      </CollapsibleSection>
     </>
   );
 }
