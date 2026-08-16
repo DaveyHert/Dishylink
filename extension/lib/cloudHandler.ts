@@ -23,6 +23,7 @@ import { browser } from "wxt/browser";
 import { createCloudHandler } from "../../cloud/starlinkCloudHandler";
 import { DishClient, type DishConfigJson } from "@core/dishClient";
 import { prepareDishConfigUpdate } from "@core/dishConfigUpdate";
+import { buildRouterConfigRequest, type RouterConfigUpdate } from "@core/routerConfigUpdate";
 import { prepareRouterClientUpdate, type RouterClientUpdate } from "@core/routerClientUpdate";
 import type { CloudReply, CloudRequest } from "@/lib/cloudHost";
 import { dishHandleUrl, routerHandleUrl } from "./endpoints";
@@ -59,6 +60,15 @@ const cloudHandler = createCloudHandler({
     }
     routerPromise ??= DishClient.load("router", { handleUrl: routerUrl });
     return prepareRouterClientUpdate(await routerPromise, update);
+  },
+  prepareRouterConfigUpdate: async (update, targetId) => {
+    const routerUrl = routerHandleUrl();
+    if (routerUrl !== cachedRouterUrl) {
+      cachedRouterUrl = routerUrl;
+      routerPromise = null;
+    }
+    routerPromise ??= DishClient.load("router", { handleUrl: routerUrl });
+    return (await routerPromise).encodeRequest(buildRouterConfigRequest(targetId, update));
   },
   prepareDishConfigUpdate: async (changes) => {
     const dishUrl = dishHandleUrl();
@@ -142,6 +152,12 @@ export async function handleCloudRequest(request: CloudRequest): Promise<CloudRe
   // whole, not to whichever device happens to be running the extension.
   if (route === "/cloud/dish-config" && request.method === "POST") {
     return cloudHandler.updateDishConfig(request.body as DishConfigJson);
+  }
+
+  // Custom DNS is router-wide, not per-client, so it carries none of the
+  // self-target hazard that makes pausing unsafe on this host.
+  if (route === "/cloud/router-config" && request.method === "POST") {
+    return cloudHandler.updateRouterConfig(request.body as RouterConfigUpdate);
   }
 
   // /cloud/session is connect (capture our copy) and disconnect (drop our copy).

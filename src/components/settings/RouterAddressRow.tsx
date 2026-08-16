@@ -7,9 +7,9 @@
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Explainer } from "@/components/ui/explainer";
+import { InfoDot } from "../shared/InfoDot";
 import { SettingRow } from "./settingsChrome";
-import { normalizeRouterAddress } from "@core/routerAddress";
+import { normalizeIpAddress } from "@core/ipAddress";
 import {
   routerAddressHost,
   type RouterAddressWriteResult,
@@ -68,7 +68,7 @@ export function RouterAddressRow({
     <>
       <SettingRow
         title='Router IP address'
-        caption={`Standard is ${fallback}`}
+        caption={`Default is ${fallback}`}
         note={
           refused ? (
             <span className='text-destructive'>{REFUSAL_MESSAGE[refused]}</span>
@@ -88,7 +88,7 @@ export function RouterAddressRow({
           autoComplete='off'
           inputMode='numeric'
           aria-label='Router IP address'
-          aria-invalid={trimmed !== "" && normalizeRouterAddress(trimmed) === null}
+          aria-invalid={trimmed !== "" && normalizeIpAddress(trimmed) === null}
           className='h-8 w-[168px] font-mono text-[12px] tabular-nums'
         />
         <Button
@@ -99,14 +99,11 @@ export function RouterAddressRow({
         >
           {saving ? "Saving…" : "Save"}
         </Button>
+        <InfoDot
+          tone='notable'
+          tip={`Dishylink looks for your router at this address. Change it only if the router's subnet was moved in the Starlink app, or your kit is in bypass mode behind a third-party router. Clearing the box returns to ${fallback}.`}
+        />
       </SettingRow>
-
-      <Explainer title='When to change this'>
-        Dishylink looks for your router at this address. Change it only if the router's subnet was
-        moved in the Starlink app — because another connection already owned 192.168.1.x — or your
-        kit is in bypass mode behind a third-party router. An address nothing answers on leaves
-        Dishylink unable to find the router. Clearing the box always returns to {fallback}.
-      </Explainer>
     </>
   );
 }

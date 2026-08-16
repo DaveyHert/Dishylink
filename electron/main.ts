@@ -29,7 +29,7 @@ import {
 } from "./collector";
 import { startCloud, handleCloudRequest, signIn } from "./cloud";
 import { localNetworkIdentity } from "../core/hostNetworkIdentity";
-import { normalizeRouterAddress, type RouterAddress } from "../core/routerAddress";
+import { normalizeIpAddress, type RouterAddress } from "../core/ipAddress";
 import { ROUTER_LAN_ADDRESS } from "../core/dishClient";
 import { preferences, setPreference, onPreferencesChanged, type WindowBounds } from "./preferences";
 import {
@@ -509,7 +509,7 @@ function registerHostHandlers(): void {
   // An address that does not parse is rejected here rather than stored and
   // silently ignored later, so the window can tell the user it was refused.
   ipcMain.handle("set-router-address", (_event, address: string | null): RouterAddress | null => {
-    const normalized = address === null ? null : normalizeRouterAddress(address);
+    const normalized = address === null ? null : normalizeIpAddress(address);
     if (address !== null && normalized === null) return null;
     setPreference("routerAddress", normalized);
     return routerAddress();

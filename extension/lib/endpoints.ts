@@ -9,7 +9,7 @@
 // fetch to it is blocked, so the grant is what a save waits on.
 
 import { browser } from "wxt/browser";
-import { normalizeRouterAddress, originFor } from "@core/routerAddress";
+import { normalizeIpAddress, originFor } from "@core/ipAddress";
 
 export const DISH_LAN_ADDRESS = "192.168.100.1";
 export const ROUTER_LAN_ADDRESS = "192.168.1.1";
@@ -33,7 +33,7 @@ let current: StoredAddresses = { router: null };
 function readStored(value: unknown): StoredAddresses {
   const stored = (value ?? {}) as Partial<Record<keyof StoredAddresses, unknown>>;
   return {
-    router: typeof stored.router === "string" ? normalizeRouterAddress(stored.router) : null,
+    router: typeof stored.router === "string" ? normalizeIpAddress(stored.router) : null,
   };
 }
 
@@ -78,7 +78,7 @@ export type StoreResult =
  * setting that looks accepted and never works.
  */
 export async function storeRouterAddress(address: string | null): Promise<StoreResult> {
-  const normalized = address === null ? null : normalizeRouterAddress(address);
+  const normalized = address === null ? null : normalizeIpAddress(address);
   if (address !== null && normalized === null) return { ok: false, reason: "invalid" };
 
   if (normalized !== null) {

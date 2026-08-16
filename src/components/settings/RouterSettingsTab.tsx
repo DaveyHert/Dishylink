@@ -9,6 +9,9 @@ import type { RouterUnreachable } from "../../lib/routerDiagnosis";
 import { Badge } from "@/components/ui/badge";
 import { CollapsibleSection, DangerAction, SectionLabel, SettingRow } from "./settingsChrome";
 import { RouterAddressRow } from "./RouterAddressRow";
+import { CustomDnsSection } from "./CustomDnsSection";
+import { applyRouterConfigUpdate } from "../../lib/routerConfigUpdate";
+import { useCloudAccount } from "../../hooks/useCloudAccount";
 import { useRouterAddressState } from "../../hooks/useRouterAddress";
 
 /** SSIDs with the bands each is broadcast on. One network can appear on several
@@ -42,9 +45,13 @@ export function RouterSettingsTab({
   const ssids = useMemo(() => ssidsWithBands(wifiConfig), [wifiConfig]);
   const meshNodes = Object.values(wifiConfig?.meshConfigs ?? {});
   const [addresses, setAddresses] = useRouterAddressState();
+  // The DNS write has no local path, so the control is disabled up front rather
+  // than failing at the moment Save is pressed.
+  const accountConnected = useCloudAccount(true).status === "ready";
   // Only the rows that ask the router something wait on it. The address is how a
   // silent router gets found again, so it stays live through every state below.
   const answering = routerReachable !== null && !unreachable && wifiConfig !== null;
+  const showDns = answering && !wifiConfig?.customDnsDisabled;
 
   return (
     <>
@@ -115,18 +122,23 @@ export function RouterSettingsTab({
           return "Reboot sent — the router is restarting.";
         }}
       />
-      {addresses && (
+      {(addresses || showDns) && (
         <CollapsibleSection title='Advanced'>
-          <RouterAddressRow addresses={addresses} onChanged={setAddresses} />
+          {addresses && <RouterAddressRow addresses={addresses} onChanged={setAddresses} />}
+          {showDns && (
+            <>
+              <SectionLabel>DNS</SectionLabel>
+              <CustomDnsSection
+                nameservers={wifiConfig?.nameservers ?? []}
+                disabled={!accountConnected}
+                onSave={(nameservers) =>
+                  applyRouterConfigUpdate({ kind: "customDns", nameservers })
+                }
+              />
+            </>
+          )}
         </CollapsibleSection>
       )}
-
-      <Callout className='mt-3.5'>
-        Custom DNS and bypass mode aren't available here yet. The router refuses configuration
-        writes over the local network, so both need a connected Starlink account. Content filtering
-        isn't a router setting at all, it lives in your Starlink account. Use the official app for
-        these.
-      </Callout>
     </>
   );
 }

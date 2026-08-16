@@ -281,6 +281,11 @@ export interface WifiMeshNodeJson {
 
 export interface WifiNetworkConfigJson {
   countryCode?: string;
+  /** The DNS servers the router forwards to. Absent means Starlink's own — proto3
+   *  omits an empty repeated field, so absent and empty are the same answer. */
+  nameservers?: string[];
+  /** True when this kit is not permitted to set custom DNS at all. */
+  customDnsDisabled?: boolean;
   networks?: WifiLanNetworkJson[];
   meshConfigs?: Record<string, WifiMeshNodeJson>;
   clientConfigs?: WifiClientConfigJson[];
