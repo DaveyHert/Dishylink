@@ -97,9 +97,11 @@ export function SubnetSection({
     <>
       <SettingRow
         title='Subnet'
+        info={SUBNET_TIP}
+        infoSeverity='danger'
         caption={
           disabled
-            ? "Connect your Starlink account to change this"
+            ? "Connect your Starlink account to use this"
             : currentSubnet === null && !successNote
               ? "Couldn't tell which subnet the router is on"
               : "The address range the router gives your devices"
@@ -141,14 +143,16 @@ export function SubnetSection({
             ))}
           </SelectContent>
         </Select>
-        <InfoDot tone='critical' tip={SUBNET_TIP} />
       </SettingRow>
 
       {subnetDiffersFromRouter && (
         <div className='flex flex-col gap-2 pt-0.5 pb-2'>
           <div className='relative flex items-center justify-between gap-5'>
             <ConnectorThread className='pointer-events-none absolute -top-[29px] right-[13px] h-[45px] w-2 animate-[rise_320ms_ease_both] text-ink/20' />
-            <span className='text-[12px] text-muted-foreground'>WiFi password</span>
+            <span className='flex items-center gap-1.5 text-[12px] text-muted-foreground'>
+              WiFi password
+              <InfoDot severity='danger' tip={PASSWORD_TIP} />
+            </span>
             <div className='flex shrink-0 items-center gap-2'>
               <div className='relative'>
                 <Input
@@ -179,7 +183,6 @@ export function SubnetSection({
                   )}
                 </button>
               </div>
-              <InfoDot tone='critical' tip={PASSWORD_TIP} />
             </div>
           </div>
 

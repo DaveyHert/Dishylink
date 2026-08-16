@@ -9,7 +9,6 @@ import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { InfoDot } from "../shared/InfoDot";
 import { SettingRow } from "./settingsChrome";
 import { normalizeIpAddress } from "@core/ipAddress";
 import { MAX_NAMESERVERS } from "@core/routerConfigUpdate";
@@ -72,17 +71,15 @@ export function CustomDnsSection({
     <>
       <SettingRow
         title='Custom DNS'
+        info="Custom DNS lets you specify IPv4 or IPv6 addresses of one or more alternate DNS servers to be used for lookups instead of the Starlink defaults. A server that doesn't answer stops lookups for every device on the network."
+        infoSeverity='warn'
         caption={
           disabled
-            ? "Connect your Starlink account to change this"
+            ? "Connect your Starlink account to use this"
             : "Send name lookups to your own servers instead of Starlink's"
         }
       >
         <Switch checked={enabled} disabled={disabled || saving} onCheckedChange={toggle} />
-        <InfoDot
-          tone='notable'
-          tip="Custom DNS lets you specify IPv4 or IPv6 addresses of one or more alternate DNS servers to be used for lookups instead of the Starlink defaults. A server that doesn't answer stops lookups for every device on the network."
-        />
       </SettingRow>
 
       {enabled && (
