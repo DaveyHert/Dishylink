@@ -26,6 +26,7 @@ import {
 } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { networkInterfaces } from "node:os";
+import { identityFromEnv } from "../core/hostNetworkIdentity.ts";
 import { join, resolve } from "node:path";
 import { createFileRegistry, fromBinary, toJson, type DescMessage } from "@bufbuild/protobuf";
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
@@ -112,12 +113,13 @@ const ROUTER_PATH = "/SpaceX.API.Device.Device/Handle";
  *  process at a stand-in, and for the probe scripts under scripts/. */
 const ROUTER_URL_OVERRIDE = process.env.ROUTER_URL ?? null;
 
-const routerOrigins = createRouterOrigins(() =>
-  Object.values(networkInterfaces())
+const routerOrigins = createRouterOrigins(() => [
+  ...(identityFromEnv()?.ipAddresses ?? []),
+  ...Object.values(networkInterfaces())
     .flat()
     .filter((entry) => entry && entry.family === "IPv6" && !entry.internal)
     .map((entry) => entry!.address),
-);
+]);
 
 /**
  * Thermal flags on get_status → alerts. The dish has no temperature reading to

@@ -1,0 +1,34 @@
+# Browser Dishylink on Apple Silicon. The Mac running Docker must be on the
+# Starlink LAN — dish (192.168.100.1) and router (192.168.1.1) are not inside
+# this compose network. Do not set network_mode: host; Docker Desktop attaches
+# that to the Linux VM, not the Mac's Wi-Fi.
+#
+# If launchd is already running com.dishylink.historian, stop it first. Two
+# recorders double the 200ms router client poll.
+
+services:
+  dishylink:
+    build:
+      context: .
+      platforms:
+        - linux/arm64
+    image: dishylink:local
+    platform: linux/arm64
+    ports:
+      - "8080:8080"
+    volumes:
+      - historian-data:/data
+      # Persist a pasted starlink.com session across restarts:
+      #   touch .starlink-cookie && chmod 600 .starlink-cookie
+      # then uncomment:
+      # - ./.starlink-cookie:/app/.starlink-cookie
+    environment:
+      HISTORIAN_DATA_DIR: /data
+      # Mac LAN identity so "This device" and pause-self-protect survive Docker
+      # Desktop's port publish (the container otherwise sees the VM's NICs).
+      # HOST_LAN_IP: 192.168.1.45
+      # HOST_MAC: aa:bb:cc:dd:ee:ff
+    restart: unless-stopped
+
+volumes:
+  historian-data:
