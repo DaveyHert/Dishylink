@@ -98,6 +98,26 @@ describe("buildRouterConfigRequest", () => {
     expect(request.wifiSetConfig.wifiConfig).toEqual({ nameservers: [], applyNameservers: true });
   });
 
+  it("names only the bypass fields, so no other setting rides along", () => {
+    const request = buildRouterConfigRequest(TARGET, { kind: "bypass", enabled: true });
+    expect(request).toEqual({
+      targetId: TARGET,
+      wifiSetConfig: { wifiConfig: { bypassMode: true, applyBypassMode: true } },
+    });
+    expect(Object.keys(request.wifiSetConfig.wifiConfig)).toEqual([
+      "bypassMode",
+      "applyBypassMode",
+    ]);
+  });
+
+  it("sends the apply flag when switching bypass off, not just when turning it on", () => {
+    const request = buildRouterConfigRequest(TARGET, { kind: "bypass", enabled: false });
+    expect(request.wifiSetConfig.wifiConfig).toEqual({
+      bypassMode: false,
+      applyBypassMode: true,
+    });
+  });
+
   it("refuses a target that is not a router", () => {
     expect(() =>
       buildRouterConfigRequest("ut0158168c-42207c02-5946ca71", {

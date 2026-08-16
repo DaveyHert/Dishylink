@@ -66,6 +66,13 @@ export type RouterConfigUpdate =
        *  router reports the stored one as `•••••` and takes that string
        *  literally if it is written back, locking every device off the WiFi. */
       password: string;
+    }
+  | {
+      kind: "bypass";
+      /** On hands the LAN to a third-party router and takes the Starlink
+       *  router's own WiFi down with it, so the machine asking for this is
+       *  usually the one that loses its connection. Off is the way back. */
+      enabled: boolean;
     };
 
 /** The addresses as they will be sent, or null when any of them is not an address
@@ -203,6 +210,12 @@ export function buildRouterConfigRequest(
           applyNetworks: true,
         },
       },
+    };
+  }
+  if (update.kind === "bypass") {
+    return {
+      targetId,
+      wifiSetConfig: { wifiConfig: { bypassMode: update.enabled, applyBypassMode: true } },
     };
   }
   const nameservers = normalizeNameservers(update.nameservers);
