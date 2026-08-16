@@ -17,6 +17,11 @@ collector/data
 
 # Claude Code's local settings/session state — machine-specific, not shared config.
 .claude/
+CLAUDE.md
+
+# Working notes and throwaway probe scripts. Local to whoever is mid-task.
+HANDOFF.md
+*.tmp.mts
 
 # Local working notes. Open security TODOs live here rather than in a public file.
 *.local.md
