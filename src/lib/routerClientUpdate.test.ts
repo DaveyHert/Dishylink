@@ -10,16 +10,11 @@ const available = {
   isThisDevice: false,
   viewerIdentified: true,
   cloudConnected: true,
-  hostSupportsPause: true,
 };
 
 describe("clientPauseControlAvailable", () => {
   test("given: no Starlink session, should: hide the device control", () => {
     expect(clientPauseControlAvailable({ ...available, cloudConnected: false })).toBe(false);
-  });
-
-  test("given: a host cannot identify its own client, should: hide the device control", () => {
-    expect(clientPauseControlAvailable({ ...available, hostSupportsPause: false })).toBe(false);
   });
 
   test("given: an unresolved viewer identity, should: hide the control on every device", () => {
@@ -57,6 +52,22 @@ describe("applyRouterClientPaused", () => {
       applyRouterClientUpdate({ kind: "pause", clientId: 7, paused: false }, request),
     ).rejects.toThrow("Starlink rejected the device update: Starlink did not answer in time.");
     expect(request).toHaveBeenCalledOnce();
+  });
+});
+
+describe("applyRouterClientUpdate refused by the host", () => {
+  test("given: 409, should: surface the refusal as its own, not as Starlink's", async () => {
+    const request = vi.fn().mockResolvedValue({
+      status: 409,
+      body: {
+        error: "self_pause_refused",
+        message: "This is the device you are using, so it cannot be paused from here.",
+      },
+    });
+
+    await expect(
+      applyRouterClientUpdate({ kind: "pause", clientId: 7, paused: true }, request),
+    ).rejects.toThrow("This is the device you are using, so it cannot be paused from here.");
   });
 });
 

@@ -91,6 +91,11 @@ export function clientEntryKey(client: WifiClientJson): string | null {
     : client.macAddress;
 }
 
+/** A device on the network rather than a router or mesh node. */
+export function isClientDevice(client: WifiClientJson): boolean {
+  return !client.role || client.role === "CLIENT";
+}
+
 export function displayName(client: WifiClientJson): string {
   return (
     client.givenName || client.name || client.ipAddress || client.macAddress || "Unnamed device"

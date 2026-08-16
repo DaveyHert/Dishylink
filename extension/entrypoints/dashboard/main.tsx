@@ -6,6 +6,7 @@ import App from "@/App";
 document.documentElement.dataset.host = "extension";
 import { setApiHost } from "@/lib/apiHost";
 import { setCloudHost } from "@/lib/cloudHost";
+import { setSelfDeviceHost } from "@/lib/selfDeviceHost";
 import { bindNotifications, setNotificationHost } from "@/lib/notifications";
 import { setDishHost } from "@core/dishClient";
 import { setSatelliteHost } from "@/lib/satellites";
@@ -13,6 +14,7 @@ import { extensionApiTransport } from "../../lib/apiTransport";
 import { extensionCloudSignIn, extensionCloudTransport } from "../../lib/cloudTransport";
 import { extensionNotificationHost } from "../../lib/notificationHost";
 import { startClientSampler } from "../../lib/clientSampler";
+import { loadSelfDeviceClientId, storeSelfDeviceClientId } from "../../lib/selfDevice";
 import {
   dishHandleUrl,
   loadRouterAddress,
@@ -32,14 +34,11 @@ setApiHost({ transport: extensionApiTransport });
 
 // Account features read starlink.com over the internet, carried to the service
 // worker which holds the browser's own session; the app never learns the host.
-setCloudHost({
-  transport: extensionCloudTransport,
-  signIn: extensionCloudSignIn,
-  // Chrome extensions cannot reliably resolve the viewer's LAN IP or MAC on
-  // desktop platforms. Disable the control so the extension can never offer to
-  // pause the device it is running on.
-  supportsRouterClientPause: false,
-});
+setCloudHost({ transport: extensionCloudTransport, signIn: extensionCloudSignIn });
+
+// Chrome extensions cannot resolve the viewer's LAN IP or MAC, so the device this
+// runs on is whichever roster entry the user named.
+setSelfDeviceHost({ read: loadSelfDeviceClientId, write: storeSelfDeviceClientId });
 
 // The background worker posts OS notifications for alerts the user is not looking
 // at — its alarm fires with no dashboard open. So the extension declares itself an

@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { matchesSelf, resolveSelfIdentity, type SelfIdentity } from "./selfIdentity";
+import {
+  matchesSelf,
+  resolveSelfIdentity,
+  selfIdentified,
+  type SelfIdentity,
+} from "./selfIdentity";
+import { setSelfDeviceHost } from "./selfDeviceHost";
 
 const self = (over: Partial<SelfIdentity> = {}): SelfIdentity => ({
   ips: [],
@@ -45,6 +51,56 @@ describe("matchesSelf", () => {
     expect(
       matchesSelf({ ipAddress: "192.168.1.45", macAddress: "5a:c9:44:55:f3:e9" }, self()),
     ).toBe(false);
+  });
+
+  it("matches on a named clientId (extension path)", () => {
+    expect(matchesSelf({ clientId: 12 }, self({ clientId: 12 }))).toBe(true);
+  });
+
+  it("given a named clientId, matches nothing else, however the addresses line up", () => {
+    expect(
+      matchesSelf(
+        { clientId: 13, ipAddress: "192.168.1.45", macAddress: "5a:c9:44:55:f3:e9" },
+        self({ clientId: 12, ips: ["192.168.1.45"], macs: ["5a:c9:44:55:f3:e9"] }),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("selfIdentified", () => {
+  it("counts a named clientId, so the extension can pause once it is set", () => {
+    expect(selfIdentified(self({ clientId: 12 }))).toBe(true);
+    expect(selfIdentified(self({ ips: ["192.168.1.45"] }))).toBe(true);
+    expect(selfIdentified(self({ macs: ["5a:c9:44:55:f3:e9"] }))).toBe(true);
+    expect(selfIdentified(self())).toBe(false);
+  });
+});
+
+describe("resolveSelfIdentity via a host's named device", () => {
+  // A host that has nothing named answers null, which is also how these cases
+  // leave the binding for whatever runs next.
+  const nothingNamed = { read: () => Promise.resolve(null), write: () => Promise.resolve() };
+  afterEach(() => setSelfDeviceHost(nothingNamed));
+
+  it("names the client without claiming to describe the host's own routing", async () => {
+    setSelfDeviceHost({ read: () => Promise.resolve(12), write: () => Promise.resolve() });
+
+    await expect(resolveSelfIdentity()).resolves.toEqual({
+      ips: [],
+      macs: [],
+      clientId: 12,
+      describesHost: false,
+    });
+  });
+
+  it("falls through when nothing has been named yet", async () => {
+    setSelfDeviceHost(nothingNamed);
+
+    await expect(resolveSelfIdentity()).resolves.toEqual({
+      ips: [],
+      macs: [],
+      describesHost: false,
+    });
   });
 });
 

@@ -25,7 +25,6 @@ import {
 } from "../../lib/routerClientUpdate";
 import { AccountRequiredNotice } from "../shared/AccountRequiredNotice";
 import { useCloudAccount } from "../../hooks/useCloudAccount";
-import { supportsRouterClientPause } from "../../lib/cloudHost";
 import {
   Dialog,
   DialogContent,
@@ -82,7 +81,6 @@ export function DeviceDetail({
     isThisDevice,
     viewerIdentified,
     cloudConnected: cloudStatus === "ready",
-    hostSupportsPause: supportsRouterClientPause(),
   });
 
   useEffect(() => {
