@@ -621,11 +621,15 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
       return { status: 200, body: { ok: true } };
     } catch (error) {
       if (error instanceof SessionExpiredError) return NOT_CONNECTED;
+      // A subnet change reconfigures the LAN carrying it, so a write that takes
+      // effect kills its own reply. How that surfaces is the host's business: a
+      // deadline where the request is left hanging, a dead socket where it is not
+      // — a service worker's fetch rejects the moment the network goes. Neither
+      // is the far end refusing, and only the far end can refuse.
+      if (update.kind === "subnet" && configWriteDispatched && !(error instanceof GrpcWebError)) {
+        return { status: 200, body: { ok: true, applied: true } };
+      }
       if (error instanceof DOMException && error.name === "TimeoutError") {
-        // A subnet change reconfigures the LAN carrying it, so a write that takes
-        // effect kills its own reply.
-        if (update.kind === "subnet" && configWriteDispatched)
-          return { status: 200, body: { ok: true, applied: true } };
         return {
           status: 504,
           body: {
