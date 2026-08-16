@@ -77,20 +77,14 @@ export default defineConfig({
       "https://*.starlink.com/*",
       "https://celestrak.org/*",
     ],
-    // A kit whose subnet was moved in the official app, or one in bypass mode,
-    // puts the boxes at an address no static manifest can name. MV3 host
-    // permissions are fixed at build time, so reaching an arbitrary address is
-    // only possible as an optional permission the user grants at the moment they
-    // save one.
-    //
-    // It cannot be narrowed to the private ranges: a match pattern's host is "*",
-    // or "*." and a literal suffix, or a literal host, with no CIDR and no
-    // wildcard inside a host.
-    //
-    // A ceiling on what may be asked for, not a grant. The request happens as an
-    // address is saved and names that one address (lib/endpoints.ts), so a single
-    // origin is all the user is ever asked for. http only: the boxes speak plain
-    // grpc-web on the LAN.
+    // A kit moved off its default subnet, or in bypass mode, sits at an address no
+    // static manifest can name, and MV3 host permissions are fixed at build time —
+    // so an arbitrary address is reachable only as an optional permission. This is
+    // the ceiling on what may be asked for, not a grant: the request names the one
+    // address being saved (lib/endpoints.ts). It cannot be narrowed to the private
+    // ranges — a match pattern's host is "*", or "*." plus a literal suffix, or a
+    // literal host, with no CIDR and no wildcard inside a host. http only: the
+    // boxes speak plain grpc-web on the LAN.
     optional_host_permissions: ["http://*/*"],
     // 'wasm-unsafe-eval' for satellite.js. No declarativeNetRequest: an extension
     // never sends the Referer the dish's guard rejects, so no ruleset is needed.
