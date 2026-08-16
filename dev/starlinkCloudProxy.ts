@@ -17,28 +17,34 @@ import type { DishConfigJson } from "../core/dishClient.ts";
 import { prepareDishConfigUpdate } from "../core/dishConfigUpdate.ts";
 import { prepareRouterClientUpdate } from "../core/routerClientUpdate.ts";
 import type { RouterClientUpdate } from "../core/routerClientUpdate.ts";
-import { localNetworkIdentity } from "../core/hostNetworkIdentity.ts";
+import { localNetworkIdentity, type HostNetworkIdentity } from "../core/hostNetworkIdentity.ts";
 
-const COOKIE_FILE = resolve(process.cwd(), ".starlink-cookie");
-
-function readCookie(): string | null {
-  try {
-    return readFileSync(COOKIE_FILE, "utf8").trim();
-  } catch {
-    return null;
-  }
+export interface FileCloudHandlerOptions {
+  cookieFile?: string;
+  identity?: () => HostNetworkIdentity;
+  protosetPath?: string;
 }
 
-function writeCookie(cookie: string): void {
-  writeFileSync(COOKIE_FILE, cookie, "utf8");
-}
-
-function clearCookie(): void {
-  try {
-    rmSync(COOKIE_FILE);
-  } catch {
-    /* already gone */
-  }
+function cookieStore(cookieFile: string) {
+  return {
+    readCookie(): string | null {
+      try {
+        return readFileSync(cookieFile, "utf8").trim();
+      } catch {
+        return null;
+      }
+    },
+    writeCookie(cookie: string): void {
+      writeFileSync(cookieFile, cookie, "utf8");
+    },
+    clearCookie(): void {
+      try {
+        rmSync(cookieFile);
+      } catch {
+        /* already gone */
+      }
+    },
+  };
 }
 
 function sendJson(res: ServerResponse, status: number, payload: unknown) {
@@ -69,85 +75,103 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
+/** File-backed /cloud/* handler used by the Vite plugin and the Docker host. */
+export function createFileCloudHandler(options: FileCloudHandlerOptions = {}) {
+  const cookieFile = resolve(
+    options.cookieFile ??
+      process.env.STARLINK_COOKIE_FILE ??
+      resolve(process.cwd(), ".starlink-cookie"),
+  );
+  const store = cookieStore(cookieFile);
+  const identity = options.identity ?? localNetworkIdentity;
+  const protosetPath = resolve(
+    options.protosetPath ?? resolve(process.cwd(), "public/dish.protoset"),
+  );
+  let routerPromise: Promise<DishClient> | null = null;
+  let dishPromise: Promise<DishClient> | null = null;
+  const protosetBytes = () => new Uint8Array(readFileSync(protosetPath));
+  return createCloudHandler({
+    ...store,
+    prepareDeviceUpdate: async (update) => {
+      routerPromise ??= DishClient.load("router", {
+        handleUrl: ROUTER_LAN_HANDLE_URL,
+        protosetBytes: protosetBytes(),
+      });
+      return prepareRouterClientUpdate(await routerPromise, update, identity());
+    },
+    prepareDishConfigUpdate: async (changes) => {
+      dishPromise ??= DishClient.load("dish", {
+        handleUrl: DISH_LAN_HANDLE_URL,
+        protosetBytes: protosetBytes(),
+      });
+      return prepareDishConfigUpdate(await dishPromise, changes);
+    },
+  });
+}
+
+export async function dispatchCloudRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  handler: ReturnType<typeof createCloudHandler>,
+): Promise<void> {
+  if (!isLocalOrigin(req.headers.origin)) return sendJson(res, 403, { error: "forbidden_origin" });
+  const route = (req.url ?? "").split("?")[0];
+
+  // Connect / disconnect the session pasted from the UI.
+  if (route === "/cloud/session") {
+    if (req.method === "DELETE") {
+      const { status, body } = handler.disconnect();
+      return sendJson(res, status, body);
+    }
+    if (req.method === "POST") {
+      try {
+        const { cookie } = JSON.parse((await readBody(req)) || "{}") as { cookie?: string };
+        const { status, body } = await handler.connect(cookie ?? "");
+        return sendJson(res, status, body);
+      } catch {
+        return sendJson(res, 400, {
+          error: "bad_request",
+          message: "Expected JSON { cookie }.",
+        });
+      }
+    }
+    return sendJson(res, 405, { error: "method_not_allowed" });
+  }
+
+  if (route === "/cloud/device" && req.method === "POST") {
+    try {
+      const update = JSON.parse((await readBody(req)) || "{}") as RouterClientUpdate;
+      const result = await handler.updateClient(update);
+      return sendJson(res, result.status, result.body);
+    } catch (error) {
+      return sendJson(res, 400, { error: "bad_request", message: (error as Error).message });
+    }
+  }
+
+  if (route === "/cloud/dish-config" && req.method === "POST") {
+    try {
+      const changes = JSON.parse((await readBody(req)) || "{}") as DishConfigJson;
+      const result = await handler.updateDishConfig(changes);
+      return sendJson(res, result.status, result.body);
+    } catch (error) {
+      return sendJson(res, 400, { error: "bad_request", message: (error as Error).message });
+    }
+  }
+
+  const { status, body } = await handler.handle(route);
+  sendJson(res, status, body);
+}
+
 /** Vite plugin: serves /cloud/* from the user's own starlink.com session, held in
  *  a local .starlink-cookie file. */
 export function starlinkCloudProxy(): Plugin {
+  const handler = createFileCloudHandler();
   return {
     name: "starlink-cloud-proxy",
     configureServer(server) {
-      let routerPromise: Promise<DishClient> | null = null;
-      let dishPromise: Promise<DishClient> | null = null;
-      const protosetBytes = () =>
-        new Uint8Array(readFileSync(resolve(process.cwd(), "public/dish.protoset")));
-      const handler = createCloudHandler({
-        readCookie,
-        writeCookie,
-        clearCookie,
-        prepareDeviceUpdate: async (update) => {
-          routerPromise ??= DishClient.load("router", {
-            handleUrl: ROUTER_LAN_HANDLE_URL,
-            protosetBytes: protosetBytes(),
-          });
-          return prepareRouterClientUpdate(await routerPromise, update, localNetworkIdentity());
-        },
-        prepareDishConfigUpdate: async (changes) => {
-          dishPromise ??= DishClient.load("dish", {
-            handleUrl: DISH_LAN_HANDLE_URL,
-            protosetBytes: protosetBytes(),
-          });
-          return prepareDishConfigUpdate(await dishPromise, changes);
-        },
-      });
       server.middlewares.use(async (req: IncomingMessage, res: ServerResponse, next) => {
-        const url = req.url ?? "";
-        if (!url.startsWith("/cloud/")) return next();
-        if (!isLocalOrigin(req.headers.origin))
-          return sendJson(res, 403, { error: "forbidden_origin" });
-        const route = url.split("?")[0];
-
-        // Connect / disconnect the session pasted from the UI.
-        if (route === "/cloud/session") {
-          if (req.method === "DELETE") {
-            const { status, body } = handler.disconnect();
-            return sendJson(res, status, body);
-          }
-          if (req.method === "POST") {
-            try {
-              const { cookie } = JSON.parse((await readBody(req)) || "{}") as { cookie?: string };
-              const { status, body } = await handler.connect(cookie ?? "");
-              return sendJson(res, status, body);
-            } catch {
-              return sendJson(res, 400, {
-                error: "bad_request",
-                message: "Expected JSON { cookie }.",
-              });
-            }
-          }
-          return sendJson(res, 405, { error: "method_not_allowed" });
-        }
-
-        if (route === "/cloud/device" && req.method === "POST") {
-          try {
-            const update = JSON.parse((await readBody(req)) || "{}") as RouterClientUpdate;
-            const result = await handler.updateClient(update);
-            return sendJson(res, result.status, result.body);
-          } catch (error) {
-            return sendJson(res, 400, { error: "bad_request", message: (error as Error).message });
-          }
-        }
-
-        if (route === "/cloud/dish-config" && req.method === "POST") {
-          try {
-            const changes = JSON.parse((await readBody(req)) || "{}") as DishConfigJson;
-            const result = await handler.updateDishConfig(changes);
-            return sendJson(res, result.status, result.body);
-          } catch (error) {
-            return sendJson(res, 400, { error: "bad_request", message: (error as Error).message });
-          }
-        }
-
-        const { status, body } = await handler.handle(route);
-        sendJson(res, status, body);
+        if (!(req.url ?? "").startsWith("/cloud/")) return next();
+        await dispatchCloudRequest(req, res, handler);
       });
     },
   };

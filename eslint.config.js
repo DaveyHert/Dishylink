@@ -95,7 +95,12 @@ export default tseslint.config(
   // historian's stdout is its service log under launchd, and the dev proxy and
   // build scripts report to whoever started them.
   {
-    files: ["collector/**/*.{ts,mts}", "dev/**/*.{ts,mts}", "scripts/**/*.mjs"],
+    files: [
+      "collector/**/*.{ts,mts}",
+      "dev/**/*.{ts,mts}",
+      "docker/**/*.{ts,mts}",
+      "scripts/**/*.mjs",
+    ],
     rules: { "no-console": "off" },
   },
 

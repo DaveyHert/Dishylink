@@ -31,6 +31,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "historian": "tsx collector/historian.mts",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up",
     "seed:desktop": "node scripts/seed-desktop.mjs",
     "typecheck": "tsc -b",
     "typecheck:extension": "wxt prepare && tsc --noEmit -p extension/tsconfig.json",
