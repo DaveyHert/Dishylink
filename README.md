@@ -105,33 +105,25 @@ npm run pack:win        # Windows build
 npm run build:extension # Chromium extension bundle
 npm run build:extension:firefox
 npm run build:extension:edge
-docker compose up --build   # browser dashboard + recorder (amd64 or arm64)
+docker compose up --build   # browser dashboard + recorder, this machine only
 ```
 
 ### Docker (browser)
 
 Packages the web dashboard and the history recorder in one container. The
-image is built for **this machine's CPU** — `linux/amd64` or `linux/arm64`
-(Apple Silicon, a 64-bit Raspberry Pi, an x86 box). Open
-`http://localhost:8080`. The **host running Docker must be on the Starlink
-LAN** — the dish (`192.168.100.1`) and router (`192.168.1.1`) are reached
-through the host, not from inside Compose. Docker Desktop has no real
-`--network host`; do not set it.
+image is built **only for the CPU of the machine you clone and build on** —
+amd64 on an x86 box, arm64 on Apple Silicon or a 64-bit Raspberry Pi. Compose
+does not cross-build. Open `http://localhost:8080`. The **host running Docker
+must be on the Starlink LAN** — the dish (`192.168.100.1`) and router
+(`192.168.1.1`) are reached through the host, not from inside Compose. Docker
+Desktop has no real `--network host`; do not set it.
 
 ```bash
 docker compose up --build
 ```
 
-To publish one image that runs on both architectures (build machine needs
-QEMU/`binfmt` for the foreign half):
-
-```bash
-docker buildx build --platform linux/amd64,linux/arm64 -t dishylink:local .
-```
-
 A Raspberry Pi 4/5 needs the 64-bit OS and enough RAM for the Vite build
-(4 GB is comfortable; 2 GB often OOMs). Building on a desktop and
-`docker save` / `docker load` onto the Pi avoids that.
+(4 GB is comfortable; 2 GB often OOMs).
 
 Recordings persist in the `historian-data` volume. If `com.dishylink.historian`
 is already running under launchd, stop it first — two recorders double the

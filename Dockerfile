@@ -1,8 +1,9 @@
 # Browser-only Dishylink: SPA + historian + LAN/cloud proxies.
-# Architecture-neutral — node:22-bookworm-slim publishes amd64 and arm64, so
-# `docker compose build` produces an image for this machine. The host must be
-# on the Starlink LAN. Docker Desktop has no real --network host, so the
-# container reaches the dish and router through the host's IPv4 NAT.
+# Architecture-neutral base; compose does not pass --platform, so the image
+# is this machine only (amd64 or arm64), never a multi-arch manifest. The
+# host must be on the Starlink LAN. Docker Desktop has no real --network
+# host, so the container reaches the dish and router through the host's
+# IPv4 NAT.
 
 FROM node:22-bookworm-slim AS build
 WORKDIR /app

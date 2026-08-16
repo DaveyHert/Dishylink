@@ -1,4 +1,5 @@
-# Browser Dishylink. Builds for whatever CPU this machine is (amd64, arm64).
+# Browser Dishylink. No `platform:` and no `build.platforms` — Docker builds
+# and runs only the architecture of this host (amd64 or arm64), never both.
 # The host must be on the Starlink LAN — dish (192.168.100.1) and router
 # (192.168.1.1) are not inside this compose network. Do not set
 # network_mode: host on Docker Desktop; that attaches to the Linux VM, not
