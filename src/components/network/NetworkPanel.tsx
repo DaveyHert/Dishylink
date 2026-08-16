@@ -8,7 +8,11 @@ import { useMemo, useState } from "react";
 import type { RouterNetwork } from "../../hooks/useRouterNetwork";
 import { useRadioTemps } from "../../hooks/useRadioTemps";
 import { useSelfIdentity } from "../../hooks/useSelfIdentity";
-import { matchesSelf } from "../../lib/selfIdentity";
+import { matchesSelf, selfIdentified } from "../../lib/selfIdentity";
+import { selfDeviceHost } from "../../lib/selfDeviceHost";
+import { requestPanel } from "../../hooks/usePanelRouting";
+import { useCloudAccount } from "../../hooks/useCloudAccount";
+import { inlineLinkButton } from "../ui/action-button";
 import type { RouterUnreachable } from "../../lib/routerDiagnosis";
 import { DetailsModal } from "../ui/details-modal";
 import { Loading } from "../ui/loading";
@@ -24,7 +28,7 @@ import { useOuiRegistry } from "../../hooks/useOuiRegistry";
 import { useClientTotals } from "../../hooks/useClientTotals";
 import { useNow } from "../../hooks/useNow";
 import { usageKey } from "@core/clientUsage";
-import { clientEntryKey, liveThroughputMbps } from "./networkFormat";
+import { clientEntryKey, isClientDevice, liveThroughputMbps } from "./networkFormat";
 
 export function NetworkPanel({
   network,
@@ -74,16 +78,17 @@ function NetworkPanelBody({
   // while the panel is mounted (i.e. the Network panel is open).
   const radio = useRadioTemps();
   // The viewer's own address(es), to flag "This device" in the list.
-  const self = useSelfIdentity();
+  const { self, resolved: selfResolved } = useSelfIdentity();
   // The odometer's records, for the split-record question below the device list.
   // The rows themselves come from the router and know nothing about stored totals.
   const { totals, mergeCandidates, writeError, answerMerge } = useClientTotals();
   const nowMs = useNow(30_000);
+  // Both halves of what pausing needs, so the list can name whichever is missing.
+  const { status: cloudStatus } = useCloudAccount(true);
+  const needsAccount = cloudStatus !== "loading" && cloudStatus !== "ready";
+  const needsSelfDevice = selfDeviceHost() !== null && selfResolved && !selfIdentified(self);
 
-  const devices = useMemo(
-    () => network.clients.filter((client) => !client.role || client.role === "CLIENT"),
-    [network.clients],
-  );
+  const devices = useMemo(() => network.clients.filter(isClientDevice), [network.clients]);
   // The viewer's own device pins to the top (like the app), then by throughput.
   //
   // Ordered on the rates captured with the roster rather than the live ones: the
@@ -143,7 +148,7 @@ function NetworkPanelBody({
           nodes.find((node) => node.client?.macAddress === selected.upstreamMacAddress)?.name
         }
         isThisDevice={matchesSelf(selected, self)}
-        viewerIdentified={self.ips.length > 0 || self.macs.length > 0}
+        viewerIdentified={selfIdentified(self)}
         onRename={network.renameClient}
       />
     );
@@ -177,6 +182,39 @@ function NetworkPanelBody({
               />
             ))}
           </ListSection>
+          {(needsAccount || needsSelfDevice) && (
+            <Callout tone='info' iconSeverity='warn' className='mt-2.5'>
+              Pause feature disabled! To enable,{" "}
+              {needsAccount && (
+                <>
+                  <button
+                    type='button'
+                    className={inlineLinkButton}
+                    onClick={() => requestPanel("account")}
+                  >
+                    sign in
+                  </button>{" "}
+                  to your Starlink account
+                </>
+              )}
+              {needsAccount && needsSelfDevice && " and "}
+              {needsSelfDevice && (
+                <>
+                  pick the current device you are using under app&rsquo;s{" "}
+                  <button
+                    type='button'
+                    className={inlineLinkButton}
+                    onClick={() => requestPanel("settings", "app")}
+                  >
+                    settings
+                  </button>
+                </>
+              )}
+              .
+              {needsSelfDevice &&
+                " That keeps your own device off the list of things this app can cut off."}
+            </Callout>
+          )}
           {/* The device list is where a split record is noticed — one name on two
               entries — so the question belongs here as well as on the usage panel.
               Outside ListSection, whose rows scroll within a fixed height: a

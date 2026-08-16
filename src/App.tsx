@@ -38,8 +38,15 @@ import { useTheme } from "./hooks/useTheme";
 
 export default function App() {
   const { theme, cycleTheme } = useTheme();
-  const { openPanel, setOpenPanel, skyViewOpen, setSkyViewOpen, openNav, openSkyView } =
-    usePanelRouting();
+  const {
+    openPanel,
+    setOpenPanel,
+    settingsTab,
+    skyViewOpen,
+    setSkyViewOpen,
+    openNav,
+    openSkyView,
+  } = usePanelRouting();
   const [windowMinutes, setWindowMinutes] = useState(15);
   const notificationsOn = useSyncExternalStore(subscribeToNotifications, readNotificationsOn);
   const notificationsBlockedReason = useSyncExternalStore(
@@ -198,6 +205,8 @@ export default function App() {
             telemetry.deviceInfo?.hardwareVersion ?? status?.deviceInfo?.hardwareVersion
           }
           wifiConfig={routerNetwork.wifiConfig}
+          clients={routerNetwork.clients}
+          initialTab={settingsTab}
           routerReachable={routerNetwork.routerReachable}
           routerUnreachable={routerUnreachable}
           onRouterConfigChanged={routerNetwork.refreshConfig}

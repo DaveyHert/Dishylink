@@ -9,8 +9,9 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import type { DishStatusJson, WifiNetworkConfigJson } from "@core/dishClient";
+import type { DishStatusJson, WifiClientJson, WifiNetworkConfigJson } from "@core/dishClient";
 import type { RouterUnreachable } from "../../lib/routerDiagnosis";
+import type { SettingsTab } from "../../hooks/usePanelRouting";
 import { useDishSettings, loadDishClient } from "../../hooks/useDishSettings";
 import { specForHardware } from "../../lib/dishMesh";
 import { RouterSettingsTab } from "./RouterSettingsTab";
@@ -22,10 +23,13 @@ interface SettingsModalProps {
   status: DishStatusJson | null;
   hardwareVersion?: string;
   wifiConfig: WifiNetworkConfigJson | null;
+  clients: WifiClientJson[];
   routerReachable: boolean | null;
   routerUnreachable: RouterUnreachable | null;
   /** Ask the poller to re-read the router config after a write changed it. */
   onRouterConfigChanged: () => void;
+  /** Which section to open on, for a control elsewhere that named a setting. */
+  initialTab?: SettingsTab;
 }
 
 export function SettingsModal({
@@ -33,11 +37,13 @@ export function SettingsModal({
   status,
   hardwareVersion,
   wifiConfig,
+  clients,
   routerReachable,
   routerUnreachable,
   onRouterConfigChanged,
+  initialTab = "starlink",
 }: SettingsModalProps) {
-  const [tab, setTab] = useState<"starlink" | "router" | "app">("starlink");
+  const [tab, setTab] = useState<SettingsTab>(initialTab);
   const settings = useDishSettings();
 
   // Animate the body height: measure the active panel and cap at 68vh (inner
@@ -135,7 +141,7 @@ export function SettingsModal({
                 onConfigChanged={onRouterConfigChanged}
               />
             )}
-            {tab === "app" && <AppSettingsTab />}
+            {tab === "app" && <AppSettingsTab clients={clients} />}
           </div>
         </div>
       </DialogContent>

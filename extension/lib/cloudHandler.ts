@@ -32,6 +32,7 @@ import {
 import { prepareRouterClientUpdate, type RouterClientUpdate } from "@core/routerClientUpdate";
 import type { CloudReply, CloudRequest } from "@/lib/cloudHost";
 import { dishHandleUrl, routerHandleUrl } from "./endpoints";
+import { loadSelfDeviceClientId } from "./selfDevice";
 
 const SESSION_KEY = "cloudSession";
 
@@ -152,14 +153,31 @@ async function setCookieRule(cookie: string | null): Promise<void> {
 export async function handleCloudRequest(request: CloudRequest): Promise<CloudReply> {
   const route = new URL(request.path, "http://extension.invalid").pathname;
 
-  // Renaming is safe from anywhere, but pausing is not: a desktop extension cannot
-  // read its host's LAN address or MAC, so it cannot tell whether the client it is
-  // about to cut off is the one it is running on. Refused here rather than left to
-  // the hidden control, so nothing that reaches this route can self-pause.
+  // A pause aimed at the device running this extension would cut off the session
+  // needed to undo it, and the only thing that knows which device that is, is the
+  // one the user named. Enforced here as well as in the control that renders it.
   if (route === "/cloud/device" && request.method === "POST") {
     const update = request.body as RouterClientUpdate;
-    if (update?.kind !== "rename")
+    if (update?.kind === "rename") return cloudHandler.updateClient(update);
+    if (update?.kind !== "pause")
       return { status: 501, body: { error: "unsupported_on_extension" } };
+    const selfClientId = await loadSelfDeviceClientId();
+    if (selfClientId === null)
+      return {
+        status: 409,
+        body: {
+          error: "self_device_unknown",
+          message: "Choose this device under Settings → App before pausing others.",
+        },
+      };
+    if (update.clientId === selfClientId)
+      return {
+        status: 409,
+        body: {
+          error: "self_pause_refused",
+          message: "This is the device you are using, so it cannot be paused from here.",
+        },
+      };
     return cloudHandler.updateClient(update);
   }
 

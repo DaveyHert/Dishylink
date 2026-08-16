@@ -10,10 +10,8 @@ export function clientPauseControlAvailable(options: {
   isThisDevice: boolean;
   viewerIdentified: boolean;
   cloudConnected: boolean;
-  hostSupportsPause?: boolean;
 }): boolean {
   return (
-    (options.hostSupportsPause ?? true) &&
     options.cloudConnected &&
     options.viewerIdentified &&
     !options.isThisDevice &&
@@ -41,6 +39,9 @@ export async function applyRouterClientUpdate(
   if (reply.status === 200) return;
   const message = (reply.body as { message?: string })?.message ?? `HTTP ${reply.status}`;
   if (reply.status === 428) throw new AccountRequiredError(message);
+  // 409 is a host refusing before anything left this machine, so its own message
+  // is the whole answer.
+  if (reply.status === 409) throw new Error(message);
   throw new Error(`Starlink rejected the device update: ${message}`);
 }
 

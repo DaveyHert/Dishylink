@@ -4,16 +4,18 @@
 // verified against the reflected WifiClient schema), so this is a client-side
 // match: resolve our own address(es), then find the matching client entry.
 //
-// Two backends, feature-detected, each degrading to the next when its runtime
+// Three backends, feature-detected, each degrading to the next when its runtime
 // API isn't present:
-//   • Electron — a preload bridge exposes os.networkInterfaces()      (ip + mac)
-//   • Web      — the historian echoes the caller's IP at /api/whoami   (ip only)
+//   • Host choice — the roster entry the user named as theirs      (clientId only)
+//   • Electron    — a preload bridge exposes os.networkInterfaces()    (ip + mac)
+//   • Web         — the historian echoes the caller's IP at /api/whoami (ip only)
 // A browser extension has no route to its own LAN address — chrome.system.network
 // is packaged-app-only, and WebRTC returns mDNS-masked .local candidates that
-// match no client — so under the extension this resolves to nothing and the list
-// simply shows no "This device" row.
+// match no client — so it binds the host choice and has nothing else to fall back
+// on. Unresolved on any host means no "This device" row and no pause control.
 
 import { apiRequest } from "./apiHost";
+import { selfDeviceHost } from "./selfDeviceHost";
 
 export interface SelfIdentity {
   /** Lowercased IPv4/IPv6 address(es) of this device's active interface(s). */
@@ -21,6 +23,9 @@ export interface SelfIdentity {
   /** Lowercased interface MAC(s). Populated only when the addresses were read
    *  off real interfaces — a whoami echo of a remote caller can't see a MAC. */
   macs: string[];
+  /** The roster entry the user named as this device, where the host asks rather
+   *  than resolves. A clientId survives reconnects; a router reset ends it. */
+  clientId?: number;
   /**
    * Whether `ips` are the interface addresses of the machine running this
    * dashboard's network requests, rather than an echo of some other caller's
@@ -58,6 +63,19 @@ function clean(ips: (string | undefined)[]): string[] {
     .filter((ip): ip is string => !!ip)
     .map(normalizeIp)
     .filter(isRoutable);
+}
+
+async function fromHostChoice(): Promise<SelfIdentity | null> {
+  const host = selfDeviceHost();
+  if (!host) return null;
+  try {
+    const clientId = await host.read();
+    if (clientId === null) return null;
+    // Says which client we are, never where our requests come from.
+    return { ips: [], macs: [], clientId, describesHost: false };
+  } catch {
+    return null;
+  }
 }
 
 interface DishlinkBridge {
@@ -102,16 +120,23 @@ async function fromWhoami(signal?: AbortSignal): Promise<SelfIdentity | null> {
 /** Resolve the viewer's addresses via the first backend that answers. Never
  *  rejects — an unresolved identity is `EMPTY`, which matches no client. */
 export async function resolveSelfIdentity(signal?: AbortSignal): Promise<SelfIdentity> {
-  return (await fromElectron()) ?? (await fromWhoami(signal)) ?? EMPTY;
+  return (await fromHostChoice()) ?? (await fromElectron()) ?? (await fromWhoami(signal)) ?? EMPTY;
 }
 
-/** True when this client entry is the device viewing the dashboard. MAC wins
- *  when present (Electron); otherwise falls back to v4 then v6 address match —
- *  Starlink hands out IPv6, so a v6-connected viewer must still resolve. */
+/** Whether the viewer's own device could be resolved at all. False makes every
+ *  `matchesSelf` answer meaningless: nothing matches an unknown identity. */
+export function selfIdentified(self: SelfIdentity): boolean {
+  return self.clientId !== undefined || self.ips.length > 0 || self.macs.length > 0;
+}
+
+/** True when this client entry is the device viewing the dashboard. A named
+ *  clientId settles it alone; otherwise MAC wins when present (Electron), then v4,
+ *  then v6 — Starlink hands out IPv6, so a v6-connected viewer must still resolve. */
 export function matchesSelf(
-  client: { macAddress?: string; ipAddress?: string; ipv6Addresses?: string[] },
+  client: { clientId?: number; macAddress?: string; ipAddress?: string; ipv6Addresses?: string[] },
   self: SelfIdentity,
 ): boolean {
+  if (self.clientId !== undefined) return client.clientId === self.clientId;
   const mac = client.macAddress?.toLowerCase();
   if (mac && self.macs.includes(mac)) return true;
   const v4 = client.ipAddress ? normalizeIp(client.ipAddress) : undefined;
