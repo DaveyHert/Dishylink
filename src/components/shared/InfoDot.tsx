@@ -13,13 +13,15 @@ import { Tooltip as TooltipPrimitive } from "radix-ui";
 import { cn } from "@/lib/utils";
 
 const infoDot =
-  "relative inline-flex size-[13px] cursor-help items-center justify-center rounded-full border font-mono text-[9px] italic leading-none outline-none [transition:border-color_120ms_ease,color_120ms_ease] hover:border-(--accent) hover:text-(--accent) focus-visible:border-(--accent) focus-visible:text-(--accent)";
-// Amber at rest marks a control that can cost the user their connection, so the
-// tip reads as worth opening before the setting is touched rather than as one
-// more optional hint.
+  "relative inline-flex size-[13px] cursor-help items-center justify-center rounded-full border font-mono text-[9px] italic leading-none outline-none [transition:border-color_120ms_ease,color_120ms_ease,opacity_120ms_ease]";
 const infoDotTone = {
-  muted: "border-input text-muted-foreground",
-  notable: "border-(--accent) text-(--accent)",
+  muted:
+    "border-input text-muted-foreground hover:border-(--accent) hover:text-(--accent) focus-visible:border-(--accent) focus-visible:text-(--accent)",
+  // Amber at rest marks a control that can cost the user their connection.
+  notable: "border-(--accent) text-(--accent) hover:opacity-80 focus-visible:opacity-80",
+  // For a field where a wrong value costs the user something they cannot undo
+  // from here. Reserved: everything else is amber at most.
+  critical: "border-status-critical text-status-critical hover:opacity-80 focus-visible:opacity-80",
 };
 // Portalled by Radix, so this is presentation only — the resets (not-italic,
 // normal-case, tracking-normal) guard against whatever context it lands in.
@@ -45,9 +47,8 @@ export function InfoDot({ tip, tone = "muted" }: { tip: string; tone?: keyof typ
           <TooltipPrimitive.Content
             className={infoTip}
             side='top'
-            // Right-aligned to the dot rather than centred on it: these sit at the
-            // right edge of a row, where a centred tip of this width overhangs the
-            // panel it belongs to.
+            // These dots sit at the right edge of a row, where a tip this wide
+            // would overhang the panel if it were centred on the dot.
             align='end'
             sideOffset={8}
             collisionPadding={12}

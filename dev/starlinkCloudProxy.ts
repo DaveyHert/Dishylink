@@ -15,7 +15,11 @@ import { createCloudHandler } from "../cloud/starlinkCloudHandler.ts";
 import { DishClient, DISH_LAN_HANDLE_URL, ROUTER_LAN_HANDLE_URL } from "../core/dishClient.ts";
 import type { DishConfigJson } from "../core/dishClient.ts";
 import { prepareDishConfigUpdate } from "../core/dishConfigUpdate.ts";
-import { buildRouterConfigRequest, type RouterConfigUpdate } from "../core/routerConfigUpdate.ts";
+import {
+  buildRouterConfigRequest,
+  readCurrentNetworks,
+  type RouterConfigUpdate,
+} from "../core/routerConfigUpdate.ts";
 import { prepareRouterClientUpdate } from "../core/routerClientUpdate.ts";
 import type { RouterClientUpdate } from "../core/routerClientUpdate.ts";
 import { localNetworkIdentity } from "../core/hostNetworkIdentity.ts";
@@ -100,12 +104,14 @@ export function starlinkCloudProxy(): Plugin {
         },
         // Encoding only — the client is never dialled here, so this works on a
         // kit whose router answers nothing on the LAN.
-        prepareRouterConfigUpdate: async (update, targetId) => {
+        prepareRouterConfigUpdate: async (update, targetId, send) => {
           routerPromise ??= DishClient.load("router", {
             handleUrl: ROUTER_LAN_HANDLE_URL,
             protosetBytes: protosetBytes(),
           });
-          return (await routerPromise).encodeRequest(buildRouterConfigRequest(targetId, update));
+          const client = await routerPromise;
+          const networks = await readCurrentNetworks(update, client, targetId, send);
+          return client.encodeRequest(buildRouterConfigRequest(targetId, update, networks));
         },
       });
       server.middlewares.use(async (req: IncomingMessage, res: ServerResponse, next) => {

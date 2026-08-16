@@ -44,6 +44,29 @@ if (desktop) {
   }
 }
 
+// The dev server proxies /router/* itself and honours the address stored beside
+// it, so the setting works there exactly as it does in the packaged app. A built
+// page served from anywhere else reaches no LAN address whatever it is told, and
+// binds nothing.
+if (!desktop && import.meta.env.DEV) {
+  const readAddresses = async () => {
+    const response = await fetch("/router-address");
+    return (await response.json()) as { router: string | null; routerDefault: string };
+  };
+  setRouterAddressHost({
+    read: readAddresses,
+    write: async (address) => {
+      const response = await fetch("/router-address", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ address }),
+      });
+      if (!response.ok) return { ok: false, reason: "invalid" };
+      return { ok: true, addresses: await response.json() };
+    },
+  });
+}
+
 // Bound for every host, desktop or plain tab, since each keeps the notification
 // state somewhere different. Not awaited: the desktop's answer crosses the bridge,
 // and main pushes it again as this page finishes loading, so the alerts panel is

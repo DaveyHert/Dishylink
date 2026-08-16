@@ -598,6 +598,14 @@ export class DishClient {
     );
   }
 
+  /** Decode a Device.Response the host fetched through the cloud gateway. Pairs
+   *  with `encodeRequest` for the reads that have no LAN path. */
+  decodeResponse(responseBytes: Uint8Array): DishResponseJson {
+    return toJson(this.responseSchema, fromBinary(this.responseSchema, responseBytes), {
+      registry: this.registry,
+    }) as DishResponseJson;
+  }
+
   /** Current dish configuration (sleep schedule, snow melt, update window …). */
   async getConfig(abortSignal?: AbortSignal): Promise<DishConfigJson & Record<string, unknown>> {
     return (

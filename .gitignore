@@ -13,6 +13,7 @@ collector/data
 
 # Local Starlink account session for the dev cloud proxy (never commit).
 .starlink-cookie
+.router-address
 
 # Claude Code's local settings/session state — machine-specific, not shared config.
 .claude/

@@ -11,9 +11,26 @@
 // corrupts every non-UTF8 byte in the payload.
 
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { networkInterfaces } from "node:os";
+import { resolve } from "node:path";
 import type { Plugin } from "vite";
+import { ROUTER_LAN_ADDRESS } from "../core/dishClient";
+import { normalizeIpAddress } from "../core/ipAddress";
 import { createRouterOrigins } from "../core/routerEndpoint";
+
+// The dev equivalent of Electron's preferences file: where this dev server looks
+// for the router when 192.168.1.1 is wrong for the kit. Read per call, so a
+// change takes effect without restarting vite.
+const ADDRESS_FILE = resolve(process.cwd(), ".router-address");
+
+function readConfiguredAddress(): string | null {
+  try {
+    return existsSync(ADDRESS_FILE) ? normalizeIpAddress(readFileSync(ADDRESS_FILE, "utf8")) : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Set by the response itself, or meaningless once fetch has decoded the body. */
 const SKIP_RESPONSE_HEADERS = new Set([
@@ -47,11 +64,13 @@ function forwardableHeaders(request: IncomingMessage): Headers {
 }
 
 export function routerProxy(): Plugin {
-  const origins = createRouterOrigins(() =>
-    Object.values(networkInterfaces())
-      .flat()
-      .filter((entry) => entry && entry.family === "IPv6" && !entry.internal)
-      .map((entry) => entry!.address),
+  const origins = createRouterOrigins(
+    () =>
+      Object.values(networkInterfaces())
+        .flat()
+        .filter((entry) => entry && entry.family === "IPv6" && !entry.internal)
+        .map((entry) => entry!.address),
+    readConfiguredAddress,
   );
 
   return {
@@ -59,6 +78,40 @@ export function routerProxy(): Plugin {
     configureServer(server) {
       server.middlewares.use(async (req: IncomingMessage, res: ServerResponse, next) => {
         const url = req.url ?? "";
+
+        if (url === "/router-address") {
+          const answer = () => {
+            res.statusCode = 200;
+            res.setHeader("content-type", "application/json");
+            res.end(
+              JSON.stringify({
+                router: readConfiguredAddress(),
+                routerDefault: ROUTER_LAN_ADDRESS,
+              }),
+            );
+          };
+          if (req.method === "GET") return answer();
+          if (req.method === "POST") {
+            const { address } = JSON.parse((await readBody(req)).toString("utf8") || "{}") as {
+              address?: string | null;
+            };
+            if (address === null || address === undefined || address === "") {
+              rmSync(ADDRESS_FILE, { force: true });
+              return answer();
+            }
+            const normalized = normalizeIpAddress(address);
+            if (!normalized) {
+              res.statusCode = 400;
+              res.setHeader("content-type", "application/json");
+              return res.end(JSON.stringify({ error: "invalid" }));
+            }
+            writeFileSync(ADDRESS_FILE, normalized, "utf8");
+            return answer();
+          }
+          res.statusCode = 405;
+          return res.end();
+        }
+
         if (!url.startsWith("/router/")) return next();
 
         const path = url.slice("/router".length);

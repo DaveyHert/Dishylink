@@ -23,7 +23,11 @@ import { browser } from "wxt/browser";
 import { createCloudHandler } from "../../cloud/starlinkCloudHandler";
 import { DishClient, type DishConfigJson } from "@core/dishClient";
 import { prepareDishConfigUpdate } from "@core/dishConfigUpdate";
-import { buildRouterConfigRequest, type RouterConfigUpdate } from "@core/routerConfigUpdate";
+import {
+  buildRouterConfigRequest,
+  readCurrentNetworks,
+  type RouterConfigUpdate,
+} from "@core/routerConfigUpdate";
 import { prepareRouterClientUpdate, type RouterClientUpdate } from "@core/routerClientUpdate";
 import type { CloudReply, CloudRequest } from "@/lib/cloudHost";
 import { dishHandleUrl, routerHandleUrl } from "./endpoints";
@@ -61,14 +65,16 @@ const cloudHandler = createCloudHandler({
     routerPromise ??= DishClient.load("router", { handleUrl: routerUrl });
     return prepareRouterClientUpdate(await routerPromise, update);
   },
-  prepareRouterConfigUpdate: async (update, targetId) => {
+  prepareRouterConfigUpdate: async (update, targetId, send) => {
     const routerUrl = routerHandleUrl();
     if (routerUrl !== cachedRouterUrl) {
       cachedRouterUrl = routerUrl;
       routerPromise = null;
     }
     routerPromise ??= DishClient.load("router", { handleUrl: routerUrl });
-    return (await routerPromise).encodeRequest(buildRouterConfigRequest(targetId, update));
+    const client = await routerPromise;
+    const networks = await readCurrentNetworks(update, client, targetId, send);
+    return client.encodeRequest(buildRouterConfigRequest(targetId, update, networks));
   },
   prepareDishConfigUpdate: async (changes) => {
     const dishUrl = dishHandleUrl();

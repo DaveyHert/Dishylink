@@ -12,7 +12,11 @@ import { createCloudHandler } from "../cloud/starlinkCloudHandler";
 import { DishClient, DISH_LAN_HANDLE_URL, ROUTER_LAN_HANDLE_URL } from "../core/dishClient";
 import type { DishConfigJson } from "../core/dishClient";
 import { prepareDishConfigUpdate } from "../core/dishConfigUpdate";
-import { buildRouterConfigRequest, type RouterConfigUpdate } from "../core/routerConfigUpdate";
+import {
+  buildRouterConfigRequest,
+  readCurrentNetworks,
+  type RouterConfigUpdate,
+} from "../core/routerConfigUpdate";
 import { prepareRouterClientUpdate } from "../core/routerClientUpdate";
 import type { RouterClientUpdate } from "../core/routerClientUpdate";
 import { localNetworkIdentity } from "../core/hostNetworkIdentity";
@@ -79,13 +83,16 @@ export function startCloud(rendererRoot: string): void {
       return prepareDishConfigUpdate(await dishPromise, changes);
     },
     // Encoding only — the client is never dialled here, so this works on a kit
-    // whose router answers nothing on the LAN.
-    prepareRouterConfigUpdate: async (update, targetId) => {
+    // whose router answers nothing on the LAN. A subnet change reads the current
+    // networks through the caller's gateway, which has the same reach.
+    prepareRouterConfigUpdate: async (update, targetId, send) => {
       routerPromise ??= DishClient.load("router", {
         handleUrl: ROUTER_LAN_HANDLE_URL,
         protosetBytes: new Uint8Array(readFileSync(protosetPath)),
       });
-      return (await routerPromise).encodeRequest(buildRouterConfigRequest(targetId, update));
+      const client = await routerPromise;
+      const networks = await readCurrentNetworks(update, client, targetId, send);
+      return client.encodeRequest(buildRouterConfigRequest(targetId, update, networks));
     },
   });
 }

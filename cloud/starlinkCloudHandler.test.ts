@@ -436,3 +436,96 @@ describe("createCloudHandler updateDishConfig", () => {
     expect(prepared).toBe(false);
   });
 });
+
+describe("updateRouterConfig", () => {
+  const TARGET = "Router-010000000000000001B31340";
+  const SUBNET = { kind: "subnet" as const, subnet: "192.168.2.1/24", password: "hunter2hunter2" };
+
+  /** Answers everything the controller lookup needs, then defers the device
+   *  gateway to `onDevice`. */
+  function gateway(onDevice: (init?: RequestInit) => Promise<Response>) {
+    return (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === AUTH_URL) return res(200);
+      if (url.includes("service-lines"))
+        return res(200, {
+          content: { results: [{ serviceLineNumber: "SL-1", accountReferenceId: "ACC-1" }] },
+        });
+      if (url.includes("/device-data/cache/v1/telemetry"))
+        return res(200, {
+          data: {
+            columnNamesByDeviceType: { r: ["DeviceId", "WifiHopsFromController"] },
+            values: [["r", TARGET, 0]],
+          },
+        });
+      return onDevice(init);
+    }) as typeof fetch;
+  }
+
+  const stall = (init?: RequestInit) =>
+    new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+    });
+
+  it("given: the write itself stalls, should: report the subnet change as applied", async () => {
+    const handler = createCloudHandler({
+      fetch: gateway(stall),
+      readCookie: () => SESSION,
+      retryDelayMs: 0,
+      deviceCallTimeoutMs: 5,
+      prepareRouterConfigUpdate: async () => new Uint8Array(),
+    });
+
+    await expect(handler.updateRouterConfig(SUBNET)).resolves.toMatchObject({
+      status: 200,
+      body: { applied: true },
+    });
+  });
+
+  it("given: the read before the write stalls, should: NOT claim the subnet moved", async () => {
+    const handler = createCloudHandler({
+      fetch: gateway(stall),
+      readCookie: () => SESSION,
+      retryDelayMs: 0,
+      deviceCallTimeoutMs: 5,
+      // Stands in for reading the current networks: it consumes the gateway call
+      // and never reaches the write.
+      prepareRouterConfigUpdate: async (_update, _targetId, send) => send(new Uint8Array()),
+    });
+
+    await expect(handler.updateRouterConfig(SUBNET)).resolves.toMatchObject({
+      status: 504,
+      body: { error: "device_call_timeout" },
+    });
+  });
+
+  it("given: a DNS write that stalls, should: stay retryable rather than claim success", async () => {
+    const handler = createCloudHandler({
+      fetch: gateway(stall),
+      readCookie: () => SESSION,
+      retryDelayMs: 0,
+      deviceCallTimeoutMs: 5,
+      prepareRouterConfigUpdate: async () => new Uint8Array(),
+    });
+
+    await expect(
+      handler.updateRouterConfig({ kind: "customDns", nameservers: ["1.1.1.1"] }),
+    ).resolves.toMatchObject({ status: 504 });
+  });
+
+  it("given: a passphrase outside WPA2's bounds, should: refuse before the account is touched", async () => {
+    let prepared = false;
+    const handler = createCloudHandler({
+      readCookie: () => SESSION,
+      prepareRouterConfigUpdate: async () => {
+        prepared = true;
+        return new Uint8Array();
+      },
+    });
+
+    await expect(
+      handler.updateRouterConfig({ ...SUBNET, password: "short" }),
+    ).resolves.toMatchObject({ status: 400 });
+    expect(prepared).toBe(false);
+  });
+});

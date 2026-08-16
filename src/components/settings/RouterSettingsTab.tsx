@@ -10,6 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import { CollapsibleSection, DangerAction, SectionLabel, SettingRow } from "./settingsChrome";
 import { RouterAddressRow } from "./RouterAddressRow";
 import { CustomDnsSection } from "./CustomDnsSection";
+import { SubnetSection } from "./SubnetSection";
+import { routerAddressForSubnet } from "@core/routerConfigUpdate";
+import { routerAddressHost } from "../../lib/routerAddressHost";
 import { applyRouterConfigUpdate } from "../../lib/routerConfigUpdate";
 import { useCloudAccount } from "../../hooks/useCloudAccount";
 import { useRouterAddressState } from "../../hooks/useRouterAddress";
@@ -124,7 +127,12 @@ export function RouterSettingsTab({
       />
       {(addresses || showDns) && (
         <CollapsibleSection title='Advanced'>
-          {addresses && <RouterAddressRow addresses={addresses} onChanged={setAddresses} />}
+          {addresses && (
+            <>
+              <SectionLabel>Connection</SectionLabel>
+              <RouterAddressRow addresses={addresses} onChanged={setAddresses} />
+            </>
+          )}
           {showDns && (
             <>
               <SectionLabel>DNS</SectionLabel>
@@ -134,6 +142,24 @@ export function RouterSettingsTab({
                 onSave={(nameservers) =>
                   applyRouterConfigUpdate({ kind: "customDns", nameservers })
                 }
+              />
+            </>
+          )}
+          {answering && (
+            <>
+              <SectionLabel>Network</SectionLabel>
+              <SubnetSection
+                currentSubnet={wifiConfig?.networks?.[0]?.ipv4 ?? null}
+                disabled={!accountConnected}
+                onSave={async (subnet, password) => {
+                  await applyRouterConfigUpdate({ kind: "subnet", password, subnet });
+                  // The router is about to answer somewhere else, and this is the
+                  // setting that decides where the app looks for it.
+                  const updatedAddresses = await routerAddressHost()?.write(
+                    routerAddressForSubnet(subnet),
+                  );
+                  if (updatedAddresses?.ok) setAddresses(updatedAddresses.addresses);
+                }}
               />
             </>
           )}
