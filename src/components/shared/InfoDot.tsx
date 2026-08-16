@@ -13,19 +13,31 @@ import { Tooltip as TooltipPrimitive } from "radix-ui";
 import { cn } from "@/lib/utils";
 
 const infoDot =
-  "relative inline-flex size-[13px] cursor-help items-center justify-center rounded-full border border-input font-mono text-[9px] italic leading-none text-muted-foreground outline-none [transition:border-color_120ms_ease,color_120ms_ease] hover:border-(--accent) hover:text-(--accent) focus-visible:border-(--accent) focus-visible:text-(--accent)";
+  "relative inline-flex size-[13px] cursor-help items-center justify-center rounded-full border font-mono text-[9px] italic leading-none outline-none [transition:border-color_120ms_ease,color_120ms_ease] hover:border-(--accent) hover:text-(--accent) focus-visible:border-(--accent) focus-visible:text-(--accent)";
+// Amber at rest marks a control that can cost the user their connection, so the
+// tip reads as worth opening before the setting is touched rather than as one
+// more optional hint.
+const infoDotTone = {
+  muted: "border-input text-muted-foreground",
+  notable: "border-(--accent) text-(--accent)",
+};
 // Portalled by Radix, so this is presentation only — the resets (not-italic,
 // normal-case, tracking-normal) guard against whatever context it lands in.
 const infoTip =
-  "z-[60] w-max max-w-[240px] rounded-sm border border-hairline bg-secondary px-2.5 py-2 text-left text-[11.5px] not-italic normal-case leading-[1.45] tracking-normal text-ink-secondary shadow-[0_6px_24px_rgba(0,0,0,0.28)]";
+  "z-[60] w-max max-w-[360px] rounded-lg border border-hairline bg-secondary px-[13px] py-[11px] text-left text-[12.5px] not-italic normal-case leading-normal tracking-normal text-ink-secondary shadow-[0_6px_24px_rgba(0,0,0,0.28)]";
 
 /** Standalone ⓘ dot. Pair with any heading. */
-export function InfoDot({ tip }: { tip: string }) {
+export function InfoDot({ tip, tone = "muted" }: { tip: string; tone?: keyof typeof infoDotTone }) {
   return (
     <TooltipPrimitive.Provider delayDuration={120}>
       <TooltipPrimitive.Root>
         <TooltipPrimitive.Trigger asChild>
-          <span className={infoDot} tabIndex={0} role='note' aria-label={tip}>
+          <span
+            className={cn(infoDot, infoDotTone[tone])}
+            tabIndex={0}
+            role='note'
+            aria-label={tip}
+          >
             i
           </span>
         </TooltipPrimitive.Trigger>
@@ -33,6 +45,10 @@ export function InfoDot({ tip }: { tip: string }) {
           <TooltipPrimitive.Content
             className={infoTip}
             side='top'
+            // Right-aligned to the dot rather than centred on it: these sit at the
+            // right edge of a row, where a centred tip of this width overhangs the
+            // panel it belongs to.
+            align='end'
             sideOffset={8}
             collisionPadding={12}
           >

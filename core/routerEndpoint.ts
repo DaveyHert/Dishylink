@@ -24,7 +24,7 @@
 // from this codebase at all, so offering it would only produce failures.
 
 import { ROUTER_LAN_ADDRESS } from "./dishClient";
-import { expandIpv6, normalizeRouterAddress, originFor } from "./routerAddress";
+import { expandIpv6, normalizeIpAddress, originFor } from "./ipAddress";
 
 export { expandIpv6 };
 
@@ -86,7 +86,7 @@ export function routerOriginsFrom(
   ownIps: readonly string[],
   configuredAddress?: string | null,
 ): string[] {
-  const configured = configuredAddress ? normalizeRouterAddress(configuredAddress) : null;
+  const configured = configuredAddress ? normalizeIpAddress(configuredAddress) : null;
   if (configured) return [originFor(configured, ROUTER_PORT)];
   return [
     ROUTER_IPV4_ORIGIN,

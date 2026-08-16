@@ -13,7 +13,7 @@
 import { app } from "electron";
 import { join } from "node:path";
 import { readFileSync, writeFileSync } from "node:fs";
-import { normalizeRouterAddress } from "../core/routerAddress";
+import { normalizeIpAddress } from "../core/ipAddress";
 
 export interface WindowBounds {
   x: number;
@@ -84,7 +84,7 @@ function isWindowBounds(value: unknown): value is WindowBounds {
 /** A hand-edited settings file must not send this process dialling something that
  *  is not an address at all, so what comes off disk is validated like typed input. */
 function storedAddress(value: unknown): string | null {
-  return typeof value === "string" ? normalizeRouterAddress(value) : null;
+  return typeof value === "string" ? normalizeIpAddress(value) : null;
 }
 
 let cached: Preferences | null = null;

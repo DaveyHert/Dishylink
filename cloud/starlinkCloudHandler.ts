@@ -10,6 +10,7 @@
 import { GrpcWebError, grpcWebUnaryCall } from "../core/grpcWeb";
 import type { DishConfigJson } from "../core/dishClient";
 import type { RouterClientUpdate } from "../core/routerClientUpdate";
+import { normalizeNameservers, type RouterConfigUpdate } from "../core/routerConfigUpdate";
 
 const AUTH_URL = "https://api.starlink.com/auth-rp/auth/user";
 const API = "https://starlink.com/api";
@@ -52,6 +53,11 @@ export interface CloudHandlerOptions {
   /** Trusted host callback: reads the local dish's identity and encodes exactly
    *  one config change. Renderer-provided protobuf is never accepted. */
   prepareDishConfigUpdate?: (changes: DishConfigJson) => Promise<Uint8Array>;
+  /** Trusted host callback: encodes exactly one router config change against the
+   *  target this handler resolved from the account. Unlike the callbacks above it
+   *  reads nothing from the LAN, which is what lets a bypassed router — invisible
+   *  on the local network by definition — still be configured. */
+  prepareRouterConfigUpdate?: (update: RouterConfigUpdate, targetId: string) => Promise<Uint8Array>;
 }
 
 /** The durable half of the session — without it a token refresh can't happen, so
@@ -137,12 +143,15 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
   const deviceCallTimeoutMs = options.deviceCallTimeoutMs ?? 15_000;
   const prepareDeviceUpdate = options.prepareDeviceUpdate;
   const prepareDishConfigUpdate = options.prepareDishConfigUpdate;
+  const prepareRouterConfigUpdate = options.prepareRouterConfigUpdate;
 
   let cachedCookie: string | null = null;
   let cachedAt = 0;
   let refreshInFlight: Promise<string | null> | null = null;
   let cachedIds: { acc: string; sl: string } | null = null;
   let cachedIdsAt = 0;
+  let cachedControllerId: string | null = null;
+  let cachedControllerIdAt = 0;
   let deviceMutationTail: Promise<void> = Promise.resolve();
 
   function forgetSession() {
@@ -150,6 +159,8 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
     cachedAt = 0;
     cachedIds = null;
     cachedIdsAt = 0;
+    cachedControllerId = null;
+    cachedControllerIdAt = 0;
   }
 
   /** Swap in a freshly-minted Access.V1 (the webagg/telemetryagg calls 401
@@ -280,6 +291,37 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
     cachedIds = { acc: first.accountReferenceId, sl: first.serviceLineNumber };
     cachedIdsAt = Date.now();
     return cachedIds;
+  }
+
+  /**
+   * The router to configure, named by the account rather than by the LAN.
+   *
+   * A mesh node reports as a router too, so the id cannot simply be "the one
+   * router on the account" — this kit has two. `WifiHopsFromController` is what
+   * separates them: the controller is zero hops from itself, and every node sits
+   * behind it. Sourcing this from telemetry rather than the local router is the
+   * whole reason a bypassed kit, which answers nothing on the LAN, can still be
+   * configured.
+   */
+  async function resolveControllerId(cookie: string): Promise<string> {
+    if (cachedControllerId && Date.now() - cachedControllerIdAt < IDS_TTL_MS) {
+      return cachedControllerId;
+    }
+    const { acc } = await resolveIds(cookie);
+    const telemetry = await apiPost("/device-data/cache/v1/telemetry", cookie, {
+      accountNumber: acc,
+    });
+    const routers = Object.entries(deviceTelemetryFrom(telemetry)).filter(
+      ([, device]) => device.kind === "router",
+    );
+    if (routers.length === 0) throw new Error("no Starlink router on this account");
+    const controller =
+      routers.find(([, device]) => device.hops === 0) ??
+      (routers.length === 1 ? routers[0] : undefined);
+    if (!controller) throw new Error("could not tell which router is the controller");
+    cachedControllerId = controller[0];
+    cachedControllerIdAt = Date.now();
+    return cachedControllerId;
   }
 
   /** `route` is the path without query, e.g. "/cloud/account". */
@@ -519,5 +561,59 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
     return applyDishConfigUpdate(changes);
   }
 
-  return { handle, connect, disconnect, updateClient, updateDishConfig };
+  async function applyRouterConfigUpdate(update: RouterConfigUpdate): Promise<CloudResult> {
+    if (!readCookie()) return NOT_CONNECTED;
+    try {
+      if (!prepareRouterConfigUpdate)
+        return { status: 503, body: { error: "router_config_update_unavailable" } };
+      const abortSignal = AbortSignal.timeout(deviceCallTimeoutMs);
+      await withFreshCookie(async (cookie) => {
+        const targetId = await resolveControllerId(cookie);
+        const requestBytes = await prepareRouterConfigUpdate(update, targetId);
+        try {
+          await grpcWebUnaryCall(DEVICE_HANDLE, requestBytes, abortSignal, {
+            fetch: doFetch,
+            headers: { cookie },
+          });
+        } catch (error) {
+          if (error instanceof GrpcWebError && error.grpcStatus === 16)
+            throw new SessionExpiredError();
+          throw error;
+        }
+      }, abortSignal);
+      return { status: 200, body: { ok: true } };
+    } catch (error) {
+      if (error instanceof SessionExpiredError) return NOT_CONNECTED;
+      if (error instanceof DOMException && error.name === "TimeoutError") {
+        return {
+          status: 504,
+          body: {
+            error: "device_call_timeout",
+            message: "Starlink did not answer the router change in time. Try again.",
+          },
+        };
+      }
+      return {
+        status: 502,
+        body: { error: "device_call_failed", message: (error as Error).message },
+      };
+    }
+  }
+
+  /** The renderer names a field and its new value, never protobuf. Anything
+   *  outside these shapes is refused before the account is touched. */
+  function validRouterConfig(update: RouterConfigUpdate): boolean {
+    if (update?.kind !== "customDns") return false;
+    if (!Array.isArray(update.nameservers)) return false;
+    if (!update.nameservers.every((server) => typeof server === "string")) return false;
+    return normalizeNameservers(update.nameservers) !== null;
+  }
+
+  function updateRouterConfig(update: RouterConfigUpdate): Promise<CloudResult> {
+    if (!validRouterConfig(update))
+      return Promise.resolve({ status: 400, body: { error: "bad_request" } });
+    return applyRouterConfigUpdate(update);
+  }
+
+  return { handle, connect, disconnect, updateClient, updateDishConfig, updateRouterConfig };
 }

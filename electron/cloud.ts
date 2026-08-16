@@ -12,6 +12,7 @@ import { createCloudHandler } from "../cloud/starlinkCloudHandler";
 import { DishClient, DISH_LAN_HANDLE_URL, ROUTER_LAN_HANDLE_URL } from "../core/dishClient";
 import type { DishConfigJson } from "../core/dishClient";
 import { prepareDishConfigUpdate } from "../core/dishConfigUpdate";
+import { buildRouterConfigRequest, type RouterConfigUpdate } from "../core/routerConfigUpdate";
 import { prepareRouterClientUpdate } from "../core/routerClientUpdate";
 import type { RouterClientUpdate } from "../core/routerClientUpdate";
 import { localNetworkIdentity } from "../core/hostNetworkIdentity";
@@ -77,6 +78,15 @@ export function startCloud(rendererRoot: string): void {
       });
       return prepareDishConfigUpdate(await dishPromise, changes);
     },
+    // Encoding only — the client is never dialled here, so this works on a kit
+    // whose router answers nothing on the LAN.
+    prepareRouterConfigUpdate: async (update, targetId) => {
+      routerPromise ??= DishClient.load("router", {
+        handleUrl: ROUTER_LAN_HANDLE_URL,
+        protosetBytes: new Uint8Array(readFileSync(protosetPath)),
+      });
+      return (await routerPromise).encodeRequest(buildRouterConfigRequest(targetId, update));
+    },
   });
 }
 
@@ -117,6 +127,12 @@ export async function handleCloudRequest(request: Request): Promise<Response> {
   if (route === "/cloud/dish-config" && request.method === "POST") {
     const changes = (await request.json().catch(() => ({}))) as DishConfigJson;
     const { status, body } = await handler.updateDishConfig(changes);
+    return json(status, body);
+  }
+
+  if (route === "/cloud/router-config" && request.method === "POST") {
+    const update = (await request.json().catch(() => ({}))) as RouterConfigUpdate;
+    const { status, body } = await handler.updateRouterConfig(update);
     return json(status, body);
   }
 

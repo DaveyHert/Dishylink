@@ -15,6 +15,7 @@ import { createCloudHandler } from "../cloud/starlinkCloudHandler.ts";
 import { DishClient, DISH_LAN_HANDLE_URL, ROUTER_LAN_HANDLE_URL } from "../core/dishClient.ts";
 import type { DishConfigJson } from "../core/dishClient.ts";
 import { prepareDishConfigUpdate } from "../core/dishConfigUpdate.ts";
+import { buildRouterConfigRequest, type RouterConfigUpdate } from "../core/routerConfigUpdate.ts";
 import { prepareRouterClientUpdate } from "../core/routerClientUpdate.ts";
 import type { RouterClientUpdate } from "../core/routerClientUpdate.ts";
 import { localNetworkIdentity } from "../core/hostNetworkIdentity.ts";
@@ -97,6 +98,15 @@ export function starlinkCloudProxy(): Plugin {
           });
           return prepareDishConfigUpdate(await dishPromise, changes);
         },
+        // Encoding only — the client is never dialled here, so this works on a
+        // kit whose router answers nothing on the LAN.
+        prepareRouterConfigUpdate: async (update, targetId) => {
+          routerPromise ??= DishClient.load("router", {
+            handleUrl: ROUTER_LAN_HANDLE_URL,
+            protosetBytes: protosetBytes(),
+          });
+          return (await routerPromise).encodeRequest(buildRouterConfigRequest(targetId, update));
+        },
       });
       server.middlewares.use(async (req: IncomingMessage, res: ServerResponse, next) => {
         const url = req.url ?? "";
@@ -140,6 +150,16 @@ export function starlinkCloudProxy(): Plugin {
           try {
             const changes = JSON.parse((await readBody(req)) || "{}") as DishConfigJson;
             const result = await handler.updateDishConfig(changes);
+            return sendJson(res, result.status, result.body);
+          } catch (error) {
+            return sendJson(res, 400, { error: "bad_request", message: (error as Error).message });
+          }
+        }
+
+        if (route === "/cloud/router-config" && req.method === "POST") {
+          try {
+            const update = JSON.parse((await readBody(req)) || "{}") as RouterConfigUpdate;
+            const result = await handler.updateRouterConfig(update);
             return sendJson(res, result.status, result.body);
           } catch (error) {
             return sendJson(res, 400, { error: "bad_request", message: (error as Error).message });

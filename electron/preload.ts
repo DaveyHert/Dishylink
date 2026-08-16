@@ -7,7 +7,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { NotificationState } from "../core/alertNotification";
 import type { HostNetworkIdentity } from "../core/hostNetworkIdentity";
-import type { RouterAddress } from "../core/routerAddress";
+import type { RouterAddress } from "../core/ipAddress";
 import {
   NOTIFICATION_STATE_CHANNEL,
   MENUBAR_THROUGHPUT_CHANNEL,

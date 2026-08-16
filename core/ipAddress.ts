@@ -1,10 +1,5 @@
-// A user-supplied address for the router, and the origin built from it.
-//
-// 192.168.1.1 is right for almost everyone, so this exists for the setups where it
-// cannot be: a kit whose router was moved off that subnet in the official app
-// because another connection already owned it, or one in bypass mode behind a
-// third-party router. The dish needs no equivalent — its 192.168.100.1 is fixed in
-// firmware and the official app offers no way to change it.
+// Literal IP addresses the user types: where the router is, and which DNS servers
+// it should forward to.
 //
 // Validation is deliberately narrow — a literal IPv4 or IPv6 address, nothing
 // else. A hostname would need a resolver, and every host here (a service worker,
@@ -40,7 +35,7 @@ export function expandIpv6(address: string): string[] | null {
 /** An address as typed, reduced to the canonical form the origin is built from,
  *  or null when it is not an address this can dial. Surrounding whitespace and
  *  the brackets an IPv6 address is often pasted with are tolerated. */
-export function normalizeRouterAddress(input: string): string | null {
+export function normalizeIpAddress(input: string): string | null {
   const trimmed = input.trim();
   if (trimmed === "") return null;
   const unbracketed =
