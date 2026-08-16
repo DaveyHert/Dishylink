@@ -1,5 +1,4 @@
 import { useRef, useState } from "react";
-import NumberFlow from "@number-flow/react";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -14,6 +13,46 @@ const stepBtnClass =
 const digitClass = "text-[16px] font-semibold leading-none text-foreground tabular-nums";
 const pillButtonBase =
   "cursor-pointer rounded-full px-3.5 py-1 text-[10px] font-semibold transition-opacity duration-[120ms] enabled:hover:opacity-85 disabled:cursor-default disabled:opacity-45";
+
+const HOUR_TENS = [0, 1];
+const HOUR_ONES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
+const MINUTE_TENS = [0, 1, 2, 3, 4, 5];
+const MINUTE_ONES = [0, 5, 1, 2, 3, 4, 6, 7, 8, 9];
+
+function DigitColumn({ value, sequence }: { value: number; sequence: number[] }) {
+  const index = sequence.indexOf(value);
+  return (
+    <span className={cn("relative inline-block h-[1em] w-[1ch] overflow-hidden", digitClass)}>
+      <span
+        className='absolute inset-x-0 flex flex-col transition-transform duration-300 ease-in-out'
+        style={{ transform: `translateY(${-index}em)` }}
+      >
+        {sequence.map((n, i) => (
+          <span key={i} className='flex h-[1em] shrink-0 items-center justify-center'>
+            {n}
+          </span>
+        ))}
+      </span>
+    </span>
+  );
+}
+
+function TwoDigit({
+  value,
+  tensSequence,
+  onesSequence,
+}: {
+  value: number;
+  tensSequence: number[];
+  onesSequence: number[];
+}) {
+  return (
+    <span className='inline-flex'>
+      <DigitColumn value={Math.floor(value / 10)} sequence={tensSequence} />
+      <DigitColumn value={value % 10} sequence={onesSequence} />
+    </span>
+  );
+}
 
 /** A compact trigger, matching the other settings dropdowns, that opens a
  *  popover to dial in a time. Adjustments inside the popover are local until
@@ -152,11 +191,7 @@ function TimeDial({ minutes, onChange }: { minutes: number; onChange: (minutes: 
             title='Click to type'
             className='grid w-8 cursor-text place-items-center rounded-sm transition-colors hover:bg-accent'
           >
-            <NumberFlow
-              value={hour12}
-              format={{ minimumIntegerDigits: 2 }}
-              className={digitClass}
-            />
+            <TwoDigit value={hour12} tensSequence={HOUR_TENS} onesSequence={HOUR_ONES} />
           </button>
         )}
       </TimeStepper>
@@ -192,11 +227,7 @@ function TimeDial({ minutes, onChange }: { minutes: number; onChange: (minutes: 
             title='Click to type'
             className='grid w-8 cursor-text place-items-center rounded-sm transition-colors hover:bg-accent'
           >
-            <NumberFlow
-              value={minute}
-              format={{ minimumIntegerDigits: 2 }}
-              className={digitClass}
-            />
+            <TwoDigit value={minute} tensSequence={MINUTE_TENS} onesSequence={MINUTE_ONES} />
           </button>
         )}
       </TimeStepper>
