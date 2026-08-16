@@ -264,6 +264,13 @@ export function fetchCloudUsage(signal?: AbortSignal): Promise<CloudUsage> {
   return cloudGet<CloudUsage>("/cloud/usage", signal);
 }
 
+/** The subnet the router reports, asked of the account rather than the LAN — the
+ *  only reader that still answers for a router this network cannot see. */
+export async function fetchCloudRouterSubnet(signal?: AbortSignal): Promise<string | null> {
+  const { subnet } = await cloudGet<{ subnet: string | null }>("/cloud/router-subnet", signal);
+  return subnet;
+}
+
 /** Persist a pasted session via the host binding. The host validates it against
  *  starlink.com and rejects a bad paste, whose message we surface to the user. */
 export async function connectCloud(cookie: string): Promise<void> {

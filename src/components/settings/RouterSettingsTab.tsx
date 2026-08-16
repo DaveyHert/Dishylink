@@ -14,7 +14,7 @@ import { SubnetSection } from "./SubnetSection";
 import { routerAddressForSubnet } from "@core/routerConfigUpdate";
 import { routerAddressHost } from "../../lib/routerAddressHost";
 import { applyRouterConfigUpdate } from "../../lib/routerConfigUpdate";
-import { useCloudAccount } from "../../hooks/useCloudAccount";
+import { useCloudAccount, useCloudRouterSubnet } from "../../hooks/useCloudAccount";
 import { useRouterAddressState } from "../../hooks/useRouterAddress";
 
 /** SSIDs with the bands each is broadcast on. One network can appear on several
@@ -39,18 +39,28 @@ export function RouterSettingsTab({
   wifiConfig,
   routerReachable,
   unreachable,
+  onConfigChanged,
 }: {
   wifiConfig: WifiNetworkConfigJson | null;
   routerReachable: boolean | null;
   /** Why the router is silent, when it is. Null while it is answering. */
   unreachable: RouterUnreachable | null;
+  /** For a write that leaves the router up, which nothing else would re-read.
+   *  A write that takes it down is covered by the read on its return instead. */
+  onConfigChanged: () => void;
 }) {
   const ssids = useMemo(() => ssidsWithBands(wifiConfig), [wifiConfig]);
   const meshNodes = Object.values(wifiConfig?.meshConfigs ?? {});
   const [addresses, setAddresses] = useRouterAddressState();
-  // The DNS write has no local path, so the control is disabled up front rather
-  // than failing at the moment Save is pressed.
+  // The DNS and subnet writes have no local path, so the controls are disabled up
+  // front rather than failing at the moment Save is pressed.
   const accountConnected = useCloudAccount(true).status === "ready";
+  // The account is asked only when the router itself cannot answer, which costs a
+  // round trip to Starlink for something the LAN gives away.
+  const lanSubnet = wifiConfig?.networks?.[0]?.ipv4 ?? null;
+  const { data: cloudSubnet, reload: rereadCloudSubnet } = useCloudRouterSubnet(
+    accountConnected && lanSubnet === null,
+  );
   // Only the rows that ask the router something wait on it. The address is how a
   // silent router gets found again, so it stays live through every state below.
   const answering = routerReachable !== null && !unreachable && wifiConfig !== null;
@@ -125,12 +135,18 @@ export function RouterSettingsTab({
           return "Reboot sent — the router is restarting.";
         }}
       />
-      {(addresses || showDns) && (
+      {(addresses || showDns || accountConnected) && (
         <CollapsibleSection title='Advanced'>
           {addresses && (
             <>
               <SectionLabel>Connection</SectionLabel>
-              <RouterAddressRow addresses={addresses} onChanged={setAddresses} />
+              <RouterAddressRow
+                addresses={addresses}
+                onChanged={(next) => {
+                  setAddresses(next);
+                  onConfigChanged();
+                }}
+              />
             </>
           )}
           {showDns && (
@@ -139,17 +155,18 @@ export function RouterSettingsTab({
               <CustomDnsSection
                 nameservers={wifiConfig?.nameservers ?? []}
                 disabled={!accountConnected}
-                onSave={(nameservers) =>
-                  applyRouterConfigUpdate({ kind: "customDns", nameservers })
-                }
+                onSave={async (nameservers) => {
+                  await applyRouterConfigUpdate({ kind: "customDns", nameservers });
+                  onConfigChanged();
+                }}
               />
             </>
           )}
-          {answering && (
+          {accountConnected && (
             <>
               <SectionLabel>Network</SectionLabel>
               <SubnetSection
-                currentSubnet={wifiConfig?.networks?.[0]?.ipv4 ?? null}
+                currentSubnet={lanSubnet ?? cloudSubnet}
                 disabled={!accountConnected}
                 onSave={async (subnet, password) => {
                   await applyRouterConfigUpdate({ kind: "subnet", password, subnet });
@@ -159,6 +176,7 @@ export function RouterSettingsTab({
                     routerAddressForSubnet(subnet),
                   );
                   if (updatedAddresses?.ok) setAddresses(updatedAddresses.addresses);
+                  rereadCloudSubnet();
                 }}
               />
             </>

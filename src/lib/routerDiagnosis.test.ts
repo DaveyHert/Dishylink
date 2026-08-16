@@ -38,9 +38,12 @@ describe("viewerOnRouterSubnet", () => {
   });
 });
 
+const AT_DEFAULT_ADDRESS_AND_PERSISTENT = { addressConfigured: false, silencePersisted: true };
+
 describe("diagnoseRouterUnreachable", () => {
   it("blames the address when a live router is unreachable from its own subnet", () => {
     const { cause, message } = diagnoseRouterUnreachable({
+      ...AT_DEFAULT_ADDRESS_AND_PERSISTENT,
       routerPresent: true,
       onRouterSubnet: true,
     });
@@ -49,48 +52,130 @@ describe("diagnoseRouterUnreachable", () => {
   });
 
   it("blames the network when a live router is unreachable from elsewhere", () => {
-    expect(diagnoseRouterUnreachable({ routerPresent: true, onRouterSubnet: false }).cause).toBe(
-      "differentNetwork",
-    );
+    expect(
+      diagnoseRouterUnreachable({
+        ...AT_DEFAULT_ADDRESS_AND_PERSISTENT,
+        routerPresent: true,
+        onRouterSubnet: false,
+      }).cause,
+    ).toBe("differentNetwork");
+  });
+
+  it("offers the subnet setting to someone already on their Starlink WiFi", () => {
+    // A subnet moved in the official app leaves this host holding a lease in the
+    // new range while the app still dials the old default.
+    const { message } = diagnoseRouterUnreachable({
+      ...AT_DEFAULT_ADDRESS_AND_PERSISTENT,
+      routerPresent: true,
+      onRouterSubnet: false,
+    });
+    expect(message).toContain("subnet was changed");
   });
 
   it("reports no router when the dish says there is none", () => {
     // Bypass mode: the dish answers, and names nothing downstream of it. Our own
     // position is irrelevant — there is nothing at any address to reach.
     for (const onRouterSubnet of [true, false, null]) {
-      expect(diagnoseRouterUnreachable({ routerPresent: false, onRouterSubnet }).cause).toBe(
-        "noRouter",
-      );
+      for (const addressConfigured of [true, false]) {
+        expect(
+          diagnoseRouterUnreachable({
+            routerPresent: false,
+            onRouterSubnet,
+            addressConfigured,
+            silencePersisted: true,
+          }).cause,
+        ).toBe("noRouter");
+      }
     }
   });
 
   it("stays unknown while the dish cannot say whether a router exists", () => {
-    expect(diagnoseRouterUnreachable({ routerPresent: null, onRouterSubnet: true }).cause).toBe(
-      "unknown",
-    );
+    expect(
+      diagnoseRouterUnreachable({
+        ...AT_DEFAULT_ADDRESS_AND_PERSISTENT,
+        routerPresent: null,
+        onRouterSubnet: true,
+      }).cause,
+    ).toBe("unknown");
   });
 
   it("stays unknown when a live router is found but our own position is not", () => {
-    expect(diagnoseRouterUnreachable({ routerPresent: true, onRouterSubnet: null }).cause).toBe(
-      "unknown",
-    );
+    expect(
+      diagnoseRouterUnreachable({
+        ...AT_DEFAULT_ADDRESS_AND_PERSISTENT,
+        routerPresent: true,
+        onRouterSubnet: null,
+      }).cause,
+    ).toBe("unknown");
   });
 
   it("gives every cause something to read", () => {
     for (const routerPresent of [true, false, null]) {
       for (const onRouterSubnet of [true, false, null]) {
-        expect(diagnoseRouterUnreachable({ routerPresent, onRouterSubnet }).message).not.toBe("");
+        for (const addressConfigured of [true, false]) {
+          for (const silencePersisted of [true, false]) {
+            expect(
+              diagnoseRouterUnreachable({
+                routerPresent,
+                onRouterSubnet,
+                addressConfigured,
+                silencePersisted,
+              }).message,
+            ).not.toBe("");
+          }
+        }
       }
     }
   });
 
   it("names the address actually being dialled, not the default", () => {
     const message = diagnoseRouterUnreachable(
-      { routerPresent: null, onRouterSubnet: null },
+      { ...AT_DEFAULT_ADDRESS_AND_PERSISTENT, routerPresent: null, onRouterSubnet: null },
       "192.168.2.1",
     ).message;
     expect(message).toContain("192.168.2.1");
     expect(message).not.toContain("192.168.1.1");
+  });
+});
+
+describe("diagnoseRouterUnreachable with an address the user chose", () => {
+  it("blames the setting, not a neighbour, wherever this device sits", () => {
+    for (const onRouterSubnet of [true, false, null]) {
+      const { cause, message } = diagnoseRouterUnreachable(
+        { routerPresent: true, onRouterSubnet, addressConfigured: true, silencePersisted: true },
+        "192.168.2.1",
+      );
+      expect(cause).toBe("configuredAddressSilent");
+      expect(message).toContain("192.168.2.1");
+    }
+  });
+
+  it("still reports bypass ahead of the setting", () => {
+    expect(
+      diagnoseRouterUnreachable({
+        routerPresent: false,
+        onRouterSubnet: true,
+        addressConfigured: true,
+        silencePersisted: true,
+      }).cause,
+    ).toBe("noRouter");
+  });
+});
+
+describe("diagnoseRouterUnreachable before the outage settles", () => {
+  it("names no cause at all, however strong the signals", () => {
+    for (const routerPresent of [true, false, null]) {
+      for (const addressConfigured of [true, false]) {
+        expect(
+          diagnoseRouterUnreachable({
+            routerPresent,
+            onRouterSubnet: true,
+            addressConfigured,
+            silencePersisted: false,
+          }).cause,
+        ).toBe("checking");
+      }
+    }
   });
 });
 
@@ -105,4 +190,16 @@ describe("viewerOnRouterSubnet with a configured address", () => {
     // claim the viewer is off the router's network.
     expect(viewerOnRouterSubnet(["192.168.1.40"], "fdc1:5296:c0f2:10::1")).toBeNull();
   });
+});
+
+it("never suggests the address the router already answers on", () => {
+  for (const routerAddress of ["192.168.1.1", "192.168.2.1", "10.0.0.1"]) {
+    const { message } = diagnoseRouterUnreachable(
+      { ...AT_DEFAULT_ADDRESS_AND_PERSISTENT, routerPresent: true, onRouterSubnet: true },
+      routerAddress,
+    );
+    const suggestion = /different address \(like ([\d.]+)\)/.exec(message)?.[1];
+    expect(suggestion).toBeDefined();
+    expect(suggestion).not.toBe(routerAddress);
+  }
 });

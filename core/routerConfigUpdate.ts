@@ -150,13 +150,38 @@ export async function readCurrentNetworks(
   update: RouterConfigUpdate,
   codec: RouterCodec,
   targetId: string,
-  send: (requestBytes: Uint8Array) => Promise<Uint8Array>,
+  callGateway: (requestBytes: Uint8Array) => Promise<Uint8Array>,
 ): Promise<Json[]> {
   if (update.kind !== "subnet") return [];
+  return readRouterNetworks(codec, targetId, callGateway);
+}
+
+async function readRouterNetworks(
+  codec: RouterCodec,
+  targetId: string,
+  callGateway: (requestBytes: Uint8Array) => Promise<Uint8Array>,
+): Promise<Json[]> {
   const reply = codec.decodeResponse(
-    await send(codec.encodeRequest({ targetId, wifiGetConfig: {} })),
+    await callGateway(codec.encodeRequest({ targetId, wifiGetConfig: {} })),
   );
   return (reply.wifiGetConfig?.wifiConfig?.networks as Json[] | undefined) ?? [];
+}
+
+/**
+ * The subnet the router is on, over the same gateway the writes use.
+ *
+ * The LAN reports this too and is asked first. This path answers for the case
+ * the LAN cannot: a router sitting on a subnet the app is not looking at is
+ * exactly the one whose subnet someone needs to read.
+ */
+export async function readCurrentSubnet(
+  codec: RouterCodec,
+  targetId: string,
+  callGateway: (requestBytes: Uint8Array) => Promise<Uint8Array>,
+): Promise<string | null> {
+  const [firstNetwork] = await readRouterNetworks(codec, targetId, callGateway);
+  const ipv4 = (firstNetwork as { ipv4?: unknown } | undefined)?.ipv4;
+  return typeof ipv4 === "string" ? ipv4 : null;
 }
 
 export function buildRouterConfigRequest(

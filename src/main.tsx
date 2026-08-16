@@ -28,8 +28,10 @@ if (desktop) {
   // cannot be down while this window is asking — see recorderRunsInHostProcess.
   void desktop.recorderInProcess().then(setRecorderInProcess);
   // Main owns where the router is dialled, because the recorder there dials it
-  // with no window open.
-  if (desktop.routerAddress && desktop.setRouterAddress) {
+  // with no window open. Only in a build that serves itself, though: a dev-server
+  // page's /router/* calls are carried by Vite, not by main, so main's copy of the
+  // address would be a setting that changes nothing.
+  if (!import.meta.env.DEV && desktop.routerAddress && desktop.setRouterAddress) {
     const read = desktop.routerAddress;
     const write = desktop.setRouterAddress;
     setRouterAddressHost({
@@ -48,7 +50,11 @@ if (desktop) {
 // it, so the setting works there exactly as it does in the packaged app. A built
 // page served from anywhere else reaches no LAN address whatever it is told, and
 // binds nothing.
-if (!desktop && import.meta.env.DEV) {
+//
+// This holds under the desktop shell too. A dev run loads the window from the dev
+// server, so its router calls leave through Vite whatever process is hosting it,
+// and the store the setting writes has to be the one that request consults.
+if (import.meta.env.DEV) {
   const readAddresses = async () => {
     const response = await fetch("/router-address");
     return (await response.json()) as { router: string | null; routerDefault: string };
