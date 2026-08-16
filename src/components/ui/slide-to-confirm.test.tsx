@@ -142,6 +142,25 @@ describe("SlideToConfirm", () => {
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 
+  // Measured at rest on first paint, which no transition applies to. It is the
+  // one place the resting geometry is pinned, so the callers can settle for
+  // knowing which way their track runs.
+  test("parks the handle at the end its travel starts from", async () => {
+    await mount({ direction: "left" });
+    const trackBox = track().getBoundingClientRect();
+    const handleBox = handle().getBoundingClientRect();
+    const position = (handleBox.left - trackBox.left) / (trackBox.width - handleBox.width);
+    expect(position).toBeGreaterThan(0.9);
+  });
+
+  test("parks the handle at the start when the travel runs rightward", async () => {
+    await mount({ direction: "right" });
+    const trackBox = track().getBoundingClientRect();
+    const handleBox = handle().getBoundingClientRect();
+    const position = (handleBox.left - trackBox.left) / (trackBox.width - handleBox.width);
+    expect(position).toBeLessThan(0.1);
+  });
+
   test("ignores a full drag while disabled", async () => {
     const onConfirm = await mount({ disabled: true });
     drag(1);

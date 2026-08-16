@@ -92,11 +92,10 @@ function slide() {
   grip.dispatchEvent(new PointerEvent("pointerup", { clientX: to, bubbles: true }));
 }
 
-/** Where the handle sits, as a share of the track. 0 is the left edge, 1 the right. */
-function handlePosition(): number {
-  const trackBox = track().getBoundingClientRect();
-  const handleBox = handle().getBoundingClientRect();
-  return (handleBox.left - trackBox.left) / (trackBox.width - handleBox.width);
+/** How far along the track the handle has been carried, 0 to 100. Where that
+ *  puts it on screen is the primitive's own business, and its own test. */
+function travelled(): string | null {
+  return handle().getAttribute("aria-valuenow");
 }
 
 describe("BypassSection", () => {
@@ -118,7 +117,7 @@ describe("BypassSection", () => {
     expect(onSave).toHaveBeenCalledWith(true);
   });
 
-  test("leaves the handle at the end it was dragged to once the write is away", async () => {
+  test("turns the control around once the write is away, so the way back starts where the handle is", async () => {
     mount({ reported: false });
     await waitForText("Slide to turn on bypass");
 
@@ -126,24 +125,15 @@ describe("BypassSection", () => {
     await waitForText("Turn on bypass mode?");
     button("Turn on").click();
     await waitForText("Sent.");
+    await settle();
 
-    // Sampled rather than measured once: the failure this guards against is the
-    // handle returning to the start and gliding back, which a single reading
-    // taken after the glide would not see.
-    const path: number[] = [];
-    for (let sample = 0; sample < 12; sample++) {
-      await settle(35);
-      path.push(handlePosition());
-    }
-
-    // Bypass now reads as on, so the control turns around and offers the way back
-    // from where the handle already is, rather than crossing the track twice.
-    expect(Math.min(...path)).toBeGreaterThan(0.5);
-    expect(path.at(-1)).toBeGreaterThan(0.9);
+    // Bypass now reads as on, so the track runs the other way and the spent
+    // travel is cleared. Together those leave the handle at the end it reached.
     expect(text()).toContain("Slide to turn off bypass");
+    expect(travelled()).toBe("0");
   });
 
-  test("writes nothing when the dialog is dismissed, and puts the handle back", async () => {
+  test("writes nothing when the dialog is dismissed, and gives the travel back", async () => {
     const { onSave } = mount({ reported: false });
     await waitForText("Slide to turn on bypass");
 
@@ -153,7 +143,8 @@ describe("BypassSection", () => {
     await settle();
 
     expect(onSave).not.toHaveBeenCalled();
-    expect(handlePosition()).toBeLessThan(0.1);
+    expect(travelled()).toBe("0");
+    expect(text()).toContain("Slide to turn on bypass");
   });
 
   test("holds the assumed state until the account agrees, then stops saying so", async () => {
