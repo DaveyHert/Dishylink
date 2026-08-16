@@ -11,10 +11,8 @@
 
 import { Tooltip as TooltipPrimitive } from "radix-ui";
 import { cn } from "@/lib/utils";
-import { dotSeverityClass, type Severity } from "../ui/severity-icon";
+import { SeverityDot, type Severity } from "../ui/severity-icon";
 
-const infoDot =
-  "relative inline-flex size-[13px] cursor-help items-center justify-center rounded-full border font-mono text-[9px] italic leading-none outline-none [transition:border-color_120ms_ease,color_120ms_ease,opacity_120ms_ease]";
 // Portalled by Radix, so this is presentation only — the resets (not-italic,
 // normal-case, tracking-normal) guard against whatever context it lands in.
 const infoTip =
@@ -26,14 +24,7 @@ export function InfoDot({ tip, severity = "normal" }: { tip: string; severity?: 
     <TooltipPrimitive.Provider delayDuration={120}>
       <TooltipPrimitive.Root>
         <TooltipPrimitive.Trigger asChild>
-          <span
-            className={cn(infoDot, dotSeverityClass[severity])}
-            tabIndex={0}
-            role='note'
-            aria-label={tip}
-          >
-            i
-          </span>
+          <SeverityDot severity={severity} tabIndex={0} role='note' aria-label={tip} />
         </TooltipPrimitive.Trigger>
         <TooltipPrimitive.Portal>
           <TooltipPrimitive.Content
