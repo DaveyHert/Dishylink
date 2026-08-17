@@ -22,7 +22,7 @@ import {
   type DishReading,
 } from "@core/alertEngine";
 import type { AlertState } from "@core/alertDefinitions";
-import { ClientTotalsCore } from "@core/clientTotals";
+import { ClientTotalsCore, migrateSnapshot } from "@core/clientTotals";
 import { usageKey } from "@core/clientUsage";
 import { applyDrain, IndexedDbHistory, type ClientMinuteRow, type HistoryStore } from "./history";
 import { packObstructionCells } from "./obstruction";
@@ -234,7 +234,7 @@ async function recordClients(
   await store.putClientMinutes(rows, now);
 
   const odometer = new ClientTotalsCore(CLIENT_MAX_GAP_MS);
-  const snapshot = await store.readTotalsSnapshot();
+  const snapshot = migrateSnapshot(await store.readTotalsSnapshot());
   if (snapshot) odometer.loadSnapshot(snapshot);
   const liveKeys = odometer.notePoll(
     identified.map((c) => ({ clientId: c.clientId, macAddress: c.macAddress ?? "" })),

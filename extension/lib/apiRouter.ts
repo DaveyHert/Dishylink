@@ -11,7 +11,7 @@
 // desktop historian isn't running.
 
 import { energyRangeBounds, RANGES, summarizeEnergy, type Range } from "@core/energySummary";
-import { ClientTotalsCore } from "@core/clientTotals";
+import { ClientTotalsCore, migrateSnapshot } from "@core/clientTotals";
 import { resolveRows, foldMinuteCollisions } from "@core/clientHistory";
 import type { ClientSampleRow, HistoryStore } from "./history";
 
@@ -185,7 +185,7 @@ export async function routeApiRequest(
  *  recording, never a read or a reset/delete, so the default is fine here. */
 async function loadOdometer(store: HistoryStore): Promise<ClientTotalsCore> {
   const odometer = new ClientTotalsCore();
-  const snapshot = await store.readTotalsSnapshot();
+  const snapshot = migrateSnapshot(await store.readTotalsSnapshot());
   if (snapshot) odometer.loadSnapshot(snapshot);
   return odometer;
 }

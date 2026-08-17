@@ -8,12 +8,7 @@
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import {
-  ClientTotalsCore,
-  VERSION,
-  type ClientTotal,
-  type Snapshot,
-} from "../core/clientTotals.ts";
+import { ClientTotalsCore, migrateSnapshot, type ClientTotal } from "../core/clientTotals.ts";
 
 export type { ClientTotal };
 
@@ -27,13 +22,11 @@ export class ClientTotalsStore extends ClientTotalsCore {
   private restore(): void {
     if (!existsSync(this.filePath)) return;
     try {
-      const persisted = JSON.parse(readFileSync(this.filePath, "utf8")) as Snapshot;
-      // Anything else is a shape this build does not know how to read; starting
-      // fresh beats loading it wrong. Buckets with no clientId are normal here —
-      // a device that has not been seen since it was keyed by MAC adopts its
-      // clientId on the next poll (see adoptOrCreate).
-      if (persisted?.version !== VERSION) return;
-      this.loadSnapshot(persisted);
+      // Buckets with no clientId are normal here — a device that has not been
+      // seen since it was keyed by MAC adopts its clientId on the next poll (see
+      // adoptOrCreate).
+      const persisted = migrateSnapshot(JSON.parse(readFileSync(this.filePath, "utf8")));
+      if (persisted) this.loadSnapshot(persisted);
     } catch {
       // unreadable snapshot: start fresh rather than refuse to boot
     }
