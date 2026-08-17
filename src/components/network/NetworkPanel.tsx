@@ -88,6 +88,9 @@ function NetworkPanelBody({
   const needsAccount = cloudStatus !== "loading" && cloudStatus !== "ready";
   const needsSelfDevice = selfDeviceHost() !== null && selfResolved && !selfIdentified(self);
 
+  /** The LAN is silent and the account is answering in its place. */
+  const viaCloud = network.clientsSource === "cloud";
+
   const devices = useMemo(() => network.clients.filter(isClientDevice), [network.clients]);
   // The viewer's own device pins to the top (like the app), then by throughput.
   //
@@ -110,7 +113,11 @@ function NetworkPanelBody({
   }
   // Branch on the diagnosis rather than on `routerReachable` again: it is
   // derived from that same flag, so this cannot render an empty callout.
-  if (unreachable) {
+  //
+  // A roster read through the account is not a degraded stand-in for this list —
+  // it IS this list, from the one reader that still reaches the router. So the
+  // silence is explained above the devices rather than shown instead of them.
+  if (unreachable && !viaCloud) {
     return <Callout tone='error'>{unreachable.message}</Callout>;
   }
 
@@ -168,10 +175,23 @@ function NetworkPanelBody({
         ]}
       />
 
+      {/* Above both tabs: everything under them is coming from the account, not
+          from the router on this network. */}
+      {viaCloud && (
+        <Callout tone='info' className='mb-2.5'>
+          {unreachable ? `${unreachable.message} ` : ""}These devices come from your Starlink
+          account, so they refresh every 20&nbsp;s and carry no live throughput.
+        </Callout>
+      )}
+
       {tab === "connected" && (
         <>
           <ListSection
-            caption={`${devices.length} device${devices.length === 1 ? "" : "s"} · live from the router, refreshed every 5 s`}
+            caption={`${devices.length} device${devices.length === 1 ? "" : "s"} · ${
+              viaCloud
+                ? "via your Starlink account, refreshed every 20 s"
+                : "live from the router, refreshed every 5 s"
+            }`}
           >
             {sortedDevices.map((client, index) => (
               <DeviceRow

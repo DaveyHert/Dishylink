@@ -208,6 +208,7 @@ export default function App() {
           clients={routerNetwork.clients}
           initialTab={settingsTab}
           routerReachable={routerNetwork.routerReachable}
+          routerViaAccount={routerNetwork.clientsSource === "cloud"}
           routerUnreachable={routerUnreachable}
           onRouterConfigChanged={routerNetwork.refreshConfig}
         />

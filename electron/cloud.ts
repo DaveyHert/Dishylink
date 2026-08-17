@@ -16,9 +16,10 @@ import {
   buildRouterConfigRequest,
   readCurrentNetworks,
   readCurrentSubnet,
+  readRouterWifiConfig,
   type RouterConfigUpdate,
 } from "../core/routerConfigUpdate";
-import { prepareRouterClientUpdate } from "../core/routerClientUpdate";
+import { prepareRouterClientUpdate, readRouterClients } from "../core/routerClientUpdate";
 import type { RouterClientUpdate } from "../core/routerClientUpdate";
 import { localNetworkIdentity } from "../core/hostNetworkIdentity";
 
@@ -65,17 +66,19 @@ export function startCloud(rendererRoot: string): void {
     : join(app.getAppPath(), "public/dish.protoset");
   let routerPromise: Promise<DishClient> | null = null;
   let dishPromise: Promise<DishClient> | null = null;
+  // Every router callback needs the same client, and the gateway ones need it
+  // only as a codec — loading it dials nothing.
+  const loadRouter = () =>
+    (routerPromise ??= DishClient.load("router", {
+      handleUrl: ROUTER_LAN_HANDLE_URL,
+      protosetBytes: new Uint8Array(readFileSync(protosetPath)),
+    }));
   handler = createCloudHandler({
     readCookie,
     writeCookie,
     clearCookie,
-    prepareDeviceUpdate: async (update) => {
-      routerPromise ??= DishClient.load("router", {
-        handleUrl: ROUTER_LAN_HANDLE_URL,
-        protosetBytes: new Uint8Array(readFileSync(protosetPath)),
-      });
-      return prepareRouterClientUpdate(await routerPromise, update, localNetworkIdentity());
-    },
+    prepareDeviceUpdate: async (update) =>
+      prepareRouterClientUpdate(await loadRouter(), update, localNetworkIdentity()),
     prepareDishConfigUpdate: async (changes) => {
       dishPromise ??= DishClient.load("dish", {
         handleUrl: DISH_LAN_HANDLE_URL,
@@ -87,21 +90,16 @@ export function startCloud(rendererRoot: string): void {
     // whose router answers nothing on the LAN. A subnet change reads the current
     // networks through the caller's gateway, which has the same reach.
     prepareRouterConfigUpdate: async (update, targetId, callGateway) => {
-      routerPromise ??= DishClient.load("router", {
-        handleUrl: ROUTER_LAN_HANDLE_URL,
-        protosetBytes: new Uint8Array(readFileSync(protosetPath)),
-      });
-      const client = await routerPromise;
+      const client = await loadRouter();
       const networks = await readCurrentNetworks(update, client, targetId, callGateway);
       return client.encodeRequest(buildRouterConfigRequest(targetId, update, networks));
     },
-    readRouterSubnet: async (targetId, callGateway) => {
-      routerPromise ??= DishClient.load("router", {
-        handleUrl: ROUTER_LAN_HANDLE_URL,
-        protosetBytes: new Uint8Array(readFileSync(protosetPath)),
-      });
-      return readCurrentSubnet(await routerPromise, targetId, callGateway);
-    },
+    readRouterSubnet: async (targetId, callGateway) =>
+      readCurrentSubnet(await loadRouter(), targetId, callGateway),
+    readRouterClients: async (targetId, callGateway) =>
+      readRouterClients(await loadRouter(), targetId, callGateway),
+    readRouterConfig: async (targetId, callGateway) =>
+      readRouterWifiConfig(await loadRouter(), targetId, callGateway),
   });
 }
 

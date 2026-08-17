@@ -25,6 +25,8 @@ interface SettingsModalProps {
   wifiConfig: WifiNetworkConfigJson | null;
   clients: WifiClientJson[];
   routerReachable: boolean | null;
+  /** Whether the router's config was read through the account rather than the LAN. */
+  routerViaAccount: boolean;
   routerUnreachable: RouterUnreachable | null;
   /** Ask the poller to re-read the router config after a write changed it. */
   onRouterConfigChanged: () => void;
@@ -39,6 +41,7 @@ export function SettingsModal({
   wifiConfig,
   clients,
   routerReachable,
+  routerViaAccount,
   routerUnreachable,
   onRouterConfigChanged,
   initialTab = "starlink",
@@ -137,6 +140,7 @@ export function SettingsModal({
               <RouterSettingsTab
                 wifiConfig={wifiConfig}
                 routerReachable={routerReachable}
+                viaAccount={routerViaAccount}
                 unreachable={routerUnreachable}
                 onConfigChanged={onRouterConfigChanged}
               />

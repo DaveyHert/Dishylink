@@ -9,6 +9,7 @@
 // from the historian: this needs internet + the account session, nothing about
 // the local dish.
 
+import type { WifiClientJson, WifiNetworkConfigJson } from "@core/dishClient";
 import { cloudRequest, noteCloudSessionChanged } from "./cloudHost";
 
 // ---- response shapes (only the fields the UI reads) ----
@@ -269,6 +270,29 @@ export function fetchCloudUsage(signal?: AbortSignal): Promise<CloudUsage> {
 export async function fetchCloudRouterSubnet(signal?: AbortSignal): Promise<string | null> {
   const { subnet } = await cloudGet<{ subnet: string | null }>("/cloud/router-subnet", signal);
   return subnet;
+}
+
+/** The connected devices the router reports, asked of the account rather than
+ *  the LAN. The same roster, from the one path that still answers when this
+ *  machine is not on that network — or cannot see the router at all. */
+export async function fetchCloudRouterClients(signal?: AbortSignal): Promise<WifiClientJson[]> {
+  const { clients } = await cloudGet<{ clients: WifiClientJson[] | null }>(
+    "/cloud/router-clients",
+    signal,
+  );
+  return clients ?? [];
+}
+
+/** The router's WiFi config over the same path — SSIDs, mesh nodes, and the
+ *  saved per-device entries a roster is read alongside. */
+export async function fetchCloudRouterConfig(
+  signal?: AbortSignal,
+): Promise<WifiNetworkConfigJson | null> {
+  const { wifiConfig } = await cloudGet<{ wifiConfig: WifiNetworkConfigJson | null }>(
+    "/cloud/router-config",
+    signal,
+  );
+  return wifiConfig;
 }
 
 /** Persist a pasted session via the host binding. The host validates it against
