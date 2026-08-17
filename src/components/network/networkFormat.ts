@@ -25,6 +25,13 @@ export const WINDOW_OPTIONS = [
   { label: "6H", value: "360" },
 ];
 
+/** How long to hold a pause control pending before calling the write unapplied.
+ *  The roster is what confirms it landed, so a deadline shorter than the roster's
+ *  own cadence reports a failure the very next read denies. */
+export function pauseSettleTimeoutMs(rosterRefreshMs: number): number {
+  return Math.max(20_000, rosterRefreshMs * 2 + 5_000);
+}
+
 export function bandLabel(client: WifiClientJson): string {
   const iface = client.iface ?? "";
   if (iface === "ETH") return "Ethernet";
