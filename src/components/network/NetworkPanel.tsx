@@ -232,10 +232,15 @@ function NetworkPanelBody({
 
       {tab === "connected" && (
         <>
+          {viaCloud && network.accountRosterError && (
+            <div className='mb-2 text-[11.5px] text-destructive'>{network.accountRosterError}</div>
+          )}
           <ListSection
             caption={`${devices.length} device${devices.length === 1 ? "" : "s"} · ${
               viaCloud
-                ? "via your Starlink account, refreshed every 20 s"
+                ? network.accountRosterError
+                  ? "via your Starlink account, no longer refreshing"
+                  : "via your Starlink account, refreshed every 20 s"
                 : "live from the router, refreshed every 5 s"
             }`}
           >
