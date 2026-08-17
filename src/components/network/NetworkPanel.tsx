@@ -226,7 +226,8 @@ function NetworkPanelBody({
           }}
         >
           {unreachable ? `${unreachable.message} ` : ""}These devices come from your Starlink
-          account, so they refresh every 20&nbsp;s and carry no live throughput.
+          account, so they refresh every {CLOUD_CLIENTS_POLL_MS / 1000}&nbsp;s and carry no live
+          throughput.
         </Callout>
       )}
 
@@ -240,8 +241,8 @@ function NetworkPanelBody({
               viaCloud
                 ? network.accountRosterError
                   ? "via your Starlink account, no longer refreshing"
-                  : "via your Starlink account, refreshed every 20 s"
-                : "live from the router, refreshed every 5 s"
+                  : `via your Starlink account, refreshed every ${CLOUD_CLIENTS_POLL_MS / 1000} s`
+                : `live from the router, refreshed every ${CLIENTS_POLL_MS / 1000} s`
             }`}
           >
             {sortedDevices.map((client, index) => (
