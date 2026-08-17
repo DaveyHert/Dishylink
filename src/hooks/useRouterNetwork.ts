@@ -44,12 +44,12 @@ const SAMPLES_POLL_MS = 1_000;
 /**
  * How often the roster is asked of the account, once the LAN cannot answer.
  *
- * Far slower than the LAN's 5s on purpose: each poll is a round trip to
- * starlink.com and back down to the router, and it exists to keep a list of
- * devices readable — not to drive anything live. The 1 Hz per-device throughput
- * stays LAN-only for the same reason.
+ * Slower than the LAN's 5s: each poll is a round trip to starlink.com and back
+ * down to the router, and it exists to keep a list of devices readable, not to
+ * drive anything live. The 1 Hz per-device throughput stays LAN-only for the
+ * same reason. It runs only while a router-backed panel is open.
  */
-export const CLOUD_CLIENTS_POLL_MS = 20_000;
+export const CLOUD_CLIENTS_POLL_MS = 15_000;
 
 /** How many 1 Hz tails between asks for the monthly totals. They are a list of
  *  every device, and a month's odometer does not move meaningfully inside a

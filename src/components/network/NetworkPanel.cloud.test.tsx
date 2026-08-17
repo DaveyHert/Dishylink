@@ -253,7 +253,7 @@ test("given: a roster on screen that has stopped refreshing, should: say so over
   expect(text).toContain("Couldn't reach your Starlink account.");
   // The caption must not keep promising a refresh that is not happening.
   expect(text).toContain("no longer refreshing");
-  expect(text).not.toContain("refreshed every 20 s");
+  expect(text).not.toContain("refreshed every");
 });
 
 test("given: an account read that cannot leave this device, should: say so rather than sit there", async () => {
