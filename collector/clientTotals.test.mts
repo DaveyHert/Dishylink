@@ -72,6 +72,27 @@ describe("ClientTotalsStore.observe arithmetic (single device)", () => {
     expect(rx(store)).toBe(1_500);
   });
 
+  // A device that sleeps or roams re-associates constantly, and the router
+  // restarts its counter each time. Billing every restart as a fresh counter's
+  // worth is what took a laptop whose counter reads under a gigabyte to a
+  // recorded terabyte in a fortnight.
+  it("ignores a restart claiming more traffic than the interval could carry", () => {
+    const store = tempStore();
+    obs(store, 1_000, 0, T0); // baseline
+    obs(store, 900_000_000, 0, T0 + 200); // +899999000, a plausible 200ms burst
+    // Backwards, and 800 MB is far past what 200ms of a 2.5 Gbps link holds:
+    // a stale reply repeating a counter already counted, not 800 MB of traffic.
+    obs(store, 800_000_000, 0, T0 + 400);
+    expect(rx(store)).toBe(899_999_000);
+  });
+
+  it("still counts a restart small enough to have happened in the interval", () => {
+    const store = tempStore();
+    obs(store, 900_000_000, 0, T0); // baseline
+    obs(store, 5_000, 0, T0 + 200); // genuine reconnect: counter restarted low
+    expect(rx(store)).toBe(5_000);
+  });
+
   it("starts a fresh bucket at the month boundary without carrying traffic over", () => {
     const store = tempStore();
     obs(store, 1_000, 0, T0); // baseline, July
@@ -338,6 +359,39 @@ describe("ClientTotalsStore seed / reset / remove / compact / persistence", () =
     const reopened = new ClientTotalsStore(path);
     reopened.observe(A, MAC, 1_200, 0, T0 + 2_000, "A", live(A)); // within gap → +200
     expect(reopened.totals(String(A))[0].rxBytes).toBe(200);
+  });
+
+  it("keeps the figure a snapshot from before the lifetime counter was showing", () => {
+    const path = tempPath();
+    writeFileSync(
+      path,
+      JSON.stringify({
+        version: 3,
+        totals: [
+          {
+            clientId: A,
+            macAddress: MAC,
+            name: "A",
+            rxBytes: 4_000,
+            txBytes: 900,
+            sinceMs: T0,
+            lastSeenMs: T0,
+            periodMonth: 2026 * 12 + 6,
+            prevRx: 10_000,
+            prevTx: 2_000,
+            lastPollMs: T0,
+          },
+        ],
+        sharedMacs: [],
+      }),
+    );
+    const store = new ClientTotalsStore(path);
+    const [total] = store.totals(String(A));
+    expect(total.rxBytes).toBe(4_000);
+    expect(total.txBytes).toBe(900);
+    // And the restored counters still delta against the next live reading.
+    store.observe(A, MAC, 10_500, 2_050, T0 + 1_000, "A", live(A));
+    expect(store.totals(String(A))[0].rxBytes).toBe(4_500);
   });
 
   it("starts fresh on a snapshot whose version it does not recognise", () => {
