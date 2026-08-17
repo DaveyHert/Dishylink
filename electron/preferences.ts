@@ -61,6 +61,13 @@ export interface Preferences {
    * process dials the router with no window open.
    */
   routerAddress: string | null;
+
+  /**
+   * The router's clientId for this machine, or null until the window has seen
+   * itself on the roster. What the self-pause refusal matches on when the write
+   * is made from off the router's network, where an address match means nothing.
+   */
+  selfClientId: number | null;
 }
 
 const DEFAULTS: Preferences = {
@@ -68,7 +75,15 @@ const DEFAULTS: Preferences = {
   menuBarThroughput: false,
   windowBounds: null,
   routerAddress: null,
+  selfClientId: null,
 };
+
+/** A clientId is a uint32 the router issued, so anything else on disk is not one. */
+function storedClientId(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 0xffff_ffff
+    ? value
+    : null;
+}
 
 function isWindowBounds(value: unknown): value is WindowBounds {
   if (typeof value !== "object" || value === null) return false;
@@ -107,6 +122,7 @@ export function preferences(): Preferences {
         typeof parsed.menuBarThroughput === "boolean" ? parsed.menuBarThroughput : false,
       windowBounds: isWindowBounds(parsed.windowBounds) ? parsed.windowBounds : null,
       routerAddress: storedAddress(parsed.routerAddress),
+      selfClientId: storedClientId(parsed.selfClientId),
     };
   } catch {
     // No file yet, or unreadable. Either way the defaults are the answer.

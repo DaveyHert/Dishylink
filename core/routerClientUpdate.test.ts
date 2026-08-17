@@ -55,7 +55,12 @@ function gatewayRouter({
             },
           },
   };
-  return { codec, callGateway: async (requestBytes: Uint8Array) => requestBytes, captured, encoded };
+  return {
+    codec,
+    callGateway: async (requestBytes: Uint8Array) => requestBytes,
+    captured,
+    encoded,
+  };
 }
 
 describe("buildRouterPauseRequest", () => {
@@ -196,8 +201,7 @@ describe("buildRouterPauseRequest", () => {
 
   test("given: a viewer off the router's network, should: leave the address guard silent", async () => {
     // Nothing on the roster can match a host that is somewhere else entirely, so
-    // this guard has nothing to say there — the device the user named for
-    // themselves is what refuses a remote self-pause, before this is reached.
+    // an identity carrying only addresses has nothing to say there.
     const router = gatewayRouter({
       clients: [{ clientId: 7, macAddress: "aa:bb:cc:XX:XX:XX", ipAddress: "192.168.1.5" }],
     });
@@ -212,6 +216,56 @@ describe("buildRouterPauseRequest", () => {
         elsewhere,
       ),
     ).resolves.toBe(router.encoded);
+  });
+
+  test("given: a remembered clientId, should: refuse a self-pause from off the network", async () => {
+    const router = gatewayRouter({
+      clients: [
+        { clientId: 7, macAddress: "aa:bb:cc:XX:XX:XX", ipAddress: "192.168.1.5" },
+        { clientId: 8, macAddress: "dd:ee:ff:XX:XX:XX", ipAddress: "192.168.1.6" },
+      ],
+    });
+    const elsewhere = {
+      macAddresses: ["de:ad:be:ef:00:01"],
+      ipAddresses: ["10.20.30.40"],
+      clientId: 7,
+    };
+
+    await expect(
+      prepareRouterClientUpdate(
+        router.codec,
+        { kind: "pause", clientId: 7, paused: true },
+        TARGET,
+        router.callGateway,
+        elsewhere,
+      ),
+    ).rejects.toThrow(/Refusing/);
+    await expect(
+      prepareRouterClientUpdate(
+        router.codec,
+        { kind: "pause", clientId: 8, paused: true },
+        TARGET,
+        router.callGateway,
+        elsewhere,
+      ),
+    ).resolves.toBe(router.encoded);
+  });
+
+  test("given: a remembered id the router has since renumbered, should: still refuse by address", async () => {
+    const router = gatewayRouter({
+      clients: [{ clientId: 9, macAddress: "aa:bb:cc:XX:XX:XX", ipAddress: "192.168.1.5" }],
+    });
+    const host = { macAddresses: ["aa:bb:cc:XX:XX:XX"], ipAddresses: ["192.168.1.5"], clientId: 7 };
+
+    await expect(
+      prepareRouterClientUpdate(
+        router.codec,
+        { kind: "pause", clientId: 9, paused: true },
+        TARGET,
+        router.callGateway,
+        host,
+      ),
+    ).rejects.toThrow(/Refusing/);
   });
 });
 

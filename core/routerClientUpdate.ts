@@ -133,6 +133,9 @@ export async function readRouterClients(
 /** True when this router client entry is the machine preparing the request.
  *  Both sides are normalised here so no caller has to pre-lowercase. */
 export function clientIsHost(client: WifiClientJson, host: HostNetworkIdentity): boolean {
+  // Either signal is enough: a kept id is stale for one roster read after a router
+  // reset renumbers every client, and the addresses cover that gap.
+  if (host.clientId !== undefined && client.clientId === host.clientId) return true;
   const macAddress = client.macAddress?.toLowerCase();
   if (macAddress && host.macAddresses.some((candidate) => candidate.toLowerCase() === macAddress))
     return true;
@@ -151,15 +154,14 @@ export function clientIsHost(client: WifiClientJson, host: HostNetworkIdentity):
  * confine pausing and renaming to a machine sitting on the router's own network,
  * which a kit in bypass does not have.
  *
- * A device that pauses itself cannot undo it — the official Starlink app hides
- * the control for the device it runs on, so recovery needs a second machine.
- * `hostIdentity` refuses that write here because the UI guard is bypassable, but
- * it only speaks for a host sharing the roster's network: this firmware masks the
- * low octets of every MAC it reports, so the match is by address alone, and a
- * viewer somewhere else matches nothing. A host that lets the user name their own
- * device covers that case before this is reached — the extension refuses any
- * pause aimed at the named one — and a host without that naming leaves a remote
- * self-pause unguarded. Renaming carries no such risk and is not guarded.
+ * A device that pauses itself cannot undo it: the official Starlink app hides the
+ * control for the device it runs on, so recovery needs a second machine.
+ * `hostIdentity` refuses that write here because the UI guard is bypassable. A
+ * `clientId` in it settles the question from anywhere. Without one the match is by
+ * address alone, since this firmware masks the low octets of every MAC it reports,
+ * and an address speaks only for a host on the network that issued it. A host that
+ * supplies neither leaves a remote self-pause unguarded. Renaming carries no such
+ * risk and is not guarded.
  */
 export async function prepareRouterClientUpdate(
   codec: RouterCodec,

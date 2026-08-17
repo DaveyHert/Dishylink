@@ -24,7 +24,12 @@ interface Window {
       method?: string;
       body?: unknown;
     }) => Promise<{ status: number; body: unknown }>;
-    selfIdentity: () => Promise<{ ipAddresses: string[]; macAddresses: string[] }>;
+    selfIdentity: () => Promise<{
+      ipAddresses: string[];
+      macAddresses: string[];
+      clientId?: number;
+    }>;
+    rememberSelfDevice?: (clientId: number) => Promise<void>;
     recorderInProcess: () => Promise<boolean>;
     // Where the host dials the router, with the default it falls back to. Absent
     // on hosts that reach it some other way, which is what keeps the setting from

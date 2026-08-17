@@ -28,7 +28,7 @@ import {
   type ThroughputSample,
 } from "./collector";
 import { startCloud, handleCloudRequest, signIn } from "./cloud";
-import { localNetworkIdentity } from "../core/hostNetworkIdentity";
+import { hostIdentity, rememberSelfDevice } from "./selfDevice";
 import { normalizeIpAddress, type RouterAddress } from "../core/ipAddress";
 import { ROUTER_LAN_ADDRESS } from "../core/dishClient";
 import { preferences, setPreference, onPreferencesChanged, type WindowBounds } from "./preferences";
@@ -502,8 +502,13 @@ function startAlertNotifications(): void {
 /** Facts about this host that only main can answer. */
 function registerHostHandlers(): void {
   // get_clients answers everyone identically, so "this device" can only be settled
-  // from the host's own interfaces.
-  ipcMain.handle("get-self-identity", () => localNetworkIdentity());
+  // from the host's own interfaces, plus the roster entry a window on the router's
+  // network has since matched to them.
+  ipcMain.handle("get-self-identity", () => hostIdentity());
+  // Written whenever the window resolves this machine on a roster read over the LAN.
+  ipcMain.handle("remember-self-device", (_event, clientId: unknown) => {
+    if (typeof clientId === "number") rememberSelfDevice(clientId);
+  });
   ipcMain.handle("get-recorder-in-process", () => !devServerUrl);
   ipcMain.handle("get-router-address", () => routerAddress());
   // An address that does not parse is rejected here rather than stored and

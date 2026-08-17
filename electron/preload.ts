@@ -28,6 +28,10 @@ contextBridge.exposeInMainWorld("dishlink", {
     ipcRenderer.send("open-external", url);
   },
   selfIdentity: (): Promise<HostNetworkIdentity> => ipcRenderer.invoke("get-self-identity"),
+  // The roster entry this machine matched over the LAN, kept by main so the
+  // self-pause refusal there still knows this device off that network.
+  rememberSelfDevice: (clientId: number): Promise<void> =>
+    ipcRenderer.invoke("remember-self-device", clientId),
   recorderInProcess: (): Promise<boolean> => ipcRenderer.invoke("get-recorder-in-process"),
   // Where this process dials the router. Main owns it because the recorder there
   // dials with no window open.
