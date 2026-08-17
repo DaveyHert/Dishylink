@@ -153,11 +153,13 @@ export function clientIsHost(client: WifiClientJson, host: HostNetworkIdentity):
  *
  * A device that pauses itself cannot undo it — the official Starlink app hides
  * the control for the device it runs on, so recovery needs a second machine.
- * `hostIdentity` refuses that write here because the UI guard is bypassable. It
- * can only speak for a host on the same network as the roster it is matching
- * against; a viewer somewhere else matches nothing, and the device that viewer
- * named for itself is what guards it there (the extension enforces exactly that
- * before this is reached). Renaming carries no such risk and is not guarded.
+ * `hostIdentity` refuses that write here because the UI guard is bypassable, but
+ * it only speaks for a host sharing the roster's network: this firmware masks the
+ * low octets of every MAC it reports, so the match is by address alone, and a
+ * viewer somewhere else matches nothing. A host that lets the user name their own
+ * device covers that case before this is reached — the extension refuses any
+ * pause aimed at the named one — and a host without that naming leaves a remote
+ * self-pause unguarded. Renaming carries no such risk and is not guarded.
  */
 export async function prepareRouterClientUpdate(
   codec: RouterCodec,
