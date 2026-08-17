@@ -534,15 +534,24 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
   useEffect(() => {
     if (!active || routerReachable !== false) return;
     let disposed = false;
-    void fetchCloudRouterConfig()
-      .then((config) => {
-        if (disposed || !config) return;
-        setWifiConfig(config);
-        setWifiConfigViaAccount(true);
-      })
-      .catch(() => {});
+    let timerId = 0;
+
+    // Retried until one read lands, then left alone. A single attempt would
+    // leave the settings that show this empty for the rest of an outage that
+    // began while the account happened to be out of reach.
+    const read = async () => {
+      const config = await fetchCloudRouterConfig().catch(() => null);
+      if (disposed || !config) return;
+      setWifiConfig(config);
+      setWifiConfigViaAccount(true);
+      window.clearInterval(timerId);
+    };
+
+    void read();
+    timerId = window.setInterval(() => void read(), CLOUD_CLIENTS_POLL_MS);
     return () => {
       disposed = true;
+      window.clearInterval(timerId);
     };
   }, [active, routerReachable, cloudSession]);
 

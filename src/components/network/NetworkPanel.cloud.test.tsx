@@ -231,6 +231,31 @@ test("given: the router answering again, should: bring the note back for the nex
   });
 });
 
+test("given: a roster on screen that has stopped refreshing, should: say so over the list", async () => {
+  setCloudHost({ transport: async () => ({ status: 428, body: {} }) });
+
+  await render(
+    <NetworkPanel
+      network={{
+        ...network,
+        accountRosterStatus: "failed",
+        accountRosterError: "Couldn't reach your Starlink account.",
+      }}
+      unreachable={unreachable}
+      onClose={() => {}}
+    />,
+  );
+
+  await vi.waitFor(() => expect(document.body.textContent).toContain("Nanoleaf"), {
+    timeout: 8_000,
+  });
+  const text = document.body.textContent ?? "";
+  expect(text).toContain("Couldn't reach your Starlink account.");
+  // The caption must not keep promising a refresh that is not happening.
+  expect(text).toContain("no longer refreshing");
+  expect(text).not.toContain("refreshed every 20 s");
+});
+
 test("given: an account read that cannot leave this device, should: say so rather than sit there", async () => {
   setCloudHost({
     transport: async ({ path }) =>
