@@ -97,6 +97,14 @@ export function RouterSettingsTab({
       {/* Branch on the diagnosis rather than on `routerReachable` again: it is
           derived from that same flag, so this cannot render an empty callout. */}
       {unreachable && <Callout tone='error'>{unreachable.message}</Callout>}
+      {/* Populated sections under that error would otherwise read as if the
+          router were answering after all. */}
+      {viaAccount && (
+        <Callout tone='info' className='mt-2.5'>
+          What follows is read through your Starlink account. Anything that dials the router
+          directly — a reboot — stays unavailable until it answers here.
+        </Callout>
+      )}
 
       {configKnown && (
         <>

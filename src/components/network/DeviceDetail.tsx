@@ -44,6 +44,7 @@ export function DeviceDetail({
   client,
   history,
   rates,
+  liveRatesAvailable,
   total,
   upstreamName,
   isThisDevice,
@@ -53,6 +54,10 @@ export function DeviceDetail({
   client: WifiClientJson;
   /** Live per-MAC rates from the hook's byte-delta tracker. */
   rates: Map<string, ThroughputRates>;
+  /** Whether that tracker is still being fed. It runs on the LAN, so a roster
+   *  sourced from the account has no current entry in it — only whatever it held
+   *  when the router last answered, which would be shown as if it were live. */
+  liveRatesAvailable: boolean;
   history: TelemetrySample[];
   /** This device's monthly usage from the historian's odometer, if it has one. */
   total?: ClientUsageTotal;
@@ -112,9 +117,10 @@ export function DeviceDetail({
   const name = displayName(client);
   // Byte-delta rate, so the headline number matches a speed test instead of the
   // router's 60-second average of it. Falls back until the second reading lands.
-  const liveRate = client.macAddress
-    ? rates.get(usageKey(client.clientId, client.macAddress))
-    : undefined;
+  const liveRate =
+    liveRatesAvailable && client.macAddress
+      ? rates.get(usageKey(client.clientId, client.macAddress))
+      : undefined;
   const downMbps = liveRate?.downMbps ?? throughputMbps(client.rxStats);
   const upMbps = liveRate?.upMbps ?? throughputMbps(client.txStats);
 

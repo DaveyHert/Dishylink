@@ -147,6 +147,7 @@ function NetworkPanelBody({
       <DeviceDetail
         client={selected}
         rates={network.rates}
+        liveRatesAvailable={!viaCloud}
         total={network.totals.get(usageKey(selected.clientId, selected.macAddress))}
         history={
           network.throughputHistory.get(usageKey(selected.clientId, selected.macAddress)) || []

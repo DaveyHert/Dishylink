@@ -22,6 +22,16 @@ const DEVICE_HANDLE = `${API}/SpaceX.API.Device.Device/Handle`;
 const REFRESH_TTL_MS = 60_000; // the Access.V1 token is short-lived; refresh at most this often
 const IDS_TTL_MS = 5 * 60_000; // account/service-line numbers change ~never; cache across routes
 
+/** The account has not named a router this write could target. Nothing is wrong
+ *  with the session or the connection: the telemetry feed is momentarily empty,
+ *  and it fills in again on its own — so this must not read as a fault. */
+export class ControllerUnknownError extends Error {
+  constructor() {
+    super("Starlink has not reported a router on this account yet");
+    this.name = "ControllerUnknownError";
+  }
+}
+
 /** The account session is gone or expired — the UI must prompt a reconnect, NOT
  *  show a generic "check your internet". Distinct from a real upstream fault. */
 export class SessionExpiredError extends Error {
@@ -101,6 +111,16 @@ export interface CloudHandlerOptions {
 /** The durable half of the session — without it a token refresh can't happen, so
  *  a session missing it is definitely not usable. */
 const SSO_COOKIE_RE = /Starlink\.Com\.Sso=/;
+
+/** Answered wherever a router has to be named, so every surface says the same
+ *  waitable thing rather than reporting an outage. */
+const NO_CONTROLLER: CloudResult = {
+  status: 503,
+  body: {
+    error: "router_not_reported",
+    message: "Starlink hasn't reported your router yet — try again in a minute.",
+  },
+};
 
 const NOT_CONNECTED: CloudResult = {
   status: 428,
@@ -369,11 +389,11 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
     const routers = Object.entries(deviceTelemetryFrom(telemetry)).filter(
       ([, device]) => device.kind === "router",
     );
-    if (routers.length === 0) throw new Error("no Starlink router on this account");
+    if (routers.length === 0) throw new ControllerUnknownError();
     const controller =
       routers.find(([, device]) => device.hops === 0) ??
       (routers.length === 1 ? routers[0] : undefined);
-    if (!controller) throw new Error("could not tell which router is the controller");
+    if (!controller) throw new ControllerUnknownError();
     cachedControllerId = controller[0];
     cachedControllerIdAt = Date.now();
     return cachedControllerId;
@@ -462,6 +482,7 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
     } catch (error) {
       // A dead session is a reconnect prompt (428), not a network fault (502).
       if (error instanceof SessionExpiredError) return NOT_CONNECTED;
+      if (error instanceof ControllerUnknownError) return NO_CONTROLLER;
       return { status: 502, body: { error: "upstream_failed", message: (error as Error).message } };
     }
   }
@@ -525,6 +546,7 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
       return { status: 200, body: { ok: true } };
     } catch (error) {
       if (error instanceof SessionExpiredError) return NOT_CONNECTED;
+      if (error instanceof ControllerUnknownError) return NO_CONTROLLER;
       if (error instanceof DOMException && error.name === "TimeoutError") {
         return {
           status: 504,
@@ -683,6 +705,7 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
       return { status: 200, body: { ok: true } };
     } catch (error) {
       if (error instanceof SessionExpiredError) return NOT_CONNECTED;
+      if (error instanceof ControllerUnknownError) return NO_CONTROLLER;
       // A subnet change and a bypass switch both reconfigure the LAN carrying
       // them, so a write that takes effect kills its own reply. How that surfaces
       // is the host's business: a deadline where the request is left hanging, a
