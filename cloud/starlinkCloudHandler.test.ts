@@ -175,16 +175,19 @@ describe("createCloudHandler pauseClient", () => {
     let authCalls = 0;
     let deviceCalls = 0;
     const responseFrame = new Uint8Array([0, 0, 0, 0, 0]);
-    const doFetch = gateway(async () => {
-      deviceCalls++;
-      if (deviceCalls === 1) return res(401);
-      return {
-        status: 200,
-        ok: true,
-        headers: { get: () => null },
-        arrayBuffer: async () => responseFrame.buffer,
-      } as unknown as Response;
-    }, () => authCalls++);
+    const doFetch = gateway(
+      async () => {
+        deviceCalls++;
+        if (deviceCalls === 1) return res(401);
+        return {
+          status: 200,
+          ok: true,
+          headers: { get: () => null },
+          arrayBuffer: async () => responseFrame.buffer,
+        } as unknown as Response;
+      },
+      () => authCalls++,
+    );
     const handler = createCloudHandler({
       fetch: doFetch,
       readCookie: () => SESSION,
