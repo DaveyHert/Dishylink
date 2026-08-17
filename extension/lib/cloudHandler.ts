@@ -74,7 +74,8 @@ const cloudHandler = createCloudHandler({
     ourCookie = null;
     void browser.storage.local.remove(SESSION_KEY);
   },
-  prepareDeviceUpdate: async (update) => prepareRouterClientUpdate(await loadRouter(), update),
+  prepareDeviceUpdate: async (update, targetId, callGateway) =>
+    prepareRouterClientUpdate(await loadRouter(), update, targetId, callGateway),
   prepareRouterConfigUpdate: async (update, targetId, callGateway) => {
     const client = await loadRouter();
     const networks = await readCurrentNetworks(update, client, targetId, callGateway);

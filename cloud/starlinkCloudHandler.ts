@@ -51,9 +51,16 @@ export interface CloudHandlerOptions {
   retryDelayMs?: number;
   /** Maximum time for each remote router mutation attempt. */
   deviceCallTimeoutMs?: number;
-  /** Trusted host callback: reads the local router and encodes exactly one
-   *  client update. Renderer-provided protobuf is never accepted. */
-  prepareDeviceUpdate?: (update: RouterClientUpdate) => Promise<Uint8Array>;
+  /** Trusted host callback: reads what the write must preserve — through the same
+   *  gateway, against the target this handler resolved from the account — and
+   *  encodes exactly one client update. Renderer-provided protobuf is never
+   *  accepted. Touching no LAN is what lets a bypassed router, invisible on the
+   *  local network by definition, still have its devices paused and renamed. */
+  prepareDeviceUpdate?: (
+    update: RouterClientUpdate,
+    targetId: string,
+    callGateway: (requestBytes: Uint8Array) => Promise<Uint8Array>,
+  ) => Promise<Uint8Array>;
   /** Trusted host callback: reads the local dish's identity and encodes exactly
    *  one config change. Renderer-provided protobuf is never accepted. */
   prepareDishConfigUpdate?: (changes: DishConfigJson) => Promise<Uint8Array>;
@@ -262,20 +269,27 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
     }
   }
 
-  async function apiGet(path: string, cookie: string): Promise<unknown> {
+  async function apiGet(path: string, cookie: string, abortSignal?: AbortSignal): Promise<unknown> {
     const response = await doFetch(`${API}${path}`, {
       headers: { cookie, accept: "application/json" },
+      signal: abortSignal,
     });
     if (response.status === 401 || response.status === 403) throw new SessionExpiredError();
     if (!response.ok) throw new Error(`GET ${path} → HTTP ${response.status}`);
     return response.json();
   }
 
-  async function apiPost(path: string, cookie: string, body: unknown): Promise<unknown> {
+  async function apiPost(
+    path: string,
+    cookie: string,
+    body: unknown,
+    abortSignal?: AbortSignal,
+  ): Promise<unknown> {
     const response = await doFetch(`${API}${path}`, {
       method: "POST",
       headers: { cookie, accept: "application/json", "content-type": "application/json" },
       body: JSON.stringify(body),
+      signal: abortSignal,
     });
     if (response.status === 401 || response.status === 403) throw new SessionExpiredError();
     if (!response.ok) throw new Error(`POST ${path} → HTTP ${response.status}`);
@@ -312,11 +326,15 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
 
   /** Resolve the account number + primary service line the UI hangs everything
    *  off. Cached briefly so /cloud/account and /cloud/usage don't each re-list. */
-  async function resolveIds(cookie: string): Promise<{ acc: string; sl: string }> {
+  async function resolveIds(
+    cookie: string,
+    abortSignal?: AbortSignal,
+  ): Promise<{ acc: string; sl: string }> {
     if (cachedIds && Date.now() - cachedIdsAt < IDS_TTL_MS) return cachedIds;
     const list = (await apiGet(
       "/webagg/v2/accounts/service-lines?limit=100&page=0&isConverting=false&serviceAddressId=&onlyActive=false&searchString=&onlyNoUts=false",
       cookie,
+      abortSignal,
     )) as { content?: { results?: ServiceLineResult[] } };
     const first = list.content?.results?.[0];
     if (!first?.serviceLineNumber || !first?.accountReferenceId) {
@@ -337,14 +355,17 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
    * whole reason a bypassed kit, which answers nothing on the LAN, can still be
    * configured.
    */
-  async function resolveControllerId(cookie: string): Promise<string> {
+  async function resolveControllerId(cookie: string, abortSignal?: AbortSignal): Promise<string> {
     if (cachedControllerId && Date.now() - cachedControllerIdAt < IDS_TTL_MS) {
       return cachedControllerId;
     }
-    const { acc } = await resolveIds(cookie);
-    const telemetry = await apiPost("/device-data/cache/v1/telemetry", cookie, {
-      accountNumber: acc,
-    });
+    const { acc } = await resolveIds(cookie, abortSignal);
+    const telemetry = await apiPost(
+      "/device-data/cache/v1/telemetry",
+      cookie,
+      { accountNumber: acc },
+      abortSignal,
+    );
     const routers = Object.entries(deviceTelemetryFrom(telemetry)).filter(
       ([, device]) => device.kind === "router",
     );
@@ -369,7 +390,7 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
   ): Promise<T> {
     const abortSignal = AbortSignal.timeout(deviceCallTimeoutMs);
     return withFreshCookie(async (cookie) => {
-      const targetId = await resolveControllerId(cookie);
+      const targetId = await resolveControllerId(cookie, abortSignal);
       return run(targetId, (requestBytes) =>
         grpcWebUnaryCall(DEVICE_HANDLE, requestBytes, abortSignal, {
           fetch: doFetch,
@@ -491,20 +512,16 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
       // mutation cannot be built from a snapshot predating an earlier write.
       if (!prepareDeviceUpdate)
         return { status: 503, body: { error: "device_update_unavailable" } };
-      const requestBytes = await prepareDeviceUpdate(update);
-      const abortSignal = AbortSignal.timeout(deviceCallTimeoutMs);
-      await withFreshCookie(async (cookie) => {
+      await withRouterGateway(async (targetId, callGateway) => {
+        const requestBytes = await prepareDeviceUpdate(update, targetId, callGateway);
         try {
-          await grpcWebUnaryCall(DEVICE_HANDLE, requestBytes, abortSignal, {
-            fetch: doFetch,
-            headers: { cookie },
-          });
+          await callGateway(requestBytes);
         } catch (error) {
           if (error instanceof GrpcWebError && error.grpcStatus === 16)
             throw new SessionExpiredError();
           throw error;
         }
-      }, abortSignal);
+      });
       return { status: 200, body: { ok: true } };
     } catch (error) {
       if (error instanceof SessionExpiredError) return NOT_CONNECTED;
@@ -647,7 +664,7 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
         return { status: 503, body: { error: "router_config_update_unavailable" } };
       const abortSignal = AbortSignal.timeout(deviceCallTimeoutMs);
       await withFreshCookie(async (cookie) => {
-        const targetId = await resolveControllerId(cookie);
+        const targetId = await resolveControllerId(cookie, abortSignal);
         const callGateway = (requestBytes: Uint8Array) =>
           grpcWebUnaryCall(DEVICE_HANDLE, requestBytes, abortSignal, {
             fetch: doFetch,

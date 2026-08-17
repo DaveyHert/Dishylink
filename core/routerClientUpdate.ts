@@ -1,10 +1,6 @@
-import type {
-  DishClient,
-  WifiClientConfigJson,
-  WifiClientJson,
-  WifiNetworkConfigJson,
-} from "./dishClient";
+import type { WifiClientConfigJson, WifiClientJson, WifiNetworkConfigJson } from "./dishClient";
 import type { HostNetworkIdentity } from "./hostNetworkIdentity";
+import { readRouterWifiConfig } from "./routerConfigUpdate";
 
 const PERMANENT_GROUP = "_permanent";
 const WEEK_MINUTES = 7 * 24 * 60;
@@ -104,8 +100,15 @@ export function buildRouterRenameRequest(
  *  usable with any codec rather than only the client dialling the LAN. */
 interface RouterCodec {
   encodeRequest(requestJson: object): Uint8Array;
-  decodeResponse(responseBytes: Uint8Array): { wifiGetClients?: { clients?: WifiClientJson[] } };
+  decodeResponse(responseBytes: Uint8Array): {
+    wifiGetClients?: { clients?: WifiClientJson[] };
+    wifiGetConfig?: { wifiConfig?: WifiNetworkConfigJson };
+  };
 }
+
+/** One encoded request out to the router and its reply back, through whatever
+ *  path the caller has. */
+type CallGateway = (requestBytes: Uint8Array) => Promise<Uint8Array>;
 
 /**
  * The devices the router currently reports, over the caller's gateway instead of
@@ -119,7 +122,7 @@ interface RouterCodec {
 export async function readRouterClients(
   codec: RouterCodec,
   targetId: string,
-  callGateway: (requestBytes: Uint8Array) => Promise<Uint8Array>,
+  callGateway: CallGateway,
 ): Promise<WifiClientJson[]> {
   const reply = codec.decodeResponse(
     await callGateway(codec.encodeRequest({ targetId, wifiGetClients: {} })),
@@ -139,24 +142,32 @@ export function clientIsHost(client: WifiClientJson, host: HostNetworkIdentity):
   );
 }
 
-/** Trusted-host preparation: source target, config, and client identity directly
- *  from the local router immediately before encoding the cloud write.
+/**
+ * Trusted-host preparation: read the config and the roster this write has to be
+ * built from, then encode it — everything over the caller's gateway.
  *
- *  A device that pauses itself cannot undo it — the official Starlink app hides
- *  the control for the device it runs on, so recovery needs a second machine.
- *  `hostIdentity` refuses that write here because the UI guard is bypassable.
- *  Renaming carries no such risk and is not guarded. */
+ * Nothing here touches the LAN. The write cannot go that way — current firmware
+ * answers a LAN write with grpc status 7 — and sourcing its inputs there would
+ * confine pausing and renaming to a machine sitting on the router's own network,
+ * which a kit in bypass does not have.
+ *
+ * A device that pauses itself cannot undo it — the official Starlink app hides
+ * the control for the device it runs on, so recovery needs a second machine.
+ * `hostIdentity` refuses that write here because the UI guard is bypassable. It
+ * can only speak for a host on the same network as the roster it is matching
+ * against; a viewer somewhere else matches nothing, and the device that viewer
+ * named for itself is what guards it there (the extension enforces exactly that
+ * before this is reached). Renaming carries no such risk and is not guarded.
+ */
 export async function prepareRouterClientUpdate(
-  router: DishClient,
+  codec: RouterCodec,
   update: RouterClientUpdate,
+  targetId: string,
+  callGateway: CallGateway,
   hostIdentity?: HostNetworkIdentity,
 ): Promise<Uint8Array> {
-  const [config, status] = await Promise.all([
-    router.getWifiConfig(AbortSignal.timeout(5_000)),
-    router.getRouterStatus(AbortSignal.timeout(5_000)),
-  ]);
-  const targetId = status.deviceInfo?.id;
-  if (!targetId) throw new Error("Starlink router identity is unavailable");
+  const config = await readRouterWifiConfig(codec, targetId, callGateway);
+  if (!config) throw new Error("Starlink router reported no configuration");
 
   if (update.kind === "rename") {
     // A device with a saved entry needs no roster, which is what lets an offline
@@ -166,22 +177,22 @@ export async function prepareRouterClientUpdate(
     );
     const liveClient = saved
       ? undefined
-      : (await router.getWifiClients(AbortSignal.timeout(5_000))).find(
+      : (await readRouterClients(codec, targetId, callGateway)).find(
           (client) => client.clientId === update.clientId,
         );
-    return router.encodeRequest(
+    return codec.encodeRequest(
       buildRouterRenameRequest(targetId, config, update.clientId, update.givenName, liveClient),
     );
   }
 
   // Pause needs the live roster: it keys on clientId, which only exists while the
   // device is associated, and the host guard matches on the addresses it reports.
-  const clients = await router.getWifiClients(AbortSignal.timeout(5_000));
+  const clients = await readRouterClients(codec, targetId, callGateway);
   const liveClient = clients.find((client) => client.clientId === update.clientId);
   if (!liveClient) throw new Error("Device is no longer connected to the router");
   if (update.paused && hostIdentity && clientIsHost(liveClient, hostIdentity))
     throw new Error("Refusing to pause the device Dishylink is running on");
-  return router.encodeRequest(
+  return codec.encodeRequest(
     buildRouterPauseRequest(targetId, config, update.clientId, update.paused, liveClient),
   );
 }

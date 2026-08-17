@@ -135,24 +135,23 @@ describe("createCloudHandler pauseClient", () => {
     const responseMessage = new Uint8Array([10, 0]);
     const responseFrame = new Uint8Array([0, 0, 0, 0, responseMessage.length, ...responseMessage]);
     const captured: { url: string; init?: RequestInit } = { url: "" };
-    const doFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url === AUTH_URL) return res(200);
-      captured.url = url;
-      captured.init = init;
-      return {
-        status: 200,
-        ok: true,
-        headers: { get: () => null },
-        arrayBuffer: async () => responseFrame.buffer,
-      } as unknown as Response;
-    }) as typeof fetch;
     const handler = createCloudHandler({
-      fetch: doFetch,
+      fetch: gateway(async (init, url) => {
+        captured.url = url ?? "";
+        captured.init = init;
+        return {
+          status: 200,
+          ok: true,
+          headers: { get: () => null },
+          arrayBuffer: async () => responseFrame.buffer,
+        } as unknown as Response;
+      }),
       readCookie: () => SESSION,
       retryDelayMs: 0,
-      prepareDeviceUpdate: async (update) => {
+      prepareDeviceUpdate: async (update, targetId) => {
         expect(update).toEqual({ kind: "pause", clientId: 7, paused: true });
+        // Named by the account, not by anything read off the local network.
+        expect(targetId).toBe(TARGET);
         return request;
       },
     });
@@ -176,11 +175,7 @@ describe("createCloudHandler pauseClient", () => {
     let authCalls = 0;
     let deviceCalls = 0;
     const responseFrame = new Uint8Array([0, 0, 0, 0, 0]);
-    const doFetch = (async (input: RequestInfo | URL) => {
-      if (String(input) === AUTH_URL) {
-        authCalls++;
-        return res(200);
-      }
+    const doFetch = gateway(async () => {
       deviceCalls++;
       if (deviceCalls === 1) return res(401);
       return {
@@ -189,7 +184,7 @@ describe("createCloudHandler pauseClient", () => {
         headers: { get: () => null },
         arrayBuffer: async () => responseFrame.buffer,
       } as unknown as Response;
-    }) as typeof fetch;
+    }, () => authCalls++);
     const handler = createCloudHandler({
       fetch: doFetch,
       readCookie: () => SESSION,
@@ -273,8 +268,7 @@ describe("createCloudHandler pauseClient", () => {
     const responseFrame = new Uint8Array([0, 0, 0, 0, 0]);
     let releaseFirstWrite: (() => void) | undefined;
     let deviceCalls = 0;
-    const doFetch = (async (input: RequestInfo | URL) => {
-      if (String(input) === AUTH_URL) return res(200);
+    const doFetch = gateway(async () => {
       deviceCalls++;
       if (deviceCalls === 1) {
         await new Promise<void>((resolve) => {
@@ -287,7 +281,7 @@ describe("createCloudHandler pauseClient", () => {
         headers: { get: () => null },
         arrayBuffer: async () => responseFrame.buffer,
       } as unknown as Response;
-    }) as typeof fetch;
+    });
     const prepared: number[] = [];
     const handler = createCloudHandler({
       fetch: doFetch,
@@ -441,11 +435,18 @@ describe("createCloudHandler updateDishConfig", () => {
 const TARGET = "Router-010000000000000001B31340";
 
 /** Answers everything the controller lookup needs, then defers the device
- *  gateway to `onDevice`. */
-function gateway(onDevice: (init?: RequestInit) => Promise<Response>) {
+ *  gateway to `onDevice`. `onAuth` counts token refreshes for the tests that
+ *  care how many there were. */
+function gateway(
+  onDevice: (init?: RequestInit, url?: string) => Promise<Response>,
+  onAuth?: () => void,
+) {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    if (url === AUTH_URL) return res(200);
+    if (url === AUTH_URL) {
+      onAuth?.();
+      return res(200);
+    }
     if (url.includes("service-lines"))
       return res(200, {
         content: { results: [{ serviceLineNumber: "SL-1", accountReferenceId: "ACC-1" }] },
@@ -459,7 +460,7 @@ function gateway(onDevice: (init?: RequestInit) => Promise<Response>) {
           values: [["r", TARGET, 0]],
         },
       });
-    return onDevice(init);
+    return onDevice(init, url);
   }) as typeof fetch;
 }
 

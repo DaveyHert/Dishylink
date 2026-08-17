@@ -77,8 +77,14 @@ export function startCloud(rendererRoot: string): void {
     readCookie,
     writeCookie,
     clearCookie,
-    prepareDeviceUpdate: async (update) =>
-      prepareRouterClientUpdate(await loadRouter(), update, localNetworkIdentity()),
+    prepareDeviceUpdate: async (update, targetId, callGateway) =>
+      prepareRouterClientUpdate(
+        await loadRouter(),
+        update,
+        targetId,
+        callGateway,
+        localNetworkIdentity(),
+      ),
     prepareDishConfigUpdate: async (changes) => {
       dishPromise ??= DishClient.load("dish", {
         handleUrl: DISH_LAN_HANDLE_URL,
