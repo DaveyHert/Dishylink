@@ -50,11 +50,16 @@ function controllerBypassed(account: CloudAccount | null): boolean | null {
 export function RouterSettingsTab({
   wifiConfig,
   routerReachable,
+  viaAccount,
   unreachable,
   onConfigChanged,
 }: {
   wifiConfig: WifiNetworkConfigJson | null;
   routerReachable: boolean | null;
+  /** Whether `wifiConfig` was read through the account because the LAN could not
+   *  serve it. What it says is the same either way; what still cannot be done
+   *  from here is anything that dials the router directly. */
+  viaAccount: boolean;
   /** Why the router is silent, when it is. Null while it is answering. */
   unreachable: RouterUnreachable | null;
   /** For a write that leaves the router up, which nothing else would re-read.
@@ -71,16 +76,20 @@ export function RouterSettingsTab({
   // Read from the account rather than the router: a bypassed router answers
   // nothing on the LAN, so `wifiConfig` is silent exactly when the answer is yes.
   const bypassed = controllerBypassed(account.data);
-  // The account is asked only when the router itself cannot answer, which costs a
-  // round trip to Starlink for something the LAN gives away.
-  const lanSubnet = wifiConfig?.networks?.[0]?.ipv4 ?? null;
+  // Whichever read landed already carries it; the dedicated subnet route is only
+  // for when neither did.
+  const configSubnet = wifiConfig?.networks?.[0]?.ipv4 ?? null;
   const { data: cloudSubnet, reload: rereadCloudSubnet } = useCloudRouterSubnet(
-    accountConnected && lanSubnet === null,
+    accountConnected && configSubnet === null,
   );
   // Only the rows that ask the router something wait on it. The address is how a
   // silent router gets found again, so it stays live through every state below.
   const answering = routerReachable !== null && !unreachable && wifiConfig !== null;
-  const showDns = answering && !wifiConfig?.customDnsDisabled;
+  // What the config says is worth showing however it arrived — and the writes
+  // beside it go through the account, not the LAN, so they were never waiting on
+  // the router to answer here in the first place.
+  const configKnown = wifiConfig !== null && (answering || viaAccount);
+  const showDns = configKnown && !wifiConfig?.customDnsDisabled;
 
   return (
     <>
@@ -89,7 +98,7 @@ export function RouterSettingsTab({
           derived from that same flag, so this cannot render an empty callout. */}
       {unreachable && <Callout tone='error'>{unreachable.message}</Callout>}
 
-      {answering && (
+      {configKnown && (
         <>
           <SectionLabel>Networks</SectionLabel>
           {ssids.map(([ssid, bands]) => (
@@ -179,7 +188,7 @@ export function RouterSettingsTab({
         )}
         <SectionLabel>Network</SectionLabel>
         <SubnetSection
-          currentSubnet={lanSubnet ?? cloudSubnet}
+          currentSubnet={configSubnet ?? cloudSubnet}
           disabled={!accountConnected}
           onSave={async (subnet, password) => {
             await applyRouterConfigUpdate({ kind: "subnet", password, subnet });

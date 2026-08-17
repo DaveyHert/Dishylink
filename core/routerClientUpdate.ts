@@ -100,6 +100,33 @@ export function buildRouterRenameRequest(
   );
 }
 
+/** The bit of DishClient a gateway read needs, named structurally so this stays
+ *  usable with any codec rather than only the client dialling the LAN. */
+interface RouterCodec {
+  encodeRequest(requestJson: object): Uint8Array;
+  decodeResponse(responseBytes: Uint8Array): { wifiGetClients?: { clients?: WifiClientJson[] } };
+}
+
+/**
+ * The devices the router currently reports, over the caller's gateway instead of
+ * the LAN.
+ *
+ * The roster is the same one the LAN serves — same clientIds, same masked MACs,
+ * same byte counters — so everything joined on it downstream still joins. What
+ * differs is reach: this answers for a router the local network cannot see, and
+ * from a machine that is not on that network at all.
+ */
+export async function readRouterClients(
+  codec: RouterCodec,
+  targetId: string,
+  callGateway: (requestBytes: Uint8Array) => Promise<Uint8Array>,
+): Promise<WifiClientJson[]> {
+  const reply = codec.decodeResponse(
+    await callGateway(codec.encodeRequest({ targetId, wifiGetClients: {} })),
+  );
+  return reply.wifiGetClients?.clients ?? [];
+}
+
 /** True when this router client entry is the machine preparing the request.
  *  Both sides are normalised here so no caller has to pre-lowercase. */
 export function clientIsHost(client: WifiClientJson, host: HostNetworkIdentity): boolean {

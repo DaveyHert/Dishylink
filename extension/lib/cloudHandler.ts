@@ -27,9 +27,14 @@ import {
   buildRouterConfigRequest,
   readCurrentNetworks,
   readCurrentSubnet,
+  readRouterWifiConfig,
   type RouterConfigUpdate,
 } from "@core/routerConfigUpdate";
-import { prepareRouterClientUpdate, type RouterClientUpdate } from "@core/routerClientUpdate";
+import {
+  prepareRouterClientUpdate,
+  readRouterClients,
+  type RouterClientUpdate,
+} from "@core/routerClientUpdate";
 import type { CloudReply, CloudRequest } from "@/lib/cloudHost";
 import { dishHandleUrl, routerHandleUrl } from "./endpoints";
 import { loadSelfDeviceClientId } from "./selfDevice";
@@ -46,6 +51,17 @@ let dishPromise: Promise<DishClient> | null = null;
 let cachedRouterUrl = "";
 let cachedDishUrl = "";
 
+/** The router client every router callback needs, reloaded whenever the address
+ *  changes. The gateway callbacks need it only as a codec — loading dials nothing. */
+function loadRouter(): Promise<DishClient> {
+  const routerUrl = routerHandleUrl();
+  if (routerUrl !== cachedRouterUrl) {
+    cachedRouterUrl = routerUrl;
+    routerPromise = null;
+  }
+  return (routerPromise ??= DishClient.load("router", { handleUrl: routerUrl }));
+}
+
 const cloudHandler = createCloudHandler({
   fetch: ((input: RequestInfo | URL, init?: RequestInit) =>
     fetch(input, { ...init, credentials: "include" })) as typeof fetch,
@@ -58,35 +74,18 @@ const cloudHandler = createCloudHandler({
     ourCookie = null;
     void browser.storage.local.remove(SESSION_KEY);
   },
-  prepareDeviceUpdate: async (update) => {
-    const routerUrl = routerHandleUrl();
-    if (routerUrl !== cachedRouterUrl) {
-      cachedRouterUrl = routerUrl;
-      routerPromise = null;
-    }
-    routerPromise ??= DishClient.load("router", { handleUrl: routerUrl });
-    return prepareRouterClientUpdate(await routerPromise, update);
-  },
+  prepareDeviceUpdate: async (update) => prepareRouterClientUpdate(await loadRouter(), update),
   prepareRouterConfigUpdate: async (update, targetId, callGateway) => {
-    const routerUrl = routerHandleUrl();
-    if (routerUrl !== cachedRouterUrl) {
-      cachedRouterUrl = routerUrl;
-      routerPromise = null;
-    }
-    routerPromise ??= DishClient.load("router", { handleUrl: routerUrl });
-    const client = await routerPromise;
+    const client = await loadRouter();
     const networks = await readCurrentNetworks(update, client, targetId, callGateway);
     return client.encodeRequest(buildRouterConfigRequest(targetId, update, networks));
   },
-  readRouterSubnet: async (targetId, callGateway) => {
-    const routerUrl = routerHandleUrl();
-    if (routerUrl !== cachedRouterUrl) {
-      cachedRouterUrl = routerUrl;
-      routerPromise = null;
-    }
-    routerPromise ??= DishClient.load("router", { handleUrl: routerUrl });
-    return readCurrentSubnet(await routerPromise, targetId, callGateway);
-  },
+  readRouterSubnet: async (targetId, callGateway) =>
+    readCurrentSubnet(await loadRouter(), targetId, callGateway),
+  readRouterClients: async (targetId, callGateway) =>
+    readRouterClients(await loadRouter(), targetId, callGateway),
+  readRouterConfig: async (targetId, callGateway) =>
+    readRouterWifiConfig(await loadRouter(), targetId, callGateway),
   prepareDishConfigUpdate: async (changes) => {
     const dishUrl = dishHandleUrl();
     if (dishUrl !== cachedDishUrl) {

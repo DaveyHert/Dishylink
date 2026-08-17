@@ -76,6 +76,19 @@ export interface CloudHandlerOptions {
     targetId: string,
     callGateway: (requestBytes: Uint8Array) => Promise<Uint8Array>,
   ) => Promise<string | null>;
+  /** Trusted host callback: reads the connected-device roster through the same
+   *  gateway — the one reader that answers away from home, and for a router the
+   *  LAN cannot see. */
+  readRouterClients?: (
+    targetId: string,
+    callGateway: (requestBytes: Uint8Array) => Promise<Uint8Array>,
+  ) => Promise<unknown[]>;
+  /** Trusted host callback: reads the router's whole WiFi config through the same
+   *  gateway — SSIDs, mesh nodes, saved device names. */
+  readRouterConfig?: (
+    targetId: string,
+    callGateway: (requestBytes: Uint8Array) => Promise<Uint8Array>,
+  ) => Promise<unknown>;
 }
 
 /** The durable half of the session — without it a token refresh can't happen, so
@@ -163,6 +176,8 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
   const prepareDishConfigUpdate = options.prepareDishConfigUpdate;
   const prepareRouterConfigUpdate = options.prepareRouterConfigUpdate;
   const readRouterSubnet = options.readRouterSubnet;
+  const readRouterClients = options.readRouterClients;
+  const readRouterConfig = options.readRouterConfig;
 
   let cachedCookie: string | null = null;
   let cachedAt = 0;
@@ -343,6 +358,27 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
     return cachedControllerId;
   }
 
+  /** Run one bounded read against the account's controller: resolve the target,
+   *  hand the callback a gateway bound to a fresh token, and let a session miss
+   *  heal the way every other call here does. */
+  async function withRouterGateway<T>(
+    run: (
+      targetId: string,
+      callGateway: (requestBytes: Uint8Array) => Promise<Uint8Array>,
+    ) => Promise<T>,
+  ): Promise<T> {
+    const abortSignal = AbortSignal.timeout(deviceCallTimeoutMs);
+    return withFreshCookie(async (cookie) => {
+      const targetId = await resolveControllerId(cookie);
+      return run(targetId, (requestBytes) =>
+        grpcWebUnaryCall(DEVICE_HANDLE, requestBytes, abortSignal, {
+          fetch: doFetch,
+          headers: { cookie },
+        }),
+      );
+    }, abortSignal);
+  }
+
   /** `route` is the path without query, e.g. "/cloud/account". */
   async function handle(route: string): Promise<CloudResult> {
     if (!readCookie()) return NOT_CONNECTED;
@@ -380,17 +416,26 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
       }
       if (route === "/cloud/router-subnet") {
         if (!readRouterSubnet) return { status: 503, body: { error: "router_subnet_unavailable" } };
-        const abortSignal = AbortSignal.timeout(deviceCallTimeoutMs);
-        const subnet = await withFreshCookie(async (cookie) => {
-          const targetId = await resolveControllerId(cookie);
-          return readRouterSubnet(targetId, (requestBytes) =>
-            grpcWebUnaryCall(DEVICE_HANDLE, requestBytes, abortSignal, {
-              fetch: doFetch,
-              headers: { cookie },
-            }),
-          );
-        }, abortSignal);
+        const subnet = await withRouterGateway(readRouterSubnet);
         return { status: 200, body: { subnet } };
+      }
+      // The roster the LAN normally serves, sourced from the account instead. It
+      // is the same list — the router reports its devices to Starlink whether or
+      // not this machine can reach it — so it answers the two cases the LAN read
+      // cannot: away from home, and a router the local network cannot see.
+      if (route === "/cloud/router-clients") {
+        if (!readRouterClients)
+          return { status: 503, body: { error: "router_clients_unavailable" } };
+        const clients = await withRouterGateway(readRouterClients);
+        return { status: 200, body: { clients } };
+      }
+      // GET reads the config the writes on this route change. Names, mesh nodes,
+      // and SSIDs all live here, so a roster read from the account has somewhere
+      // to get them from.
+      if (route === "/cloud/router-config") {
+        if (!readRouterConfig) return { status: 503, body: { error: "router_config_unavailable" } };
+        const wifiConfig = await withRouterGateway(readRouterConfig);
+        return { status: 200, body: { wifiConfig } };
       }
       return { status: 404, body: { error: "unknown_cloud_route", route } };
     } catch (error) {

@@ -4,6 +4,7 @@ import {
   buildRouterPauseRequest,
   buildRouterRenameRequest,
   prepareRouterClientUpdate,
+  readRouterClients,
 } from "./routerClientUpdate";
 
 const TARGET = "Router-010000000000000001B31340";
@@ -228,5 +229,36 @@ describe("buildRouterRenameRequest", () => {
       targetId: TARGET,
       wifiSetConfig: { wifiConfig: { applyClientConfigs: true } },
     });
+  });
+});
+
+describe("readRouterClients", () => {
+  test("given: a gateway reply, should: name the target and serve the roster it carries", async () => {
+    let request: object | undefined;
+    const codec = {
+      encodeRequest: (value: object) => {
+        request = value;
+        return new Uint8Array([9]);
+      },
+      decodeResponse: () => ({
+        wifiGetClients: { clients: [{ clientId: 7, macAddress: "aa:bb:cc:XX:XX:XX" }] },
+      }),
+    };
+
+    await expect(readRouterClients(codec, TARGET, async () => new Uint8Array())).resolves.toEqual([
+      { clientId: 7, macAddress: "aa:bb:cc:XX:XX:XX" },
+    ]);
+    expect(request).toEqual({ targetId: TARGET, wifiGetClients: {} });
+  });
+
+  test("given: a router reporting nobody, should: answer with an empty roster", async () => {
+    const codec = {
+      encodeRequest: () => new Uint8Array([9]),
+      decodeResponse: () => ({}),
+    };
+
+    await expect(readRouterClients(codec, TARGET, async () => new Uint8Array())).resolves.toEqual(
+      [],
+    );
   });
 });
