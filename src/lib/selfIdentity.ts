@@ -79,7 +79,12 @@ async function fromHostChoice(): Promise<SelfIdentity | null> {
 }
 
 interface DishlinkBridge {
-  selfIdentity?: () => Promise<{ ipAddresses?: string[]; macAddresses?: string[] }>;
+  selfIdentity?: () => Promise<{
+    ipAddresses?: string[];
+    macAddresses?: string[];
+    clientId?: number;
+  }>;
+  rememberSelfDevice?: (clientId: number) => Promise<void>;
 }
 async function fromElectron(): Promise<SelfIdentity | null> {
   const bridge = (globalThis as { dishlink?: DishlinkBridge }).dishlink;
@@ -89,6 +94,7 @@ async function fromElectron(): Promise<SelfIdentity | null> {
     return {
       ips: clean(identity.ipAddresses ?? []),
       macs: (identity.macAddresses ?? []).map((macAddress) => macAddress.toLowerCase()),
+      clientId: identity.clientId,
       // Read from this process's own os.networkInterfaces(), and the desktop
       // app makes its LAN requests from that same process.
       describesHost: true,
@@ -129,17 +135,35 @@ export function selfIdentified(self: SelfIdentity): boolean {
   return self.clientId !== undefined || self.ips.length > 0 || self.macs.length > 0;
 }
 
-/** True when this client entry is the device viewing the dashboard. A named
- *  clientId settles it alone; otherwise MAC wins when present (Electron), then v4,
- *  then v6 — Starlink hands out IPv6, so a v6-connected viewer must still resolve. */
+/** True when this client entry is the device viewing the dashboard. Either signal
+ *  is enough: a clientId identifies this device from anywhere, and the addresses
+ *  still identify it on the router's own network, where a clientId kept from
+ *  before a router reset would name whichever device inherited the number. */
 export function matchesSelf(
   client: { clientId?: number; macAddress?: string; ipAddress?: string; ipv6Addresses?: string[] },
   self: SelfIdentity,
 ): boolean {
-  if (self.clientId !== undefined) return client.clientId === self.clientId;
+  if (self.clientId !== undefined && client.clientId === self.clientId) return true;
+  return matchesSelfByAddress(client, self);
+}
+
+/** The address half of `matchesSelf` alone. A caller learning which entry this
+ *  device is cannot use the clientId branch to find it, and an address match only
+ *  means anything on the network that issued the address. */
+export function matchesSelfByAddress(
+  client: { macAddress?: string; ipAddress?: string; ipv6Addresses?: string[] },
+  self: SelfIdentity,
+): boolean {
   const mac = client.macAddress?.toLowerCase();
   if (mac && self.macs.includes(mac)) return true;
   const v4 = client.ipAddress ? normalizeIp(client.ipAddress) : undefined;
   if (v4 && self.ips.includes(v4)) return true;
   return (client.ipv6Addresses ?? []).some((addr) => self.ips.includes(normalizeIp(addr)));
+}
+
+/** Hand this device's roster id to the host that writes pauses, where there is
+ *  one. Nothing to do on a host that resolves the viewer some other way. */
+export function rememberSelfDevice(clientId: number): void {
+  const bridge = (globalThis as { dishlink?: DishlinkBridge }).dishlink;
+  void bridge?.rememberSelfDevice?.(clientId);
 }

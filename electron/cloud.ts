@@ -21,7 +21,7 @@ import {
 } from "../core/routerConfigUpdate";
 import { prepareRouterClientUpdate, readRouterClients } from "../core/routerClientUpdate";
 import type { RouterClientUpdate } from "../core/routerClientUpdate";
-import { localNetworkIdentity } from "../core/hostNetworkIdentity";
+import { hostIdentity } from "./selfDevice";
 
 const LOGIN_URL = "https://www.starlink.com/account";
 // The login window gets its own session, so signing out can wipe its Starlink
@@ -78,13 +78,7 @@ export function startCloud(rendererRoot: string): void {
     writeCookie,
     clearCookie,
     prepareDeviceUpdate: async (update, targetId, callGateway) =>
-      prepareRouterClientUpdate(
-        await loadRouter(),
-        update,
-        targetId,
-        callGateway,
-        localNetworkIdentity(),
-      ),
+      prepareRouterClientUpdate(await loadRouter(), update, targetId, callGateway, hostIdentity()),
     prepareDishConfigUpdate: async (changes) => {
       dishPromise ??= DishClient.load("dish", {
         handleUrl: DISH_LAN_HANDLE_URL,
