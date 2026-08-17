@@ -126,16 +126,16 @@ function messagesFor(routerAddress: string): Record<RouterUnreachableCause, stri
       `Another device on this network is using ${routerAddress}, the address the Starlink ` +
       `router answers on, so the router is hidden behind it. To fix it, connect to your ` +
       `Starlink WiFi, give the other router a different address (like ` +
-      `${suggestedAlternative(routerAddress)}), or set the router address below to wherever ` +
+      `${suggestedAlternative(routerAddress)}), or point Dishylink's router address at wherever ` +
       `your Starlink router actually is.`,
     configuredAddressSilent:
-      `Nothing answered at ${routerAddress}, the address set below, but the dish reports your ` +
-      `Starlink router is running. It is most likely at a different address. Check the one set ` +
-      `below, or clear it to go back to the default.`,
+      `Nothing answered at ${routerAddress}, the address Dishylink is set to use, but the dish ` +
+      `reports your Starlink router is running. It is most likely at a different address. ` +
+      `Check that setting, or clear it to go back to the default.`,
     differentNetwork:
       `Your Starlink router is running, but this device isn't on the network ${routerAddress} ` +
-      `belongs to. Connect to your Starlink WiFi, or if the router's subnet was changed, set the ` +
-      `router address below to where it is now.`,
+      `belongs to. Connect to your Starlink WiFi, or if the router's subnet was changed, point ` +
+      `Dishylink's router address at where it is now.`,
     noRouter:
       `The dish isn't reporting a Starlink router — it's in bypass mode, or the router is off. ` +
       `WiFi and connected devices come from the router, so there's nothing to show here. ` +
@@ -143,7 +143,7 @@ function messagesFor(routerAddress: string): Record<RouterUnreachableCause, stri
     unknown:
       `Couldn't reach the Starlink router at ${routerAddress}. Another device may be using ` +
       `that address, the router may be in bypass mode or on a different network, or it may be ` +
-      `at an address other than the one set below.`,
+      `at an address other than the one Dishylink is set to use.`,
     checking:
       `Couldn't reach the Starlink router at ${routerAddress}. Working out why; most short ` +
       `silences are the router restarting.`,

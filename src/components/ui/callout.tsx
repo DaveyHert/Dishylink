@@ -42,10 +42,22 @@ interface CalloutProps extends VariantProps<typeof callout> {
   /** The glyph, for a warning that is not a failure: the triangle without the
    *  red box behind it. Defaults to the one the tone implies. */
   icon?: keyof typeof GLYPH;
+  /** Given only where the reader can be done with this for good. A message they
+   *  still need is not dismissible. */
+  onDismiss?: () => void;
+  dismissLabel?: string;
   className?: string;
 }
 
-export function Callout({ children, tone, iconSeverity, icon, className }: CalloutProps) {
+export function Callout({
+  children,
+  tone,
+  iconSeverity,
+  icon,
+  onDismiss,
+  dismissLabel = "Dismiss",
+  className,
+}: CalloutProps) {
   const resolvedTone = tone ?? "info";
   // A broken thing is never quieter than its box, so the error tone settles this.
   const severity = resolvedTone === "error" ? "danger" : (iconSeverity ?? "normal");
@@ -61,6 +73,16 @@ export function Callout({ children, tone, iconSeverity, icon, className }: Callo
         {GLYPH[icon ?? (resolvedTone === "error" ? "warning" : "note")]}
       </SeverityIcon>
       <span>{children}</span>
+      {onDismiss && (
+        <button
+          type='button'
+          aria-label={dismissLabel}
+          onClick={onDismiss}
+          className='-my-0.5 -mr-1 ml-auto inline-flex h-[22px] w-[22px] flex-none cursor-pointer items-center justify-center rounded-[999px] border-0 bg-transparent text-[11px] text-ink-secondary/70 hover:bg-[color-mix(in_srgb,var(--ink)_7%,transparent)] hover:text-ink'
+        >
+          ✕
+        </button>
+      )}
     </div>
   );
 }

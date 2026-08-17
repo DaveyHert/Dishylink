@@ -6,6 +6,7 @@
 // effects, their cleanup, and the state they publish are the behaviour under
 // test, and only a real commit exercises them in order.
 
+import { useEffect } from "react";
 import { expect, test, vi } from "vitest";
 import { render } from "vitest-browser-react";
 import { useRouterNetwork } from "./useRouterNetwork";
@@ -39,8 +40,12 @@ const CLOUD_ROSTER = [
   },
 ];
 
-function Probe() {
+function Probe({ askForAccountRoster = true }: { askForAccountRoster?: boolean } = {}) {
   const network = useRouterNetwork(true);
+  const { readRosterViaAccount } = network;
+  useEffect(() => {
+    if (askForAccountRoster) readRosterViaAccount();
+  }, [askForAccountRoster, readRosterViaAccount]);
   return (
     <div>
       <span data-testid='source'>{network.clientsSource ?? "none"}</span>
@@ -76,6 +81,27 @@ test("given: a silent LAN router and a connected account, should: serve the rost
   await vi.waitFor(() => expect(read("country")).toBe("US"), { timeout: 8_000 });
   // Once per stretch of fallback, not once per roster poll.
   expect(asked.filter((path) => path === "/cloud/router-config")).toHaveLength(1);
+});
+
+test("given: a silent LAN nobody has asked to work around, should: read the config but not the roster", async () => {
+  const asked: string[] = [];
+  setCloudHost({
+    transport: async ({ path }) => {
+      asked.push(path);
+      if (path === "/cloud/router-clients") return { status: 200, body: { clients: CLOUD_ROSTER } };
+      if (path === "/cloud/router-config")
+        return { status: 200, body: { wifiConfig: { countryCode: "US" } } };
+      return { status: 404, body: {} };
+    },
+  });
+
+  render(<Probe askForAccountRoster={false} />);
+
+  // The settings reading these never asked for anything and must not go dark.
+  await vi.waitFor(() => expect(read("country")).toBe("US"), { timeout: 8_000 });
+  expect(asked).not.toContain("/cloud/router-clients");
+  expect(read("source")).toBe("none");
+  expect(read("names")).toBe("");
 });
 
 test("given: no account session, should: leave the roster empty rather than retry blindly", async () => {

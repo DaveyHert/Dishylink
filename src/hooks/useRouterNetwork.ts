@@ -36,7 +36,7 @@ import {
 // the browser meant two pollers hitting the router every second and two
 // independent trackers, each able to land on the router's stats-refresh boundary
 // differently. One recorder, read by every tab, is both cheaper and consistent.
-const CLIENTS_POLL_MS = 5_000;
+export const CLIENTS_POLL_MS = 5_000;
 
 /** Tail of the historian's 1 Hz window — small, incremental, purely local. */
 const SAMPLES_POLL_MS = 1_000;
@@ -49,7 +49,7 @@ const SAMPLES_POLL_MS = 1_000;
  * devices readable — not to drive anything live. The 1 Hz per-device throughput
  * stays LAN-only for the same reason.
  */
-const CLOUD_CLIENTS_POLL_MS = 20_000;
+export const CLOUD_CLIENTS_POLL_MS = 20_000;
 
 /** How many 1 Hz tails between asks for the monthly totals. They are a list of
  *  every device, and a month's odometer does not move meaningfully inside a
@@ -246,6 +246,21 @@ export interface RouterNetwork {
    * throughput series, so a surface showing rates has to say which it is holding.
    */
   clientsSource: "lan" | "cloud" | null;
+  /** Start reading the roster through the account. Lasts one outage: the LAN
+   *  answering ends it, so the next silence asks again. */
+  readRosterViaAccount: () => void;
+  /** Whether the config on screen was read through the account because the LAN
+   *  could not serve it. Independent of `clientsSource`: the config is fetched
+   *  whenever the LAN is silent, the roster only when asked for. */
+  wifiConfigViaAccount: boolean;
+  /** How that read is going, for the control that asked for it. */
+  accountRosterStatus: "idle" | "loading" | "failed";
+  /** Why it failed, in words for the user. Null unless it did. */
+  accountRosterError: string | null;
+  /** Whether the historian answered its last tail, null before the first one. It
+   *  serves the series and the router serves the roster, so this is not
+   *  `routerReachable`. */
+  historianAnswering: boolean | null;
   /** Rename a device on the router (persists across reconnects). */
   renameClient: (clientId: number, givenName: string) => Promise<void>;
   /** Rolling per-MAC throughput samples (down/up in bps) built from each poll. */
@@ -273,6 +288,10 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
   const [wifiConfig, setWifiConfig] = useState<WifiNetworkConfigJson | null>(null);
   const [routerReachable, setRouterReachable] = useState<boolean | null>(null);
   const [clientsSource, setClientsSource] = useState<"lan" | "cloud" | null>(null);
+  const [historianAnswering, setHistorianAnswering] = useState<boolean | null>(null);
+  const [accountRosterRequested, setAccountRosterRequested] = useState(false);
+  const [accountRosterError, setAccountRosterError] = useState<string | null>(null);
+  const [wifiConfigViaAccount, setWifiConfigViaAccount] = useState(false);
   /** Bumped on connect/disconnect, so a fallback that gave up for want of a
    *  session starts again the moment there is one. */
   const [cloudSession, setCloudSession] = useState(0);
@@ -328,7 +347,11 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
         const readConfig = () => {
           routerClient
             .getWifiConfig(AbortSignal.timeout(4_000))
-            .then((config) => !disposed && setWifiConfig(config))
+            .then((config) => {
+              if (disposed) return;
+              setWifiConfig(config);
+              setWifiConfigViaAccount(false);
+            })
             .catch(() => {});
         };
         readConfigRef.current = readConfig;
@@ -340,6 +363,8 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
             if (disposed) return;
             setClients(clientList);
             setClientsSource("lan");
+            setAccountRosterRequested(false);
+            setAccountRosterError(null);
             // Captured with the roster, not read later: the pair is what an
             // ordering is taken from, and rates replace their map rather than
             // mutating it, so this stays the set that arrived with this roster.
@@ -374,7 +399,9 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
               `/api/clients?samples=1${wantTotals ? "&totals=1" : ""}${since ? `&since=${since}` : "&hours=6"}`,
               { signal: AbortSignal.timeout(4_000) },
             );
-            if (!response.ok || disposed) return;
+            if (disposed) return;
+            setHistorianAnswering(response.ok);
+            if (!response.ok) return;
             const payload = (await response.json()) as {
               samples?: ClientSampleJson[];
               totals?: ClientUsageTotal[];
@@ -416,6 +443,7 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
             setThroughputHistory(new Map(history));
           } catch {
             // Historian down: the roster still renders, just without a series.
+            if (!disposed) setHistorianAnswering(false);
           } finally {
             tailInFlight = false;
           }
@@ -451,14 +479,13 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
    * The router reports its devices to Starlink whether or not this machine can
    * reach it, so the two cases the LAN read simply cannot cover — a kit in
    * bypass, and a viewer away from the network — are answered here. Runs only
-   * while the LAN is silent: the local read is faster, free, and carries the
-   * throughput this one does not.
+   * while the LAN is silent and only once asked: the local read is faster, free,
+   * and carries the throughput this one does not.
    */
   useEffect(() => {
-    if (!active || routerReachable !== false) return;
+    if (!active || routerReachable !== false || !accountRosterRequested) return;
     let disposed = false;
     let inFlight = false;
-    let configRead = false;
     let timerId = 0;
 
     const poll = async () => {
@@ -469,18 +496,19 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
         if (disposed) return;
         setClients(roster);
         setClientsSource("cloud");
-        // Once per stretch of cloud fallback, not per poll: names, SSIDs and mesh
-        // nodes change when the user changes them, and each read is a second trip
-        // through the account. `refreshConfig` covers a change made from here.
-        if (!configRead) {
-          configRead = true;
-          const config = await fetchCloudRouterConfig().catch(() => null);
-          if (!disposed && config) setWifiConfig(config);
-        }
+        setAccountRosterError(null);
       } catch (error) {
+        if (disposed) return;
         // No session to ask with — stop rather than retry something only a
         // sign-in can fix. Connecting one bumps `cloudSession` and re-runs this.
-        if (error instanceof CloudNotConnectedError) window.clearInterval(timerId);
+        if (error instanceof CloudNotConnectedError) {
+          window.clearInterval(timerId);
+          setAccountRosterError("Connect your Starlink account first.");
+        } else {
+          setAccountRosterError(
+            "Couldn't reach your Starlink account. Check this device's internet connection.",
+          );
+        }
       } finally {
         inFlight = false;
       }
@@ -492,7 +520,44 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
       disposed = true;
       window.clearInterval(timerId);
     };
+  }, [active, routerReachable, cloudSession, accountRosterRequested]);
+
+  /**
+   * Read the router's config through the account while the LAN cannot serve it.
+   *
+   * Unasked, unlike the roster: nothing here is swapped out from under a reader
+   * mid-glance. The surfaces showing it (SSIDs, mesh nodes, the subnet) are the
+   * same facts from either source, and they are simply absent without it. Once
+   * per stretch of silence, since each read is a trip through the account and a
+   * change made from here re-reads through `refreshConfig`.
+   */
+  useEffect(() => {
+    if (!active || routerReachable !== false) return;
+    let disposed = false;
+    void fetchCloudRouterConfig()
+      .then((config) => {
+        if (disposed || !config) return;
+        setWifiConfig(config);
+        setWifiConfigViaAccount(true);
+      })
+      .catch(() => {});
+    return () => {
+      disposed = true;
+    };
   }, [active, routerReachable, cloudSession]);
+
+  const readRosterViaAccount = useCallback(() => {
+    setAccountRosterError(null);
+    setAccountRosterRequested(true);
+  }, []);
+
+  const accountRosterStatus = !accountRosterRequested
+    ? "idle"
+    : accountRosterError
+      ? "failed"
+      : clientsSource === "cloud"
+        ? "idle"
+        : "loading";
 
   const renameClient = useCallback(async (clientId: number, givenName: string) => {
     // Current firmware answers every LAN write with grpc status 7, so this goes
@@ -521,6 +586,11 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
     wifiConfig,
     routerReachable,
     clientsSource,
+    historianAnswering,
+    readRosterViaAccount,
+    accountRosterStatus,
+    accountRosterError,
+    wifiConfigViaAccount,
     renameClient,
     throughputHistory,
     rates,
