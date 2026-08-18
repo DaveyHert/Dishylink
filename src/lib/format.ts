@@ -76,6 +76,16 @@ export function formatHasActuators(hasActuators: string | undefined): string {
 }
 
 /** Byte counters → human size. Used for per-device data totals. */
+/** A gigabyte figure split from the unit it reads best in, for a surface that
+ *  renders the number and its unit separately. Rolls to TB past a terabyte, as
+ *  the Starlink portal's own usage card does. */
+export function formatGigabytes(gigabytes: number): { value: string; unit: "GB" | "TB" } {
+  if (gigabytes >= 1000) return { value: (gigabytes / 1000).toFixed(2), unit: "TB" };
+  if (gigabytes >= 100) return { value: gigabytes.toFixed(0), unit: "GB" };
+  if (gigabytes >= 1) return { value: gigabytes.toFixed(1), unit: "GB" };
+  return { value: gigabytes.toFixed(2), unit: "GB" };
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes >= 1e12) return `${(bytes / 1e12).toFixed(2)} TB`;
   if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(2)} GB`;

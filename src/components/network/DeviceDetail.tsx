@@ -192,7 +192,7 @@ export function DeviceDetail({
                   className='cursor-pointer px-2'
                   onClick={() => setEditingMeter(true)}
                 >
-                  <MeterIcon />
+                  <MeterIcon className='size-[19px]' />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side='top'>Data limit</TooltipContent>

@@ -6,6 +6,7 @@
 import { useState } from "react";
 import { useDataUsage, type UsageBucket } from "../../hooks/useDataUsage";
 import type { EnergyRange } from "../../hooks/useEnergyHistory";
+import { formatGigabytes } from "../../lib/format";
 import { RangeBars, type RangeBarColumn } from "../shared/RangeBarChart";
 import { RANGE_TABS, bucketLabel } from "../shared/rangeTabs";
 import { SegmentedControl } from "../ui/segmented-control";
@@ -22,10 +23,10 @@ const SOURCE_TABS = [
   { label: "Starlink billing", value: "cloud" as const },
 ];
 
-function formatGB(gigabytes: number): string {
-  if (gigabytes >= 100) return gigabytes.toFixed(0);
-  if (gigabytes >= 1) return gigabytes.toFixed(1);
-  return gigabytes.toFixed(2);
+/** The figure with its unit, for the places that render them as one string. */
+function withUnit(gigabytes: number): string {
+  const { value, unit } = formatGigabytes(gigabytes);
+  return `${value} ${unit}`;
 }
 
 function UsageBars({ buckets, range }: { buckets: UsageBucket[]; range: EnergyRange }) {
@@ -40,7 +41,7 @@ function UsageBars({ buckets, range }: { buckets: UsageBucket[]; range: EnergyRa
       label: when,
       title: missing
         ? `${when} · no data — the historian wasn't running`
-        : `${when} · ↓${formatGB(bucket.downGB!)} GB · ↑${formatGB(bucket.upGB!)} GB`,
+        : `${when} · ↓${withUnit(bucket.downGB!)} · ↑${withUnit(bucket.upGB!)}`,
       bar: missing ? (
         // An empty slot, not a zero one: mark the hole rather than draw a
         // bar claiming no traffic passed.
@@ -66,7 +67,7 @@ function UsageBars({ buckets, range }: { buckets: UsageBucket[]; range: EnergyRa
       columns={columns}
       range={range}
       heightPx={150}
-      yAxis={{ max: maxTotalGB, format: (v) => `${formatGB(v)} GB` }}
+      yAxis={{ max: maxTotalGB, format: (v) => withUnit(v) }}
     />
   );
 }
@@ -107,12 +108,20 @@ function LocalDataUsage() {
     <div>
       <FigureRow
         figures={[
-          { label: "↓ Download", value: data ? formatGB(data.totalDownGB) : "—", unit: "GB" },
-          { label: "↑ Upload", value: data ? formatGB(data.totalUpGB) : "—", unit: "GB" },
+          {
+            label: "↓ Download",
+            value: data ? formatGigabytes(data.totalDownGB).value : "—",
+            unit: data ? formatGigabytes(data.totalDownGB).unit : "GB",
+          },
+          {
+            label: "↑ Upload",
+            value: data ? formatGigabytes(data.totalUpGB).value : "—",
+            unit: data ? formatGigabytes(data.totalUpGB).unit : "GB",
+          },
           {
             label: "Total",
-            value: data ? formatGB(data.totalDownGB + data.totalUpGB) : "—",
-            unit: "GB",
+            value: data ? formatGigabytes(data.totalDownGB + data.totalUpGB).value : "—",
+            unit: data ? formatGigabytes(data.totalDownGB + data.totalUpGB).unit : "GB",
           },
         ]}
       />
