@@ -38,8 +38,8 @@ export interface Preferences {
    * Whether the live ↓/↑ throughput readout is shown — in the macOS menu bar
    * beside the tray icon, or on the Windows taskbar. One preference, whichever
    * surface the host has. A desktop-only display choice with no history anywhere
-   * else, so unlike `notifications` it is a plain boolean: off is a real default,
-   * not an unanswered question, and there is no older store to migrate a value
+   * else, so unlike `notifications` it is a plain boolean: nothing turns on telling
+   * a default apart from a choice, and there is no older store to migrate a value
    * from. (The stored key keeps this name even though the readout isn't menu-bar
    * only — renaming it would orphan the value in existing settings files.)
    */
@@ -72,7 +72,7 @@ export interface Preferences {
 
 const DEFAULTS: Preferences = {
   notifications: null,
-  menuBarThroughput: false,
+  menuBarThroughput: process.platform === "darwin",
   windowBounds: null,
   routerAddress: null,
   selfClientId: null,
@@ -119,7 +119,9 @@ export function preferences(): Preferences {
       ...DEFAULTS,
       notifications: typeof parsed.notifications === "boolean" ? parsed.notifications : null,
       menuBarThroughput:
-        typeof parsed.menuBarThroughput === "boolean" ? parsed.menuBarThroughput : false,
+        typeof parsed.menuBarThroughput === "boolean"
+          ? parsed.menuBarThroughput
+          : DEFAULTS.menuBarThroughput,
       windowBounds: isWindowBounds(parsed.windowBounds) ? parsed.windowBounds : null,
       routerAddress: storedAddress(parsed.routerAddress),
       selfClientId: storedClientId(parsed.selfClientId),
