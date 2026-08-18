@@ -4,7 +4,7 @@
 // edits it, not on the router's cadence, and the card that shows it is open far
 // less often than the network panel behind it.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import type { MeterCycle, MeterRule } from "@core/dataMeter";
 import { apiRequest } from "../lib/apiHost";
 
@@ -19,7 +19,7 @@ export interface DataMeter {
   rule: MeterRuleView | null;
   /** Whether the recorder can actually pause: the write needs an account session,
    *  and a rule that cannot be enforced should say so before it is relied on. */
-  enforceable: boolean;
+  pauseEnforceable: boolean;
   loading: boolean;
   error: string | null;
   save: (options: {
@@ -41,7 +41,7 @@ function cycleParams(cycle: MeterCycle): Record<string, string> {
 
 export function useDataMeter(clientKey: string | null): DataMeter {
   const [rule, setRule] = useState<MeterRuleView | null>(null);
-  const [enforceable, setEnforceable] = useState(false);
+  const [pauseEnforceable, setPauseEnforceable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,9 +52,12 @@ export function useDataMeter(clientKey: string | null): DataMeter {
         `/api/clients/meters?client=${encodeURIComponent(clientKey)}`,
       );
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const body = (await response.json()) as { rules?: MeterRuleView[]; enforceable?: boolean };
+      const body = (await response.json()) as {
+        rules?: MeterRuleView[];
+        pauseEnforceable?: boolean;
+      };
       setRule(body.rules?.[0] ?? null);
-      setEnforceable(body.enforceable === true);
+      setPauseEnforceable(body.pauseEnforceable === true);
       setError(null);
     } catch {
       setError("The recorder isn’t answering, so data limits can’t be read or changed.");
@@ -115,5 +118,49 @@ export function useDataMeter(clientKey: string | null): DataMeter {
     await write(`/api/clients/meters?client=${encodeURIComponent(clientKey)}`, "DELETE");
   }, [clientKey, write]);
 
-  return { rule, enforceable, loading, error, save, restart, remove };
+  return { rule, pauseEnforceable, loading, error, save, restart, remove };
+}
+
+let meteredKeys = new Set<string>();
+const meteredListeners = new Set<() => void>();
+let meteredTimerId: number | null = null;
+
+async function loadMeteredKeys(): Promise<void> {
+  try {
+    const response = await apiRequest("/api/clients/meters");
+    if (!response.ok) return;
+    const body = (await response.json()) as { rules?: { clientKey: string }[] };
+    const next = new Set((body.rules ?? []).map((rule) => rule.clientKey));
+    if (meteredListeners.size === 0) return;
+    if (next.size === meteredKeys.size && [...next].every((key) => meteredKeys.has(key))) return;
+    meteredKeys = next;
+    for (const listener of meteredListeners) listener();
+  } catch {
+    // The panel behind these marks reports a silent recorder on its own.
+  }
+}
+
+function subscribeToMeteredKeys(listener: () => void): () => void {
+  meteredListeners.add(listener);
+  if (meteredTimerId === null) {
+    void loadMeteredKeys();
+    meteredTimerId = window.setInterval(() => void loadMeteredKeys(), REFRESH_MS);
+  }
+  return () => {
+    meteredListeners.delete(listener);
+    if (meteredListeners.size > 0) return;
+    if (meteredTimerId !== null) {
+      window.clearInterval(meteredTimerId);
+      meteredTimerId = null;
+    }
+    meteredKeys = new Set();
+  };
+}
+
+export function useMeteredKeys(): Set<string> {
+  return useSyncExternalStore(
+    subscribeToMeteredKeys,
+    () => meteredKeys,
+    () => meteredKeys,
+  );
 }

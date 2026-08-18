@@ -400,6 +400,17 @@ export function setDevicePauser(
   sendDevicePause = pauser;
 }
 
+/**
+ * Whether a pause sent right now would be accepted. The transport is wired once
+ * at startup, but the account session behind it is signed in and out while the
+ * app runs, so this is asked at read time rather than latched.
+ */
+let readAccountSignedIn: (() => boolean) | null = null;
+
+export function setAccountSessionReader(reader: (() => boolean) | null): void {
+  readAccountSignedIn = reader;
+}
+
 /** The account's billing cycle, for a rule that follows it. Installed by a host
  *  that can reach the account; without one such a rule falls back to the 1st. */
 let readBillingCycle: () => BillingCycle | undefined = () => undefined;
@@ -494,15 +505,20 @@ async function deliverMeterTransition(transition: MeterTransition): Promise<void
         key,
         ok: `${name} is within its data allowance`,
         firing: `${name} reached its ${formatGigabytes(rule.allocationBytes)} data allowance`,
-        advice: sendDevicePause
-          ? undefined
-          : "Connect your Starlink account to have Dishylink pause a device when it reaches its allowance.",
+        advice:
+          sendDevicePause && readAccountSignedIn?.() === true
+            ? undefined
+            : "Connect your Starlink account to have Dishylink pause a device when it reaches its allowance.",
         severity: "warning",
         notify: true,
       },
     },
   ]);
 
+  await sendMeterPause(clientKey, reached, atMs);
+}
+
+async function sendMeterPause(clientKey: string, reached: boolean, atMs: number): Promise<void> {
   const clientId = Number(clientKey);
   if (!sendDevicePause || !Number.isInteger(clientId)) {
     if (reached) meters.notePauseState(clientKey, "failed", atMs);
@@ -512,7 +528,9 @@ async function deliverMeterTransition(transition: MeterTransition): Promise<void
     await sendDevicePause(clientId, reached);
     meters.notePauseState(clientKey, reached ? "applied" : "none", Date.now());
   } catch (error) {
-    console.warn(`[historian] meter ${kind} for ${name}: ${(error as Error).message}`);
+    console.warn(
+      `[historian] meter pause for ${meterDeviceName(clientKey)}: ${(error as Error).message}`,
+    );
     if (reached) meters.notePauseState(clientKey, "failed", Date.now());
   }
 }
@@ -1022,6 +1040,29 @@ function runMeters(): void {
   );
   const transitions = meters.observe(clientTotals.lifetimes(), Date.now(), readBillingCycle());
   for (const transition of transitions) void deliverMeterTransition(transition);
+  retryUnsentPauses();
+}
+
+const PAUSE_RETRY_MS = 60_000;
+
+function retryUnsentPauses(): void {
+  const nowMs = Date.now();
+  // Cheap scan before asking the host anything: this runs on the 200 ms client
+  // poll, and reading the account session decrypts a file off the keychain.
+  const stalled = meters
+    .all()
+    .filter(
+      (rule) =>
+        rule.autoPause &&
+        rule.pauseState === "failed" &&
+        nowMs - (rule.pauseCheckedMs ?? 0) >= PAUSE_RETRY_MS &&
+        usageBytes(rule) >= rule.allocationBytes,
+    );
+  if (stalled.length === 0 || readAccountSignedIn?.() !== true) return;
+  for (const rule of stalled) {
+    meters.notePauseState(rule.clientKey, "pending", nowMs);
+    void sendMeterPause(rule.clientKey, true, nowMs);
+  }
 }
 
 /**
@@ -1378,7 +1419,7 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
         rules: rules.map(withUsage),
         // The pause write needs an account, so a surface can say up front whether
         // a rule will be enforced rather than only after one is not.
-        enforceable: sendDevicePause !== null,
+        pauseEnforceable: sendDevicePause !== null && readAccountSignedIn?.() === true,
       }),
     );
     return;
