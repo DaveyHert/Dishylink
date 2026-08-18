@@ -12,6 +12,9 @@ import { deviceRowSubtitle } from "./deviceRowSubtitle";
 import { DeviceTypeIcon } from "../../assets/icons/DeviceTypeIcon";
 import { Badge } from "../ui/badge";
 import { DeviceSignalIcon } from "../../assets/icons/DeviceSignalIcon";
+import { MeterIcon } from "../../assets/icons/MeterIcon";
+import { usageKey } from "@core/clientUsage";
+import { useMeteredKeys } from "../../hooks/useDataMeter";
 import { bandLabel, clientEntryKey, displayName, signalQuality } from "./networkFormat";
 
 export function NetworkRow({
@@ -21,6 +24,7 @@ export function NetworkRow({
   sub,
   band,
   paused,
+  metered,
   showChevron,
   disabled,
   highlight,
@@ -36,6 +40,7 @@ export function NetworkRow({
   /** Shows a "Paused" tag left of the band chip when the device's internet is
    *  blocked. */
   paused?: boolean;
+  metered?: boolean;
   showChevron?: boolean;
   disabled?: boolean;
   /** The viewer's own device — resting tint bumped so it reads as pinned, like
@@ -64,10 +69,11 @@ export function NetworkRow({
           {sub}
         </span>
       </span>
-      {(paused || band) && (
+      {(paused || band || metered) && (
         // Grouped tight so the pair reads as one unit — [Paused][5 GHz] — rather
         // than each taking the row's wider inter-item gap.
         <span className='flex flex-none items-center gap-1.5'>
+          {metered && <MeterIcon active className='size-[21px] flex-none text-muted-foreground' />}
           {paused && <Badge>Paused</Badge>}
           {band && <Badge>{band}</Badge>}
         </span>
@@ -96,6 +102,7 @@ export function DeviceRow({
 }) {
   const isSelf = matchesSelf(client, self);
   const name = displayName(client);
+  const metered = useMeteredKeys().has(usageKey(client.clientId, client.macAddress));
   return (
     <NetworkRow
       icon={<DeviceSignalIcon client={client} quality={signalQuality(client)} />}
@@ -106,6 +113,7 @@ export function DeviceRow({
       sub={deviceRowSubtitle(client, isSelf)}
       band={bandLabel(client)}
       paused={client.blocked}
+      metered={metered}
       highlight={isSelf}
       showChevron
       onClick={() => {
