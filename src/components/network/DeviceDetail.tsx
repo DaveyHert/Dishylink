@@ -16,6 +16,7 @@ import { DeviceSignalIcon } from "../../assets/icons/DeviceSignalIcon";
 import { MeterIcon } from "../../assets/icons/MeterIcon";
 import { DeviceThroughput } from "./DeviceThroughput";
 import { DataMeterDialog } from "./DataMeterDialog";
+import { useDataMeter } from "../../hooks/useDataMeter";
 import { buildDeviceFacts } from "./deviceFacts";
 import { deviceRowSubtitle } from "./deviceRowSubtitle";
 import { displayName, pauseSettleTimeoutMs, signalQuality } from "./networkFormat";
@@ -90,6 +91,9 @@ export function DeviceDetail({
   if (pendingPaused !== null && paused === pendingPaused) setPendingPaused(null);
   const pauseBusy = pendingPaused !== null && paused !== pendingPaused;
   const { status: cloudStatus } = useCloudAccount(true);
+  const meter = useDataMeter(
+    client.macAddress ? usageKey(client.clientId, client.macAddress) : null,
+  );
   const showPauseControl = clientPauseControlAvailable({
     clientId: client.clientId,
     isThisDevice,
@@ -192,7 +196,7 @@ export function DeviceDetail({
                   className='cursor-pointer px-2'
                   onClick={() => setEditingMeter(true)}
                 >
-                  <MeterIcon className='size-[19px]' />
+                  <MeterIcon className='size-[21px]' active={meter.rule !== null} />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side='top'>Data limit</TooltipContent>
@@ -273,7 +277,7 @@ export function DeviceDetail({
 
       {client.macAddress && (
         <DataMeterDialog
-          clientKey={usageKey(client.clientId, client.macAddress)}
+          meter={meter}
           deviceName={name}
           open={editingMeter}
           onOpenChange={setEditingMeter}

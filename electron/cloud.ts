@@ -111,6 +111,11 @@ export function startCloud(rendererRoot: string): void {
  * path the renderer's own pause takes, so the two cannot build a client-config
  * write from stale snapshots of each other.
  */
+/** Whether an account session exists for that write to go out on. */
+export function accountSignedIn(): boolean {
+  return handler !== null && readCookie() !== null;
+}
+
 export async function pauseDevice(clientId: number, paused: boolean): Promise<void> {
   if (!handler) throw new Error("Cloud not started");
   const { status, body } = await handler.updateClient({ kind: "pause", clientId, paused });
