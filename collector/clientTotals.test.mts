@@ -319,13 +319,17 @@ describe("ClientTotalsStore seed / reset / remove / compact / persistence", () =
     expect(store.totals(String(A))).toHaveLength(0);
   });
 
-  it("compact drops devices unseen since before last month, keeps recent ones", () => {
+  it("compact drops devices unseen for longer than the history window", () => {
     const store = tempStore();
-    const old = new Date(2026, 4, 20).getTime(); // May — two months before July
-    store.observe(999, "old:mac", 0, 0, old, "old", live(999));
+    const gone = new Date(2025, 11, 20).getTime(); // Dec 2025 — beyond six months
+    const away = new Date(2026, 4, 20).getTime(); // May — inside the window
+    store.observe(999, "old:mac", 0, 0, gone, "old", live(999));
+    store.observe(998, "away:mac", 0, 0, away, "away", live(998));
     store.observe(A, MAC, 0, 0, T0, "A", live(A));
     expect(store.compact(T0)).toBe(1);
     expect(store.totals("999")).toHaveLength(0);
+    // A device seen within the window keeps its record, and the months with it.
+    expect(store.totals("998")).toHaveLength(1);
     expect(store.totals(String(A))).toHaveLength(1);
   });
 
@@ -359,6 +363,47 @@ describe("ClientTotalsStore seed / reset / remove / compact / persistence", () =
     const reopened = new ClientTotalsStore(path);
     reopened.observe(A, MAC, 1_200, 0, T0 + 2_000, "A", live(A)); // within gap → +200
     expect(reopened.totals(String(A))[0].rxBytes).toBe(200);
+  });
+
+  it("files each month as it rolls, keeping the last six", () => {
+    const store = tempStore();
+    // Ten months, each moving 1000 more bytes than the last.
+    for (let month = 0; month < 10; month++) {
+      const at = new Date(2026, month, 10, 12).getTime();
+      store.observe(A, MAC, 0, 0, at, "A", live(A));
+      store.observe(A, MAC, (month + 1) * 1_000, 0, at + 1_000, "A", live(A));
+    }
+    const [total] = store.totals(String(A));
+    expect(total.months).toHaveLength(6);
+    // Oldest first, and the earliest four have aged out.
+    expect(total.months!.map((m) => m.rxBytes)).toEqual([4_000, 5_000, 6_000, 7_000, 8_000, 9_000]);
+    expect(total.rxBytes).toBe(10_000); // the month still running
+  });
+
+  it("does not file a month a device passed no traffic in", () => {
+    const store = tempStore();
+    const july = new Date(2026, 6, 10, 12).getTime();
+    store.observe(A, MAC, 0, 0, july, "A", live(A));
+    store.observe(A, MAC, 500, 0, july + 1_000, "A", live(A));
+    // Away for August and September, back in October: only July is on record.
+    const october = new Date(2026, 9, 10, 12).getTime();
+    store.observe(A, MAC, 500, 0, october, "A", live(A));
+    const [total] = store.totals(String(A));
+    expect(total.months).toEqual([{ periodMonth: 2026 * 12 + 6, rxBytes: 500, txBytes: 0 }]);
+  });
+
+  it("adds the months of two identities merged into one device", () => {
+    const store = tempStore();
+    const july = new Date(2026, 6, 10, 12).getTime();
+    const august = new Date(2026, 7, 10, 12).getTime();
+    for (const id of [1, 2]) {
+      store.observe(id, `m${id}:mac`, 0, 0, july, "same", live(1, 2));
+      store.observe(id, `m${id}:mac`, id * 1_000, 0, july + 1_000, "same", live(1, 2));
+      store.observe(id, `m${id}:mac`, id * 1_000, 0, august, "same", live(1, 2));
+    }
+    expect(store.merge("1", "2")).toBe(true);
+    const [total] = store.totals("2");
+    expect(total.months).toEqual([{ periodMonth: 2026 * 12 + 6, rxBytes: 3_000, txBytes: 0 }]);
   });
 
   it("keeps the figure a snapshot from before the lifetime counter was showing", () => {
