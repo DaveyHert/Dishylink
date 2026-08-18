@@ -44,11 +44,8 @@ export type MeterPauseState = "none" | "pending" | "applied" | "failed";
 
 export interface MeterRule {
   clientKey: string;
-  /** The cycle's budget. Also what the card measures against. */
+  /** The cycle's budget, and the point the device is paused at. */
   allocationBytes: number;
-  /** Where the pause trips. Defaults to the allocation and may sit below it, to
-   *  stop short of the budget rather than on it. */
-  pauseAtBytes: number;
   /** False leaves the rule inert: usage is still tracked and the cycle still
    *  rolls, but nothing is paused and nothing is announced. */
   autoPause: boolean;
@@ -219,7 +216,7 @@ export function evaluateMeters(
         });
     }
 
-    if (rule.autoPause && !rule.actedThisCycle && usageBytes(rule) >= rule.pauseAtBytes) {
+    if (rule.autoPause && !rule.actedThisCycle && usageBytes(rule) >= rule.allocationBytes) {
       rule = { ...rule, actedThisCycle: true, pauseState: "pending" };
       transitions.push({
         kind: "reached",
@@ -246,7 +243,6 @@ export function evaluateMeters(
 export function createRule(options: {
   clientKey: string;
   allocationBytes: number;
-  pauseAtBytes?: number;
   autoPause?: boolean;
   cycle: MeterCycle;
   lifetimeRx: number;
@@ -258,7 +254,6 @@ export function createRule(options: {
   return {
     clientKey: options.clientKey,
     allocationBytes: options.allocationBytes,
-    pauseAtBytes: options.pauseAtBytes ?? options.allocationBytes,
     autoPause: options.autoPause ?? true,
     cycle: options.cycle,
     anchorRx: options.lifetimeRx,

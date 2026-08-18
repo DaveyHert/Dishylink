@@ -441,12 +441,10 @@ function upsertMeterFrom(clientKey: string, params: URLSearchParams): MeterRule 
   const cycle = cycleFrom(params);
   const allocationBytes = Number(params.get("allocation"));
   if (!cycle || !Number.isFinite(allocationBytes) || allocationBytes <= 0) return null;
-  const pauseAt = Number(params.get("pauseAt"));
   const counters = clientTotals.lifetimes().find((entry) => entry.clientKey === clientKey);
   return meters.upsert({
     clientKey,
     allocationBytes,
-    pauseAtBytes: Number.isFinite(pauseAt) && pauseAt > 0 ? pauseAt : allocationBytes,
     autoPause: params.get("autoPause") !== "0",
     cycle,
     lifetimeRx: counters?.lifetimeRx ?? 0,
@@ -495,7 +493,7 @@ async function deliverMeterTransition(transition: MeterTransition): Promise<void
       spec: {
         key,
         ok: `${name} is within its data allowance`,
-        firing: `${name} reached its ${formatGigabytes(rule.pauseAtBytes)} data allowance`,
+        firing: `${name} reached its ${formatGigabytes(rule.allocationBytes)} data allowance`,
         advice: sendDevicePause
           ? undefined
           : "Connect your Starlink account to have Dishylink pause a device when it reaches its allowance.",
