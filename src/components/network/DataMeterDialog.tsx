@@ -77,7 +77,11 @@ export function DataMeterDialog({
   const meter = useDataMeter(open ? clientKey : null);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='glass-panel gap-0 sm:max-w-lg' showCloseButton={false}>
+      <DialogContent
+        className='glass-panel gap-0 sm:max-w-lg'
+        overlayClassName='bg-black/30 backdrop-blur-[2px]'
+        showCloseButton={false}
+      >
         <MeterForm
           // The stored rule is the form's opening value, so the form is remounted
           // when a different one arrives rather than being written into by an
