@@ -23,7 +23,7 @@
   --color-popover-foreground: var(--ink);
   --color-primary: var(--ink);
   --color-primary-foreground: var(--page);
-  --color-secondary: var(--surface-raised);
+  --color-secondary: color-mix(in srgb, var(--ink) 8%, var(--surface));
   --color-secondary-foreground: var(--ink);
   --color-muted: var(--grid-dot);
   --color-muted-foreground: var(--ink-muted);
