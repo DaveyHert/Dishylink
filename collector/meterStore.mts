@@ -12,6 +12,7 @@ import { dirname } from "node:path";
 import {
   createRule,
   evaluateMeters,
+  periodBounds,
   restartCycle,
   type BillingCycle,
   type MeterCycle,
@@ -127,18 +128,22 @@ export class MeterStore {
     billingCycle?: BillingCycle;
   }): MeterRule {
     const existing = this.find(options.clientKey);
-    // Editing keeps the cycle it is in, so raising a limit mid-cycle hands out no
-    // fresh allowance. Changing the cycle kind restarts it: the old boundaries
-    // describe nothing.
-    const rule =
-      existing && existing.cycle.kind === options.cycle.kind
-        ? {
-            ...existing,
-            allocationBytes: options.allocationBytes,
-            autoPause: options.autoPause ?? existing.autoPause,
-            cycle: options.cycle,
-          }
-        : createRule(options);
+    // An edit never clears what a device has spent: the anchors stand, and a
+    // changed cycle moves only its boundaries. Clearing is what restart() does.
+    const movesBoundaries =
+      existing && JSON.stringify(existing.cycle) !== JSON.stringify(options.cycle);
+    const bounds = movesBoundaries
+      ? periodBounds(options.cycle, options.nowMs, options.billingCycle)
+      : null;
+    const rule = existing
+      ? {
+          ...existing,
+          allocationBytes: options.allocationBytes,
+          autoPause: options.autoPause ?? existing.autoPause,
+          cycle: options.cycle,
+          ...(bounds ? { periodStartMs: bounds.startMs, periodEndMs: bounds.endMs } : {}),
+        }
+      : createRule(options);
     this.rules = [...this.rules.filter((other) => other.clientKey !== options.clientKey), rule];
     this.persist();
     return rule;
