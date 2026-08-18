@@ -103,6 +103,22 @@ export function startCloud(rendererRoot: string): void {
   });
 }
 
+/**
+ * Pause or unpause a device from main, with no window involved.
+ *
+ * The recorder calls this when a device spends its data allowance, which happens
+ * whether or not anyone is looking. It goes through the same queued, validated
+ * path the renderer's own pause takes, so the two cannot build a client-config
+ * write from stale snapshots of each other.
+ */
+export async function pauseDevice(clientId: number, paused: boolean): Promise<void> {
+  if (!handler) throw new Error("Cloud not started");
+  const { status, body } = await handler.updateClient({ kind: "pause", clientId, paused });
+  if (status === 200) return;
+  const message = (body as { message?: string })?.message ?? `HTTP ${status}`;
+  throw new Error(status === 428 ? "No Starlink account connected" : message);
+}
+
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,

@@ -10,6 +10,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { AlertTransition } from "../core/alertEngine";
 import { preferences } from "./preferences";
+import { pauseDevice } from "./cloud";
 import type { ThroughputSample } from "../collector/historian.mts";
 
 export type { ThroughputSample };
@@ -37,6 +38,9 @@ export async function startCollector(rendererRoot: string): Promise<void> {
   // The recorder dials the router with no window open, so it reads the same
   // preference the window edits rather than the default it was built with.
   historian.setRouterAddressReader(() => preferences().routerAddress);
+  // A device that spends its data allowance is paused from here, through the
+  // account session this process holds. The recorder decides; only main can send.
+  historian.setDevicePauser((clientId, paused) => pauseDevice(clientId, paused));
   handleRequest = historian.handleRequest;
   subscribeToAlerts = historian.onAlertTransitions;
   subscribeToThroughput = historian.onThroughput;

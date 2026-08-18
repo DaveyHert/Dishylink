@@ -51,6 +51,9 @@ import { ClientStore, type ClientReading } from "./clientStore.mts";
 import { ClientWindow } from "./clientWindow.mts";
 import { resolveRows, foldMinuteCollisions } from "../core/clientHistory.ts";
 import { ClientTotalsStore } from "./clientTotals.mts";
+import { MeterStore } from "./meterStore.mts";
+import { usageBytes } from "../core/dataMeter.ts";
+import type { BillingCycle, MeterCycle, MeterRule, MeterTransition } from "../core/dataMeter.ts";
 import { ThroughputTracker } from "../core/throughputTracker.ts";
 import { usageKey } from "../core/clientUsage.ts";
 import { AlertStore } from "./alertStore.mts";
@@ -88,6 +91,7 @@ const EVENTS_FILE = join(DATA_DIR, "events.ndjson");
 const CLIENTS_FILE = join(DATA_DIR, "clients.ndjson");
 const CLIENT_SAMPLES_FILE = join(DATA_DIR, "client-samples.json");
 const CLIENT_TOTALS_FILE = join(DATA_DIR, "client-totals.json");
+const METERS_FILE = join(DATA_DIR, "meters.json");
 const ALERTS_FILE = join(DATA_DIR, "alerts.ndjson");
 const OBSTRUCTION_FILE = join(DATA_DIR, "obstruction.ndjson");
 const LOCK_FILE = join(DATA_DIR, "historian.lock");
@@ -376,6 +380,144 @@ const clientThroughput = new ThroughputTracker();
 /** Per-device monthly data-usage odometer. Accumulates the same byte counters,
  *  reset-aware, so a total survives the reconnects that zero the router's own. */
 const clientTotals = new ClientTotalsStore(CLIENT_TOTALS_FILE);
+
+/** Per-device data allowances, checked on the poll that folds the counters they
+ *  measure, so a limit is reached in the reading that carries the traffic. */
+const meters = new MeterStore(METERS_FILE);
+
+/**
+ * Pauses a device, when the host has a way to. The write goes to the Starlink
+ * account rather than the LAN, which current firmware refuses, so only a host
+ * holding an account session can install one. Standing alone this recorder has
+ * none: it still measures and announces a limit being reached, and reports the
+ * pause as failed rather than as one that happened.
+ */
+let sendDevicePause: ((clientId: number, paused: boolean) => Promise<void>) | null = null;
+
+export function setDevicePauser(
+  pauser: ((clientId: number, paused: boolean) => Promise<void>) | null,
+): void {
+  sendDevicePause = pauser;
+}
+
+/** The account's billing cycle, for a rule that follows it. Installed by a host
+ *  that can reach the account; without one such a rule falls back to the 1st. */
+let readBillingCycle: () => BillingCycle | undefined = () => undefined;
+
+export function setBillingCycleReader(reader: () => BillingCycle | undefined): void {
+  readBillingCycle = reader;
+}
+
+/** Falls back to the key so a message never reads blank. */
+function meterDeviceName(clientKey: string): string {
+  return clientTotals.totals(clientKey)[0]?.name?.trim() || `device ${clientKey}`;
+}
+
+/** A rule as a surface draws it: the rule plus what it has counted. */
+function withUsage(rule: MeterRule): MeterRule & { usageBytes: number; deviceName: string } {
+  return { ...rule, usageBytes: usageBytes(rule), deviceName: meterDeviceName(rule.clientKey) };
+}
+
+/** A cycle from query parameters, or null if it names no cycle this build has. */
+function cycleFrom(params: URLSearchParams): MeterCycle | null {
+  const kind = params.get("cycle");
+  const number = (name: string, fallback: number) => {
+    const value = Number(params.get(name));
+    return Number.isFinite(value) ? value : fallback;
+  };
+  if (kind === "daily" || kind === "billing" || kind === "once") return { kind };
+  if (kind === "weekly") return { kind, weekday: Math.min(6, Math.max(0, number("weekday", 1))) };
+  if (kind === "monthly") return { kind, day: Math.min(31, Math.max(1, number("day", 1))) };
+  if (kind === "custom")
+    return {
+      kind,
+      days: Math.max(1, number("days", 30)),
+      startMs: number("start", Date.now()),
+    };
+  return null;
+}
+
+function upsertMeterFrom(clientKey: string, params: URLSearchParams): MeterRule | null {
+  const cycle = cycleFrom(params);
+  const allocationBytes = Number(params.get("allocation"));
+  if (!cycle || !Number.isFinite(allocationBytes) || allocationBytes <= 0) return null;
+  const pauseAt = Number(params.get("pauseAt"));
+  const counters = clientTotals.lifetimes().find((entry) => entry.clientKey === clientKey);
+  return meters.upsert({
+    clientKey,
+    allocationBytes,
+    pauseAtBytes: Number.isFinite(pauseAt) && pauseAt > 0 ? pauseAt : allocationBytes,
+    autoPause: params.get("autoPause") !== "0",
+    cycle,
+    lifetimeRx: counters?.lifetimeRx ?? 0,
+    lifetimeTx: counters?.lifetimeTx ?? 0,
+    nowMs: Date.now(),
+    billingCycle: readBillingCycle(),
+  });
+}
+
+/** Lift a pause this recorder applied, when the rule behind it is stood down. */
+async function releaseMeterPause(clientKey: string): Promise<void> {
+  const clientId = Number(clientKey);
+  if (!sendDevicePause || !Number.isInteger(clientId)) return;
+  try {
+    await sendDevicePause(clientId, false);
+    meters.notePauseState(clientKey, "none", Date.now());
+  } catch (error) {
+    console.warn(
+      `[historian] releasing ${meterDeviceName(clientKey)}: ${(error as Error).message}`,
+    );
+  }
+}
+
+function formatGigabytes(bytes: number): string {
+  return bytes >= 1e12 ? `${(bytes / 1e12).toFixed(2)} TB` : `${(bytes / 1e9).toFixed(1)} GB`;
+}
+
+/**
+ * Announce a limit being reached, and pause the device if this host can.
+ *
+ * The alert carries its own spec, since its key names one device and no static
+ * definition can. Recorded before the pause is attempted, so an unreachable
+ * account does not cost the record of the limit being reached.
+ */
+async function deliverMeterTransition(transition: MeterTransition): Promise<void> {
+  const { clientKey, kind, atMs, rule } = transition;
+  const name = meterDeviceName(clientKey);
+  const key = `dataLimit:${clientKey}`;
+  const reached = kind === "reached";
+  recordAlertTransitions([
+    {
+      kind: reached ? "fired" : "cleared",
+      source: "system",
+      key,
+      atMs,
+      spec: {
+        key,
+        ok: `${name} is within its data allowance`,
+        firing: `${name} reached its ${formatGigabytes(rule.pauseAtBytes)} data allowance`,
+        advice: sendDevicePause
+          ? undefined
+          : "Connect your Starlink account to have Dishylink pause a device when it reaches its allowance.",
+        severity: "warning",
+        notify: true,
+      },
+    },
+  ]);
+
+  const clientId = Number(clientKey);
+  if (!sendDevicePause || !Number.isInteger(clientId)) {
+    if (reached) meters.notePauseState(clientKey, "failed", atMs);
+    return;
+  }
+  try {
+    await sendDevicePause(clientId, reached);
+    meters.notePauseState(clientKey, reached ? "applied" : "none", Date.now());
+  } catch (error) {
+    console.warn(`[historian] meter ${kind} for ${name}: ${(error as Error).message}`);
+    if (reached) meters.notePauseState(clientKey, "failed", Date.now());
+  }
+}
 
 function finiteMbps(value: number | "NaN" | undefined): number | null {
   const numeric = Number(value);
@@ -864,6 +1006,24 @@ async function pollClients(): Promise<void> {
   } catch {
     // router unreachable (or bypass mode) — keep what we have
   }
+  runMeters();
+}
+
+/**
+ * Check every allowance against the counters this poll folded.
+ *
+ * Runs whether or not the router answered: a cycle rolls on the clock, so a rule
+ * whose device is away still has to release the pause it applied when the cycle
+ * turns over. Transitions latch inside the store before any is delivered, so the
+ * 200 ms cadence cannot stack a second pause behind the first.
+ */
+function runMeters(): void {
+  meters.resolve(
+    (key) => clientTotals.resolveKey(key),
+    (key) => clientTotals.totals(key).length > 0,
+  );
+  const transitions = meters.observe(clientTotals.lifetimes(), Date.now(), readBillingCycle());
+  for (const transition of transitions) void deliverMeterTransition(transition);
 }
 
 /**
@@ -1124,6 +1284,8 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
     const client = url.searchParams.get("client");
     const reset = client ? clientTotals.reset(client, Date.now()) : false;
     if (reset) clientTotals.snapshot();
+    // The rule reads this counter, so emptying it empties what the rule counted.
+    if (reset && client) meters.restart(client, Date.now(), readBillingCycle());
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify({ reset }));
     return;
@@ -1154,13 +1316,17 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
     response.setHeader("Content-Type", "application/json");
     if (request.method === "DELETE") {
       const client = url.searchParams.get("client");
+      // A delete takes the rule too: one on a record that no longer exists can
+      // never be reached, and would meter again unannounced if the device came back.
       if (client) {
         const removed = clientTotals.remove(client);
         clientTotals.snapshot();
+        meters.remove(client);
         response.end(JSON.stringify({ removed }));
       } else {
         clientTotals.clear();
         clientTotals.snapshot();
+        meters.clear();
         response.end(JSON.stringify({ cleared: true }));
       }
       return;
@@ -1194,6 +1360,41 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
     return legacyByMac.get(row.macAddress);
   };
 
+  // The rules, each with what it has counted, so a card needs one request.
+  if (url.pathname === "/api/clients/meters") {
+    response.setHeader("Content-Type", "application/json");
+    const client = url.searchParams.get("client");
+    if (request.method === "DELETE") {
+      response.end(JSON.stringify({ removed: client ? meters.remove(client) : false }));
+      return;
+    }
+    if (request.method === "POST") {
+      const rule = client ? upsertMeterFrom(client, url.searchParams) : null;
+      response.statusCode = rule ? 200 : 400;
+      response.end(JSON.stringify(rule ? { rule: withUsage(rule) } : { error: "bad_request" }));
+      return;
+    }
+    const rules = client ? meters.all().filter((rule) => rule.clientKey === client) : meters.all();
+    response.end(
+      JSON.stringify({
+        rules: rules.map(withUsage),
+        // The pause write needs an account, so a surface can say up front whether
+        // a rule will be enforced rather than only after one is not.
+        enforceable: sendDevicePause !== null,
+      }),
+    );
+    return;
+  }
+  // Start one rule's allowance over, leaving the device's own usage standing.
+  if (url.pathname === "/api/clients/meters/reset" && request.method === "POST") {
+    const client = url.searchParams.get("client");
+    const rule = client ? meters.restart(client, Date.now(), readBillingCycle()) : undefined;
+    // Released with it: nothing else would lift the pause until the cycle rolled.
+    if (rule && client) void releaseMeterPause(client);
+    response.setHeader("Content-Type", "application/json");
+    response.end(JSON.stringify({ rule: rule ? withUsage(rule) : null }));
+    return;
+  }
   if (url.pathname === "/api/clients") {
     const hours = Math.min(6, Math.max(1, Number(url.searchParams.get("hours") ?? 6)));
     // One key across history, samples and the odometer: the clientId. The old

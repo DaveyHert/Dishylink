@@ -735,6 +735,17 @@ export class ClientTotalsCore {
     return dropped;
   }
 
+  /** Every device's counter as it stands, for a reader measuring a span of its
+   *  own from an anchor it keeps. Keyed as the store keys it, so a caller holding
+   *  an older identity resolves it through resolveKey first. */
+  lifetimes(): { clientKey: string; lifetimeRx: number; lifetimeTx: number }[] {
+    return [...this.states].map(([clientKey, state]) => ({
+      clientKey,
+      lifetimeRx: state.lifetimeRx,
+      lifetimeTx: state.lifetimeTx,
+    }));
+  }
+
   /** Public totals, one device (by clientId key) or all (newest activity first).
    *  Internal fields (`prev*`, `lastPollMs`, `periodMonth`) are stripped. */
   totals(clientKey?: string): ClientTotal[] {

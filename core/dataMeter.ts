@@ -69,6 +69,9 @@ export interface MeterRule {
    *  the next reading. */
   actedThisCycle: boolean;
   pauseState: MeterPauseState;
+  /** When the pause was last attempted, so a host that retries a failed write
+   *  can space its attempts. */
+  pauseCheckedMs?: number;
 }
 
 export interface MeterTransition {
