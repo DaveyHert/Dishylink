@@ -1592,6 +1592,33 @@ function releaseDataDir(): void {
 claimDataDir();
 process.on("exit", releaseDataDir);
 
+// Enforcement in dev, where the recorder is this standalone process rather than
+// the one Electron main embeds. The account lives in the Vite dev server's cloud
+// proxy — the same binding the window's own pause goes through — and the cookie
+// it signs with sits beside this process. Without this a rule set in dev is
+// evaluated and announced but never acted on, which is not a difference dev
+// should have from the built app.
+const DEV_CLOUD_ORIGIN = process.env.HISTORIAN_DEV_CLOUD_ORIGIN;
+if (DEV_CLOUD_ORIGIN) {
+  const cookieFile = resolve(".starlink-cookie");
+  setAccountSessionReader(() => {
+    try {
+      return readFileSync(cookieFile, "utf8").trim().length > 0;
+    } catch {
+      return false;
+    }
+  });
+  setDevicePauser(async (clientId, paused) => {
+    const response = await fetch(`${DEV_CLOUD_ORIGIN}/cloud/device`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "pause", clientId, paused }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) throw new Error(`cloud proxy answered ${response.status}`);
+  });
+}
+
 // The dev process serves the collector over loopback HTTP. An embedded host (the
 // Electron app) sets HISTORIAN_EMBED and calls handleRequest directly instead, so
 // there is no open port.
