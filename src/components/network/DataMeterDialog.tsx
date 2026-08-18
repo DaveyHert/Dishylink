@@ -136,6 +136,8 @@ export function DataMeterDialog({
             meter={meter}
             deviceName={deviceName}
             onOpenChange={setOpen}
+            onCancel={editing ? () => setEditing(false) : () => setOpen(false)}
+            onSaved={editing ? () => setEditing(false) : () => setOpen(false)}
           />
         ) : meter.rule ? (
           <MeterStatus
@@ -163,7 +165,7 @@ export function DataMeterDialog({
 const NEARING_LIMIT = 0.9;
 
 function UsageRing({ spent, paused }: { spent: number; paused: boolean }) {
-  const radius = 68;
+  const radius = 82;
   const circumference = 2 * Math.PI * radius;
   const stroke =
     paused || spent >= 1
@@ -172,25 +174,25 @@ function UsageRing({ spent, paused }: { spent: number; paused: boolean }) {
         ? "var(--accent)"
         : "var(--series-down)";
   return (
-    <svg width='160' height='160' viewBox='0 0 160 160' aria-hidden='true'>
+    <svg width='192' height='192' viewBox='0 0 192 192' aria-hidden='true'>
       <circle
-        cx='80'
-        cy='80'
+        cx='96'
+        cy='96'
         r={radius}
         fill='none'
-        strokeWidth='12'
+        strokeWidth='14'
         stroke='color-mix(in srgb, var(--ink) 12%, transparent)'
       />
       <circle
-        cx='80'
-        cy='80'
+        cx='96'
+        cy='96'
         r={radius}
         fill='none'
-        strokeWidth='12'
+        strokeWidth='14'
         strokeLinecap='round'
         stroke={stroke}
         strokeDasharray={`${circumference * spent} ${circumference}`}
-        transform='rotate(-90 80 80)'
+        transform='rotate(-90 96 96)'
       />
     </svg>
   );
@@ -235,17 +237,17 @@ function MeterStatus({
               </span>
             ) : (
               <>
-                <span className='text-[34px] leading-none font-extrabold tabular-nums text-foreground'>
+                <span className='text-[42px] leading-none font-extrabold tabular-nums text-foreground'>
                   {gigabytes(used)}
                 </span>
-                <span className='mt-1 text-[11px] tracking-wide text-muted-foreground'>
+                <span className='mt-1.5 text-[12.5px] tracking-wide text-muted-foreground'>
                   GB USED
                 </span>
               </>
             )}
           </div>
         </div>
-        <div className='text-center text-[13px] text-muted-foreground'>
+        <div className='text-center text-[15px] text-muted-foreground'>
           of <span className='font-semibold text-foreground'>{formatBytes(allowance)}</span>{" "}
           allowance
         </div>
@@ -287,14 +289,21 @@ function MeterStatus({
         {meter.error && <Callout tone='error'>{meter.error}</Callout>}
       </div>
 
-      <DialogFooter className='flex-row items-center justify-end gap-2 border-t border-border/60 pt-4'>
-        <Button variant='outline' className='cursor-pointer' onClick={onClose}>
-          Close
-        </Button>
-        <Button className='cursor-pointer' onClick={onEdit}>
-          Edit limit
-        </Button>
-      </DialogFooter>
+      <div className='space-y-4 border-t border-border/60 pt-4'>
+        {rule.autoPause && !paused && (
+          <Callout tone='info'>
+            Device data will automatically pause when usage reaches this limit.
+          </Callout>
+        )}
+        <DialogFooter className='flex-row items-center justify-end gap-2'>
+          <Button variant='outline' className='cursor-pointer' onClick={onClose}>
+            Close
+          </Button>
+          <Button className='cursor-pointer' onClick={onEdit}>
+            Edit limit
+          </Button>
+        </DialogFooter>
+      </div>
     </>
   );
 }
@@ -303,10 +312,14 @@ function MeterForm({
   meter,
   deviceName,
   onOpenChange,
+  onCancel,
+  onSaved,
 }: {
   meter: DataMeter;
   deviceName: string;
   onOpenChange: (open: boolean) => void;
+  onCancel: () => void;
+  onSaved: () => void;
 }) {
   const { rule, pauseEnforceable, error, save, restart, remove } = meter;
   const [allocationGB, setAllocationGB] = useState(rule ? gigabytes(rule.allocationBytes) : "50");
@@ -569,7 +582,7 @@ function MeterForm({
           )}
         </div>
         <div className='flex gap-2'>
-          <Button variant='outline' className='cursor-pointer' onClick={() => onOpenChange(false)}>
+          <Button variant='outline' className='cursor-pointer' onClick={onCancel}>
             Cancel
           </Button>
           <Button
@@ -582,7 +595,7 @@ function MeterForm({
                   autoPause,
                   cycle: cycleFor(kind, weekday, day, nowMs),
                 });
-                onOpenChange(false);
+                onSaved();
               })
             }
           >
