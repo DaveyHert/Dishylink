@@ -40,6 +40,13 @@
 // the extension with IndexedDB. loadSnapshot / toSnapshot are the bridge — the
 // whole internal state serializes, so a torn-down worker resumes exactly.
 
+/** A month that has finished, as `year * 12 + month` (local) and its usage. */
+export interface MonthTotal {
+  periodMonth: number;
+  rxBytes: number;
+  txBytes: number;
+}
+
 export interface ClientTotal {
   /** Router's stable per-device id — the identity this odometer is keyed by.
    *  Undefined only for a legacy/seeded bucket awaiting its first live poll. */
@@ -54,6 +61,8 @@ export interface ClientTotal {
   sinceMs: number;
   /** Last time the device was observed active, epoch ms. */
   lastSeenMs: number;
+  /** Completed months, oldest first. */
+  months?: MonthTotal[];
 }
 
 export interface TotalState {
@@ -80,6 +89,8 @@ export interface TotalState {
   lastSeenMs: number;
   /** Which month the totals belong to, as `year * 12 + month` (local). */
   periodMonth: number;
+  /** Written when a month rolls, the only moment its figure is final. */
+  months?: MonthTotal[];
   /** Last counter values, to delta the next reading against. One stream per state
    *  (a state is one clientId), so the counters live here rather than in a map. */
   prevRx: number;
@@ -222,6 +233,10 @@ function monthlyTx(state: TotalState): number {
   return Math.max(0, state.lifetimeTx - state.monthAnchorTx);
 }
 
+/** Completed months kept beside the one running. Also how long an absent device
+ *  is kept, since dropping it sooner would discard months it still holds. */
+export const MONTHS_KEPT = 6;
+
 /** Local `year * 12 + month` — the bucket a timestamp's usage belongs to. */
 function monthOf(atMs: number): number {
   const date = new Date(atMs);
@@ -236,10 +251,10 @@ function monthStartMs(atMs: number): number {
   return date.getTime();
 }
 
-/** Local midnight on the first of the month *before* `atMs`'s, epoch ms. */
-function previousMonthStartMs(atMs: number): number {
+/** Local midnight on the first of the month `months` before `atMs`'s, epoch ms. */
+function monthsBackStartMs(atMs: number, months: number): number {
   const date = new Date(monthStartMs(atMs));
-  date.setMonth(date.getMonth() - 1);
+  date.setMonth(date.getMonth() - months);
   return date.getTime();
 }
 
@@ -403,8 +418,18 @@ export class ClientTotalsCore {
 
     const month = monthOf(atMs);
     if (month !== state.periodMonth) {
-      // First sighting in a new month: start its bucket fresh. The delta that
-      // straddles the boundary is dropped rather than split — one interval.
+      // First sighting in a new month: file the month that just ended, then start
+      // the new one fresh. The delta that straddles the boundary is dropped
+      // rather than split — one interval.
+      const closed = {
+        periodMonth: state.periodMonth,
+        rxBytes: monthlyRx(state),
+        txBytes: monthlyTx(state),
+      };
+      // An empty month is not filed: a device away since spring would otherwise
+      // push its real months out of the window with blanks.
+      if (closed.rxBytes > 0 || closed.txBytes > 0)
+        state.months = [...(state.months ?? []), closed].slice(-MONTHS_KEPT);
       state.monthAnchorRx = state.lifetimeRx;
       state.monthAnchorTx = state.lifetimeTx;
       state.periodMonth = month;
@@ -601,6 +626,21 @@ export class ClientTotalsCore {
       survivor.monthAnchorRx += source.lifetimeRx;
       survivor.monthAnchorTx += source.lifetimeTx;
     }
+    // One device's past under two identities: months either held separately add
+    // together, since both were the same device spending.
+    const byMonth = new Map<number, MonthTotal>();
+    for (const month of [...(survivor.months ?? []), ...(source.months ?? [])]) {
+      const held = byMonth.get(month.periodMonth);
+      if (held) {
+        held.rxBytes += month.rxBytes;
+        held.txBytes += month.txBytes;
+      } else byMonth.set(month.periodMonth, { ...month });
+    }
+    if (byMonth.size > 0)
+      survivor.months = [...byMonth.values()]
+        .sort((a, b) => a.periodMonth - b.periodMonth)
+        .slice(-MONTHS_KEPT);
+
     survivor.lastSeenMs = Math.max(survivor.lastSeenMs, source.lastSeenMs);
     survivor.name ??= source.name;
     survivor.lastPollMs = 0;
@@ -681,11 +721,10 @@ export class ClientTotalsCore {
     return false;
   }
 
-  /** Drop devices unseen since before last month so the list cannot grow forever.
-   *  Month-aligned rather than a day count: a device seen anywhere in the previous
-   *  calendar month survives through this one. Returns how many were dropped. */
+  /** Drop devices unseen for longer than the history window, so the list cannot
+   *  grow forever. Month-aligned rather than a day count. Returns how many. */
   compact(nowMs: number): number {
-    const cutoff = previousMonthStartMs(nowMs);
+    const cutoff = monthsBackStartMs(nowMs, MONTHS_KEPT);
     let dropped = 0;
     for (const [key, state] of this.states) {
       if (state.lastSeenMs < cutoff) {
@@ -707,6 +746,7 @@ export class ClientTotalsCore {
       txBytes: monthlyTx(s),
       sinceMs: s.sinceMs,
       lastSeenMs: s.lastSeenMs,
+      months: s.months,
     });
     if (clientKey) {
       const state = this.states.get(clientKey);
