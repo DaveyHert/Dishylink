@@ -171,53 +171,6 @@ function MeterForm({
           </div>
         </div>
 
-        <div className='flex items-start justify-between gap-4'>
-          <div>
-            <div className='text-[13px] font-medium text-foreground'>Pause when spent</div>
-            <div className='text-[12px] text-muted-foreground'>
-              Cuts this device’s internet until the cycle turns over.
-            </div>
-          </div>
-          <Switch checked={autoPause} onCheckedChange={setAutoPause} />
-        </div>
-
-        {autoPause && (
-          <div className='space-y-3'>
-            <div className='flex items-center gap-3'>
-              <div className='relative flex-1'>
-                <Input
-                  value={pauseAtGB}
-                  inputMode='decimal'
-                  onChange={(event) => setPauseAtGB(event.target.value)}
-                  className='pr-12 tabular-nums'
-                />
-                <span className='absolute inset-y-0 right-3 flex items-center text-[12px] text-muted-foreground'>
-                  GB
-                </span>
-              </div>
-              <div
-                className={`rounded-md px-3 py-2 text-[12.5px] font-medium tabular-nums ${
-                  remaining <= 0
-                    ? "bg-destructive/10 text-destructive"
-                    : "bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] text-foreground"
-                }`}
-              >
-                {formatBytes(Math.max(0, remaining))} left
-              </div>
-            </div>
-            <Slider
-              value={[Math.min(pauseAtBytes / GB, Number(allocationGB) || 0)]}
-              max={Math.max(1, Number(allocationGB) || 0)}
-              step={0.5}
-              onValueChange={([next]) => setPauseAtGB(String(next))}
-            />
-            <div className='flex justify-between text-[11px] text-muted-foreground'>
-              <span>0 GB</span>
-              <span>{allocationGB || 0} GB allowance</span>
-            </div>
-          </div>
-        )}
-
         <div className='grid grid-cols-2 gap-3'>
           <label className='space-y-1.5'>
             <span className='text-[12px] font-medium text-foreground'>Allowance</span>
@@ -282,6 +235,53 @@ function MeterForm({
               className='tabular-nums'
             />
           </label>
+        )}
+
+        <div className='flex items-start justify-between gap-4'>
+          <div>
+            <div className='text-[13px] font-medium text-foreground'>Pause when spent</div>
+            <div className='text-[12px] text-muted-foreground'>
+              Cuts this device’s internet until the cycle turns over.
+            </div>
+          </div>
+          <Switch checked={autoPause} onCheckedChange={setAutoPause} />
+        </div>
+
+        {autoPause && (
+          <div className='space-y-3'>
+            <div className='flex items-center gap-3'>
+              <div className='relative flex-1'>
+                <Input
+                  value={pauseAtGB}
+                  inputMode='decimal'
+                  onChange={(event) => setPauseAtGB(event.target.value)}
+                  className='pr-12 tabular-nums'
+                />
+                <span className='absolute inset-y-0 right-3 flex items-center text-[12px] text-muted-foreground'>
+                  GB
+                </span>
+              </div>
+              <div
+                className={`rounded-md px-3 py-2 text-[12.5px] font-medium tabular-nums ${
+                  remaining <= 0
+                    ? "bg-destructive/10 text-destructive"
+                    : "bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] text-foreground"
+                }`}
+              >
+                {formatBytes(Math.max(0, remaining))} left
+              </div>
+            </div>
+            <Slider
+              value={[Math.min(pauseAtBytes / GB, Number(allocationGB) || 0)]}
+              max={Math.max(1, Number(allocationGB) || 0)}
+              step={0.5}
+              onValueChange={([next]) => setPauseAtGB(String(next))}
+            />
+            <div className='flex justify-between text-[11px] text-muted-foreground'>
+              <span>0 GB</span>
+              <span>{allocationGB || 0} GB allowance</span>
+            </div>
+          </div>
         )}
 
         {willPauseOnSave && (
