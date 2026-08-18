@@ -30,7 +30,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "historian": "tsx collector/historian.mts",
+    "historian": "cross-env HISTORIAN_DEV_CLOUD_ORIGIN=http://localhost:5173 tsx collector/historian.mts",
     "seed:desktop": "node scripts/seed-desktop.mjs",
     "typecheck": "tsc -b",
     "typecheck:extension": "wxt prepare && tsc --noEmit -p extension/tsconfig.json",
