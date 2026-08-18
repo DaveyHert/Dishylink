@@ -13,7 +13,6 @@ import { useNow } from "../../hooks/useNow";
 import { formatBytes } from "../../lib/format";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { Slider } from "../ui/slider";
 import { Switch } from "../ui/switch";
 import { Callout } from "../ui/callout";
 import {
@@ -105,7 +104,6 @@ function MeterForm({
 }) {
   const { rule, enforceable, error, save, restart, remove } = meter;
   const [allocationGB, setAllocationGB] = useState(rule ? gigabytes(rule.allocationBytes) : "50");
-  const [pauseAtGB, setPauseAtGB] = useState(rule ? gigabytes(rule.pauseAtBytes) : "50");
   const [autoPause, setAutoPause] = useState(rule?.autoPause ?? true);
   const [kind, setKind] = useState<MeterCycle["kind"]>(rule?.cycle.kind ?? "monthly");
   const [weekday, setWeekday] = useState(rule?.cycle.kind === "weekly" ? rule.cycle.weekday : 1);
@@ -116,12 +114,11 @@ function MeterForm({
   const nowMs = useNow(60_000);
 
   const allocationBytes = Math.max(0, Number(allocationGB) || 0) * GB;
-  const pauseAtBytes = Math.min(Math.max(0, Number(pauseAtGB) || 0) * GB, allocationBytes);
   const used = rule?.usageBytes ?? 0;
-  const remaining = pauseAtBytes - used;
+  const remaining = allocationBytes - used;
   const spent = allocationBytes > 0 ? Math.min(1, used / allocationBytes) : 0;
-  const pausePoint = allocationBytes > 0 ? Math.min(1, pauseAtBytes / allocationBytes) : 0;
-  const willPauseOnSave = autoPause && rule !== null && used >= pauseAtBytes && pauseAtBytes > 0;
+  const willPauseOnSave =
+    autoPause && rule !== null && allocationBytes > 0 && used >= allocationBytes;
 
   const apply = async (run: () => Promise<void>) => {
     setBusy(true);
@@ -146,28 +143,31 @@ function MeterForm({
           <div className='flex items-baseline justify-between'>
             <span className='text-[13px] font-medium text-foreground'>This cycle</span>
             <span className='text-[13px] tabular-nums text-muted-foreground'>
-              <span className='font-semibold text-foreground'>{formatBytes(used)}</span>
+              <span
+                className={`font-semibold ${remaining <= 0 ? "text-destructive" : "text-foreground"}`}
+              >
+                {formatBytes(used)}
+              </span>
               {allocationBytes > 0 && <> / {formatBytes(allocationBytes)}</>}
             </span>
           </div>
-          {/* The pause point is marked on the bar rather than stated only as a
-                number, so "how close is this device" is answerable at a glance. */}
-          <div className='relative mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--ink)_12%,transparent)]'>
+          <div className='mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--ink)_12%,transparent)]'>
             <div
-              className='h-full rounded-full bg-[color-mix(in_srgb,var(--ink)_78%,var(--baseline))]'
+              className={`h-full rounded-full ${spent >= 1 ? "bg-destructive" : "bg-[color-mix(in_srgb,var(--ink)_78%,var(--baseline))]"}`}
               style={{ width: `${spent * 100}%` }}
             />
-            {autoPause && pausePoint > 0 && pausePoint < 1 && (
-              <div
-                className='absolute inset-y-0 w-0.5 bg-destructive'
-                style={{ left: `${pausePoint * 100}%` }}
-              />
-            )}
           </div>
-          <div className='mt-1.5 text-[11.5px] text-muted-foreground'>
-            {rule
-              ? (endsIn(rule.periodEndMs, nowMs) ?? "Does not reset on its own")
-              : "No limit set yet"}
+          <div className='mt-1.5 flex justify-between text-[11.5px] text-muted-foreground'>
+            <span>
+              {rule
+                ? (endsIn(rule.periodEndMs, nowMs) ?? "Does not reset on its own")
+                : "No limit set yet"}
+            </span>
+            {rule && allocationBytes > 0 && (
+              <span className={remaining <= 0 ? "text-destructive" : undefined}>
+                {formatBytes(Math.max(0, remaining))} left
+              </span>
+            )}
           </div>
         </div>
 
@@ -178,12 +178,7 @@ function MeterForm({
               <Input
                 value={allocationGB}
                 inputMode='decimal'
-                onChange={(event) => {
-                  setAllocationGB(event.target.value);
-                  // The pause point cannot outrun the allowance it sits inside.
-                  if (Number(pauseAtGB) > Number(event.target.value))
-                    setPauseAtGB(event.target.value);
-                }}
+                onChange={(event) => setAllocationGB(event.target.value)}
                 className='pr-12 tabular-nums'
               />
               <span className='absolute inset-y-0 right-3 flex items-center text-[12px] text-muted-foreground'>
@@ -246,43 +241,6 @@ function MeterForm({
           </div>
           <Switch checked={autoPause} onCheckedChange={setAutoPause} />
         </div>
-
-        {autoPause && (
-          <div className='space-y-3'>
-            <div className='flex items-center gap-3'>
-              <div className='relative flex-1'>
-                <Input
-                  value={pauseAtGB}
-                  inputMode='decimal'
-                  onChange={(event) => setPauseAtGB(event.target.value)}
-                  className='pr-12 tabular-nums'
-                />
-                <span className='absolute inset-y-0 right-3 flex items-center text-[12px] text-muted-foreground'>
-                  GB
-                </span>
-              </div>
-              <div
-                className={`rounded-md px-3 py-2 text-[12.5px] font-medium tabular-nums ${
-                  remaining <= 0
-                    ? "bg-destructive/10 text-destructive"
-                    : "bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] text-foreground"
-                }`}
-              >
-                {formatBytes(Math.max(0, remaining))} left
-              </div>
-            </div>
-            <Slider
-              value={[Math.min(pauseAtBytes / GB, Number(allocationGB) || 0)]}
-              max={Math.max(1, Number(allocationGB) || 0)}
-              step={0.5}
-              onValueChange={([next]) => setPauseAtGB(String(next))}
-            />
-            <div className='flex justify-between text-[11px] text-muted-foreground'>
-              <span>0 GB</span>
-              <span>{allocationGB || 0} GB allowance</span>
-            </div>
-          </div>
-        )}
 
         {willPauseOnSave && (
           <Callout tone='error'>

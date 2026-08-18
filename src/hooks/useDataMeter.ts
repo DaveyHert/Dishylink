@@ -24,7 +24,6 @@ export interface DataMeter {
   error: string | null;
   save: (options: {
     allocationBytes: number;
-    pauseAtBytes: number;
     autoPause: boolean;
     cycle: MeterCycle;
   }) => Promise<void>;
@@ -93,12 +92,11 @@ export function useDataMeter(clientKey: string | null): DataMeter {
   );
 
   const save: DataMeter["save"] = useCallback(
-    async ({ allocationBytes, pauseAtBytes, autoPause, cycle }) => {
+    async ({ allocationBytes, autoPause, cycle }) => {
       if (!clientKey) return;
       const query = new URLSearchParams({
         client: clientKey,
         allocation: String(Math.round(allocationBytes)),
-        pauseAt: String(Math.round(pauseAtBytes)),
         autoPause: autoPause ? "1" : "0",
         ...cycleParams(cycle),
       });

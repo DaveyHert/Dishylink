@@ -123,9 +123,8 @@ describe("evaluateMeters", () => {
     expect(rules[0].pauseState).toBe("pending");
   });
 
-  it("trips at the pause point when it sits below the allocation", () => {
-    const early = rule({ pauseAtBytes: 16 * GB });
-    const { transitions } = evaluateMeters([early], read(17 * GB), T0 + 1_000);
+  it("trips on the allowance itself, with nothing to set separately", () => {
+    const { transitions } = evaluateMeters([rule()], read(20 * GB), T0 + 1_000);
     expect(transitions.map((t) => t.kind)).toEqual(["reached"]);
   });
 

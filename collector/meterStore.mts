@@ -119,7 +119,6 @@ export class MeterStore {
   upsert(options: {
     clientKey: string;
     allocationBytes: number;
-    pauseAtBytes?: number;
     autoPause?: boolean;
     cycle: MeterCycle;
     lifetimeRx: number;
@@ -136,7 +135,6 @@ export class MeterStore {
         ? {
             ...existing,
             allocationBytes: options.allocationBytes,
-            pauseAtBytes: options.pauseAtBytes ?? options.allocationBytes,
             autoPause: options.autoPause ?? existing.autoPause,
             cycle: options.cycle,
           }
