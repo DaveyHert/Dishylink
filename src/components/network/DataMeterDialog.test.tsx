@@ -98,21 +98,17 @@ describe("DataMeterDialog", () => {
     expect(text()).toContain("50 GB allowance");
   });
 
-  test("given: an edit that was closed, should: reopen on the status view", async () => {
+  test("given: an edit that is cancelled, should: return to the status view rather than close", async () => {
     render(<Harness value={meter({ rule: rule() })} />);
 
     await page.getByText("Edit limit").click();
     await expect.poll(text).toContain("Save limit");
 
     await page.getByText("Cancel").click();
-    await expect.poll(text).not.toContain("Save limit");
-    // The overlay fades rather than vanishing, and covers the page while it does.
-    // Clicking into that window hits the overlay, exactly as it would for a user.
-    await expect.poll(() => document.querySelector('[data-slot="dialog-overlay"]')).toBeNull();
-
-    await page.getByText("reopen").click();
     await expect.poll(text).toContain("GB USED");
     expect(text()).not.toContain("Save limit");
+    // The card is still open: cancelling an edit steps back, it does not dismiss.
+    expect(document.querySelector('[data-slot="dialog-overlay"]')).not.toBeNull();
   });
 
   test("given: a day between 2 and 9, should: accept it — clamping every keystroke made it unreachable", async () => {
