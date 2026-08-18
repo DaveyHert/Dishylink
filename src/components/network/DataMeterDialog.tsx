@@ -78,8 +78,7 @@ export function DataMeterDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className='glass-panel gap-0 sm:max-w-lg'
-        overlayClassName='bg-black/30 backdrop-blur-[2px]'
+        className='gap-0 rounded-xl border border-border/50 bg-[color-mix(in_srgb,var(--surface-raised)_80%,transparent)] text-ink shadow-[0_12px_40px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-xl backdrop-saturate-150 sm:max-w-lg dark:bg-[color-mix(in_srgb,#0e0e0e_80%,transparent)] dark:shadow-[0_12px_40px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.08)]'
         showCloseButton={false}
       >
         <MeterForm

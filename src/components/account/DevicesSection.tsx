@@ -127,8 +127,8 @@ export function DevicesSection({
                 item.kind === "router" ? "pl-7" : "pl-2.5"
               } ${
                 item.key === selected?.key
-                  ? "bg-surface-raised"
-                  : "bg-transparent hover:bg-[color-mix(in_srgb,var(--surface-raised)_55%,transparent)]"
+                  ? "bg-fill-raised"
+                  : "bg-transparent hover:bg-fill-hover"
               }`}
             >
               <DeviceIcon item={item} />
