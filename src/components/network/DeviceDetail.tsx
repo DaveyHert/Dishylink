@@ -13,7 +13,9 @@ import { Badge } from "../ui/badge";
 import { DeviceFactsList } from "./DeviceFactsList";
 import { DeviceNameEditor, RenameButton } from "./DeviceNameEditor";
 import { DeviceSignalIcon } from "../../assets/icons/DeviceSignalIcon";
+import { MeterIcon } from "../../assets/icons/MeterIcon";
 import { DeviceThroughput } from "./DeviceThroughput";
+import { DataMeterDialog } from "./DataMeterDialog";
 import { buildDeviceFacts } from "./deviceFacts";
 import { deviceRowSubtitle } from "./deviceRowSubtitle";
 import { displayName, pauseSettleTimeoutMs, signalQuality } from "./networkFormat";
@@ -76,6 +78,7 @@ export function DeviceDetail({
   onRename: (clientId: number, givenName: string) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
+  const [editingMeter, setEditingMeter] = useState(false);
   const [pendingPaused, setPendingPaused] = useState<boolean | null>(null);
   const [confirmingPause, setConfirmingPause] = useState(false);
   const [pauseError, setPauseError] = useState<Error | null>(null);
@@ -177,7 +180,19 @@ export function DeviceDetail({
           )}
           {paused && <Badge className='mt-1'>Paused</Badge>}
         </div>
-        <div className='flex justify-end'>
+        <div className='flex items-center justify-end gap-1.5'>
+          {showPauseControl && client.macAddress && (
+            <Button
+              variant='ghost'
+              size='sm'
+              aria-label='Data limit'
+              title='Data limit'
+              className='cursor-pointer px-2'
+              onClick={() => setEditingMeter(true)}
+            >
+              <MeterIcon />
+            </Button>
+          )}
           {showPauseControl && (
             <Button
               variant={paused ? "outline" : "secondary"}
@@ -249,6 +264,15 @@ export function DeviceDetail({
             pauseError.message
           )}
         </div>
+      )}
+
+      {client.macAddress && (
+        <DataMeterDialog
+          clientKey={usageKey(client.clientId, client.macAddress)}
+          deviceName={name}
+          open={editingMeter}
+          onOpenChange={setEditingMeter}
+        />
       )}
 
       {editing && (
