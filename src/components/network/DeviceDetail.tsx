@@ -20,6 +20,7 @@ import { buildDeviceFacts } from "./deviceFacts";
 import { deviceRowSubtitle } from "./deviceRowSubtitle";
 import { displayName, pauseSettleTimeoutMs, signalQuality } from "./networkFormat";
 import { Button } from "../ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { SpinLoader } from "../loaders/SpinLoader";
 import {
   AccountRequiredError,
@@ -182,16 +183,20 @@ export function DeviceDetail({
         </div>
         <div className='flex items-center justify-end gap-1.5'>
           {showPauseControl && client.macAddress && (
-            <Button
-              variant='ghost'
-              size='sm'
-              aria-label='Data limit'
-              title='Data limit'
-              className='cursor-pointer px-2'
-              onClick={() => setEditingMeter(true)}
-            >
-              <MeterIcon />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  aria-label='Data limit'
+                  className='cursor-pointer px-2'
+                  onClick={() => setEditingMeter(true)}
+                >
+                  <MeterIcon />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side='top'>Data limit</TooltipContent>
+            </Tooltip>
           )}
           {showPauseControl && (
             <Button
