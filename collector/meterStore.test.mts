@@ -67,7 +67,7 @@ describe("MeterStore", () => {
     expect(store.find("111")!.allocationBytes).toBe(80 * GB);
   });
 
-  it("starts the allowance over when the cycle kind changes", () => {
+  it("keeps what a device has spent when the cycle kind changes", () => {
     const store = new MeterStore(tempPath());
     withRule(store, "111", 10 * GB);
     store.observe([{ clientKey: "111", lifetimeRx: 30 * GB, lifetimeTx: 0 }], T0 + 1_000);
@@ -79,7 +79,11 @@ describe("MeterStore", () => {
       lifetimeTx: 0,
       nowMs: T0 + 2_000,
     });
-    expect(usageBytes(store.find("111")!)).toBe(0);
+    // Editing a rule is not a reset: only restart() clears the count, and it has
+    // a control of its own. The new cycle moves its boundaries, nothing else.
+    expect(usageBytes(store.find("111")!)).toBe(20 * GB);
+    expect(store.find("111")!.cycle).toEqual({ kind: "daily" });
+    expect(store.find("111")!.periodEndMs).toBeGreaterThan(T0 + 2_000);
   });
 
   it("clears what a rule counted without touching the device's own counter", () => {
