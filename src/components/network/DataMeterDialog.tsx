@@ -18,8 +18,6 @@ import { Slider } from "../ui/slider";
 import { Switch } from "../ui/switch";
 import { Callout } from "../ui/callout";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
-import { MeterIcon } from "../../assets/icons/MeterIcon";
 import { SpinLoader } from "../loaders/SpinLoader";
 import {
   Dialog,
@@ -147,19 +145,32 @@ export function DataMeterDialog({
             onClose={() => setOpen(false)}
           />
         ) : (
-          <div className='grid min-h-[280px] place-items-center'>
-            <SpinLoader size={36} />
-          </div>
+          <>
+            <DialogHeader className='pb-4'>
+              <DialogTitle className='text-[19px] leading-snug'>Data limit</DialogTitle>
+              <DialogDescription className='text-[13px]'>{deviceName}</DialogDescription>
+            </DialogHeader>
+            <div className='grid min-h-[220px] place-items-center border-t border-border/60'>
+              <SpinLoader size={36} />
+            </div>
+          </>
         )}
       </DialogContent>
     </Dialog>
   );
 }
 
+const NEARING_LIMIT = 0.9;
+
 function UsageRing({ spent, paused }: { spent: number; paused: boolean }) {
   const radius = 68;
   const circumference = 2 * Math.PI * radius;
-  const stroke = paused ? "var(--status-critical)" : "var(--accent)";
+  const stroke =
+    paused || spent >= 1
+      ? "var(--status-critical)"
+      : spent >= NEARING_LIMIT
+        ? "var(--accent)"
+        : "var(--series-down)";
   return (
     <svg width='160' height='160' viewBox='0 0 160 160' aria-hidden='true'>
       <circle
@@ -209,27 +220,12 @@ function MeterStatus({
 
   return (
     <>
-      <DialogHeader className='flex-row items-start justify-between gap-4 pb-4'>
-        <div className='space-y-1'>
-          <DialogTitle className='text-[19px] leading-snug'>Data limit</DialogTitle>
-          <DialogDescription className='text-[13px]'>{deviceName}</DialogDescription>
-        </div>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type='button'
-              onClick={onEdit}
-              aria-label='Edit data limit'
-              className='-mt-1 grid size-8 shrink-0 cursor-pointer place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground'
-            >
-              <MeterIcon className='size-[19px]' />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side='left'>Edit data limit</TooltipContent>
-        </Tooltip>
+      <DialogHeader className='pb-4'>
+        <DialogTitle className='text-[19px] leading-snug'>Data limit</DialogTitle>
+        <DialogDescription className='text-[13px]'>{deviceName}</DialogDescription>
       </DialogHeader>
 
-      <div className='space-y-5 border-t border-border/60 py-5'>
+      <div className='space-y-5 py-5'>
         <div className='relative grid place-items-center'>
           <UsageRing spent={spent} paused={paused} />
           <div className='absolute grid place-items-center text-center'>
@@ -239,7 +235,7 @@ function MeterStatus({
               </span>
             ) : (
               <>
-                <span className='text-[30px] leading-none font-bold tabular-nums text-foreground'>
+                <span className='text-[34px] leading-none font-extrabold tabular-nums text-foreground'>
                   {gigabytes(used)}
                 </span>
                 <span className='mt-1 text-[11px] tracking-wide text-muted-foreground'>
