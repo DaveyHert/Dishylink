@@ -275,10 +275,13 @@ describe("DataMeterDialog", () => {
     await expect.poll(text).toContain("Edit limit");
     await page.getByRole("button", { name: "Edit limit" }).click();
 
-    await expect.poll(text).toContain("2 devices");
-    await page.getByRole("button", { name: "2 devices" }).click();
+    // A group of more than one opens its picker already expanded, so the rows are
+    // there to untick without asking for them.
+    await expect.poll(text).toContain("Kids iPad");
     await page.getByText("Kids iPad").click();
-    await expect.poll(text).toContain("This device");
+    // The button names who it writes for, so losing "for all" is the untick
+    // landing — a signal that cannot read as true while the group still has two.
+    await expect.poll(text).not.toContain("Save limit for all");
     await page.getByRole("button", { name: "Save limit" }).click();
 
     // A member's rule carries what this cycle has spent. A device rule of its own
