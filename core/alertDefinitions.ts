@@ -164,8 +164,8 @@ export const DISH_ALERTS: AlertSpec[] = [
   },
   {
     key: "installPending",
-    ok: "Install complete",
-    firing: "Install is still pending",
+    ok: "Starlink software update install completed",
+    firing: "Starlink software update install pending",
     severity: "advisory",
   },
 ];
@@ -280,8 +280,8 @@ export const ROUTER_ALERTS: AlertSpec[] = [
   },
   {
     key: "installPending",
-    ok: "Install complete",
-    firing: "Router software install is pending",
+    ok: "Router software update install completed",
+    firing: "Router software update install pending",
     severity: "advisory",
   },
   {
