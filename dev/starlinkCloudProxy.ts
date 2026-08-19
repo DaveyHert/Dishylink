@@ -151,6 +151,9 @@ export function starlinkCloudProxy(): Plugin {
             if (!req.url?.startsWith("/api/")) return next();
             historian.handleRequest(req, res);
           });
+          // Last: the first poll can reach a rule that owes a pause, and the
+          // pauser above is what sends it.
+          historian.start();
         } catch (error) {
           // A second dev server would serve a window that records nothing, so the
           // one collector already running is worth stopping this one over. The

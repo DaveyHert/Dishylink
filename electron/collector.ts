@@ -46,6 +46,9 @@ export async function startCollector(rendererRoot: string): Promise<void> {
   subscribeToAlerts = historian.onAlertTransitions;
   subscribeToThroughput = historian.onThroughput;
   enableLiveThroughput = historian.setLiveThroughputEnabled;
+  // Last: the first poll can reach a rule that owes a pause, and the pauser above
+  // is what sends it.
+  historian.start();
 }
 
 /**

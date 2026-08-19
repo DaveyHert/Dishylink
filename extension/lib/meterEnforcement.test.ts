@@ -349,4 +349,110 @@ describe("runMeters", () => {
     expect(await store.readMeterRules()).toHaveLength(1);
     expect(writes).toEqual([]);
   });
+
+  const OTHER = "222";
+
+  /** Two devices, each having spent what it is given. */
+  function pairOdometer(first: number, second: number): ClientTotalsCore {
+    const odometer = new ClientTotalsCore(90_000);
+    const live = new Set([KEY, OTHER]);
+    odometer.observe(Number(KEY), "", 0, 0, T0 - 1_000, "Phone", live);
+    odometer.observe(Number(OTHER), "", 0, 0, T0 - 1_000, "Tablet", live);
+    odometer.observe(Number(KEY), "", first, 0, T0, "Phone", live);
+    odometer.observe(Number(OTHER), "", second, 0, T0, "Tablet", live);
+    return odometer;
+  }
+
+  /**
+   * A group whose member rules are already open, anchored where the counters read
+   * now — the state one drain after it was written. A rule anchors to the counter
+   * it is created against, so a group has to exist before the spend it measures.
+   */
+  async function groupedStore(
+    mode: "pooled" | "perMember",
+    host: MeterHost,
+    over: { countdownMs?: number } = {},
+  ): Promise<InMemoryHistory> {
+    const store = new InMemoryHistory();
+    await store.writeDeviceGroups([
+      {
+        groupId: "kids",
+        name: "Kids",
+        memberKeys: [KEY, OTHER],
+        allocationBytes: 10 * GB,
+        autoPause: true,
+        cycle: over.countdownMs === undefined ? { kind: "daily" } : { kind: "once" },
+        mode,
+        updatedMs: T0,
+        ...over,
+      },
+    ]);
+    await runMeters(store, pairOdometer(0, 0), host, T0);
+    return store;
+  }
+
+  it("takes a whole shared group dark on the reading that puts the sum over", async () => {
+    const { host, writes } = fakeHost();
+    const store = await groupedStore("pooled", host);
+
+    const { transitions: alerts } = await runMeters(
+      store,
+      pairOdometer(6 * GB, 5 * GB),
+      host,
+      T0 + 1_000,
+    );
+
+    // Neither device is over 10 GB alone. The group is, so both are held.
+    expect(writes.map((write) => write.clientId).sort()).toEqual([111, 222]);
+    expect(writes.every((write) => write.paused)).toBe(true);
+    // One group, one announcement, named for the group rather than for whichever
+    // member's reading happened to cross the sum.
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].spec.firing).toBe("Kids reached their 10.0 GB data allowance");
+    expect(alerts[0].key).toBe("dataLimit:group:kids");
+  });
+
+  it("holds only the member that is over when each carries the allowance itself", async () => {
+    const { host, writes } = fakeHost();
+    const store = await groupedStore("perMember", host);
+
+    const { transitions: alerts } = await runMeters(
+      store,
+      pairOdometer(12 * GB, 1 * GB),
+      host,
+      T0 + 1_000,
+    );
+
+    expect(writes).toEqual([{ clientId: 111, paused: true }]);
+    // Its own device key, since nothing is shared here.
+    expect(alerts.map((alert) => alert.key)).toEqual(["dataLimit:111"]);
+  });
+
+  it("releases a member dropped from its group, which nothing else would free", async () => {
+    const { host, writes } = fakeHost();
+    const store = await groupedStore("pooled", host);
+    await runMeters(store, pairOdometer(6 * GB, 5 * GB), host, T0 + 1_000);
+    writes.length = 0;
+
+    const groups = await store.readDeviceGroups();
+    await store.writeDeviceGroups([{ ...groups[0], memberKeys: [KEY] }]);
+    await runMeters(store, pairOdometer(6 * GB, 5 * GB), host, T0 + 2_000);
+
+    // Its rule is gone, so nothing is left that knows the router is holding it.
+    expect(writes).toEqual([{ clientId: 222, paused: false }]);
+    expect((await store.readMeterRules()).map((rule) => rule.clientKey)).toEqual([KEY]);
+  });
+
+  it("takes a whole group dark together when its timer runs out", async () => {
+    const { host, writes } = fakeHost();
+    const store = await groupedStore("pooled", host, { countdownMs: 3_600_000 });
+
+    // Well inside the hour. Spending everything does not end a countdown.
+    await runMeters(store, pairOdometer(900 * GB, 900 * GB), host, T0 + 1_000);
+    expect(writes).toEqual([]);
+
+    await runMeters(store, pairOdometer(900 * GB, 900 * GB), host, T0 + 3_600_001);
+    expect(writes.map((write) => write.clientId).sort()).toEqual([111, 222]);
+    expect(writes.every((write) => write.paused)).toBe(true);
+  });
 });

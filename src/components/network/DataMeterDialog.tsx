@@ -7,19 +7,40 @@
 // and is a different measurement, so it is never the scale on this card.
 
 import { useState } from "react";
-import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
-import type { MeterCycle } from "@core/dataMeter";
+import { Wifi } from "lucide-react";
+import { countdownLeftMs } from "@core/dataMeter";
 import type { DataMeter } from "../../hooks/useDataMeter";
+import { useDeviceGroups } from "../../hooks/useDeviceGroups";
 import { useCloudUsage } from "../../hooks/useCloudAccount";
 import { useNow } from "../../hooks/useNow";
 import { formatBytes } from "../../lib/format";
 import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Slider } from "../ui/slider";
 import { Switch } from "../ui/switch";
 import { Callout } from "../ui/callout";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { SpinLoader } from "../loaders/SpinLoader";
+import { AllowanceFields, AllowanceModeToggle, AppliesToField } from "./allowanceFields";
+import {
+  billingDayOf,
+  cycleLabel,
+  endsAtLabel,
+  endsIn,
+  formatDuration,
+  ringReading,
+  splitDuration,
+  timeLeft,
+  useAllowanceDraft,
+  type MemberCandidate,
+} from "./allowanceTerms";
+
+/** What a limit covering several devices is called. There is no name to type, so
+ *  it is built from the devices it covers — which is what it is. */
+function groupNameFor(memberKeys: readonly string[], candidates: MemberCandidate[]): string {
+  const named = memberKeys.map(
+    (key) => candidates.find((candidate) => candidate.clientKey === key)?.name ?? `device ${key}`,
+  );
+  if (named.length === 2) return `${named[0]} and ${named[1]}`;
+  return `${named[0]} and ${named.length - 1} others`;
+}
 import {
   Dialog,
   DialogContent,
@@ -29,140 +50,34 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 
-const GB = 1_000_000_000;
-
-/** The day of the month the account's own cycle turns over, or null when no
- *  account is connected — in which case the option that needs it is refused
- *  rather than quietly measuring a calendar month instead.
- *
- *  Read as a local date, because the boundaries it feeds are local midnights. */
-function billingDayOf(cycles: { startDate: string }[] | undefined): number | null {
-  const newest = cycles?.[cycles.length - 1];
-  if (!newest?.startDate) return null;
-  const day = new Date(newest.startDate).getDate();
-  return Number.isFinite(day) && day >= 1 ? day : null;
-}
-
-const CYCLE_OPTIONS: { label: string; value: MeterCycle["kind"] }[] = [
-  { label: "Daily", value: "daily" },
-  { label: "Weekly", value: "weekly" },
-  { label: "Monthly", value: "monthly" },
-  { label: "Starlink billing", value: "billing" },
-  { label: "One-off", value: "once" },
-];
-
-const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-
-/** "in 5 days" / "tomorrow" / "in 3 hours" — how long this cycle has left. */
-function endsIn(endMs: number, nowMs: number): string | null {
-  if (!Number.isFinite(endMs)) return null;
-  const hours = Math.max(0, Math.round((endMs - nowMs) / 3_600_000));
-  if (hours < 1) return "ends within the hour";
-  if (hours < 24) return `ends in ${hours} hour${hours === 1 ? "" : "s"}`;
-  const days = Math.round(hours / 24);
-  return days === 1 ? "ends tomorrow" : `ends in ${days} days`;
-}
-
-function timeLeft(endMs: number, nowMs: number): string | null {
-  if (!Number.isFinite(endMs)) return null;
-  const hours = Math.max(0, Math.round((endMs - nowMs) / 3_600_000));
-  if (hours < 1) return "under an hour";
-  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"}`;
-  const days = Math.round(hours / 24);
-  return `${days} day${days === 1 ? "" : "s"}`;
-}
-
-function cycleLabel(cycle: MeterCycle): string {
-  switch (cycle.kind) {
-    case "daily":
-      return "Daily";
-    case "weekly":
-      return "Weekly";
-    case "monthly":
-      return "Monthly";
-    case "custom":
-      return `Every ${cycle.days} days`;
-    case "billing":
-      return "Starlink billing";
-    case "once":
-      return "One-off";
-  }
-}
-
-function cycleFor(
-  kind: MeterCycle["kind"],
-  weekday: number,
-  day: number,
-  startedMs: number,
-  billingDay: number | null,
-): MeterCycle {
-  if (kind === "weekly") return { kind, weekday };
-  if (kind === "monthly") return { kind, day };
-  if (kind === "custom") return { kind, days: 30, startMs: startedMs };
-  if (kind === "billing") return { kind, day: billingDay ?? day };
-  return { kind };
-}
-
-/** GB as the field shows it: one decimal, and none when it is round. */
-function gigabytes(bytes: number): string {
-  return (bytes / GB).toFixed(1).replace(/\.0$/, "");
-}
-
-function ringReading(bytes: number): { value: string; unit: string } {
-  const megabytes = Math.round(bytes / 1e6);
-  if (megabytes < 1000) return { value: String(megabytes), unit: "MB USED" };
-  return { value: gigabytes(bytes), unit: "GB USED" };
-}
-
-const CEILING_RUNGS_GB = [10, 25, 50, 100, 250, 500, 1000];
-
-function ceilingLabel(gigabyteValue: number): string {
-  return gigabyteValue >= 1000 ? `${gigabyteValue / 1000} TB` : `${gigabyteValue} GB`;
-}
-
-const stepButtonClass =
-  "grid h-3 w-6 cursor-pointer place-items-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:scale-90";
-
-function ceilingFor(gigabyteValue: number): number {
-  return CEILING_RUNGS_GB.find((rung) => rung > gigabyteValue) ?? Math.ceil(gigabyteValue);
-}
-
-function stepCeiling(current: number, gigabyteValue: number, delta: 1 | -1): number {
-  const reachable = CEILING_RUNGS_GB.filter((rung) => rung > gigabyteValue);
-  if (reachable.length === 0) return ceilingFor(gigabyteValue);
-  const index = reachable.indexOf(current);
-  if (index === -1) return reachable[0];
-  return reachable[(index + delta + reachable.length) % reachable.length];
-}
-
-function clampDay(dayOfMonth: number): number {
-  return Math.min(31, Math.max(1, Math.floor(dayOfMonth)));
-}
-
-function stepDay(dayOfMonth: number, delta: 1 | -1): number {
-  return ((dayOfMonth - 1 + delta + 31) % 31) + 1;
-}
-
-function stepFor(ceiling: number): number {
-  if (ceiling <= 25) return 0.1;
-  if (ceiling <= 100) return 0.5;
-  if (ceiling <= 1000) return 5;
-  return 25;
-}
-
 export function DataMeterDialog({
   meter,
+  clientKey,
   deviceName,
+  candidates,
   open,
   onOpenChange,
 }: {
   meter: DataMeter;
+  /** The device this card is for, and the one member a group always keeps. */
+  clientKey: string;
   deviceName: string;
+  /**
+   * Every device a limit could be extended to.
+   *
+   * The odometer's roster rather than the router's live one: a rule on a device
+   * that is away still rolls its cycle and still releases its pause, so being
+   * offline is a tag on the row, never a reason it cannot be picked.
+   */
+  candidates: MemberCandidate[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const showForm = editing || (meter.rule === null && !meter.loading);
+  const withSelf = candidates.some((candidate) => candidate.clientKey === clientKey)
+    ? candidates
+    : [{ clientKey, name: deviceName, active: true, lastSeenMs: 0 }, ...candidates];
   const setOpen = (next: boolean) => {
     if (!next) setEditing(false);
     onOpenChange(next);
@@ -170,7 +85,7 @@ export function DataMeterDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent
-        className='gap-0 rounded-xl border border-border/50 bg-surface-raised text-ink shadow-[0_12px_40px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-xl backdrop-saturate-150 sm:max-w-lg dark:bg-[color-mix(in_srgb,#0e0e0e_80%,transparent)] dark:shadow-[0_12px_40px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.08)]'
+        className='gap-0 rounded-xl border border-border/50 bg-surface-raised text-ink shadow-[0_12px_40px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.08)] sm:max-w-lg dark:bg-[color-mix(in_srgb,#0e0e0e_80%,transparent)] dark:shadow-[0_12px_40px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.08)]'
         showCloseButton={false}
       >
         {showForm ? (
@@ -181,7 +96,9 @@ export function DataMeterDialog({
             // fresh figure every ten seconds never discards what is being typed.
             key={meter.rule ? `${meter.rule.clientKey}:${meter.rule.periodStartMs}` : "unset"}
             meter={meter}
+            clientKey={clientKey}
             deviceName={deviceName}
+            candidates={withSelf}
             onOpenChange={setOpen}
             onCancel={editing ? () => setEditing(false) : () => setOpen(false)}
             onSaved={editing ? () => setEditing(false) : () => setOpen(false)}
@@ -221,7 +138,13 @@ function UsageRing({ spent, paused }: { spent: number; paused: boolean }) {
         ? "var(--accent)"
         : "var(--series-down)";
   return (
-    <svg width='168' height='168' viewBox='0 0 168 168' aria-hidden='true'>
+    <svg
+      width='168'
+      height='168'
+      viewBox='0 0 168 168'
+      aria-hidden='true'
+      className='overflow-visible'
+    >
       <circle
         cx='84'
         cy='84'
@@ -245,6 +168,26 @@ function UsageRing({ spent, paused }: { spent: number; paused: boolean }) {
   );
 }
 
+/** Hours and minutes with their units set down in size, so the figure reads as a
+ *  number first and the units never crowd it. */
+function CountdownReading({ leftMs }: { leftMs: number }) {
+  const { hours, minutes } = splitDuration(leftMs);
+  return (
+    <span className='flex items-baseline gap-1.5 text-[34px] leading-none font-extrabold tabular-nums text-foreground'>
+      {hours > 0 && (
+        <span className='flex items-baseline'>
+          {hours}
+          <span className='text-[17px] font-bold'>h</span>
+        </span>
+      )}
+      <span className='flex items-baseline'>
+        {minutes}
+        <span className='text-[17px] font-bold'>m</span>
+      </span>
+    </span>
+  );
+}
+
 function MeterStatus({
   meter,
   deviceName,
@@ -256,23 +199,37 @@ function MeterStatus({
   onEdit: () => void;
   onClose: () => void;
 }) {
-  const nowMs = useNow(60_000);
+  // A countdown is watched as it runs; an allowance only ever reads in hours.
+  const nowMs = useNow(meter.rule?.countdownMs === undefined ? 60_000 : 1_000);
   const rule = meter.rule;
   if (!rule) return null;
 
   const used = rule.usageBytes;
   const allowance = rule.allocationBytes;
   const remaining = Math.max(0, allowance - used);
-  const spent = allowance > 0 ? Math.min(1, used / allowance) : 0;
   const paused = rule.pauseState === "applied";
   const resets = endsIn(rule.periodEndMs, nowMs);
-  const reading = ringReading(used);
+  const timing = rule.countdownMs !== undefined;
+  const leftMs = countdownLeftMs(rule, nowMs) ?? 0;
+  // A countdown fills its ring on the clock; an allowance fills it on what it has
+  // spent. Both read as how much of the rule is gone.
+  const spent = timing
+    ? 1 - leftMs / rule.countdownMs!
+    : allowance > 0
+      ? Math.min(1, used / allowance)
+      : 0;
+  // A countdown draws its own hours and minutes; only a byte figure is one string.
+  const bytesReading = timing ? null : ringReading(used);
 
   return (
     <>
       <DialogHeader className='pb-4'>
-        <DialogTitle className='text-[19px] leading-snug'>Data limit</DialogTitle>
-        <DialogDescription className='text-[13px]'>{deviceName}</DialogDescription>
+        <DialogTitle className='text-[19px] leading-snug'>
+          {timing ? "Timer" : "Data limit"}
+        </DialogTitle>
+        <DialogDescription className='text-[13px]'>
+          {rule.groupName ? `${deviceName} · shared with others` : deviceName}
+        </DialogDescription>
       </DialogHeader>
 
       <div className='space-y-5 py-5'>
@@ -280,62 +237,94 @@ function MeterStatus({
           <UsageRing spent={spent} paused={paused} />
           <div className='absolute grid place-items-center text-center'>
             {paused ? (
-              <span className='text-[17px] font-semibold tracking-wide text-destructive'>
-                PAUSED
+              <span className='flex flex-col items-center gap-2 text-foreground/60 [animation:paused-pulse_2.4s_ease-in-out_infinite]'>
+                <Wifi className='size-9' strokeWidth={2} />
+                <span className='text-[17px] font-semibold tracking-wide'>PAUSED</span>
               </span>
             ) : (
               <>
-                <span className='text-[36px] leading-none font-extrabold tabular-nums text-foreground'>
-                  {reading.value}
-                </span>
+                {bytesReading ? (
+                  <span className='text-[34px] leading-none font-extrabold tabular-nums text-foreground'>
+                    {bytesReading.value}
+                  </span>
+                ) : (
+                  <CountdownReading leftMs={leftMs} />
+                )}
                 <span className='mt-1.5 text-[11.5px] tracking-wide text-muted-foreground'>
-                  {reading.unit}
+                  {bytesReading?.unit ?? "LEFT"}
                 </span>
               </>
             )}
           </div>
         </div>
         <div className='text-center text-[15px] text-muted-foreground'>
-          of <span className='font-semibold text-foreground'>{formatBytes(allowance)}</span>{" "}
-          allowance
+          {timing ? (
+            <>
+              of a{" "}
+              <span className='font-semibold text-foreground'>
+                {formatDuration(rule.countdownMs!)}
+              </span>{" "}
+              timer
+            </>
+          ) : (
+            <>
+              of <span className='font-semibold text-foreground'>{formatBytes(allowance)}</span>{" "}
+              allowance
+            </>
+          )}
         </div>
 
         {paused && (
           <Callout tone='error'>
-            {deviceName} reached its {formatBytes(allowance)} allowance, so its internet is paused
-            {resets ? ` until the cycle ${resets.replace(/^ends/, "resets")}` : ""}.
+            {timing
+              ? `${deviceName}’s ${formatDuration(rule.countdownMs!)} timer is up, so its internet is paused until you start it over.`
+              : `${deviceName} reached its ${formatBytes(allowance)} allowance, so its internet is paused${resets ? ` until the cycle ${resets.replace(/^ends/, "resets")}` : ""}.`}
           </Callout>
         )}
 
         <div className='grid grid-cols-3 gap-3 border-t border-border/60 pt-4'>
           <div>
-            <div className='text-[12px] text-muted-foreground'>Remaining</div>
+            <div className='text-[12px] text-muted-foreground'>
+              {timing ? "Time left" : "Remaining"}
+            </div>
             <div
-              className={`text-[16px] font-semibold tabular-nums ${remaining <= 0 ? "text-destructive" : "text-foreground"}`}
+              className={`text-[16px] font-semibold tabular-nums ${(timing ? leftMs <= 0 : remaining <= 0) ? "text-destructive" : "text-foreground"}`}
             >
-              {formatBytes(remaining)}
+              {timing ? formatDuration(leftMs) : formatBytes(remaining)}
             </div>
           </div>
           <div className='text-center'>
-            <div className='text-[12px] text-muted-foreground'>Resets in</div>
+            <div className='text-[12px] text-muted-foreground'>
+              {timing ? "Pauses at" : "Resets in"}
+            </div>
             <div className='text-[16px] font-semibold text-foreground'>
-              {timeLeft(rule.periodEndMs, nowMs) ?? "never"}
+              {timing
+                ? leftMs > 0
+                  ? endsAtLabel(leftMs, nowMs)
+                  : "now"
+                : (timeLeft(rule.periodEndMs, nowMs) ?? "never")}
             </div>
           </div>
           <div className='text-right'>
-            <div className='text-[12px] text-muted-foreground'>Cycle</div>
+            <div className='text-[12px] text-muted-foreground'>{timing ? "Set for" : "Cycle"}</div>
             <div className='text-[16px] font-semibold text-foreground'>
-              {cycleLabel(rule.cycle)}
+              {timing ? formatDuration(rule.countdownMs!) : cycleLabel(rule.cycle)}
             </div>
           </div>
         </div>
 
+        {!timing && (
+          <p className='text-center text-[12px] font-medium text-muted-foreground'>
+            Only data used while Dishylink is running is counted.
+          </p>
+        )}
         {!rule.autoPause && (
           <Callout tone='info'>
-            Auto-pause is off, so this allowance is watched and announced but never enforced.
+            Auto-pause is off, so this {timing ? "timer" : "allowance"} is watched and announced but
+            never enforced.
           </Callout>
         )}
-        {rule.pauseState === "failed" && used >= allowance && (
+        {rule.pauseState === "failed" && rule.reached && (
           <Callout tone='error'>
             This device reached its limit, but the pause could not be sent to Starlink.
             {rule.pauseError ? ` ${rule.pauseError}.` : ""} It is retried every minute.
@@ -345,7 +334,14 @@ function MeterStatus({
       </div>
 
       <div className='space-y-4 border-t border-border/60 pt-4'>
-        {rule.autoPause && !paused && (
+        {rule.groupName && (
+          <Callout tone='info'>
+            This limit covers {rule.groupName}
+            {rule.sharedAllowance ? ", which share it between them" : ", each with their own"}.
+            Editing it here changes it for all of them.
+          </Callout>
+        )}
+        {rule.autoPause && !paused && !rule.groupName && (
           <Callout tone='info'>
             Device data will automatically pause when usage reaches this limit.
           </Callout>
@@ -365,37 +361,51 @@ function MeterStatus({
 
 function MeterForm({
   meter,
+  clientKey,
   deviceName,
+  candidates,
   onOpenChange,
   onCancel,
   onSaved,
 }: {
   meter: DataMeter;
+  clientKey: string;
   deviceName: string;
+  candidates: MemberCandidate[];
   onOpenChange: (open: boolean) => void;
   onCancel: () => void;
   onSaved: () => void;
 }) {
-  const { rule, pauseEnforceable, error, save, restart, remove } = meter;
+  const { rule, pauseEnforceable, error, save, restart, remove, reload } = meter;
   const { data: usage } = useCloudUsage(true);
+  const groups = useDeviceGroups();
   const billingDay = billingDayOf(usage?.content?.billingCyclesAnnotated);
-  const [allocationGB, setAllocationGB] = useState(rule ? gigabytes(rule.allocationBytes) : "50");
-  const [ceiling, setCeiling] = useState(() => ceilingFor(rule ? rule.allocationBytes / GB : 50));
-  const [autoPause, setAutoPause] = useState(rule?.autoPause ?? true);
-  const [kind, setKind] = useState<MeterCycle["kind"]>(rule?.cycle.kind ?? "monthly");
-  const [weekday, setWeekday] = useState(rule?.cycle.kind === "weekly" ? rule.cycle.weekday : 1);
-  // Billing seeds this too, so an edit made with no account reachable saves the
-  // rule's own date back rather than the 1st.
-  const [dayText, setDayText] = useState(
-    rule?.cycle.kind === "monthly" || rule?.cycle.kind === "billing" ? String(rule.cycle.day) : "1",
-  );
   const [busy, setBusy] = useState(false);
+  // Until the groups have been read, this device's membership is unknown. Saving
+  // against that guess would write a device rule over a group's terms, which the
+  // next projection silently puts back.
+  const membershipKnown = !groups.loading;
+  const heldBy = groups.groups.find((group) => group.memberKeys.includes(clientKey));
+  // Seeded once. A group arriving on a later poll must not discard a selection
+  // someone is part-way through making.
+  const [memberKeys, setMemberKeys] = useState<string[] | null>(null);
+  const [shared, setShared] = useState<boolean | null>(null);
+  const members = memberKeys ?? heldBy?.memberKeys ?? [clientKey];
+  // Each by default: it is the per-device rule the user already understands, run
+  // once per member. Sharing one allowance is the choice they opt into.
+  const sharing = shared ?? (heldBy ? heldBy.mode === "pooled" : false);
   // The countdown moves whether or not anything re-renders, and only ever reads
   // in hours, so a slow tick is enough.
   const nowMs = useNow(60_000);
-
-  const day = clampDay(Number(dayText) || 1);
-  const allocationBytes = Math.max(0, Number(allocationGB) || 0) * GB;
+  const draft = useAllowanceDraft({
+    allocationBytes: rule?.allocationBytes,
+    autoPause: rule?.autoPause,
+    cycle: rule?.cycle,
+    countdownMs: rule?.countdownMs,
+    billingDay,
+    startedMs: nowMs,
+  });
+  const { allocationBytes, autoPause, setAutoPause, timer, countdownMs } = draft;
   const used = rule?.usageBytes ?? 0;
   const remaining = allocationBytes - used;
   const spent = allocationBytes > 0 ? Math.min(1, used / allocationBytes) : 0;
@@ -411,17 +421,58 @@ function MeterForm({
     }
   };
 
+  /** This device is never dropped: the limit is being set from its own card. */
+  const toggleMember = (key: string) =>
+    setMemberKeys(
+      key === clientKey
+        ? members
+        : members.includes(key)
+          ? members.filter((other) => other !== key)
+          : [...members, key],
+    );
+
+  const persist = async () => {
+    const terms = {
+      allocationBytes,
+      autoPause,
+      cycle: draft.cycle,
+      countdownMs,
+    };
+    if (members.length > 1 || heldBy) {
+      await groups.save({
+        ...terms,
+        groupId: heldBy?.groupId,
+        name: heldBy?.name ?? groupNameFor(members, candidates),
+        memberKeys: members,
+        mode: sharing ? "pooled" : "perMember",
+      });
+      // The rule this card draws is the group's, written by the group route.
+      await reload();
+      return;
+    }
+    await save(terms);
+  };
+
   return (
     <>
       <DialogHeader className='pb-4'>
-        <DialogTitle className='text-[19px] leading-snug'>Data limit</DialogTitle>
-        <DialogDescription className='text-[13px]'>
-          Pause “{deviceName}” once it has used its share.
-        </DialogDescription>
+        <div className='flex items-start justify-between gap-3'>
+          <div className='space-y-1'>
+            <DialogTitle className='text-[19px] leading-snug'>
+              {timer ? "Timer" : "Data limit"}
+            </DialogTitle>
+            <DialogDescription className='text-[13px]'>
+              {timer
+                ? `Pause “${deviceName}” once the time is up.`
+                : `Pause “${deviceName}” once it has used its share.`}
+            </DialogDescription>
+          </div>
+          <AllowanceModeToggle draft={draft} />
+        </div>
       </DialogHeader>
 
       <div className='space-y-5 border-t border-border/60 py-5'>
-        <div>
+        <div className={timer ? "hidden" : undefined}>
           <div className='flex items-baseline justify-between'>
             <span className='text-[13px] font-medium text-foreground'>This cycle</span>
             <span className='text-[13px] tabular-nums text-muted-foreground'>
@@ -457,143 +508,38 @@ function MeterForm({
           <div>
             <div className='text-[13px] font-medium text-foreground'>Auto-pause data</div>
             <div className='text-[12px] text-muted-foreground'>
-              Cuts this device’s internet until the cycle turns over.
+              {members.length > 1
+                ? timer
+                  ? "Cuts their internet when the time is up."
+                  : "Cuts their internet until the cycle turns over."
+                : timer
+                  ? "Cuts this device’s internet when the time is up."
+                  : "Cuts this device’s internet until the cycle turns over."}
             </div>
           </div>
           <Switch checked={autoPause} onCheckedChange={setAutoPause} />
         </div>
 
-        <div className='grid grid-cols-2 gap-3'>
-          <label className='space-y-1.5'>
-            <span className='text-[12px] font-medium text-foreground'>Allowance</span>
-            <div className='relative'>
-              <Input
-                value={allocationGB}
-                inputMode='decimal'
-                onChange={(event) => {
-                  setAllocationGB(event.target.value);
-                  const typed = Number(event.target.value);
-                  if (Number.isFinite(typed) && typed > ceiling) setCeiling(ceilingFor(typed));
-                }}
-                className='pr-12 tabular-nums'
-              />
-              <span className='absolute inset-y-0 right-3 flex items-center text-[12px] text-muted-foreground'>
-                GB
-              </span>
-            </div>
-          </label>
-          <div className='space-y-1.5'>
-            <span className='text-[12px] font-medium text-foreground'>Resets</span>
-            <Select value={kind} onValueChange={(next) => setKind(next as MeterCycle["kind"])}>
-              <SelectTrigger className='w-full text-[13px]' aria-label='Resets'>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CYCLE_OPTIONS.map((option) => (
-                  <SelectItem
-                    key={option.value}
-                    value={option.value}
-                    disabled={option.value === "billing" && billingDay === null}
-                  >
-                    {option.value === "billing"
-                      ? billingDay === null
-                        ? "Starlink billing — needs your account"
-                        : `Starlink billing (${billingDay})`
-                      : option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+        <AllowanceFields draft={draft} />
 
-        <div className='flex items-center gap-3'>
-          <Slider
-            value={[Math.min(Number(allocationGB) || 0, ceiling)]}
-            max={ceiling}
-            step={stepFor(ceiling)}
-            onValueChange={([next]) => setAllocationGB(String(next))}
-            aria-label='Allowance in gigabytes'
+        {membershipKnown && (
+          <AppliesToField
+            candidates={candidates}
+            selected={members}
+            onToggle={toggleMember}
+            shared={sharing}
+            onSharedChange={setShared}
+            timer={timer}
           />
-          <div className='flex shrink-0 flex-col items-center gap-0.5'>
-            <button
-              type='button'
-              onClick={() => setCeiling(stepCeiling(ceiling, Number(allocationGB) || 0, 1))}
-              aria-label='Extend the slider'
-              className={stepButtonClass}
-            >
-              <ChevronUpIcon className='size-3' />
-            </button>
-            <button
-              type='button'
-              onClick={() => setCeiling(stepCeiling(ceiling, Number(allocationGB) || 0, 1))}
-              title='Change how far the slider reaches'
-              className='cursor-pointer rounded-sm px-1 text-[11.5px] leading-none tabular-nums text-muted-foreground transition-colors hover:bg-accent hover:text-foreground'
-            >
-              {ceilingLabel(ceiling)}
-            </button>
-            <button
-              type='button'
-              onClick={() => setCeiling(stepCeiling(ceiling, Number(allocationGB) || 0, -1))}
-              aria-label='Shorten the slider'
-              className={stepButtonClass}
-            >
-              <ChevronDownIcon className='size-3' />
-            </button>
-          </div>
-        </div>
-
-        {kind === "weekly" && (
-          <div className='space-y-1.5'>
-            <span className='text-[12px] font-medium text-foreground'>Resets on</span>
-            <Select value={String(weekday)} onValueChange={(next) => setWeekday(Number(next))}>
-              <SelectTrigger className='w-full text-[13px]' aria-label='Resets on'>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {WEEKDAYS.map((label, index) => (
-                  <SelectItem key={label} value={String(index)}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-        {kind === "monthly" && (
-          <label className='block space-y-1.5'>
-            <span className='text-[12px] font-medium text-foreground'>Resets on day</span>
-            <div className='relative'>
-              <Input
-                value={dayText}
-                inputMode='numeric'
-                onChange={(event) => setDayText(event.target.value.replace(/[^0-9]/g, ""))}
-                onBlur={() => setDayText(String(day))}
-                className='pr-9 tabular-nums'
-              />
-              <div className='absolute inset-y-0 right-2 flex flex-col justify-center gap-0.5'>
-                <button
-                  type='button'
-                  onClick={() => setDayText(String(stepDay(day, 1)))}
-                  aria-label='Later in the month'
-                  className={stepButtonClass}
-                >
-                  <ChevronUpIcon className='size-3' />
-                </button>
-                <button
-                  type='button'
-                  onClick={() => setDayText(String(stepDay(day, -1)))}
-                  aria-label='Earlier in the month'
-                  className={stepButtonClass}
-                >
-                  <ChevronDownIcon className='size-3' />
-                </button>
-              </div>
-            </div>
-          </label>
         )}
 
-        {willPauseOnSave && (
+        {timer && countdownMs !== undefined && countdownMs > 0 && (
+          <Callout tone='info'>
+            Runs for {formatDuration(countdownMs)} from when you save, pausing this device at about{" "}
+            {endsAtLabel(countdownMs, nowMs)}. Editing the duration starts it over.
+          </Callout>
+        )}
+        {!timer && willPauseOnSave && (
           <Callout tone='error'>
             This device has already used more than that, so saving pauses it straight away.
           </Callout>
@@ -610,7 +556,7 @@ function MeterForm({
               the limit is watched and announced, but nothing is paused.
             </Callout>
           ))}
-        {rule?.pauseState === "failed" && rule.usageBytes >= rule.allocationBytes && (
+        {rule?.pauseState === "failed" && rule.reached && (
           <Callout tone='error'>
             This device reached its limit, but the pause could not be sent to Starlink.
             {rule.pauseError ? ` ${rule.pauseError}.` : ""} It is retried every minute.
@@ -628,7 +574,12 @@ function MeterForm({
                 size='sm'
                 className='cursor-pointer'
                 disabled={busy}
-                onClick={() => void apply(restart)}
+                onClick={() => {
+                  // Ahead of the write: the restarted rule carries a new period
+                  // start, which is the form's remount key.
+                  onSaved();
+                  void restart();
+                }}
               >
                 Start over
               </Button>
@@ -639,12 +590,18 @@ function MeterForm({
                 disabled={busy}
                 onClick={() =>
                   void apply(async () => {
-                    await remove();
+                    // The card is showing the group's limit, so removing it takes
+                    // the group rather than leaving the other members metered by
+                    // something the user just deleted.
+                    if (heldBy) {
+                      await groups.remove(heldBy.groupId);
+                      await reload();
+                    } else await remove();
                     onOpenChange(false);
                   })
                 }
               >
-                Remove
+                {heldBy && heldBy.memberKeys.length > 1 ? "Remove for all" : "Remove"}
               </Button>
             </>
           )}
@@ -655,19 +612,15 @@ function MeterForm({
           </Button>
           <Button
             className='cursor-pointer'
-            disabled={busy || allocationBytes <= 0}
+            disabled={busy || !membershipKnown || (timer ? !countdownMs : allocationBytes <= 0)}
             onClick={() =>
               void apply(async () => {
-                await save({
-                  allocationBytes,
-                  autoPause,
-                  cycle: cycleFor(kind, weekday, day, nowMs, billingDay),
-                });
+                await persist();
                 onSaved();
               })
             }
           >
-            Save limit
+            {timer ? "Start timer" : members.length > 1 ? "Save limit for all" : "Save limit"}
           </Button>
         </div>
       </DialogFooter>

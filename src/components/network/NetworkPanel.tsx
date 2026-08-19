@@ -132,6 +132,21 @@ function NetworkPanelBody({
     });
   }, [devices, self, network.ratesAtRoster]);
 
+  // A limit can be set on any device the recorder holds a record for, not only
+  // the ones answering right now: an absent device's cycle still rolls and its
+  // pause still releases. Live is a tag on the row, decided here because only
+  // this view knows which devices the router is currently reporting.
+  const liveKeys = new Set(devices.map((client) => usageKey(client.clientId, client.macAddress)));
+  const meterCandidates = (totals ?? []).map((total) => {
+    const clientKey = usageKey(total.clientId, total.macAddress);
+    return {
+      clientKey,
+      name: total.name?.trim() || total.macAddress,
+      active: liveKeys.has(clientKey),
+      lastSeenMs: total.lastSeenMs,
+    };
+  });
+
   if (network.routerReachable === null) {
     return <Loading message='Contacting the router…' />;
   }
@@ -199,6 +214,7 @@ function NetworkPanelBody({
         }
         isThisDevice={matchesSelf(selected, self)}
         viewerIdentified={selfIdentified(self)}
+        meterCandidates={meterCandidates}
         onRename={network.renameClient}
       />
     );
@@ -334,7 +350,8 @@ function NetworkPanelBody({
   );
 }
 
-function TabLabel({ text, count }: { text: string; count: number }) {
+function TabLabel({ text, count }: { text: string; count?: number }) {
+  if (count === undefined) return text;
   return (
     <>
       {text} <span className='ml-[3px] font-mono text-[11px] tabular-nums opacity-60'>{count}</span>

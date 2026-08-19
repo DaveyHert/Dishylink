@@ -14,6 +14,17 @@
 // prevents. Nothing here holds state between calls; a rule carries everything
 // that has to survive, because on one of those hosts nothing else can.
 
+/**
+ * Whether a reconciled list differs from the one it was built from.
+ *
+ * Length first: every one of these lists can shrink — a rule whose device left
+ * the roster, a group whose last member did — and comparing only by index reads
+ * a list that lost its tail as unchanged, so the drop is never persisted.
+ */
+export function listChanged<T>(next: readonly T[], previous: readonly T[]): boolean {
+  return next.length !== previous.length || next.some((item, index) => item !== previous[index]);
+}
+
 /** What one device's counter reads now. The caller resolves identity first: a
  *  rule set on an identity the router has since reissued is keyed to the bucket
  *  that identity was merged into, and only the odometer can say which that is. */
@@ -78,6 +89,16 @@ export interface MeterRule {
   /** When its terms were last set. Absent on a rule written before the stamp
    *  existed, which loses to any rule carrying one. */
   updatedMs?: number;
+  /** The group this rule was projected from, absent when the device carries its
+   *  own. Joining a group replaces the device's rule, so there is only ever one. */
+  groupId?: string;
+  /** Charges this member the group's summed usage rather than its own, so the
+   *  members of one allowance cross together. */
+  sharedAllowance?: boolean;
+  /** A countdown rather than an allowance: the device is paused this long after
+   *  the cycle opened, whatever it has spent. Capped at a day, and always on a
+   *  cycle that does not roll, so the clock it counts is one anyone can see. */
+  countdownMs?: number;
 }
 
 export interface MeterTransition {
@@ -123,6 +144,20 @@ function dayOfMonth(atMs: number, day: number, monthOffset = 0): number {
  *  the figure has to read the same from all of them. */
 export function formatAllowance(bytes: number): string {
   return bytes >= 1e12 ? `${(bytes / 1e12).toFixed(2)} TB` : `${(bytes / 1e9).toFixed(1)} GB`;
+}
+
+export function splitDuration(totalMs: number): { hours: number; minutes: number } {
+  const whole = Math.max(0, Math.round(totalMs / 60_000));
+  return { hours: Math.floor(whole / 60), minutes: whole % 60 };
+}
+
+/** "1h 20m" / "45m" — a countdown at a glance. Beside formatAllowance because a
+ *  timer and an allowance are the two things a rule can measure, and an
+ *  announcement and the card that raised it have to word either the same way. */
+export function formatDuration(totalMs: number): string {
+  const { hours, minutes } = splitDuration(totalMs);
+  if (hours === 0) return `${minutes}m`;
+  return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
 }
 
 /** The cycle a write asks for, or null when it names none. Values are clamped. */
@@ -199,6 +234,81 @@ export function usageBytes(rule: MeterRule): number {
 }
 
 /**
+ * Whether this rule's announcement belongs to its group rather than its device.
+ *
+ * A shared allowance crosses once, for the group. A countdown ends on one clock
+ * for every member, so it too is one thing happening rather than one per device —
+ * which is why the card does not offer shared-or-each while a timer is set.
+ */
+export function announcesAsGroup(rule: MeterRule): boolean {
+  return (
+    rule.groupId !== undefined && (rule.sharedAllowance === true || rule.countdownMs !== undefined)
+  );
+}
+
+/** What an announcement about this rule is keyed to: the group when the group is
+ *  what crossed, the device otherwise. A rule whose subject changes owes the old
+ *  one a clearing, since nothing under the new key can close an episode opened
+ *  under the old. */
+export function announcementSubject(rule: MeterRule): string {
+  return announcesAsGroup(rule) ? `group:${rule.groupId}` : rule.clientKey;
+}
+
+/** What each shared allowance has spent, summed across its members. Derived on
+ *  every read rather than stored, so no member can hold a stale copy of it. */
+export function sharedUsageByGroup(rules: readonly MeterRule[]): Map<string, number> {
+  const totals = new Map<string, number>();
+  for (const rule of rules) {
+    if (rule.groupId === undefined || !rule.sharedAllowance) continue;
+    totals.set(rule.groupId, (totals.get(rule.groupId) ?? 0) + usageBytes(rule));
+  }
+  return totals;
+}
+
+/**
+ * Bytes charged against a rule's allowance: its own usage, or the group's summed
+ * usage for a member sharing one allowance.
+ *
+ * Every comparison against `allocationBytes` goes through here. One left reading
+ * `usageBytes` directly lets a member re-arm while its group is still over.
+ *
+ * `sharedUsage` is required rather than defaulted: an omitted map reads as the
+ * member's own usage, which is a plausible wrong answer the compiler would let
+ * through. `sharedUsageByGroup` builds it from whatever rule set the caller holds.
+ */
+export function chargedBytes(rule: MeterRule, sharedUsage: ReadonlyMap<string, number>): number {
+  const own = usageBytes(rule);
+  if (rule.groupId === undefined || !rule.sharedAllowance) return own;
+  return sharedUsage.get(rule.groupId) ?? own;
+}
+
+/** The longest countdown a timer rule can be set to. */
+export const MAX_COUNTDOWN_MS = 24 * 3_600_000;
+
+/** How long a countdown has left, or null on a rule that is not one. */
+export function countdownLeftMs(rule: MeterRule, nowMs: number): number | null {
+  if (rule.countdownMs === undefined) return null;
+  return Math.max(0, rule.periodStartMs + rule.countdownMs - nowMs);
+}
+
+/**
+ * Whether a rule has reached what it measures.
+ *
+ * The one place the two kinds of rule differ. A countdown is spent when its time
+ * is up, an allowance when the bytes charged to it reach it, and every caller
+ * downstream — the trip, the retries, the release — asks this rather than
+ * comparing either itself.
+ */
+export function allowanceSpent(
+  rule: MeterRule,
+  nowMs: number,
+  sharedUsage: ReadonlyMap<string, number>,
+): boolean {
+  if (rule.countdownMs !== undefined) return nowMs >= rule.periodStartMs + rule.countdownMs;
+  return chargedBytes(rule, sharedUsage) >= rule.allocationBytes;
+}
+
+/**
  * Fold one poll's readings into every rule, and report what crossed.
  *
  * Returns the rules as they now stand — the caller persists them. Rolling a cycle
@@ -208,6 +318,10 @@ export function usageBytes(rule: MeterRule): number {
  * A rule with no reading this poll is still rolled: its device is offline, its
  * counter is frozen at the last value seen, and a cycle that will not roll for an
  * absent device is one that never releases the pause it applied.
+ *
+ * Counters are folded and cycles rolled for every rule before any allowance is
+ * tested: a shared allowance tested against a sum still holding another member's
+ * pre-roll usage reads as over at the moment it starts over.
  */
 export function evaluateMeters(
   rules: readonly MeterRule[],
@@ -216,9 +330,8 @@ export function evaluateMeters(
 ): { rules: MeterRule[]; transitions: MeterTransition[] } {
   const byKey = new Map(readings.map((reading) => [reading.clientKey, reading]));
   const transitions: MeterTransition[] = [];
-  const next: MeterRule[] = [];
 
-  for (const current of rules) {
+  const rolled = rules.map((current) => {
     let rule = { ...current };
     const reading = byKey.get(rule.clientKey);
     if (reading) {
@@ -251,10 +364,18 @@ export function evaluateMeters(
           rule,
         });
     }
+    return rule;
+  });
+
+  const sharedUsage = sharedUsageByGroup(rolled);
+
+  const next = rolled.map((current) => {
+    let rule = current;
+    const charged = chargedBytes(rule, sharedUsage);
 
     // Reaching an allowance is announced whether or not a pause follows it; only
     // enforcement turns on autoPause, and a watch-only rule has no write pending.
-    if (!rule.actedThisCycle && usageBytes(rule) >= rule.allocationBytes) {
+    if (!rule.actedThisCycle && allowanceSpent(rule, nowMs, sharedUsage)) {
       rule = {
         ...rule,
         actedThisCycle: true,
@@ -264,7 +385,7 @@ export function evaluateMeters(
       transitions.push({
         kind: "reached",
         clientKey: rule.clientKey,
-        usageBytes: usageBytes(rule),
+        usageBytes: charged,
         atMs: nowMs,
         rule,
       });
@@ -277,16 +398,36 @@ export function evaluateMeters(
       transitions.push({
         kind: "expired",
         clientKey: rule.clientKey,
-        usageBytes: usageBytes(rule),
+        usageBytes: charged,
         atMs: nowMs,
         rule,
       });
     }
 
-    next.push(rule);
-  }
+    return rule;
+  });
 
   return { rules: next, transitions };
+}
+
+/**
+ * Transitions as announcements, with the members of one group reduced to the
+ * first that crossed.
+ *
+ * Every member is still paused, so this is applied to what is announced and never
+ * to what is written to the router.
+ */
+export function collapseGroupAnnouncements(
+  transitions: readonly MeterTransition[],
+): MeterTransition[] {
+  const seen = new Set<string>();
+  return transitions.filter((transition) => {
+    if (!announcesAsGroup(transition.rule)) return true;
+    const key = `${announcementSubject(transition.rule)}:${transition.kind}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /**
@@ -300,12 +441,13 @@ export function stalledPauses(
   nowMs: number,
   retryMs: number,
 ): MeterRule[] {
+  const sharedUsage = sharedUsageByGroup(rules);
   return rules.filter(
     (rule) =>
       rule.autoPause &&
       (rule.pauseState === "failed" || rule.pauseState === "pending") &&
       nowMs - (rule.pauseCheckedMs ?? 0) >= retryMs &&
-      usageBytes(rule) >= rule.allocationBytes,
+      allowanceSpent(rule, nowMs, sharedUsage),
   );
 }
 
@@ -316,10 +458,11 @@ export function stalledReleases(
   nowMs: number,
   retryMs: number,
 ): MeterRule[] {
+  const sharedUsage = sharedUsageByGroup(rules);
   return rules.filter(
     (rule) =>
       rule.pauseState === "applied" &&
-      usageBytes(rule) < rule.allocationBytes &&
+      !allowanceSpent(rule, nowMs, sharedUsage) &&
       nowMs - (rule.pauseCheckedMs ?? 0) >= retryMs,
   );
 }
@@ -376,7 +519,7 @@ export function resolveRuleKeys(rules: readonly MeterRule[], roster: MeterRoster
  * written today measures from today rather than inheriting whatever the device
  * had already spent.
  */
-export function createRule(options: {
+export interface MeterRuleTerms {
   clientKey: string;
   allocationBytes: number;
   autoPause?: boolean;
@@ -384,7 +527,27 @@ export function createRule(options: {
   lifetimeRx: number;
   lifetimeTx: number;
   nowMs: number;
-}): MeterRule {
+  /** Set when the rule is a group's, absent when the device carries its own. */
+  groupId?: string;
+  sharedAllowance?: boolean;
+  /** Makes this a countdown. Clamped to a day, and the cycle is forced to one
+   *  that does not roll, so the countdown runs from a start that stays put. */
+  countdownMs?: number;
+}
+
+/** A timer counts from its own start, so it is only ever written on a cycle that
+ *  does not move that start under it. */
+function termsOf(options: MeterRuleTerms): MeterRuleTerms & { countdownMs?: number } {
+  if (options.countdownMs === undefined) return options;
+  return {
+    ...options,
+    cycle: { kind: "once" },
+    countdownMs: Math.min(MAX_COUNTDOWN_MS, Math.max(1, Math.round(options.countdownMs))),
+  };
+}
+
+export function createRule(input: MeterRuleTerms): MeterRule {
+  const options = termsOf(input);
   const bounds = periodBounds(options.cycle, options.nowMs);
   return {
     clientKey: options.clientKey,
@@ -400,37 +563,55 @@ export function createRule(options: {
     actedThisCycle: false,
     pauseState: "none",
     updatedMs: options.nowMs,
+    ...(options.groupId === undefined ? {} : { groupId: options.groupId }),
+    ...(options.sharedAllowance ? { sharedAllowance: true } : {}),
+    ...(options.countdownMs === undefined ? {} : { countdownMs: options.countdownMs }),
   };
 }
 
-/** The rule an edit leaves behind: the anchors stand and a changed cycle moves
- *  only its boundaries. Clearing the count is restartCycle's job. */
+/**
+ * The rule an edit leaves behind: the anchors stand and a changed cycle moves
+ * only its boundaries. Clearing the count is restartCycle's job.
+ *
+ * `chargedBytes` is what the new allowance is judged against. Left out on a
+ * member of a shared allowance, it re-arms while its group is still over.
+ */
 export function upsertRule(
   existing: MeterRule | undefined,
-  options: {
-    clientKey: string;
-    allocationBytes: number;
-    autoPause?: boolean;
-    cycle: MeterCycle;
-    lifetimeRx: number;
-    lifetimeTx: number;
-    nowMs: number;
-  },
+  input: MeterRuleTerms & { chargedBytes?: number },
 ): MeterRule {
+  const options = { ...termsOf(input), chargedBytes: input.chargedBytes };
   if (!existing) return createRule(options);
   const movesBoundaries = JSON.stringify(existing.cycle) !== JSON.stringify(options.cycle);
   const bounds = movesBoundaries ? periodBounds(options.cycle, options.nowMs) : null;
-  const rule = {
+  // A countdown someone has just re-timed starts from now, rather than counting
+  // the new duration off a start the old one had already half spent.
+  const reTimed = options.countdownMs !== undefined && options.countdownMs !== existing.countdownMs;
+  const rule: MeterRule = {
     ...existing,
     allocationBytes: options.allocationBytes,
     autoPause: options.autoPause ?? existing.autoPause,
     cycle: options.cycle,
     updatedMs: options.nowMs,
     ...(bounds ? { periodStartMs: bounds.startMs, periodEndMs: bounds.endMs } : {}),
+    ...(reTimed ? { periodStartMs: options.nowMs } : {}),
+    ...(options.groupId === undefined ? { groupId: undefined } : { groupId: options.groupId }),
+    ...(options.sharedAllowance ? { sharedAllowance: true } : { sharedAllowance: undefined }),
+    ...(options.countdownMs === undefined
+      ? { countdownMs: undefined }
+      : { countdownMs: options.countdownMs }),
   };
-  // An allowance raised past what the device has spent is no longer reached, so
-  // the rule arms again.
-  if (usageBytes(rule) < rule.allocationBytes)
+  // Moving between a device and a group moves which key the announcement is
+  // filed under, and a stamp carried across would retire under a key it was never
+  // raised on. The caller clears the old one.
+  if (announcementSubject(rule) !== announcementSubject(existing)) rule.reachedAtMs = undefined;
+  // An allowance raised past what has been spent against it, or a countdown given
+  // more time, is no longer reached, so the rule arms again.
+  if (
+    rule.countdownMs !== undefined
+      ? (countdownLeftMs(rule, options.nowMs) ?? 0) > 0
+      : (options.chargedBytes ?? usageBytes(rule)) < rule.allocationBytes
+  )
     return { ...rule, actedThisCycle: false, pauseState: "none", pauseError: undefined };
   // Nothing retries a rule that no longer enforces, so it holds no owed write. A
   // pause already applied stands: the device is held until something lifts it.

@@ -17,6 +17,7 @@ import { MeterIcon } from "../../assets/icons/MeterIcon";
 import { METER_INDICATOR_COLOR, meterIndicatorForRule } from "./meterIndicator";
 import { DeviceThroughput } from "./DeviceThroughput";
 import { DataMeterDialog } from "./DataMeterDialog";
+import type { MemberCandidate } from "./allowanceTerms";
 import { useDataMeter } from "../../hooks/useDataMeter";
 import { buildDeviceFacts } from "./deviceFacts";
 import { deviceRowSubtitle } from "./deviceRowSubtitle";
@@ -52,9 +53,12 @@ export function DeviceDetail({
   upstreamName,
   isThisDevice,
   viewerIdentified,
+  meterCandidates,
   onRename,
 }: {
   client: WifiClientJson;
+  /** Every device a limit set here could be extended to cover. */
+  meterCandidates: MemberCandidate[];
   /** Live per-MAC rates from the hook's byte-delta tracker. */
   rates: Map<string, ThroughputRates>;
   /** Whether that tracker is still being fed. It runs on the LAN, so a roster
@@ -290,7 +294,9 @@ export function DeviceDetail({
       {client.macAddress && (
         <DataMeterDialog
           meter={meter}
+          clientKey={usageKey(client.clientId, client.macAddress)}
           deviceName={name}
+          candidates={meterCandidates}
           open={editingMeter}
           onOpenChange={setEditingMeter}
         />

@@ -38,11 +38,23 @@ describe("describeTransition", () => {
   });
 
   it("stays silent on a clear the alert asked not to announce", () => {
-    const spec = dataLimitAlertSpec({
-      clientKey: "42",
-      deviceName: "iPhone",
-      allocationBytes: 10_000_000_000,
-    });
+    const spec = dataLimitAlertSpec(
+      {
+        clientKey: "42",
+        allocationBytes: 10_000_000_000,
+        autoPause: true,
+        cycle: { kind: "monthly", day: 1 },
+        anchorRx: 0,
+        anchorTx: 0,
+        observedRx: 0,
+        observedTx: 0,
+        periodStartMs: NOW,
+        periodEndMs: NOW + 86_400_000,
+        actedThisCycle: false,
+        pauseState: "none",
+      },
+      "iPhone",
+    );
     const cleared = { kind: "cleared", source: "system", key: spec.key, atMs: NOW, spec } as const;
 
     // The onset is worth interrupting someone with; its retirement a minute later

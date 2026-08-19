@@ -6,12 +6,16 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  countdownLeftMs,
+  listChanged,
   createRule,
   evaluateMeters,
+  MAX_COUNTDOWN_MS,
   periodBounds,
   restartCycle,
   releasedByHand,
   stalledReleases,
+  upsertRule,
   usageBytes,
   type MeterCycle,
   type MeterRule,
@@ -221,6 +225,98 @@ describe("stalledReleases", () => {
   });
 });
 
+describe("a countdown rule", () => {
+  const HOUR = 3_600_000;
+  const timer = (over: Partial<MeterRule> = {}) => ({
+    ...createRule({
+      clientKey: KEY,
+      allocationBytes: 0,
+      cycle: { kind: "once" },
+      lifetimeRx: 0,
+      lifetimeTx: 0,
+      nowMs: T0,
+      countdownMs: 2 * HOUR,
+    }),
+    ...over,
+  });
+
+  it("given: time still on the clock, should: leave the device alone however much it spends", () => {
+    const { rules, transitions } = evaluateMeters([timer()], read(900 * GB), T0 + HOUR);
+    expect(transitions).toEqual([]);
+    expect(rules[0].pauseState).toBe("none");
+  });
+
+  it("given: the time is up, should: pause the device even having spent nothing", () => {
+    const { rules, transitions } = evaluateMeters([timer()], read(0), T0 + 2 * HOUR);
+    expect(transitions.map((t) => t.kind)).toEqual(["reached"]);
+    expect(rules[0].pauseState).toBe("pending");
+  });
+
+  it("given: the time is up, should: reach once rather than once per poll", () => {
+    let rules = [timer()];
+    let kinds: string[] = [];
+    for (const at of [2 * HOUR, 2 * HOUR + 1_000, 2 * HOUR + 2_000]) {
+      const result = evaluateMeters(rules, read(0), T0 + at);
+      rules = result.rules;
+      kinds = kinds.concat(result.transitions.map((t) => t.kind));
+    }
+    expect(kinds.filter((kind) => kind === "reached")).toHaveLength(1);
+  });
+
+  it("given: a cycle asked for alongside a countdown, should: hold it on one that never rolls", () => {
+    const written = createRule({
+      clientKey: KEY,
+      allocationBytes: 0,
+      cycle: { kind: "daily" },
+      lifetimeRx: 0,
+      lifetimeTx: 0,
+      nowMs: T0,
+      countdownMs: HOUR,
+    });
+    expect(written.cycle).toEqual({ kind: "once" });
+    expect(written.periodEndMs).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  it("given: a countdown past a day, should: cap it at one", () => {
+    const written = createRule({
+      clientKey: KEY,
+      allocationBytes: 0,
+      cycle: { kind: "once" },
+      lifetimeRx: 0,
+      lifetimeTx: 0,
+      nowMs: T0,
+      countdownMs: 40 * HOUR,
+    });
+    expect(written.countdownMs).toBe(MAX_COUNTDOWN_MS);
+  });
+
+  it("given: a countdown re-timed, should: run the new duration from now", () => {
+    const spent = timer({ periodStartMs: T0 - HOUR });
+    const edited = upsertRule(spent, {
+      clientKey: KEY,
+      allocationBytes: 0,
+      cycle: { kind: "once" },
+      lifetimeRx: 0,
+      lifetimeTx: 0,
+      nowMs: T0,
+      countdownMs: 3 * HOUR,
+    });
+    expect(countdownLeftMs(edited, T0)).toBe(3 * HOUR);
+    expect(edited.actedThisCycle).toBe(false);
+  });
+
+  it("given: a timer that is up and paused, should: owe no release while the time stays up", () => {
+    const held = timer({ pauseState: "applied", periodStartMs: T0 - 3 * HOUR });
+    expect(stalledReleases([held], T0 + 60_000, 60_000)).toEqual([]);
+  });
+
+  it("given: a timer restarted, should: owe the release its pause is holding", () => {
+    const held = restartCycle(timer({ pauseState: "applied" }), T0);
+    expect(held.pauseState).toBe("none");
+    expect(countdownLeftMs(held, T0)).toBe(2 * HOUR);
+  });
+});
+
 describe("releasedByHand", () => {
   const pausing = rule({ pauseState: "applied" });
 
@@ -234,5 +330,27 @@ describe("releasedByHand", () => {
 
   it("reads a device the poll did not carry as not asked, never as unpaused", () => {
     expect(releasedByHand([pausing], new Map())).toEqual([]);
+  });
+});
+
+describe("listChanged", () => {
+  it("given: a list that lost its only entry, should: report the change", () => {
+    // The shape every store's reconciliation rests on. Comparing index by index
+    // reads an emptied list as unchanged, so the drop is never written down.
+    expect(listChanged([], ["a"])).toBe(true);
+  });
+
+  it("given: a list that lost its tail, should: report the change", () => {
+    expect(listChanged(["a"], ["a", "b"])).toBe(true);
+  });
+
+  it("given: the same entries, should: report no change", () => {
+    const a = { id: 1 };
+    const b = { id: 2 };
+    expect(listChanged([a, b], [a, b])).toBe(false);
+  });
+
+  it("given: an entry replaced in place, should: report the change", () => {
+    expect(listChanged([{ id: 1 }], [{ id: 1 }])).toBe(true);
   });
 });

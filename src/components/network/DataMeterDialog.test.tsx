@@ -5,12 +5,32 @@
 // a test that only proved the form renders would have caught none of them.
 
 import { useState } from "react";
-import { expect, describe, test, afterEach } from "vitest";
+import { expect, describe, test, afterEach, vi } from "vitest";
 import { render, cleanup } from "vitest-browser-react";
 import { page } from "@vitest/browser/context";
+import type { DeviceGroup } from "@core/deviceGroup";
 import type { DataMeter, MeterRuleView } from "../../hooks/useDataMeter";
 import { TooltipProvider } from "../ui/tooltip";
 import { DataMeterDialog } from "./DataMeterDialog";
+
+let heldGroups: DeviceGroup[] = [];
+const groupsSaved: { memberKeys: string[]; groupId?: string }[] = [];
+const groupsRemoved: string[] = [];
+
+vi.mock("../../hooks/useDeviceGroups", () => ({
+  useDeviceGroups: () => ({
+    groups: heldGroups,
+    pauseEnforceable: true,
+    loading: false,
+    error: null,
+    save: async (terms: { memberKeys: string[]; groupId?: string }) => {
+      groupsSaved.push({ memberKeys: terms.memberKeys, groupId: terms.groupId });
+    },
+    remove: async (groupId: string) => {
+      groupsRemoved.push(groupId);
+    },
+  }),
+}));
 
 const GB = 1_000_000_000;
 const NOW = Date.now();
@@ -30,6 +50,7 @@ function rule(over: Partial<MeterRuleView> = {}): MeterRuleView {
     actedThisCycle: false,
     pauseState: "none",
     usageBytes: 12 * GB,
+    reached: false,
     deviceName: "PS5 Console",
     ...over,
   };
@@ -44,6 +65,7 @@ function meter(over: Partial<DataMeter> = {}): DataMeter {
     save: async () => {},
     restart: async () => {},
     remove: async () => {},
+    reload: async () => {},
     ...over,
   };
 }
@@ -52,18 +74,37 @@ const text = () => document.body.textContent ?? "";
 
 /** Open state held outside the card, as the drill-in holds it, so closing and
  *  reopening is the same sequence a user performs. */
+const CANDIDATES = [
+  { clientKey: "42", name: "PS5 Console", active: true, lastSeenMs: NOW },
+  // Away right now, and still pickable: a rule on an absent device rolls its
+  // cycle and releases its pause the same as one on a device that is here.
+  { clientKey: "43", name: "Kids iPad", active: false, lastSeenMs: NOW - 86_400_000 },
+];
+
 function Harness({ value }: { value: DataMeter }) {
   const [open, setOpen] = useState(true);
   return (
     <TooltipProvider>
       <button onClick={() => setOpen(true)}>reopen</button>
-      <DataMeterDialog meter={value} deviceName='PS5 Console' open={open} onOpenChange={setOpen} />
+      <DataMeterDialog
+        meter={value}
+        clientKey='42'
+        deviceName='PS5 Console'
+        candidates={CANDIDATES}
+        open={open}
+        onOpenChange={setOpen}
+      />
     </TooltipProvider>
   );
 }
 
 describe("DataMeterDialog", () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    heldGroups = [];
+    groupsSaved.length = 0;
+    groupsRemoved.length = 0;
+  });
 
   test("given: a device with a rule, should: show what it is doing before offering to edit it", async () => {
     render(<Harness value={meter({ rule: rule() })} />);
@@ -160,6 +201,130 @@ describe("DataMeterDialog", () => {
     expect(text()).not.toContain("Save limit");
     // The card is still open: cancelling an edit steps back, it does not dismiss.
     expect(document.querySelector('[data-slot="dialog-overlay"]')).not.toBeNull();
+  });
+
+  test("given: Start over, should: show the cycle it just restarted rather than stay in the form", async () => {
+    const restarted: string[] = [];
+    render(
+      <Harness
+        value={meter({ rule: rule(), restart: async () => void restarted.push("reset") })}
+      />,
+    );
+
+    await page.getByText("Edit limit").click();
+    await expect.poll(text).toContain("Save limit");
+
+    await page.getByText("Start over").click();
+
+    await expect.poll(text).toContain("GB USED");
+    expect(restarted).toEqual(["reset"]);
+    expect(text()).not.toContain("Save limit");
+  });
+
+  test("given: the Timer chip, should: swap the allowance for a countdown rather than add one", async () => {
+    render(<Harness value={meter({ rule: null })} />);
+    await expect.poll(text).toContain("Allowance");
+
+    await page.getByText("Timer").click();
+
+    await expect.poll(text).toContain("Hours");
+    expect(text()).toContain("Minutes");
+    expect(text()).toContain("24h");
+    expect(text()).toContain("Start timer");
+    // The two are alternatives. A form offering both would be setting two rules.
+    expect(text()).not.toContain("Resets on day");
+  });
+
+  test("given: a second device picked, should: save the limit for all of them, not just this one", async () => {
+    render(<Harness value={meter({ rule: null })} />);
+    await expect.poll(text).toContain("Applies to");
+    expect(text()).toContain("This device");
+
+    await page.getByRole("button", { name: "This device" }).click();
+    await page.getByText("Kids iPad").click();
+
+    await expect.poll(text).toContain("2 devices");
+    expect(text()).toContain("Save limit for all");
+    // The choice that is the whole difference a group makes.
+    expect(text()).toContain("Shared");
+    expect(text()).toContain("Each");
+  });
+
+  test("given: a group narrowed to one device, should: keep the group rather than write a rule that starts the count over", async () => {
+    heldGroups = [
+      {
+        groupId: "kids",
+        name: "Kids",
+        memberKeys: ["42", "43"],
+        allocationBytes: 50 * GB,
+        autoPause: true,
+        cycle: { kind: "monthly", day: 1 },
+        mode: "pooled",
+        updatedMs: NOW,
+      },
+    ];
+    const saved: unknown[] = [];
+    render(
+      <Harness
+        value={meter({
+          rule: rule({ groupId: "kids", sharedAllowance: true }),
+          save: async (terms) => void saved.push(terms),
+        })}
+      />,
+    );
+    await expect.poll(text).toContain("Edit limit");
+    await page.getByRole("button", { name: "Edit limit" }).click();
+
+    await expect.poll(text).toContain("2 devices");
+    await page.getByRole("button", { name: "2 devices" }).click();
+    await page.getByText("Kids iPad").click();
+    await expect.poll(text).toContain("This device");
+    await page.getByRole("button", { name: "Save limit" }).click();
+
+    // A member's rule carries what this cycle has spent. A device rule of its own
+    // opens a fresh cycle, counting from zero.
+    await expect.poll(() => groupsSaved).toHaveLength(1);
+    expect(groupsSaved[0].memberKeys).toEqual(["42"]);
+    expect(groupsRemoved).toEqual([]);
+    expect(saved).toEqual([]);
+  });
+
+  test("given: a device that is away, should: still offer it, tagging the ones that are here", async () => {
+    render(<Harness value={meter({ rule: null })} />);
+    await expect.poll(text).toContain("Applies to");
+
+    await page.getByRole("button", { name: "This device" }).click();
+
+    // Being offline is a tag on the row, never a reason it cannot be metered.
+    await expect.poll(text).toContain("Kids iPad");
+    expect(text()).toContain("ACTIVE NOW");
+    const away = [...document.querySelectorAll("label")].find((label) =>
+      label.textContent?.includes("Kids iPad"),
+    );
+    expect(away?.querySelector("input")?.disabled).toBe(false);
+  });
+
+  test("given: a timer over several devices, should: not offer a choice whose options are the same", async () => {
+    render(<Harness value={meter({ rule: null })} />);
+    await expect.poll(text).toContain("Applies to");
+
+    await page.getByText("Timer").click();
+    await page.getByRole("button", { name: "This device" }).click();
+    await page.getByText("Kids iPad").click();
+
+    await expect.poll(text).toContain("start and end on one clock");
+    expect(text()).not.toContain("One allowance between them");
+  });
+
+  test("given: the device this card is for, should: refuse to drop it from its own limit", async () => {
+    render(<Harness value={meter({ rule: null })} />);
+    await expect.poll(text).toContain("Applies to");
+
+    await page.getByRole("button", { name: "This device" }).click();
+    await page.getByText("PS5 Console").nth(1).click();
+
+    await expect.poll(text).toContain("This device");
+    expect(text()).not.toContain("0 devices");
   });
 
   test("given: a day between 2 and 9, should: accept it — clamping every keystroke made it unreachable", async () => {

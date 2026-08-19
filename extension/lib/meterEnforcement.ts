@@ -5,7 +5,11 @@
 // here is one store and one account.
 
 import {
+  announcementSubject,
+  announcesAsGroup,
+  collapseGroupAnnouncements,
   evaluateMeters,
+  listChanged,
   resolveRuleKeys,
   releasedByHand,
   stalledPauses,
@@ -13,12 +17,9 @@ import {
   type MeterRule,
   type MeterTransition,
 } from "@core/dataMeter";
+import { projectGroupRules, resolveGroupMembers, type DeviceGroup } from "@core/deviceGroup";
 import type { AlertState } from "@core/alertDefinitions";
-import {
-  CONNECT_ACCOUNT_ADVICE,
-  dataLimitAlertKey,
-  dataLimitAlertSpec,
-} from "@core/dataMeterAlert";
+import { CONNECT_ACCOUNT_ADVICE, dataLimitAlertSpec } from "@core/dataMeterAlert";
 import type { AlertTransition } from "@core/alertEngine";
 import type { ClientTotalsCore } from "@core/clientTotals";
 import type { HistoryStore } from "./history";
@@ -52,13 +53,23 @@ export async function runMeters(
   blocked: ReadonlyMap<string, boolean> = new Map(),
 ): Promise<{ transitions: AlertTransition[]; active: AlertState[] }> {
   const stored = await store.readMeterRules();
-  if (stored.length === 0) return { transitions: [], active: [] };
+  const storedGroups = await store.readDeviceGroups();
+  if (stored.length === 0 && storedGroups.length === 0) return { transitions: [], active: [] };
   const lifetimes = odometer.lifetimes();
   const roster = {
     keys: lifetimes.map((entry) => entry.clientKey),
     resolveKey: (key: string) => odometer.resolveKey(key),
   };
-  const onLiveKeys = resolveRuleKeys(stored, roster);
+  const groups = resolveGroupMembers(storedGroups, roster);
+  if (listChanged(groups, storedGroups)) await store.writeDeviceGroups(groups);
+  const resolved = resolveRuleKeys(stored, roster);
+  const onLiveKeys = projectGroupRules({
+    groups,
+    rules: resolved,
+    counters: lifetimes,
+    nowMs: now,
+  });
+  await standDownProjectedOut(store, host, odometer, groups, resolved, onLiveKeys, now);
   // Before anything is retried: a device someone already unpaused owes no write,
   // and the rule's own record of pausing it is the stale half.
   const alreadyUnpaused = new Set(
@@ -69,12 +80,14 @@ export async function runMeters(
   );
   const { rules, transitions } = evaluateMeters(reconciled, lifetimes, now);
   const signedIn = host.signedIn();
+  const groupById = new Map(groups.map((group) => [group.groupId, group]));
   // A release is a router write, not news: the announcement it would once have
-  // cleared retired a minute after it was raised.
-  const announcements = transitions.flatMap((transition) =>
+  // cleared retired a minute after it was raised. Members of a shared allowance
+  // are every one of them paused, and the group announces once.
+  const announcements = collapseGroupAnnouncements(transitions).flatMap((transition) =>
     transition.kind === "released"
       ? []
-      : [meterAlert(transition, deviceName(odometer, transition.clientKey), signedIn)],
+      : [meterAlert(transition, deviceName(odometer, transition.clientKey), signedIn, groupById)],
   );
 
   const outcomes = signedIn
@@ -95,10 +108,51 @@ export async function runMeters(
   applyPauseOutcomes(rules, outcomes, now);
   await store.writeMeterRules(rules);
   if (announcements.length > 0) await store.applyAlertTransitions(announcements, now);
-  const active = rules
-    .filter((rule) => rule.reachedAtMs !== undefined)
-    .map((rule) => meterAlertState(rule, deviceName(odometer, rule.clientKey), signedIn));
+  const announcing = rules.filter((rule) => rule.reachedAtMs !== undefined);
+  const seen = new Set<string>();
+  const active = announcing.flatMap((rule) => {
+    const subject = announcementSubject(rule);
+    if (seen.has(subject)) return [];
+    seen.add(subject);
+    return [meterAlertState(rule, deviceName(odometer, rule.clientKey), signedIn, groupById)];
+  });
   return { transitions: announcements, active };
+}
+
+/**
+ * Settle the rules the projection took away.
+ *
+ * A device dropped from a group is no longer metered by anything, so the pause
+ * its rule was holding has nothing left that knows to lift it. A rule whose
+ * announcement moved to its group owes the device key a clearing, since nothing
+ * filed under the group can close an episode opened under the device.
+ */
+async function standDownProjectedOut(
+  store: HistoryStore,
+  host: MeterHost,
+  odometer: ClientTotalsCore,
+  groups: readonly DeviceGroup[],
+  before: readonly MeterRule[],
+  after: readonly MeterRule[],
+  nowMs: number,
+): Promise<void> {
+  const byKey = new Map(after.map((rule) => [rule.clientKey, rule]));
+  const groupsById = new Map(groups.map((group) => [group.groupId, group]));
+  const stillAnnouncing = (rule: MeterRule) =>
+    announcesAsGroup(rule) &&
+    after.some(
+      (other) =>
+        other.groupId === rule.groupId &&
+        other.clientKey !== rule.clientKey &&
+        other.reachedAtMs !== undefined,
+    );
+  for (const rule of before) {
+    const still = byKey.get(rule.clientKey);
+    if (still && announcementSubject(still) === announcementSubject(rule)) continue;
+    if (!stillAnnouncing(rule))
+      await retireMeterAlert(store, rule, deviceName(odometer, rule.clientKey), nowMs, groupsById);
+    if (!still) await standDownMeterRule(host, rule, undefined);
+  }
 }
 
 async function sendPauses(
@@ -149,19 +203,13 @@ export async function retireMeterAlert(
   rule: MeterRule | undefined,
   deviceName: string,
   nowMs: number,
+  groups?: GroupsById,
 ): Promise<void> {
   if (rule?.reachedAtMs === undefined) return;
+  // Signed-in only shapes the advice, which a clearing does not carry.
+  const spec = meterSpec(rule, deviceName, false, groups);
   await store.applyAlertTransitions(
-    [
-      {
-        kind: "cleared",
-        source: "system",
-        key: dataLimitAlertKey(rule.clientKey),
-        atMs: nowMs,
-        // Signed-in only shapes the advice, which a clearing does not carry.
-        spec: meterSpec(rule, deviceName, false),
-      },
-    ],
+    [{ kind: "cleared", source: "system", key: spec.key, atMs: nowMs, spec }],
     nowMs,
   );
 }
@@ -226,25 +274,38 @@ function deviceName(odometer: ClientTotalsCore, clientKey: string): string {
   return odometer.totals(clientKey)[0]?.name?.trim() || `device ${clientKey}`;
 }
 
-function meterSpec(rule: MeterRule, name: string, signedIn: boolean) {
-  return dataLimitAlertSpec({
-    clientKey: rule.clientKey,
-    deviceName: name,
-    allocationBytes: rule.allocationBytes,
+type GroupsById = ReadonlyMap<string, DeviceGroup>;
+
+function meterSpec(rule: MeterRule, name: string, signedIn: boolean, groups?: GroupsById) {
+  const group = announcesAsGroup(rule) ? groups?.get(rule.groupId!) : undefined;
+  return dataLimitAlertSpec(rule, name, {
     advice: rule.autoPause && !signedIn ? CONNECT_ACCOUNT_ADVICE : undefined,
+    // A group down to this one device is just this device, and reads as it.
+    groupName: group && group.memberKeys.length > 1 ? group.name : undefined,
   });
 }
 
-function meterAlert(transition: MeterTransition, name: string, signedIn: boolean): AlertTransition {
+function meterAlert(
+  transition: MeterTransition,
+  name: string,
+  signedIn: boolean,
+  groups?: GroupsById,
+): AlertTransition {
+  const spec = meterSpec(transition.rule, name, signedIn, groups);
   return {
     kind: transition.kind === "reached" ? "fired" : "cleared",
     source: "system",
-    key: dataLimitAlertKey(transition.clientKey),
+    key: spec.key,
     atMs: transition.atMs,
-    spec: meterSpec(transition.rule, name, signedIn),
+    spec,
   };
 }
 
-function meterAlertState(rule: MeterRule, name: string, signedIn: boolean): AlertState {
-  return { ...meterSpec(rule, name, signedIn), source: "system", active: true };
+function meterAlertState(
+  rule: MeterRule,
+  name: string,
+  signedIn: boolean,
+  groups?: GroupsById,
+): AlertState {
+  return { ...meterSpec(rule, name, signedIn, groups), source: "system", active: true };
 }

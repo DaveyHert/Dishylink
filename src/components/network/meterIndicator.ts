@@ -6,14 +6,15 @@ export type MeterIndicator = "held" | "reached" | "off" | "watching";
 
 export function meterIndicatorForRule(rule: {
   autoPause: boolean;
-  usageBytes: number;
-  allocationBytes: number;
+  reached: boolean;
   pauseState: MeterRule["pauseState"];
 }): MeterIndicator {
   // "held" is the only state that says this rule is what stopped the device. A
   // device paused by hand is blocked too, and reads as whatever its rule is doing.
   if (rule.pauseState === "applied") return "held";
-  if (rule.usageBytes >= rule.allocationBytes) return "reached";
+  // The recorder's answer, not a comparison of the two figures beside it: a timer
+  // measures no bytes, and a shared allowance is reached on the group's sum.
+  if (rule.reached) return "reached";
   return rule.autoPause ? "watching" : "off";
 }
 

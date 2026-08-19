@@ -13,13 +13,19 @@
 import { energyRangeBounds, RANGES, summarizeEnergy, type Range } from "@core/energySummary";
 import { ClientTotalsCore, migrateSnapshot } from "@core/clientTotals";
 import {
+  allowanceSpent,
+  announcementSubject,
+  announcesAsGroup,
+  chargedBytes,
   cycleFromParams,
+  MAX_COUNTDOWN_MS,
   restartCycle,
+  sharedUsageByGroup,
   upsertRule,
-  usageBytes,
   type MeterRule,
 } from "@core/dataMeter";
 import { usageKey } from "@core/clientUsage";
+import { projectGroupRules, type DeviceGroup } from "@core/deviceGroup";
 import { NO_METER_HOST, type MeterHost } from "./meterHost";
 import { retireMeterAlert, standDownMeterRule } from "./meterEnforcement";
 import { resolveRows, foldMinuteCollisions } from "@core/clientHistory";
@@ -96,6 +102,22 @@ export async function routeApiRequest(
       const kept = rules.filter((rule) => rule.clientKey !== client);
       const removed = kept.length !== rules.length;
       if (removed) await store.writeMeterRules(kept);
+      // A member's rule is the group's, and the projection would write it straight
+      // back on the next drain. Unmetering the device means leaving the group.
+      if (client && going?.groupId !== undefined) {
+        const groups = await store.readDeviceGroups();
+        await store.writeDeviceGroups(
+          groups
+            .map((group) =>
+              group.groupId === going.groupId
+                ? { ...group, memberKeys: group.memberKeys.filter((key) => key !== client) }
+                : group,
+            )
+            // A group left with no members covers nothing, the same as on the
+            // record-deleted route.
+            .filter((group) => group.memberKeys.length > 0),
+        );
+      }
       await standDownMeterRule(host, going, undefined);
       if (going?.reachedAtMs !== undefined)
         await retireMeterAlert(
@@ -103,41 +125,94 @@ export async function routeApiRequest(
           going,
           meterDeviceName(await meterNames(store), going.clientKey),
           now.getTime(),
+          new Map((await store.readDeviceGroups()).map((group) => [group.groupId, group])),
         );
       return { status: 200, body: { removed } };
     }
     if (method === "POST") {
       const cycle = cycleFromParams(url.searchParams, now.getTime());
       const allocationBytes = Number(url.searchParams.get("allocation"));
-      if (!client || !cycle || !Number.isFinite(allocationBytes) || allocationBytes <= 0)
+      const countdownMs = countdownFromParams(url.searchParams);
+      if (!client || !cycle) return { status: 400, body: { error: "bad_request" } };
+      // A countdown measures the clock, so it needs no allowance behind it.
+      if (countdownMs === null && (!Number.isFinite(allocationBytes) || allocationBytes <= 0))
         return { status: 400, body: { error: "bad_request" } };
       const odometer = await loadOdometer(store);
       const counters = odometer.lifetimes().find((entry) => entry.clientKey === client);
       const existing = rules.find((other) => other.clientKey === client);
       const rule = upsertRule(existing, {
         clientKey: client,
-        allocationBytes,
+        allocationBytes: Number.isFinite(allocationBytes) ? Math.max(0, allocationBytes) : 0,
         autoPause: url.searchParams.get("autoPause") !== "0",
         cycle,
         lifetimeRx: counters?.lifetimeRx ?? 0,
         lifetimeTx: counters?.lifetimeTx ?? 0,
         nowMs: now.getTime(),
+        ...(countdownMs === null ? {} : { countdownMs }),
       });
-      await store.writeMeterRules([...rules.filter((o) => o.clientKey !== client), rule]);
+      const written = [...rules.filter((o) => o.clientKey !== client), rule];
+      await store.writeMeterRules(written);
       await standDownMeterRule(host, existing, rule);
-      return { status: 200, body: { rule: withUsage(rule, await meterNames(store)) } };
+      return {
+        status: 200,
+        body: {
+          rule: withUsage(
+            rule,
+            await meterNames(store),
+            sharedUsageByGroup(written),
+            now.getTime(),
+          ),
+        },
+      };
     }
     const mine = client ? rules.filter((rule) => rule.clientKey === client) : rules;
     const names = await meterNames(store);
+    const groups = await store.readDeviceGroups();
+    // One sum for the whole answer: a shared allowance is read off every member,
+    // and asking a single-device request for it costs nothing.
+    const sharedUsage = sharedUsageByGroup(rules);
     return {
       status: 200,
       body: {
-        rules: mine.map((rule) => withUsage(rule, names)),
+        rules: mine.map((rule) => withUsage(rule, names, sharedUsage, now.getTime(), groups)),
         // Enforcement here lands on the next alarm rather than within a poll, but
         // whether it lands at all is the same question: is there an account.
         pauseEnforceable: host.signedIn(),
       },
     };
+  }
+
+  // Allowances set across several devices. Members are projected into the rules
+  // above on the next drain, so nothing is written to them here.
+  if (url.pathname === "/api/clients/groups") {
+    const groups = await store.readDeviceGroups();
+    if (method === "DELETE") {
+      const groupId = url.searchParams.get("group");
+      const going = groups.find((group) => group.groupId === groupId);
+      if (!going) return { status: 200, body: { removed: false } };
+      await store.writeDeviceGroups(groups.filter((group) => group !== going));
+      await standDownGroup(store, host, going, now.getTime());
+      return { status: 200, body: { removed: true } };
+    }
+    if (method === "POST") {
+      const group = groupFromParams(url.searchParams, groups, now.getTime());
+      if (!group) return { status: 400, body: { error: "bad_request" } };
+      const kept = [...groups.filter((other) => other.groupId !== group.groupId), group];
+      await store.writeDeviceGroups(kept);
+      // The drain is 30 s away, and until it runs the members would read as
+      // carrying no limit at all.
+      const odometer = await loadOdometer(store);
+      await store.writeMeterRules(
+        projectGroupRules({
+          groups: kept,
+          rules: await store.readMeterRules(),
+          counters: odometer.lifetimes(),
+          nowMs: now.getTime(),
+        }),
+      );
+      return { status: 200, body: { group } };
+    }
+    return { status: 200, body: { groups, pauseEnforceable: host.signedIn() } };
   }
 
   // Start one rule's allowance over, leaving the device's own usage standing.
@@ -146,10 +221,32 @@ export async function routeApiRequest(
     const rules = await store.readMeterRules();
     const existing = rules.find((rule) => rule.clientKey === client);
     if (!existing) return { status: 200, body: { rule: null } };
-    const restarted = restartCycle(existing, now.getTime());
-    await store.writeMeterRules(rules.map((rule) => (rule === existing ? restarted : rule)));
-    await standDownMeterRule(host, existing, restarted);
-    return { status: 200, body: { rule: withUsage(restarted, await meterNames(store)) } };
+    // A member's allowance is the group's, so starting it over starts the group
+    // over. Leaving the others where they were would have them sharing a cycle
+    // from different anchors.
+    const restarting = rules.filter(
+      (rule) =>
+        rule === existing || (existing.groupId !== undefined && rule.groupId === existing.groupId),
+    );
+    const restartedByKey = new Map(
+      restarting.map((rule) => [rule.clientKey, restartCycle(rule, now.getTime())]),
+    );
+    const written = rules.map((rule) => restartedByKey.get(rule.clientKey) ?? rule);
+    await store.writeMeterRules(written);
+    for (const rule of restarting)
+      await standDownMeterRule(host, rule, restartedByKey.get(rule.clientKey));
+    const restarted = restartedByKey.get(existing.clientKey)!;
+    return {
+      status: 200,
+      body: {
+        rule: withUsage(
+          restarted,
+          await meterNames(store),
+          sharedUsageByGroup(written),
+          now.getTime(),
+        ),
+      },
+    };
   }
 
   // Zero one device's total but keep it listed — a reset, distinct from delete.
@@ -187,6 +284,10 @@ export async function routeApiRequest(
         ? { removed: odometer.remove(key) }
         : (odometer.clear(), { cleared: true });
       await store.writeTotalsSnapshot(odometer.toSnapshot());
+      // A rule on a record that no longer exists can never be reached, and would
+      // meter again unannounced if the device came back. The desktop recorder
+      // does the same on this route.
+      await forgetMetering(store, host, key, now.getTime());
       return { status: 200, body: result };
     }
     // Rows and candidates come from one read of one odometer: a candidate naming
@@ -258,6 +359,122 @@ export async function routeApiRequest(
   return { status: 503, body: { error: `no extension history for ${url.pathname}` } };
 }
 
+/** A countdown in milliseconds, or null when the write names none. Anything past
+ *  a day is capped rather than taken at its word. */
+function countdownFromParams(params: URLSearchParams): number | null {
+  const raw = params.get("countdown");
+  if (raw === null || raw.trim() === "") return null;
+  const countdownMs = Number(raw);
+  if (!Number.isFinite(countdownMs) || countdownMs <= 0) return null;
+  return Math.min(MAX_COUNTDOWN_MS, countdownMs);
+}
+
+function groupFromParams(
+  params: URLSearchParams,
+  existing: readonly DeviceGroup[],
+  nowMs: number,
+): DeviceGroup | null {
+  const cycle = cycleFromParams(params, nowMs);
+  const allocationBytes = Number(params.get("allocation"));
+  const countdownMs = countdownFromParams(params);
+  const name = params.get("name")?.trim();
+  const memberKeys = [
+    ...new Set(
+      (params.get("members") ?? "")
+        .split(",")
+        .map((key) => key.trim())
+        .filter((key) => key !== ""),
+    ),
+  ];
+  if (!cycle || !name || memberKeys.length === 0) return null;
+  if (countdownMs === null && (!Number.isFinite(allocationBytes) || allocationBytes <= 0))
+    return null;
+  const groupId = params.get("group");
+  return {
+    groupId:
+      existing.find((group) => group.groupId === groupId)?.groupId ??
+      groupId ??
+      `group-${nowMs.toString(36)}`,
+    name,
+    memberKeys,
+    allocationBytes: Number.isFinite(allocationBytes) ? Math.max(0, allocationBytes) : 0,
+    autoPause: params.get("autoPause") !== "0",
+    // A countdown runs from its own start, so the cycle it is written on is one
+    // that does not move that start under it. Matched to what the projected rules
+    // carry, or their terms would read as changed on every drain.
+    cycle: countdownMs === null ? cycle : { kind: "once" },
+    // Matches the form's own default, so a write naming no mode never means one
+    // thing here and another on the card that sent it.
+    mode: params.get("mode") === "pooled" ? "pooled" : "perMember",
+    updatedMs: nowMs,
+    ...(countdownMs === null ? {} : { countdownMs }),
+  };
+}
+
+/**
+ * Drop the metering behind a device whose record has been deleted, or behind
+ * every device when the whole list has been.
+ *
+ * The rule goes, its announcement is retired, and it leaves any group it was in
+ * so the projection cannot write it back. A pause it was holding is released,
+ * since nothing is left that knows the device is blocked.
+ */
+async function forgetMetering(
+  store: HistoryStore,
+  host: MeterHost,
+  clientKey: string | null,
+  nowMs: number,
+): Promise<void> {
+  const rules = await store.readMeterRules();
+  const groups = await store.readDeviceGroups();
+  const going = clientKey === null ? rules : rules.filter((rule) => rule.clientKey === clientKey);
+  if (going.length === 0 && groups.length === 0) return;
+  await store.writeMeterRules(
+    clientKey === null ? [] : rules.filter((rule) => !going.includes(rule)),
+  );
+  await store.writeDeviceGroups(
+    clientKey === null
+      ? []
+      : groups
+          .map((group) => ({
+            ...group,
+            memberKeys: group.memberKeys.filter((key) => key !== clientKey),
+          }))
+          .filter((group) => group.memberKeys.length > 0),
+  );
+  const names = await meterNames(store);
+  const groupsById = new Map(groups.map((group) => [group.groupId, group]));
+  const retired = new Set<string>();
+  for (const rule of going) {
+    const subject = announcementSubject(rule);
+    if (retired.has(subject)) continue;
+    retired.add(subject);
+    await retireMeterAlert(store, rule, meterDeviceName(names, rule.clientKey), nowMs, groupsById);
+  }
+  for (const rule of going) await standDownMeterRule(host, rule, undefined);
+}
+
+/** A group's members are unmetered the moment it is gone, so any pause it holds
+ *  is released here rather than waiting for a cycle that never rolls. */
+async function standDownGroup(
+  store: HistoryStore,
+  host: MeterHost,
+  group: DeviceGroup,
+  nowMs: number,
+): Promise<void> {
+  const rules = await store.readMeterRules();
+  const members = rules.filter((rule) => rule.groupId === group.groupId);
+  if (members.length === 0) return;
+  await store.writeMeterRules(rules.filter((rule) => rule.groupId !== group.groupId));
+  const names = await meterNames(store);
+  const announced = members.filter((rule) => rule.reachedAtMs !== undefined);
+  const shared = members.some(announcesAsGroup);
+  const groupsById = new Map([[group.groupId, group]]);
+  for (const rule of shared ? announced.slice(0, 1) : announced)
+    await retireMeterAlert(store, rule, meterDeviceName(names, rule.clientKey), nowMs, groupsById);
+  for (const rule of members) await standDownMeterRule(host, rule, undefined);
+}
+
 /** One odometer read for the whole answer, and a device with no name falls back
  *  to `device <key>`, the wording the desktop recorder uses for the same case. */
 async function meterNames(store: HistoryStore): Promise<Map<string, string>> {
@@ -274,14 +491,36 @@ function meterDeviceName(names: Map<string, string>, clientKey: string): string 
   return names.get(clientKey) ?? `device ${clientKey}`;
 }
 
+/**
+ * A rule as a surface draws it.
+ *
+ * `usageBytes` is what the rule is judged against, not what the one device spent:
+ * a member of a shared allowance is over when the group is, and a card drawing
+ * its own figure against the group's allowance would call it under.
+ */
 function withUsage(
   rule: MeterRule,
   names: Map<string, string>,
-): MeterRule & { usageBytes: number; deviceName: string } {
+  sharedUsage: ReadonlyMap<string, number>,
+  nowMs: number,
+  groups: readonly DeviceGroup[] = [],
+): MeterRule & {
+  usageBytes: number;
+  deviceName: string;
+  reached: boolean;
+  groupName?: string;
+} {
+  const group = groups.find((other) => other.groupId === rule.groupId);
   return {
     ...rule,
-    usageBytes: usageBytes(rule),
+    usageBytes: chargedBytes(rule, sharedUsage),
+    // Decided here, where the group's sum and the countdown's clock both are. A
+    // surface re-deriving it from the two figures below gets a timer wrong.
+    reached: allowanceSpent(rule, nowMs, sharedUsage),
     deviceName: meterDeviceName(names, rule.clientKey),
+    // A group down to one device covers nothing but that device, so the card has
+    // nothing to say about others.
+    ...(group && group.memberKeys.length > 1 ? { groupName: group.name } : {}),
   };
 }
 

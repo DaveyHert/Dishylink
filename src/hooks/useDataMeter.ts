@@ -5,15 +5,22 @@
 // less often than the network panel behind it.
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import type { MeterCycle, MeterRule } from "@core/dataMeter";
+import { announcementSubject, type MeterCycle, type MeterRule } from "@core/dataMeter";
 import { apiRequest } from "../lib/apiHost";
 import { meterIndicatorForRule, type MeterIndicator } from "../components/network/meterIndicator";
 
 const REFRESH_MS = 10_000;
 
 export interface MeterRuleView extends MeterRule {
+  /** What the rule is judged against: the group's sum for a member of a shared
+   *  allowance, the device's own spend otherwise. */
   usageBytes: number;
   deviceName: string;
+  /** Whether the rule has reached what it measures — the recorder's answer, since
+   *  only it holds the group's sum alongside the countdown's clock. */
+  reached: boolean;
+  /** The group that set this rule, when a group did. */
+  groupName?: string;
 }
 
 export interface DataMeter {
@@ -27,9 +34,13 @@ export interface DataMeter {
     allocationBytes: number;
     autoPause: boolean;
     cycle: MeterCycle;
+    /** Set to make the rule a countdown rather than an allowance. */
+    countdownMs?: number;
   }) => Promise<void>;
   restart: () => Promise<void>;
   remove: () => Promise<void>;
+  /** Read this rule again now, for a write made outside this hook. */
+  reload: () => Promise<void>;
 }
 
 export function cycleParams(cycle: MeterCycle): Record<string, string> {
@@ -103,13 +114,14 @@ export function useDataMeter(clientKey: string | null): DataMeter {
   );
 
   const save: DataMeter["save"] = useCallback(
-    async ({ allocationBytes, autoPause, cycle }) => {
+    async ({ allocationBytes, autoPause, cycle, countdownMs }) => {
       if (!clientKey) return;
       const query = new URLSearchParams({
         client: clientKey,
         allocation: String(Math.round(allocationBytes)),
         autoPause: autoPause ? "1" : "0",
         ...cycleParams(cycle),
+        ...(countdownMs === undefined ? {} : { countdown: String(Math.round(countdownMs)) }),
       });
       await write(`/api/clients/meters?${query.toString()}`);
     },
@@ -126,7 +138,13 @@ export function useDataMeter(clientKey: string | null): DataMeter {
     await write(`/api/clients/meters?client=${encodeURIComponent(clientKey)}`, "DELETE");
   }, [clientKey, write]);
 
-  return { rule, pauseEnforceable, loading, error, save, restart, remove };
+  return { rule, pauseEnforceable, loading, error, save, restart, remove, reload: load };
+}
+
+/** Read the rules again outside this hook's own poll, for a write that changes
+ *  them without going through it — a group covers several devices at once. */
+export async function refreshMeterIndicators(): Promise<void> {
+  await loadMeteredKeys();
 }
 
 let meterIndicators = new Map<string, MeterIndicator>();
@@ -141,7 +159,10 @@ function meterIndicatorSignature(marks: Map<string, MeterIndicator>): string {
 
 function trippedSignature(rules: readonly MeterRuleView[], enforceable: boolean): string {
   return rules
-    .map((rule) => `${rule.clientKey}:${rule.allocationBytes}:${rule.deviceName}:${enforceable}`)
+    .map(
+      (rule) =>
+        `${announcementSubject(rule)}:${rule.allocationBytes}:${rule.countdownMs}:${rule.deviceName}:${rule.groupName}:${enforceable}`,
+    )
     .join();
 }
 
@@ -164,7 +185,16 @@ async function loadMeteredKeys(): Promise<void> {
     // The recorder owns when an announcement retires, so this reads its stamp
     // rather than re-deciding off usage: usage stays over the allowance for the
     // rest of the cycle, and nothing here re-renders on a timer to notice.
-    const nextTripped = rules.filter((rule) => rule.reachedAtMs !== undefined);
+    // One entry per announcement, not per rule: a group crosses once, and the
+    // recorder filed one episode for it under the group's own key.
+    const announcing = new Set<string>();
+    const nextTripped = rules.filter((rule) => {
+      if (rule.reachedAtMs === undefined) return false;
+      const subject = announcementSubject(rule);
+      if (announcing.has(subject)) return false;
+      announcing.add(subject);
+      return true;
+    });
     const trippedMoved =
       trippedSignature(nextTripped, nextEnforceable) !==
       trippedSignature(trippedMeters, metersEnforceable);
