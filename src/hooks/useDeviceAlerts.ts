@@ -131,11 +131,9 @@ function createFirstSeenLog() {
 
 function dataLimitAlert(rule: MeterRuleView, enforceable: boolean): AlertState {
   return {
-    ...dataLimitAlertSpec({
-      clientKey: rule.clientKey,
-      deviceName: rule.deviceName,
-      allocationBytes: rule.allocationBytes,
+    ...dataLimitAlertSpec(rule, rule.deviceName, {
       advice: rule.autoPause && !enforceable ? CONNECT_ACCOUNT_ADVICE : undefined,
+      groupName: rule.groupName,
     }),
     source: "system",
     active: true,

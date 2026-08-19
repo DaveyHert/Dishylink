@@ -27,6 +27,7 @@ import {
 } from "@core/telemetry";
 import type { Snapshot as TotalsSnapshot } from "@core/clientTotals";
 import type { MeterRule } from "@core/dataMeter";
+import type { DeviceGroup } from "@core/deviceGroup";
 import type { AlertSeverity } from "@core/alertDefinitions";
 
 /** One device's aggregated throughput for a closed minute — the row /api/clients
@@ -143,6 +144,10 @@ export interface HistoryStore {
    *  device the user had released by hand. */
   readMeterRules(): Promise<MeterRule[]>;
   writeMeterRules(rules: MeterRule[]): Promise<void>;
+  /** Every allowance set across several devices. Held apart from the rules it
+   *  projects, so a pooled allowance keeps the membership it was divided across. */
+  readDeviceGroups(): Promise<DeviceGroup[]>;
+  writeDeviceGroups(groups: DeviceGroup[]): Promise<void>;
   /** Retain the dish's raw 1 Hz telemetry samples, dropping any past the window.
    *  Keyed by timestamp, so a re-drained overlap updates rather than duplicates. */
   putSamples(samples: TelemetrySample[], nowMs?: number): Promise<void>;
@@ -237,6 +242,7 @@ const CURSOR_KEY = "cursor";
 const RADIO_CURRENT_KEY = "radioCurrent";
 const CLIENT_TOTALS_KEY = "clientTotals";
 const METER_RULES_KEY = "meterRules";
+const DEVICE_GROUPS_KEY = "deviceGroups";
 
 function request<T>(req: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -499,6 +505,20 @@ export class IndexedDbHistory implements HistoryStore {
     await transactionDone(tx);
   }
 
+  async readDeviceGroups(): Promise<DeviceGroup[]> {
+    const tx = this.db.transaction(META, "readonly");
+    const groups = await request<DeviceGroup[] | undefined>(
+      tx.objectStore(META).get(DEVICE_GROUPS_KEY),
+    );
+    return groups ?? [];
+  }
+
+  async writeDeviceGroups(groups: DeviceGroup[]): Promise<void> {
+    const tx = this.db.transaction(META, "readwrite");
+    tx.objectStore(META).put(groups, DEVICE_GROUPS_KEY);
+    await transactionDone(tx);
+  }
+
   async putSamples(samples: TelemetrySample[], nowMs: number = Date.now()): Promise<void> {
     const tx = this.db.transaction(SAMPLES, "readwrite");
     const store = tx.objectStore(SAMPLES);
@@ -537,6 +557,7 @@ export class InMemoryHistory implements HistoryStore {
   private readonly samples = new Map<number, TelemetrySample>();
   private totalsSnapshot: TotalsSnapshot | null = null;
   private meterRules: MeterRule[] = [];
+  private deviceGroups: DeviceGroup[] = [];
   private cursor: SampleCursor = EMPTY_CURSOR;
 
   async readCursor(): Promise<SampleCursor> {
@@ -674,6 +695,14 @@ export class InMemoryHistory implements HistoryStore {
 
   async writeMeterRules(rules: MeterRule[]): Promise<void> {
     this.meterRules = rules;
+  }
+
+  async readDeviceGroups(): Promise<DeviceGroup[]> {
+    return this.deviceGroups;
+  }
+
+  async writeDeviceGroups(groups: DeviceGroup[]): Promise<void> {
+    this.deviceGroups = groups;
   }
 
   async putSamples(samples: TelemetrySample[], nowMs: number = Date.now()): Promise<void> {

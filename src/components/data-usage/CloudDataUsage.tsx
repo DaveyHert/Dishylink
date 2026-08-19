@@ -115,7 +115,7 @@ export function CloudDataUsage({ active }: { active: boolean }) {
   return (
     <div>
       <div className='mt-3 mb-3.5'>
-        <div className='text-[36px] leading-[1.05] font-bold tracking-[-0.01em]'>
+        <div className='text-[34px] leading-[1.05] font-bold tracking-[-0.01em]'>
           {formatGB(cycle.totalAmountGB)}
           <span className='ml-[6px] align-baseline text-[13px] font-medium'>
             {data?.content?.dataBuckets?.[0]?.name ?? "Data"}

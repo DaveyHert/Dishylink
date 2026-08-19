@@ -3,11 +3,13 @@
 // editing a rule from starting its allowance over.
 
 import { afterEach, describe, expect, it } from "vitest";
-import { rmSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MeterStore } from "./meterStore.mts";
 import { usageBytes } from "../core/dataMeter.ts";
+import type { MeterRule } from "../core/dataMeter.ts";
+import type { DeviceGroup } from "../core/deviceGroup.ts";
 
 const GB = 1_000_000_000;
 const T0 = new Date(2026, 7, 12, 15, 30, 0).getTime();
@@ -283,5 +285,104 @@ describe("MeterStore", () => {
     store.restart("111", T0 + 1);
     expect(store.find("111")!.pauseState).toBe("none");
     expect(store.find("111")!.pauseError).toBeUndefined();
+  });
+});
+
+describe("projecting a group's rules", () => {
+  const group = (memberKeys: string[]): DeviceGroup => ({
+    groupId: "kids",
+    name: "Kids",
+    memberKeys,
+    allocationBytes: 50 * GB,
+    autoPause: true,
+    cycle: METERED_CYCLE,
+    mode: "pooled",
+    updatedMs: T0,
+  });
+  const counters = (keys: string[]) =>
+    keys.map((clientKey) => ({ clientKey, lifetimeRx: 0, lifetimeTx: 0 }));
+
+  it("writes a rule for every member", () => {
+    const store = new MeterStore(tempPath());
+    store.project([group(["111", "222"])], counters(["111", "222"]), T0);
+    expect(store.all().map((rule) => rule.clientKey)).toEqual(["111", "222"]);
+  });
+
+  it("hands back a dropped member still holding its pause, so something can release it", () => {
+    const store = new MeterStore(tempPath());
+    store.project([group(["111", "222"])], counters(["111", "222"]), T0);
+    store.notePauseState("222", "applied", T0);
+    const went = store.project([group(["111"])], counters(["111", "222"]), T0 + 1);
+    expect(went.dropped.map((rule) => rule.clientKey)).toEqual(["222"]);
+    expect(went.dropped[0].pauseState).toBe("applied");
+    expect(store.find("222")).toBeUndefined();
+  });
+
+  it("hands back a rule whose announcement moved from the device to its group", () => {
+    const store = new MeterStore(tempPath());
+    withRule(store, "111");
+    const went = store.project([group(["111", "222"])], counters(["111", "222"]), T0 + 1);
+    expect(went.reannounced.map((rule) => rule.clientKey)).toEqual(["111"]);
+    expect(went.dropped).toEqual([]);
+  });
+
+  it("reports nothing gone on a poll that changes no terms", () => {
+    const store = new MeterStore(tempPath());
+    store.project([group(["111", "222"])], counters(["111", "222"]), T0);
+    const went = store.project([group(["111", "222"])], counters(["111", "222"]), T0 + 200);
+    expect(went).toEqual({ dropped: [], reannounced: [] });
+  });
+});
+
+describe("writing counters to disk", () => {
+  /** What the file on disk says, which is what a restart would read back. */
+  const storedRx = (path: string) =>
+    (JSON.parse(readFileSync(path, "utf8")) as { rules: MeterRule[] }).rules[0].observedRx;
+
+  it("holds a poll's advancing counters in memory rather than writing every poll", () => {
+    const path = tempPath();
+    const store = new MeterStore(path);
+    withRule(store, "111");
+    // The first observation flushes; the polls behind it are the ones that would
+    // have the 200 ms cadence writing the file five times a second.
+    store.observe([{ clientKey: "111", lifetimeRx: 1 * GB, lifetimeTx: 0 }], T0);
+    store.observe([{ clientKey: "111", lifetimeRx: 2 * GB, lifetimeTx: 0 }], T0 + 200);
+    store.observe([{ clientKey: "111", lifetimeRx: 3 * GB, lifetimeTx: 0 }], T0 + 400);
+
+    expect(store.all()[0].observedRx).toBe(3 * GB);
+    expect(storedRx(path)).toBe(1 * GB);
+  });
+
+  it("flushes them once the interval is up", () => {
+    const path = tempPath();
+    const store = new MeterStore(path);
+    withRule(store, "111");
+    store.observe([{ clientKey: "111", lifetimeRx: 1 * GB, lifetimeTx: 0 }], T0);
+    store.observe([{ clientKey: "111", lifetimeRx: 9 * GB, lifetimeTx: 0 }], T0 + 30_000);
+
+    expect(storedRx(path)).toBe(9 * GB);
+  });
+
+  it("writes a reached limit at once, whatever the flush is holding", () => {
+    const path = tempPath();
+    const store = new MeterStore(path);
+    store.upsert({
+      clientKey: "111",
+      allocationBytes: 2 * GB,
+      cycle: METERED_CYCLE,
+      lifetimeRx: 0,
+      lifetimeTx: 0,
+      nowMs: T0,
+    });
+    store.observe([{ clientKey: "111", lifetimeRx: 1 * GB, lifetimeTx: 0 }], T0);
+    // Well inside the flush interval, but an announcement is an event and the
+    // record of it cannot wait on a timer.
+    const transitions = store.observe(
+      [{ clientKey: "111", lifetimeRx: 5 * GB, lifetimeTx: 0 }],
+      T0 + 200,
+    );
+
+    expect(transitions.map((transition) => transition.kind)).toEqual(["reached"]);
+    expect(storedRx(path)).toBe(5 * GB);
   });
 });

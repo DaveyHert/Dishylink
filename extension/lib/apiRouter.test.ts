@@ -541,4 +541,189 @@ describe("routeApiRequest", () => {
     const { rules } = read.body as { rules: Array<{ deviceName: string }> };
     expect(rules[0]!.deviceName).toBe("device 99");
   });
+
+  /** Two devices the odometer knows, so a group written over them has counters. */
+  async function pairedStore(): Promise<InMemoryHistory> {
+    const store = new InMemoryHistory();
+    const odometer = new ClientTotalsCore(90_000);
+    const live = odometer.notePoll([
+      { clientId: 42, macAddress: "aa" },
+      { clientId: 43, macAddress: "bb" },
+    ]);
+    odometer.observe(42, "aa", 0, 0, NOW.getTime() - 60_000, "Laptop", live);
+    odometer.observe(43, "bb", 0, 0, NOW.getTime() - 60_000, "Tablet", live);
+    odometer.observe(42, "aa", 400, 100, NOW.getTime(), "Laptop", live);
+    odometer.observe(43, "bb", 400, 100, NOW.getTime(), "Tablet", live);
+    await store.writeTotalsSnapshot(odometer.toSnapshot());
+    return store;
+  }
+
+  async function saveGroup(
+    store: InMemoryHistory,
+    over: Record<string, string> = {},
+  ): Promise<{ status: number; body: unknown }> {
+    const query = new URLSearchParams({
+      name: "Kids",
+      members: "42,43",
+      allocation: String(50_000_000_000),
+      autoPause: "1",
+      cycle: "monthly",
+      day: "1",
+      ...over,
+    });
+    return routeApiRequest(store, `/api/clients/groups?${query}`, NOW, "POST");
+  }
+
+  it("projects a group's member rules on the write, not on the next drain", async () => {
+    const store = await pairedStore();
+    expect((await saveGroup(store)).status).toBe(200);
+    // A card that just wrote this would otherwise read both members as unmetered
+    // for up to a drain.
+    const rules = await store.readMeterRules();
+    expect(rules.map((rule) => rule.clientKey).sort()).toEqual(["42", "43"]);
+    expect(rules.every((rule) => rule.allocationBytes === 50_000_000_000)).toBe(true);
+  });
+
+  it("takes each, not shared, when a group arrives naming no mode", async () => {
+    const store = await pairedStore();
+    await saveGroup(store);
+    // The same default the form opens on, so a write that omits it never means
+    // one thing here and another on the card that sent it.
+    expect((await store.readDeviceGroups())[0]!.mode).toBe("perMember");
+    expect((await store.readMeterRules()).some((rule) => rule.sharedAllowance)).toBe(false);
+  });
+
+  it("charges a shared group's members the whole group's usage", async () => {
+    const store = await pairedStore();
+    await saveGroup(store, { mode: "pooled", allocation: String(600) });
+    // A rule anchors to the counter as it reads when it is written, so the spend
+    // has to happen after it. This is what a drain would have folded in.
+    await store.writeMeterRules(
+      (await store.readMeterRules()).map((rule) => ({ ...rule, observedRx: rule.anchorRx + 500 })),
+    );
+
+    const read = await routeApiRequest(store, "/api/clients/meters", NOW);
+    const { rules } = read.body as { rules: Array<{ usageBytes: number }> };
+    expect(rules).toHaveLength(2);
+    // Neither device is over 600 alone; together they are, which is the whole
+    // point of sharing one allowance, so each is judged on the sum.
+    for (const rule of rules) expect(rule.usageBytes).toBe(1000);
+  });
+
+  it("releases every device a deleted group was holding", async () => {
+    const store = await pairedStore();
+    await saveGroup(store, { mode: "pooled" });
+    const held = (await store.readMeterRules()).map((rule) => ({
+      ...rule,
+      pauseState: "applied" as const,
+    }));
+    await store.writeMeterRules(held);
+    const groupId = (await store.readDeviceGroups())[0]!.groupId;
+    const writes: { clientId: number; paused: boolean }[] = [];
+    const host = {
+      signedIn: () => true,
+      setPaused: async (clientId: number, paused: boolean) => {
+        writes.push({ clientId, paused });
+      },
+    };
+
+    const reply = await routeApiRequest(
+      store,
+      `/api/clients/groups?group=${groupId}`,
+      NOW,
+      "DELETE",
+      undefined,
+      host,
+    );
+
+    expect(reply.body).toEqual({ removed: true });
+    // Nothing else would lift them: the rules that applied the pauses are gone.
+    expect(writes.map((write) => write.clientId).sort()).toEqual([42, 43]);
+    expect(writes.every((write) => !write.paused)).toBe(true);
+    expect(await store.readMeterRules()).toEqual([]);
+  });
+
+  it("retires a deleted timer group's announcement once, not once per member", async () => {
+    const store = await pairedStore();
+    await saveGroup(store, { allocation: "0", countdown: String(3_600_000) });
+    const groupId = (await store.readDeviceGroups())[0]!.groupId;
+    const alertKey = `dataLimit:group:${groupId}`;
+    await store.applyAlertTransitions(
+      fired("system", alertKey, NOW.getTime() - 1_000),
+      NOW.getTime(),
+    );
+    await store.writeMeterRules(
+      (await store.readMeterRules()).map((rule) => ({
+        ...rule,
+        reachedAtMs: NOW.getTime() - 1_000,
+      })),
+    );
+    // The store closes an episode that is already closed without complaint, so
+    // what is counted here is the retires, not the episodes they land on.
+    const retires: number[] = [];
+    const record = store.applyAlertTransitions.bind(store);
+    store.applyAlertTransitions = async (transitions, nowMs) => {
+      retires.push(transitions.length);
+      await record(transitions, nowMs);
+    };
+
+    await routeApiRequest(store, `/api/clients/groups?group=${groupId}`, NOW, "DELETE");
+
+    // One clock ran out, not one per device, whether or not the members also
+    // share an allowance.
+    expect(retires).toEqual([1]);
+    expect((await store.readAlerts(NOW.getTime())).find((e) => e.key === alertKey)?.endMs).toBe(
+      NOW.getTime(),
+    );
+  });
+
+  it("takes a member out of its group when its rule is deleted, so nothing puts it back", async () => {
+    const store = await pairedStore();
+    await saveGroup(store);
+
+    await routeApiRequest(store, "/api/clients/meters?client=43", NOW, "DELETE");
+
+    expect((await store.readDeviceGroups())[0]!.memberKeys).toEqual(["42"]);
+    expect((await store.readMeterRules()).map((rule) => rule.clientKey)).toEqual(["42"]);
+  });
+
+  it("forgets a deleted device's rule and its membership, as the desktop recorder does", async () => {
+    const store = await pairedStore();
+    await saveGroup(store);
+
+    await routeApiRequest(store, "/api/clients/totals?client=43", NOW, "DELETE");
+
+    // A rule on a record that no longer exists can never be reached, and would
+    // meter again unannounced if the device came back.
+    expect((await store.readMeterRules()).map((rule) => rule.clientKey)).toEqual(["42"]);
+    expect((await store.readDeviceGroups())[0]!.memberKeys).toEqual(["42"]);
+  });
+
+  it("holds a countdown on a cycle that cannot move its start", async () => {
+    const store = await pairedStore();
+    await saveGroup(store, { cycle: "daily", countdown: String(2 * 3_600_000) });
+    const group = (await store.readDeviceGroups())[0]!;
+    expect(group.cycle).toEqual({ kind: "once" });
+    expect(group.countdownMs).toBe(2 * 3_600_000);
+    // Or the projection would read the terms as changed on every drain.
+    expect((await store.readMeterRules()).every((rule) => rule.countdownMs === 2 * 3_600_000)).toBe(
+      true,
+    );
+  });
+
+  it("caps a countdown at a day rather than taking it at its word", async () => {
+    const store = await pairedStore();
+    await saveGroup(store, { countdown: String(40 * 3_600_000) });
+    expect((await store.readDeviceGroups())[0]!.countdownMs).toBe(24 * 3_600_000);
+  });
+
+  it("refuses a group naming no devices", async () => {
+    const store = await pairedStore();
+    expect((await saveGroup(store, { members: "" })).status).toBe(400);
+  });
+
+  it("takes a countdown group with no allowance behind it", async () => {
+    const store = await pairedStore();
+    expect((await saveGroup(store, { allocation: "0", countdown: "60000" })).status).toBe(200);
+  });
 });

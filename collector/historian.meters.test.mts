@@ -6,6 +6,10 @@
 // HISTORIAN_DATA_DIR moves the claim to a temp directory, HISTORIAN_EMBED keeps
 // the HTTP port shut, and fake timers installed before the import mean none of
 // the intervals it registers ever fire.
+//
+// Everything that drives the recorder this way lives in this one file. The
+// directory is named through process.env, which is process-wide, so a second file
+// setting it can land between this one's assignment and its import.
 
 import { describe, expect, it, vi } from "vitest";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -17,6 +21,49 @@ const DATA_DIR = mkdtempSync(join(tmpdir(), "historian-meters-"));
 const ALERTS_FILE = join(DATA_DIR, "alerts.ndjson");
 const NOW = Date.now();
 const KEY = "111";
+const GROUP = "kids";
+const GROUP_ALERT = `dataLimit:group:${GROUP}`;
+const MEMBERS = ["333", "444"];
+
+/** A member of a shared allowance, over it between them rather than alone. */
+function member(clientKey: string) {
+  return {
+    clientKey,
+    allocationBytes: 10_000_000_000,
+    autoPause: true,
+    cycle: { kind: "daily" },
+    anchorRx: 0,
+    anchorTx: 0,
+    observedRx: 6_000_000_000,
+    observedTx: 0,
+    periodStartMs: NOW - 1_000,
+    periodEndMs: NOW + 86_400_000,
+    actedThisCycle: true,
+    pauseState: "none",
+    reachedAtMs: NOW - 1_000,
+    groupId: GROUP,
+    sharedAllowance: true,
+  };
+}
+
+writeFileSync(
+  join(DATA_DIR, "device-groups.json"),
+  JSON.stringify({
+    version: 1,
+    groups: [
+      {
+        groupId: GROUP,
+        name: "Kids",
+        memberKeys: MEMBERS,
+        allocationBytes: 10_000_000_000,
+        autoPause: true,
+        cycle: { kind: "daily" },
+        mode: "pooled",
+        updatedMs: NOW - 1_000,
+      },
+    ],
+  }),
+);
 
 /** Seeded before the import, because both stores read their file as the module
  *  is evaluated: a rule whose announcement is still standing, and the open
@@ -41,12 +88,22 @@ writeFileSync(
         pauseState: "failed",
         reachedAtMs: NOW - 1_000,
       },
+      ...MEMBERS.map(member),
     ],
   }),
 );
 writeFileSync(
   ALERTS_FILE,
-  `${JSON.stringify({ source: "system", key: `dataLimit:${KEY}`, startMs: NOW - 1_000, endMs: null })}\n`,
+  [
+    JSON.stringify({
+      source: "system",
+      key: `dataLimit:${KEY}`,
+      startMs: NOW - 1_000,
+      endMs: null,
+    }),
+    // One episode for the whole shared allowance, which is how it was announced.
+    JSON.stringify({ source: "system", key: GROUP_ALERT, startMs: NOW - 1_000, endMs: null }),
+  ].join("\n") + "\n",
 );
 
 process.env.HISTORIAN_DATA_DIR = DATA_DIR;
@@ -108,6 +165,54 @@ describe("the recorder's meter routes", () => {
   it("leaves nothing behind for a rule that was never there", async () => {
     const before = episodes().length;
     const { body } = await call("DELETE", "/api/clients/meters?client=does-not-exist");
+    expect(JSON.parse(body).removed).toBe(false);
+    expect(episodes()).toHaveLength(before);
+  });
+});
+
+describe("the recorder's group routes", () => {
+  it("serves the groups it holds", async () => {
+    const { status, body } = await call("GET", "/api/clients/groups");
+    expect(status).toBe(200);
+    const [group] = JSON.parse(body).groups;
+    expect(group.groupId).toBe(GROUP);
+    expect(group.memberKeys).toEqual(MEMBERS);
+  });
+
+  it("charges each member of a shared allowance what the group has spent", async () => {
+    const { body } = await call("GET", "/api/clients/meters");
+    const rules = JSON.parse(body).rules as { clientKey: string; usageBytes: number }[];
+    // Neither member is over 10 GB alone; together they are, and a card drawing
+    // either one against the allowance has to read the sum or call it under.
+    for (const key of MEMBERS)
+      expect(rules.find((rule) => rule.clientKey === key)?.usageBytes).toBe(12_000_000_000);
+  });
+
+  it("names the group on a member's rule, so the card knows what set it", async () => {
+    const { body } = await call("GET", `/api/clients/meters?client=${MEMBERS[0]}`);
+    expect(JSON.parse(body).rules[0].groupName).toBe("Kids");
+  });
+
+  it("retires the group's announcement under the group's own key when it is deleted", async () => {
+    expect(episodes().find((episode) => episode.key === GROUP_ALERT)?.endMs).toBeNull();
+
+    const { status, body } = await call("DELETE", `/api/clients/groups?group=${GROUP}`);
+
+    expect(status).toBe(200);
+    expect(JSON.parse(body).removed).toBe(true);
+    // Under the group. Resolving the name after the group is gone files this
+    // under a device instead and leaves the group's episode open for ever.
+    expect(episodes().find((episode) => episode.key === GROUP_ALERT)?.endMs).toEqual(
+      expect.any(Number),
+    );
+    // And once, not once per member.
+    for (const key of MEMBERS)
+      expect(episodes().some((episode) => episode.key === `dataLimit:${key}`)).toBe(false);
+  });
+
+  it("leaves nothing behind for a group that was never there", async () => {
+    const before = episodes().length;
+    const { body } = await call("DELETE", "/api/clients/groups?group=does-not-exist");
     expect(JSON.parse(body).removed).toBe(false);
     expect(episodes()).toHaveLength(before);
   });

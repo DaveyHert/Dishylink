@@ -203,6 +203,19 @@ body {
   }
 }
 
+/* The PAUSED glyph + wifi mark breathing on the meter ring: a soft dim and back,
+   not Tailwind's animate-pulse fade-to-half — a device that is paused, not
+   loading. */
+@keyframes paused-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
 /* ---------- layout ----------
    The dashboard shell and its two grids (tiles / charts) are Tailwind utilities
    in App.tsx now; only the entrance keyframe they reference lives here. */
