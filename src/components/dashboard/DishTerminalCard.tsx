@@ -167,9 +167,7 @@ export function DishTerminalCard({
     rebootSeconds >= 0
       ? `Update ready — reboot possible in ${formatUptime(rebootSeconds)}`
       : updateState && updateState !== "IDLE"
-        ? // The dish sends this as free text, faults included, so it is reported
-          // rather than named as a phase.
-          `Software update: ${updateState.replaceAll("_", " ").toLowerCase()}`
+        ? `Software update: ${updateState.replaceAll("_", " ").toLowerCase()}`
         : null;
 
   return (
