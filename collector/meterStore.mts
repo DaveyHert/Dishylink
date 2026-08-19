@@ -10,13 +10,13 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import {
-  createRule,
   evaluateMeters,
-  periodBounds,
+  resolveRuleKeys,
   restartCycle,
-  type BillingCycle,
+  upsertRule,
   type MeterCycle,
   type MeterReading,
+  type MeterRoster,
   type MeterRule,
   type MeterTransition,
 } from "../core/dataMeter.ts";
@@ -64,27 +64,11 @@ export class MeterStore {
     return this.rules.find((rule) => rule.clientKey === clientKey);
   }
 
-  /**
-   * Move rules onto the identities their devices now answer to, and drop one
-   * left on a bucket the odometer no longer holds. Two rules landing on one key
-   * came from a merge; the first kept is the survivor's.
-   */
-  resolve(resolveKey: (key: string) => string, exists: (key: string) => boolean): boolean {
-    let changed = false;
-    const kept: MeterRule[] = [];
-    const seen = new Set<string>();
-    for (const rule of this.rules) {
-      const clientKey = resolveKey(rule.clientKey);
-      if (!exists(clientKey) || seen.has(clientKey)) {
-        changed = true;
-        continue;
-      }
-      seen.add(clientKey);
-      if (clientKey !== rule.clientKey) {
-        kept.push({ ...rule, clientKey });
-        changed = true;
-      } else kept.push(rule);
-    }
+  /** Reconcile rules against the odometer's roster. True when any rule moved. */
+  resolve(roster: MeterRoster): boolean {
+    const kept = resolveRuleKeys(this.rules, roster);
+    const changed =
+      kept.length !== this.rules.length || kept.some((rule, index) => rule !== this.rules[index]);
     if (changed) {
       this.rules = kept;
       this.persist();
@@ -94,27 +78,40 @@ export class MeterStore {
 
   /** Fold one poll's counters through every rule. Persists only when a rule
    *  actually moved, so a poll that changes nothing touches no disk. */
-  observe(
-    readings: readonly MeterReading[],
-    nowMs: number,
-    billingCycle?: BillingCycle,
-  ): MeterTransition[] {
+  observe(readings: readonly MeterReading[], nowMs: number): MeterTransition[] {
     const before = this.rules;
-    const { rules, transitions } = evaluateMeters(before, readings, nowMs, { billingCycle });
+    const { rules, transitions } = evaluateMeters(before, readings, nowMs);
     this.rules = rules;
     if (transitions.length > 0 || rules.some((rule, index) => rule !== before[index]))
       this.persist();
     return transitions;
   }
 
-  /** Record how a pause write went, so a limit that could not be enforced is not
-   *  shown as one that was. */
-  notePauseState(clientKey: string, state: MeterRule["pauseState"], atMs: number): void {
+  /** Stamp a write as attempted. A rule whose write is still in flight reports
+   *  the state it had before it, so nothing else marks it as tried. */
+  noteAttempt(clientKey: string, atMs: number): void {
     const rule = this.find(clientKey);
-    if (!rule || rule.pauseState === state) return;
-    rule.pauseState = state;
+    if (!rule) return;
     rule.pauseCheckedMs = atMs;
     this.persist();
+  }
+
+  /** Record how a pause write went. False when no rule took the result. */
+  notePauseState(
+    clientKey: string,
+    state: MeterRule["pauseState"],
+    atMs: number,
+    error?: string,
+  ): boolean {
+    const rule = this.find(clientKey);
+    if (!rule) return false;
+    if (rule.pauseState === state && rule.pauseError === error) return true;
+    rule.pauseState = state;
+    rule.pauseCheckedMs = atMs;
+    if (error === undefined) delete rule.pauseError;
+    else rule.pauseError = error;
+    this.persist();
+    return true;
   }
 
   upsert(options: {
@@ -125,25 +122,8 @@ export class MeterStore {
     lifetimeRx: number;
     lifetimeTx: number;
     nowMs: number;
-    billingCycle?: BillingCycle;
   }): MeterRule {
-    const existing = this.find(options.clientKey);
-    // An edit never clears what a device has spent: the anchors stand, and a
-    // changed cycle moves only its boundaries. Clearing is what restart() does.
-    const movesBoundaries =
-      existing && JSON.stringify(existing.cycle) !== JSON.stringify(options.cycle);
-    const bounds = movesBoundaries
-      ? periodBounds(options.cycle, options.nowMs, options.billingCycle)
-      : null;
-    const rule = existing
-      ? {
-          ...existing,
-          allocationBytes: options.allocationBytes,
-          autoPause: options.autoPause ?? existing.autoPause,
-          cycle: options.cycle,
-          ...(bounds ? { periodStartMs: bounds.startMs, periodEndMs: bounds.endMs } : {}),
-        }
-      : createRule(options);
+    const rule = upsertRule(this.find(options.clientKey), options);
     this.rules = [...this.rules.filter((other) => other.clientKey !== options.clientKey), rule];
     this.persist();
     return rule;
@@ -151,10 +131,10 @@ export class MeterStore {
 
   /** Start a rule's allowance over: a top-up, and what resetting a device's
    *  usage means for the rule reading that counter. */
-  restart(clientKey: string, nowMs: number, billingCycle?: BillingCycle): MeterRule | undefined {
+  restart(clientKey: string, nowMs: number): MeterRule | undefined {
     const rule = this.find(clientKey);
     if (!rule) return undefined;
-    const restarted = restartCycle(rule, nowMs, billingCycle);
+    const restarted = restartCycle(rule, nowMs);
     this.rules = this.rules.map((other) => (other === rule ? restarted : other));
     this.persist();
     return restarted;

@@ -10,6 +10,8 @@ import {
   evaluateMeters,
   periodBounds,
   restartCycle,
+  releasedByHand,
+  stalledReleases,
   usageBytes,
   type MeterCycle,
   type MeterRule,
@@ -82,13 +84,11 @@ describe("periodBounds", () => {
   });
 
   it("takes the account's cycle when there is one, and the 1st when there is not", () => {
-    const billing = {
-      startMs: new Date(2026, 7, 6).getTime(),
-      endMs: new Date(2026, 8, 6).getTime(),
-    };
-    expect(periodBounds({ kind: "billing" }, T0, billing)).toEqual(billing);
-    const fallback = periodBounds({ kind: "billing" }, T0);
-    expect(new Date(fallback.startMs).getDate()).toBe(1);
+    // The day rides on the rule, copied from the account when it was set, so the
+    // period is the account's own — never a silent calendar month.
+    const bounds = periodBounds({ kind: "billing", day: 6 }, T0);
+    expect(new Date(bounds.startMs).getDate()).toBe(6);
+    expect(new Date(bounds.endMs).getDate()).toBe(6);
   });
 
   it("never rolls a one-off allowance", () => {
@@ -133,11 +133,19 @@ describe("evaluateMeters", () => {
     expect(transitions.map((t) => t.kind)).toEqual(["reached"]);
   });
 
-  it("tracks usage but never trips while auto-pause is off", () => {
-    const inert = rule({ autoPause: false });
-    const { rules, transitions } = evaluateMeters([inert], read(50 * GB), T0 + 1_000);
-    expect(transitions).toEqual([]);
+  it("announces a spent allowance while auto-pause is off, with no write pending", () => {
+    const watching = rule({ autoPause: false });
+    const { rules, transitions } = evaluateMeters([watching], read(50 * GB), T0 + 1_000);
+    expect(transitions.map((t) => t.kind)).toEqual(["reached"]);
+    expect(rules[0].pauseState).toBe("none");
     expect(usageBytes(rules[0])).toBe(50 * GB);
+  });
+
+  it("announces a spent allowance once per cycle, not on every poll", () => {
+    const watching = rule({ autoPause: false });
+    const first = evaluateMeters([watching], read(50 * GB), T0 + 1_000);
+    const second = evaluateMeters(first.rules, read(60 * GB), T0 + 2_000);
+    expect(second.transitions).toEqual([]);
   });
 
   it("releases the pause it applied when the cycle rolls, and re-anchors", () => {
@@ -189,5 +197,42 @@ describe("evaluateMeters", () => {
     const toppedUp = restartCycle(rules[0], aMonthOn);
     expect(usageBytes(toppedUp)).toBe(0);
     expect(toppedUp.actedThisCycle).toBe(false);
+  });
+});
+
+describe("stalledReleases", () => {
+  const pausing = (over: Partial<MeterRule> = {}) =>
+    rule({ pauseState: "applied", pauseCheckedMs: T0, ...over });
+
+  it("owes an unpause on a device paused under its allowance", () => {
+    expect(stalledReleases([pausing()], T0 + 60_000, 60_000)).toHaveLength(1);
+  });
+
+  it("owes nothing while the device is still over its allowance", () => {
+    expect(stalledReleases([pausing({ observedRx: 30 * GB })], T0 + 60_000, 60_000)).toEqual([]);
+  });
+
+  it("owes nothing inside the retry window", () => {
+    expect(stalledReleases([pausing()], T0 + 1_000, 60_000)).toEqual([]);
+  });
+
+  it("owes nothing on a rule that is pausing nothing", () => {
+    expect(stalledReleases([rule({ pauseState: "none" })], T0 + 60_000, 60_000)).toEqual([]);
+  });
+});
+
+describe("releasedByHand", () => {
+  const pausing = rule({ pauseState: "applied" });
+
+  it("finds a rule claiming a device the router reports unpaused", () => {
+    expect(releasedByHand([pausing], new Map([[KEY, false]]))).toHaveLength(1);
+  });
+
+  it("leaves the rule alone while the router still reports the device paused", () => {
+    expect(releasedByHand([pausing], new Map([[KEY, true]]))).toEqual([]);
+  });
+
+  it("reads a device the poll did not carry as not asked, never as unpaused", () => {
+    expect(releasedByHand([pausing], new Map())).toEqual([]);
   });
 });

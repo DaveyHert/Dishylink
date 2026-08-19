@@ -14,6 +14,7 @@ import { DeviceFactsList } from "./DeviceFactsList";
 import { DeviceNameEditor, RenameButton } from "./DeviceNameEditor";
 import { DeviceSignalIcon } from "../../assets/icons/DeviceSignalIcon";
 import { MeterIcon } from "../../assets/icons/MeterIcon";
+import { METER_INDICATOR_COLOR, meterIndicatorForRule } from "./meterIndicator";
 import { DeviceThroughput } from "./DeviceThroughput";
 import { DataMeterDialog } from "./DataMeterDialog";
 import { useDataMeter } from "../../hooks/useDataMeter";
@@ -99,6 +100,14 @@ export function DeviceDetail({
     isThisDevice,
     viewerIdentified,
     cloudConnected: cloudStatus === "ready",
+  });
+  // The recorder counts a limit with or without an account, so only the pause
+  // write needs one.
+  const showMeterControl = clientPauseControlAvailable({
+    clientId: client.clientId,
+    isThisDevice,
+    viewerIdentified,
+    cloudConnected: true,
   });
 
   useEffect(() => {
@@ -186,7 +195,7 @@ export function DeviceDetail({
           {paused && <Badge className='mt-1'>Paused</Badge>}
         </div>
         <div className='flex items-center justify-end gap-1.5'>
-          {showPauseControl && client.macAddress && (
+          {showMeterControl && client.macAddress && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -196,7 +205,10 @@ export function DeviceDetail({
                   className='cursor-pointer px-2'
                   onClick={() => setEditingMeter(true)}
                 >
-                  <MeterIcon className='size-[21px]' active={meter.rule !== null} />
+                  <MeterIcon
+                    className={`size-[21px] ${meter.rule ? METER_INDICATOR_COLOR[meterIndicatorForRule(meter.rule)] : ""}`}
+                    active={meter.rule !== null}
+                  />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side='top'>Data limit</TooltipContent>

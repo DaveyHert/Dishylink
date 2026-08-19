@@ -5,8 +5,10 @@ import { NotificationThrottle, describeTransition } from "@core/alertNotificatio
 import type { AlertTransition } from "@core/alertEngine";
 import type { AlertSeverity, AlertState } from "@core/alertDefinitions";
 import { routeApiRequest } from "../lib/apiRouter";
-import { handleCloudRequest } from "../lib/cloudHandler";
+import { accountSignedIn, handleCloudRequest } from "../lib/cloudHandler";
+import type { MeterHost } from "../lib/meterHost";
 import { IndexedDbHistory } from "../lib/history";
+import { singleFlight } from "../lib/singleFlight";
 import { NOTIFICATIONS_ENABLED_KEY, type NotifyResult } from "../lib/notificationHost";
 import { loadRouterAddress, watchRouterAddress } from "../lib/endpoints";
 
@@ -19,6 +21,21 @@ const SURFACE_KEY = "surface";
 const WINDOW_BOUNDS_KEY = "dashboardWindowBounds";
 const DASHBOARD_WINDOW_ID_KEY = "dashboardWindowId";
 const LAST_DRAIN_KEY = "lastDrain";
+
+/** The account this worker holds, as the recorder and the API router use it. */
+const meterHost: MeterHost = {
+  signedIn: accountSignedIn,
+  setPaused: async (clientId, paused) => {
+    const reply = await handleCloudRequest({
+      path: "/cloud/device",
+      method: "POST",
+      body: { kind: "pause", clientId, paused },
+    });
+    if (reply.status === 200) return;
+    const body = reply.body as { message?: string; error?: string } | undefined;
+    throw new Error(body?.message ?? body?.error ?? `Starlink answered ${reply.status}`);
+  },
+};
 
 type Surface = "window" | "tab";
 type Bounds = { top: number; left: number; width: number; height: number };
@@ -270,6 +287,7 @@ export default defineBackground(() => {
         new Date(),
         request.method ?? "GET",
         request.body as string | undefined,
+        meterHost,
       ),
     );
   });
@@ -306,12 +324,17 @@ export default defineBackground(() => {
   // and drains only what the dish has added since. The last tick's outcome is
   // stored so the dashboard can show whether collection is currently reaching the
   // dish, and the tick is also what notices an alert worth announcing.
-  const runDrain = async () => {
-    const { status, alerts, active } = await drainOnce();
+  const drain = async () => {
+    const { status, alerts, active } = await drainOnce(meterHost);
     await browser.storage.local.set({ [LAST_DRAIN_KEY]: status });
     await updateBadge(active);
     await announceAlerts(alerts);
   };
+  // Waking on an alarm evaluates this module and dispatches onAlarm, so both
+  // paths below ask for a tick at once. Data limits are read-modify-write: two
+  // ticks in flight together would each read an unspent allowance, each pause the
+  // device, and each announce it, with the later write erasing the earlier.
+  const runDrain = singleFlight(drain);
   // 0.5 is Chrome's floor for a packed extension — the store build cannot tick
   // faster however this is set, and asking for less only logs a warning. Half a
   // minute, because the alarm is what makes an alert reach anyone: nothing else

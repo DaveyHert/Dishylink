@@ -21,8 +21,10 @@ import {
   type DeviceReading,
   type DishReading,
 } from "@core/alertEngine";
-import type { AlertState } from "@core/alertDefinitions";
+import { sortBySeverity, type AlertState } from "@core/alertDefinitions";
 import { ClientTotalsCore, migrateSnapshot } from "@core/clientTotals";
+import { runMeters } from "./meterEnforcement";
+import type { MeterHost } from "./meterHost";
 import { usageKey } from "@core/clientUsage";
 import { applyDrain, IndexedDbHistory, type ClientMinuteRow, type HistoryStore } from "./history";
 import { packObstructionCells } from "./obstruction";
@@ -72,7 +74,7 @@ async function recordAlerts(
   return { transitions, active: engine.activeAlerts() };
 }
 
-export async function drainOnce(): Promise<DrainResult> {
+export async function drainOnce(host: MeterHost): Promise<DrainResult> {
   const at = Date.now();
   let store: HistoryStore;
   let client: DishClient;
@@ -128,9 +130,11 @@ export async function drainOnce(): Promise<DrainResult> {
   // Status-derived and router feeds are best-effort: a get_status miss or an
   // unreachable (or non-Starlink) router surfaces as its own unreachability
   // alert, not as a dropped tick.
+  const dish = await readDishAlerts(client);
+  const router = await readRouterAlerts(store);
   const observation: AlertObservation = {
-    dish: await readDishAlerts(client),
-    router: await readRouterAlerts(store),
+    dish,
+    router: router.reading,
     // Omit the satellite side when the history fetch failed: its input is this
     // tick's samples, and there were none. The engine reads an omitted device as
     // "not asked", holding any open outage episode; reporting starlinkOutage:false
@@ -139,7 +143,17 @@ export async function drainOnce(): Promise<DrainResult> {
   };
   await drainObstruction(store, client).catch(() => {});
   const { transitions, active } = await recordAlerts(store, observation, now);
-  return { status, alerts: transitions, active };
+  // Run on the clock, not on the router's reply: a cycle rolls whether or not the
+  // router answered, and a rule whose device is away still has to release the
+  // pause it applied when the cycle turns over.
+  const meters = await runMeters(store, await loadOdometer(store), host, now, router.blocked);
+  return {
+    status,
+    alerts: [...transitions, ...meters.transitions],
+    // The engine cannot hold these: a data-limit key names one device, so no
+    // static definition covers it and nothing seeds it from a stored episode.
+    active: sortBySeverity([...active, ...meters.active]),
+  };
 }
 
 /** The dish's live alert booleans, stamped when the reply arrived. get_status is
@@ -182,7 +196,9 @@ async function drainObstruction(store: HistoryStore, dish: DishClient): Promise<
  *  the safe RPCs the historian already polls (never get_ping). A router that is
  *  absent entirely (bypass mode, a third-party router) is reported as unanswered
  *  rather than as clear, the same as one that is merely unreachable. */
-async function readRouterAlerts(store: HistoryStore): Promise<DeviceReading> {
+async function readRouterAlerts(
+  store: HistoryStore,
+): Promise<{ reading: DeviceReading; blocked: Map<string, boolean> }> {
   try {
     const router = await DishClient.load("router", { handleUrl: routerHandleUrl() });
     // Settled, not all-or-nothing: one RPC faltering (an unreachable client poll)
@@ -196,12 +212,33 @@ async function readRouterAlerts(store: HistoryStore): Promise<DeviceReading> {
     if (stats.status === "fulfilled") await store.putRadio(decodeRadioReadings(stats.value), now);
     if (clients.status === "fulfilled") await recordClients(store, clients.value, now);
     return {
-      alerts: status.status === "fulfilled" ? (status.value.alerts ?? {}) : null,
-      atMs: Date.now(),
+      reading: {
+        alerts: status.status === "fulfilled" ? (status.value.alerts ?? {}) : null,
+        atMs: Date.now(),
+      },
+      // Empty when the poll did not land, which reads as "not asked" rather than
+      // as every device being free.
+      blocked:
+        clients.status === "fulfilled" ? await blockedByKey(store, clients.value) : new Map(),
     };
   } catch {
-    return { alerts: null, atMs: Date.now() };
+    return { reading: { alerts: null, atMs: Date.now() }, blocked: new Map() };
   }
+}
+
+/** What the router says about each device's block, on the keys the odometer
+ *  answers to, so a rule set before an identity was merged still matches. */
+async function blockedByKey(
+  store: HistoryStore,
+  clients: WifiClientJson[],
+): Promise<Map<string, boolean>> {
+  const odometer = await loadOdometer(store);
+  return new Map(
+    clients.map((client) => [
+      odometer.resolveKey(usageKey(client.clientId, client.macAddress)),
+      client.blocked === true,
+    ]),
+  );
 }
 
 /** Fold this poll's clients into per-minute throughput rows and the usage
@@ -233,9 +270,7 @@ async function recordClients(
   }));
   await store.putClientMinutes(rows, now);
 
-  const odometer = new ClientTotalsCore(CLIENT_MAX_GAP_MS);
-  const snapshot = migrateSnapshot(await store.readTotalsSnapshot());
-  if (snapshot) odometer.loadSnapshot(snapshot);
+  const odometer = await loadOdometer(store);
   const liveKeys = odometer.notePoll(
     identified.map((c) => ({ clientId: c.clientId, macAddress: c.macAddress ?? "" })),
   );
@@ -252,6 +287,14 @@ async function recordClients(
     );
   odometer.compact(now);
   await store.writeTotalsSnapshot(odometer.toSnapshot());
+}
+
+/** The usage odometer as the last drain left it. */
+async function loadOdometer(store: HistoryStore): Promise<ClientTotalsCore> {
+  const odometer = new ClientTotalsCore(CLIENT_MAX_GAP_MS);
+  const snapshot = migrateSnapshot(await store.readTotalsSnapshot());
+  if (snapshot) odometer.loadSnapshot(snapshot);
+  return odometer;
 }
 
 function describeDrainError(error: unknown): string {

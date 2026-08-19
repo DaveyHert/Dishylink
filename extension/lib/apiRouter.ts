@@ -12,6 +12,16 @@
 
 import { energyRangeBounds, RANGES, summarizeEnergy, type Range } from "@core/energySummary";
 import { ClientTotalsCore, migrateSnapshot } from "@core/clientTotals";
+import {
+  cycleFromParams,
+  restartCycle,
+  upsertRule,
+  usageBytes,
+  type MeterRule,
+} from "@core/dataMeter";
+import { usageKey } from "@core/clientUsage";
+import { NO_METER_HOST, type MeterHost } from "./meterHost";
+import { retireMeterAlert, standDownMeterRule } from "./meterEnforcement";
 import { resolveRows, foldMinuteCollisions } from "@core/clientHistory";
 import type { ClientSampleRow, HistoryStore } from "./history";
 
@@ -30,6 +40,7 @@ export async function routeApiRequest(
   now: Date = new Date(),
   method: string = "GET",
   body?: string,
+  host: MeterHost = NO_METER_HOST,
 ): Promise<ApiReply> {
   const url = new URL(path, "http://extension.invalid");
 
@@ -73,6 +84,72 @@ export async function routeApiRequest(
       status: 200,
       body: { snapshots: await store.readObstructionSnapshots(now.getTime()) },
     };
+  }
+
+  // The rules, each with what it has counted, so a card needs one request. Same
+  // routes the desktop recorder serves, so the card is host-agnostic.
+  if (url.pathname === "/api/clients/meters") {
+    const client = url.searchParams.get("client");
+    const rules = await store.readMeterRules();
+    if (method === "DELETE") {
+      const going = rules.find((rule) => rule.clientKey === client);
+      const kept = rules.filter((rule) => rule.clientKey !== client);
+      const removed = kept.length !== rules.length;
+      if (removed) await store.writeMeterRules(kept);
+      await standDownMeterRule(host, going, undefined);
+      if (going?.reachedAtMs !== undefined)
+        await retireMeterAlert(
+          store,
+          going,
+          meterDeviceName(await meterNames(store), going.clientKey),
+          now.getTime(),
+        );
+      return { status: 200, body: { removed } };
+    }
+    if (method === "POST") {
+      const cycle = cycleFromParams(url.searchParams, now.getTime());
+      const allocationBytes = Number(url.searchParams.get("allocation"));
+      if (!client || !cycle || !Number.isFinite(allocationBytes) || allocationBytes <= 0)
+        return { status: 400, body: { error: "bad_request" } };
+      const odometer = await loadOdometer(store);
+      const counters = odometer.lifetimes().find((entry) => entry.clientKey === client);
+      const existing = rules.find((other) => other.clientKey === client);
+      const rule = upsertRule(existing, {
+        clientKey: client,
+        allocationBytes,
+        autoPause: url.searchParams.get("autoPause") !== "0",
+        cycle,
+        lifetimeRx: counters?.lifetimeRx ?? 0,
+        lifetimeTx: counters?.lifetimeTx ?? 0,
+        nowMs: now.getTime(),
+      });
+      await store.writeMeterRules([...rules.filter((o) => o.clientKey !== client), rule]);
+      await standDownMeterRule(host, existing, rule);
+      return { status: 200, body: { rule: withUsage(rule, await meterNames(store)) } };
+    }
+    const mine = client ? rules.filter((rule) => rule.clientKey === client) : rules;
+    const names = await meterNames(store);
+    return {
+      status: 200,
+      body: {
+        rules: mine.map((rule) => withUsage(rule, names)),
+        // Enforcement here lands on the next alarm rather than within a poll, but
+        // whether it lands at all is the same question: is there an account.
+        pauseEnforceable: host.signedIn(),
+      },
+    };
+  }
+
+  // Start one rule's allowance over, leaving the device's own usage standing.
+  if (url.pathname === "/api/clients/meters/reset" && method === "POST") {
+    const client = url.searchParams.get("client");
+    const rules = await store.readMeterRules();
+    const existing = rules.find((rule) => rule.clientKey === client);
+    if (!existing) return { status: 200, body: { rule: null } };
+    const restarted = restartCycle(existing, now.getTime());
+    await store.writeMeterRules(rules.map((rule) => (rule === existing ? restarted : rule)));
+    await standDownMeterRule(host, existing, restarted);
+    return { status: 200, body: { rule: withUsage(restarted, await meterNames(store)) } };
   }
 
   // Zero one device's total but keep it listed — a reset, distinct from delete.
@@ -179,6 +256,33 @@ export async function routeApiRequest(
   }
 
   return { status: 503, body: { error: `no extension history for ${url.pathname}` } };
+}
+
+/** One odometer read for the whole answer, and a device with no name falls back
+ *  to `device <key>`, the wording the desktop recorder uses for the same case. */
+async function meterNames(store: HistoryStore): Promise<Map<string, string>> {
+  const odometer = await loadOdometer(store);
+  return new Map(
+    odometer
+      .totals()
+      .map((total) => [usageKey(total.clientId, total.macAddress), total.name ?? ""] as const)
+      .filter(([, name]) => name.length > 0),
+  );
+}
+
+function meterDeviceName(names: Map<string, string>, clientKey: string): string {
+  return names.get(clientKey) ?? `device ${clientKey}`;
+}
+
+function withUsage(
+  rule: MeterRule,
+  names: Map<string, string>,
+): MeterRule & { usageBytes: number; deviceName: string } {
+  return {
+    ...rule,
+    usageBytes: usageBytes(rule),
+    deviceName: meterDeviceName(names, rule.clientKey),
+  };
 }
 
 /** Rehydrate the odometer from its stored snapshot. The gap window only governs
