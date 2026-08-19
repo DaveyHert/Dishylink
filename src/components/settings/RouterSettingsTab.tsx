@@ -160,7 +160,8 @@ export function RouterSettingsTab({
             : "Unavailable until the router answers"
         }
         buttonLabel='Reboot'
-        confirmLabel='Yes, reboot router'
+        slideLabel='Slide to reboot router'
+        confirmLabel='Reboot router'
         disabled={!answering}
         onRun={async () => {
           const routerClient = await DishClient.load("router");

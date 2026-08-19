@@ -5,6 +5,16 @@
 import { useState } from "react";
 import { ChevronRightIcon } from "lucide-react";
 import { actionButton } from "../ui/action-button";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { SlideToConfirm } from "@/components/ui/slide-to-confirm";
 import { InfoDot } from "../shared/InfoDot";
 import type { Severity } from "../ui/severity-icon";
 
@@ -98,12 +108,14 @@ export function CollapsibleSection({
   );
 }
 
-/** Destructive action with inline armed-confirm, using the app's buttons. */
+/** Destructive action with an armed confirm. Pass `slideLabel` when the cost is real
+ *  downtime rather than a recoverable reset. */
 export function DangerAction({
   title,
   caption,
   buttonLabel,
   confirmLabel,
+  slideLabel,
   disabled = false,
   onRun,
 }: {
@@ -111,62 +123,113 @@ export function DangerAction({
   caption: string;
   buttonLabel: string;
   confirmLabel: string;
+  slideLabel?: string;
   /** Shown but not runnable, for an action whose device is not answering. */
   disabled?: boolean;
   onRun: () => Promise<string>;
 }) {
   const [armed, setArmed] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
 
+  const run = async () => {
+    setBusy(true);
+    try {
+      setResult(await onRun());
+    } catch (error) {
+      setResult(`Failed: ${(error as Error).message}`);
+    } finally {
+      setBusy(false);
+      setArmed(false);
+      setConfirming(false);
+    }
+  };
+
   return (
-    <SettingRow
-      title={title}
-      caption={caption}
-      note={
-        result && (
-          <span role='status' className='block'>
-            {result}
-          </span>
-        )
-      }
-    >
-      {!armed ? (
-        <button
-          className={actionButton("subtle")}
-          disabled={disabled}
-          onClick={() => setArmed(true)}
-        >
-          {buttonLabel}
-        </button>
-      ) : (
-        <>
-          <button
-            className={actionButton("danger")}
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                setResult(await onRun());
-              } catch (error) {
-                setResult(`Failed: ${(error as Error).message}`);
-              } finally {
-                setBusy(false);
-                setArmed(false);
-              }
-            }}
-          >
-            {busy ? "Sending…" : confirmLabel}
-          </button>
+    <>
+      <SettingRow
+        title={title}
+        caption={caption}
+        note={
+          <>
+            {armed && slideLabel && (
+              <div className='pt-1 pb-0.5'>
+                <SlideToConfirm
+                  label={slideLabel}
+                  busyLabel={busy ? "Sending…" : "Confirm to continue"}
+                  tone='danger'
+                  busy={confirming || busy}
+                  onConfirm={() => setConfirming(true)}
+                />
+              </div>
+            )}
+            {result && (
+              <span role='status' className='block'>
+                {result}
+              </span>
+            )}
+          </>
+        }
+      >
+        {!armed ? (
           <button
             className={actionButton("subtle")}
-            disabled={busy}
-            onClick={() => setArmed(false)}
+            disabled={disabled}
+            onClick={() => setArmed(true)}
           >
-            Cancel
+            {buttonLabel}
           </button>
-        </>
-      )}
-    </SettingRow>
+        ) : (
+          <>
+            {!slideLabel && (
+              <button className={actionButton("danger")} disabled={busy} onClick={() => void run()}>
+                {busy ? "Sending…" : confirmLabel}
+              </button>
+            )}
+            <button
+              className={actionButton("subtle")}
+              disabled={busy}
+              onClick={() => setArmed(false)}
+            >
+              Cancel
+            </button>
+          </>
+        )}
+      </SettingRow>
+
+      <Dialog open={confirming} onOpenChange={(open) => !open && !busy && setConfirming(false)}>
+        <DialogContent
+          showCloseButton={false}
+          className='glass-panel gap-3 sm:max-w-md'
+          overlayClassName='bg-black/30 backdrop-blur-[2px]'
+        >
+          <DialogHeader>
+            <DialogTitle className='text-[19px] leading-snug'>Are you sure?</DialogTitle>
+            <DialogDescription className='text-[13.5px] leading-relaxed'>
+              {caption}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className='mt-2 gap-2'>
+            <Button
+              variant='outline'
+              className='cursor-pointer sm:min-w-28'
+              disabled={busy}
+              onClick={() => setConfirming(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant='destructive'
+              className='cursor-pointer sm:min-w-28'
+              disabled={busy}
+              onClick={() => void run()}
+            >
+              {busy ? "Sending…" : confirmLabel}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

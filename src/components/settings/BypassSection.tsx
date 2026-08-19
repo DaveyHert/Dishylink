@@ -199,9 +199,7 @@ export function BypassSection({
           overlayClassName='bg-black/30 backdrop-blur-[2px]'
         >
           <DialogHeader>
-            <DialogTitle className='text-[19px] leading-snug'>
-              {offered ? "Turn on bypass mode?" : "Turn off bypass mode?"}
-            </DialogTitle>
+            <DialogTitle className='text-[19px] leading-snug'>Are you sure?</DialogTitle>
             <DialogDescription className='text-[13.5px] leading-relaxed'>
               {offered
                 ? "The Starlink router and its WiFi will switch off. Only devices behind a third-party router wired to the dish stay online. You can turn bypass back off from here as long as this device still has internet — if nothing else provides it, you will need another device on mobile data."
