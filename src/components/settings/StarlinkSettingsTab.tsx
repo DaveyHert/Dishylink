@@ -267,7 +267,8 @@ export function StarlinkSettingsTab({
             title='Reboot Starlink'
             caption='Internet drops for ~2–3 minutes while the dish restarts'
             buttonLabel='Reboot'
-            confirmLabel='Yes, reboot dish'
+            slideLabel='Slide to reboot dish'
+            confirmLabel='Reboot dish'
             onRun={async () => {
               await (await loadDish()).reboot();
               return "Reboot command sent — the dish is restarting.";

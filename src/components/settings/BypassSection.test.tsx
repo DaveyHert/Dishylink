@@ -104,13 +104,13 @@ describe("BypassSection", () => {
     await waitForText("Slide to turn on bypass");
 
     slide();
-    await waitForText("Turn on bypass mode?");
+    await waitForText("Are you sure?");
 
     // The account catches up mid-decision — exactly the two-minute lag landing at
     // the worst moment. The dialog must keep asking what it asked.
     reportNow(true);
     await settle();
-    expect(text()).toContain("Turn on bypass mode?");
+    expect(text()).toContain("will switch off");
 
     button("Turn on").click();
     await settle();
@@ -122,7 +122,7 @@ describe("BypassSection", () => {
     await waitForText("Slide to turn on bypass");
 
     slide();
-    await waitForText("Turn on bypass mode?");
+    await waitForText("Are you sure?");
     button("Turn on").click();
     await waitForText("Sent.");
     await settle();
@@ -138,7 +138,7 @@ describe("BypassSection", () => {
     await waitForText("Slide to turn on bypass");
 
     slide();
-    await waitForText("Turn on bypass mode?");
+    await waitForText("Are you sure?");
     button("Cancel").click();
     await settle();
 
@@ -152,7 +152,7 @@ describe("BypassSection", () => {
     await waitForText("Slide to turn on bypass");
 
     slide();
-    await waitForText("Turn on bypass mode?");
+    await waitForText("Are you sure?");
     button("Turn on").click();
     await waitForText("Sent.");
 
