@@ -41,6 +41,11 @@ export const CLIENTS_POLL_MS = 5_000;
 /** Tail of the historian's 1 Hz window — small, incremental, purely local. */
 const SAMPLES_POLL_MS = 1_000;
 
+/** Consecutive silent polls before a router that was answering is called
+ *  unreachable. One miss is the host that proxies the request stalling, not the
+ *  router going away; each miss can cost a full timeout, so two is already ~10s. */
+const MISSES_BEFORE_UNREACHABLE = 2;
+
 /**
  * How often the roster is asked of the account, once the LAN cannot answer.
  *
@@ -344,6 +349,10 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
         // SSIDs, or off bypass, so the copy held from before the silence describes
         // something that no longer exists.
         let routerAnswering = false;
+        // A router that has never answered has no silence to ride out, so it is
+        // named at once; only one that was answering gets the misses above.
+        let everAnswered = false;
+        let misses = 0;
         const readConfig = () => {
           routerClient
             .getWifiConfig(AbortSignal.timeout(4_000))
@@ -370,14 +379,19 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
             // mutating it, so this stays the set that arrived with this roster.
             setRatesAtRoster(ratesRef.current);
             setRouterReachable(true);
+            everAnswered = true;
+            misses = 0;
             if (!routerAnswering) {
               routerAnswering = true;
               readConfig();
             }
           } catch {
             if (disposed) return;
-            setRouterReachable(false);
-            routerAnswering = false;
+            misses += 1;
+            if (!everAnswered || misses >= MISSES_BEFORE_UNREACHABLE) {
+              setRouterReachable(false);
+              routerAnswering = false;
+            }
           } finally {
             clientsInFlight = false;
           }
