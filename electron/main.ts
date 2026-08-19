@@ -16,7 +16,7 @@ import {
   type MenuItem,
 } from "electron";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { existsSync, writeFileSync } from "node:fs";
 import { registerAppProtocolScheme, handleAppProtocol, APP_ENTRY_URL } from "./appProtocol";
 import {
@@ -584,10 +584,13 @@ void app.whenReady().then(async () => {
   }
   // The cloud account belongs to this host, not to packaging; bound before the window
   // loads so the renderer's first /cloud/* call has somewhere to land.
-  startCloud(rendererRoot);
+  // Against a dev server, the session is the one that server's cloud proxy holds:
+  // the recorder runs inside it, so a separate session here would leave a window
+  // signed in and its own limits unenforceable.
+  startCloud(rendererRoot, devServerUrl ? resolve(process.cwd(), ".starlink-cookie") : undefined);
   registerCloudHandlers();
-  // Only the packaged app serves itself; in dev Vite proxies /api to the dev historian,
-  // so a second collector here would double-poll the dish.
+  // A dev server runs its own recorder; a second collector here would double-poll
+  // the dish.
   if (!devServerUrl) {
     await startCollector(rendererRoot);
     handleAppProtocol(rendererRoot, handleApiRequest, handleCloudRequest);

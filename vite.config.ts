@@ -127,16 +127,6 @@ export default defineConfig(({ command }) => ({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/celestrak/, ""),
       },
-      // Long-term energy totals from the local historian service (collector/).
-      // xfwd adds x-forwarded-for so /api/whoami sees the browser's LAN IP, not
-      // this proxy's loopback address.
-      // 127.0.0.1, not localhost: the historian binds v4 loopback, and Node
-      // resolves localhost verbatim — often to ::1 first, which nothing answers.
-      "/api": {
-        target: "http://127.0.0.1:8088",
-        changeOrigin: true,
-        xfwd: true,
-      },
       // Cloudflare speed endpoints for the browser-measured speed test
       // (the dish's own speedtest RPCs are unimplemented on current firmware).
       "/speedtest": {
