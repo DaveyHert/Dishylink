@@ -97,7 +97,12 @@ function NetworkPanelBody({
   const nowMs = useNow(30_000);
   // Both halves of what pausing needs, so the list can name whichever is missing.
   const { status: cloudStatus } = useCloudAccount(true);
-  const needsAccount = cloudStatus !== "loading" && cloudStatus !== "ready";
+  // Two different questions. Whether pausing works at all is the same condition
+  // the control itself uses, so the list explains exactly what it hides. Whether
+  // to say "sign in" is narrower: a session that is held but unreachable is a
+  // connection fault, and sending someone to sign in over one is a dead end.
+  const accountUnavailable = cloudStatus !== "loading" && cloudStatus !== "ready";
+  const needsAccount = cloudStatus === "not-connected";
   const needsSelfDevice = selfDeviceHost() !== null && selfResolved && !selfIdentified(self);
 
   /** The LAN is silent and the account is answering in its place. */
@@ -254,22 +259,22 @@ function NetworkPanelBody({
               />
             ))}
           </ListSection>
-          {(needsAccount || needsSelfDevice) && (
+          {(accountUnavailable || needsSelfDevice) && (
             <Callout tone='info' iconSeverity='warn' className='mt-2.5'>
               Pause feature disabled! To enable,{" "}
-              {needsAccount && (
+              {accountUnavailable && (
                 <>
                   <button
                     type='button'
                     className={inlineLinkButton}
                     onClick={() => requestPanel("account")}
                   >
-                    sign in
+                    {needsAccount ? "sign in" : "reconnect"}
                   </button>{" "}
                   to your Starlink account
                 </>
               )}
-              {needsAccount && needsSelfDevice && " and "}
+              {accountUnavailable && needsSelfDevice && " and "}
               {needsSelfDevice && (
                 <>
                   pick the current device you are using under app&rsquo;s{" "}
