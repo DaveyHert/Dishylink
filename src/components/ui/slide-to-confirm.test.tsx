@@ -25,7 +25,7 @@ async function mount(props: Partial<React.ComponentProps<typeof SlideToConfirm>>
   render(
     <div style={{ width: 420 }}>
       <SlideToConfirm
-        label='Slide to turn on bypass'
+        label='Slide to turn on bypass mode'
         busyLabel='Sending…'
         onConfirm={onConfirm}
         {...props}

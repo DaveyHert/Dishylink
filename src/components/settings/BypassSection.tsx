@@ -172,7 +172,7 @@ export function BypassSection({
 
       <div className='flex flex-col gap-2.5 pb-2'>
         <SlideToConfirm
-          label={shown ? "Slide to turn on bypass" : "Slide to turn off bypass"}
+          label={shown ? "Slide to turn on bypass mode" : "Slide to turn off bypass mode"}
           busyLabel={saving ? "Sending…" : "Confirm to continue"}
           direction={shown ? "right" : "left"}
           tone={shown ? "danger" : "default"}
