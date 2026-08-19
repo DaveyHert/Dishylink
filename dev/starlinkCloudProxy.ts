@@ -12,6 +12,8 @@ import { resolve } from "node:path";
 import type { Plugin } from "vite";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createCloudHandler } from "../cloud/starlinkCloudHandler.ts";
+import { resilientFetch } from "../cloud/resilientFetch.ts";
+import { CollectorBusyError } from "../collector/collectorLock.mts";
 import { DishClient, DISH_LAN_HANDLE_URL, ROUTER_LAN_HANDLE_URL } from "../core/dishClient.ts";
 import type { DishConfigJson } from "../core/dishClient.ts";
 import { prepareDishConfigUpdate } from "../core/dishConfigUpdate.ts";
@@ -28,9 +30,10 @@ import { localNetworkIdentity } from "../core/hostNetworkIdentity.ts";
 
 const COOKIE_FILE = resolve(process.cwd(), ".starlink-cookie");
 
+/** null, never "", so every reader agrees on what "no session" looks like. */
 function readCookie(): string | null {
   try {
-    return readFileSync(COOKIE_FILE, "utf8").trim();
+    return readFileSync(COOKIE_FILE, "utf8").trim() || null;
   } catch {
     return null;
   }
@@ -81,7 +84,7 @@ function readBody(req: IncomingMessage): Promise<string> {
 export function starlinkCloudProxy(): Plugin {
   return {
     name: "starlink-cloud-proxy",
-    configureServer(server) {
+    async configureServer(server) {
       let routerPromise: Promise<DishClient> | null = null;
       let dishPromise: Promise<DishClient> | null = null;
       const protosetBytes = () =>
@@ -94,6 +97,7 @@ export function starlinkCloudProxy(): Plugin {
           protosetBytes: protosetBytes(),
         }));
       const handler = createCloudHandler({
+        fetch: resilientFetch,
         readCookie,
         writeCookie,
         clearCookie,
@@ -126,6 +130,38 @@ export function starlinkCloudProxy(): Plugin {
         readRouterConfig: async (targetId, callGateway) =>
           readRouterWifiConfig(await loadRouter(), targetId, callGateway),
       });
+
+      // Vitest stands up its own dev server, which must not claim the data directory.
+      if (!process.env.VITEST) {
+        process.env.HISTORIAN_EMBED = "1";
+        try {
+          const historian = await import("../collector/historian.mts");
+          historian.setAccountSessionReader(() => readCookie() !== null);
+          historian.setDevicePauser(async (clientId, paused) => {
+            const { status, body } = await handler.updateClient({
+              kind: "pause",
+              clientId,
+              paused,
+            });
+            if (status === 200) return;
+            const message = (body as { message?: string })?.message ?? `HTTP ${status}`;
+            throw new Error(status === 428 ? "No Starlink account connected" : message);
+          });
+          server.middlewares.use((req: IncomingMessage, res: ServerResponse, next) => {
+            if (!req.url?.startsWith("/api/")) return next();
+            historian.handleRequest(req, res);
+          });
+        } catch (error) {
+          // A second dev server would serve a window that records nothing, so the
+          // one collector already running is worth stopping this one over. The
+          // port is not: Vite moves to the next, and the recorder moves with it.
+          if (error instanceof CollectorBusyError) throw error;
+          console.warn(
+            `[dev] recorder not started: ${(error as Error).message}. /api is unanswered here.`,
+          );
+        }
+      }
+
       server.middlewares.use(async (req: IncomingMessage, res: ServerResponse, next) => {
         const url = req.url ?? "";
         if (!url.startsWith("/cloud/")) return next();
