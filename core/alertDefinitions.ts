@@ -33,6 +33,10 @@ export interface AlertSpec {
   severity: AlertSeverity;
   /** Worth interrupting someone with a desktop notification. */
   notify?: boolean;
+  /** Whether the clearing is worth announcing too. Defaults to yes: most alerts
+   *  here clear because a fault ended, which is news. False for one that retires
+   *  on a timer, where nothing has changed to report. */
+  notifyClear?: boolean;
 }
 
 /** Alerts on the dish's get_status. Order is roughly by how much it matters. */

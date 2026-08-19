@@ -31,10 +31,9 @@ export type MeterCycle =
   /** `day` is the day of the month it rolls on, clamped to short months. */
   | { kind: "monthly"; day: number }
   | { kind: "custom"; days: number; startMs: number }
-  /** Follows the Starlink account's own billing cycle, which is not the calendar
-   *  month and is the one a reseller bills against. Falls back to the 1st when no
-   *  account cycle is to hand — a standalone recorder cannot reach one. */
-  | { kind: "billing" }
+  /** The account's own cycle, not the calendar month. `day` is copied from the
+   *  signed-in account when the rule is set. */
+  | { kind: "billing"; day: number }
   /** A fixed allowance that never rolls: sold once, topped up by hand. */
   | { kind: "once" };
 
@@ -46,8 +45,9 @@ export interface MeterRule {
   clientKey: string;
   /** The cycle's budget, and the point the device is paused at. */
   allocationBytes: number;
-  /** False leaves the rule inert: usage is still tracked and the cycle still
-   *  rolls, but nothing is paused and nothing is announced. */
+  /** False watches without enforcing: usage is still counted, the cycle still
+   *  rolls, and reaching the allowance is still announced — only the pause is
+   *  never sent. */
   autoPause: boolean;
   cycle: MeterCycle;
   /** Counter values when this cycle opened. */
@@ -69,12 +69,23 @@ export interface MeterRule {
   /** When the pause was last attempted, so a host that retries a failed write
    *  can space its attempts. */
   pauseCheckedMs?: number;
+  /** Why the last attempt failed. */
+  pauseError?: string;
+  /** When this cycle's allowance was reached, for as long as the announcement
+   *  stands. Absent once it has retired — and absent on a rule stored before the
+   *  stamp existed, which reads as one whose announcement is already over. */
+  reachedAtMs?: number;
+  /** When its terms were last set. Absent on a rule written before the stamp
+   *  existed, which loses to any rule carrying one. */
+  updatedMs?: number;
 }
 
 export interface MeterTransition {
   /** `reached` — the allowance is spent and the device should be paused.
-   *  `released` — the cycle rolled on a device this rule had paused. */
-  kind: "reached" | "released";
+   *  `expired` — the announcement has stood its minute and retires; it reaches
+   *  no router. `released` — the cycle rolled on a device this rule had paused,
+   *  which owes an unpause and nothing else. */
+  kind: "reached" | "expired" | "released";
   clientKey: string;
   /** Bytes used in the cycle that just ended, or the one still running. */
   usageBytes: number;
@@ -82,13 +93,12 @@ export interface MeterTransition {
   rule: MeterRule;
 }
 
-/** The account's current billing cycle, when the caller has one. */
-export interface BillingCycle {
-  startMs: number;
-  endMs: number;
-}
-
 const DAY_MS = 86_400_000;
+
+/** How long a spent-allowance announcement stands. Reaching an allowance is an
+ *  event, not a condition to sit in: the cap lasts the rest of the cycle, which
+ *  on a rule that never rolls is forever, and the history keeps the record. */
+export const METER_ALERT_HOLD_MS = 60_000;
 
 /** Local midnight on the day `atMs` falls in. */
 function startOfDay(atMs: number): number {
@@ -109,17 +119,44 @@ function dayOfMonth(atMs: number, day: number, monthOffset = 0): number {
   return date.getTime();
 }
 
-/**
- * The cycle `atMs` falls in.
- *
- * `billingCycle` is passed rather than fetched: the account's dates arrive over
- * the cloud, and a recorder running without one still has to answer.
- */
-export function periodBounds(
-  cycle: MeterCycle,
-  atMs: number,
-  billingCycle?: BillingCycle,
-): { startMs: number; endMs: number } {
+/** The allowance as an announcement names it. Every host shares one alert key, so
+ *  the figure has to read the same from all of them. */
+export function formatAllowance(bytes: number): string {
+  return bytes >= 1e12 ? `${(bytes / 1e12).toFixed(2)} TB` : `${(bytes / 1e9).toFixed(1)} GB`;
+}
+
+/** The cycle a write asks for, or null when it names none. Values are clamped. */
+export function cycleFromParams(params: URLSearchParams, nowMs: number): MeterCycle | null {
+  const number = (name: string, fallback: number) => {
+    const raw = params.get(name);
+    const value = raw === null || raw.trim() === "" ? Number.NaN : Number(raw);
+    return Number.isFinite(value) ? value : fallback;
+  };
+  const dayOfTheMonth = () => Math.min(31, Math.max(1, number("day", 1)));
+  switch (params.get("cycle")) {
+    case "daily":
+      return { kind: "daily" };
+    case "once":
+      return { kind: "once" };
+    case "weekly":
+      return { kind: "weekly", weekday: Math.min(6, Math.max(0, number("weekday", 1))) };
+    case "monthly":
+      return { kind: "monthly", day: dayOfTheMonth() };
+    case "billing":
+      return { kind: "billing", day: dayOfTheMonth() };
+    case "custom":
+      return {
+        kind: "custom",
+        days: Math.max(1, number("days", 30)),
+        startMs: number("start", nowMs),
+      };
+    default:
+      return null;
+  }
+}
+
+/** The cycle `atMs` falls in. */
+export function periodBounds(cycle: MeterCycle, atMs: number): { startMs: number; endMs: number } {
   switch (cycle.kind) {
     case "daily": {
       const startMs = startOfDay(atMs);
@@ -147,8 +184,7 @@ export function periodBounds(
       return { startMs, endMs: startMs + span };
     }
     case "billing":
-      if (billingCycle) return { startMs: billingCycle.startMs, endMs: billingCycle.endMs };
-      return periodBounds({ kind: "monthly", day: 1 }, atMs);
+      return periodBounds({ kind: "monthly", day: cycle.day }, atMs);
     case "once":
       return { startMs: 0, endMs: Number.POSITIVE_INFINITY };
   }
@@ -177,7 +213,6 @@ export function evaluateMeters(
   rules: readonly MeterRule[],
   readings: readonly MeterReading[],
   nowMs: number,
-  options: { billingCycle?: BillingCycle } = {},
 ): { rules: MeterRule[]; transitions: MeterTransition[] } {
   const byKey = new Map(readings.map((reading) => [reading.clientKey, reading]));
   const transitions: MeterTransition[] = [];
@@ -193,7 +228,7 @@ export function evaluateMeters(
 
     if (nowMs >= rule.periodEndMs) {
       const spent = usageBytes(rule);
-      const bounds = periodBounds(rule.cycle, nowMs, options.billingCycle);
+      const bounds = periodBounds(rule.cycle, nowMs);
       const released = rule.pauseState === "applied";
       rule = {
         ...rule,
@@ -203,6 +238,7 @@ export function evaluateMeters(
         periodEndMs: bounds.endMs,
         actedThisCycle: false,
         pauseState: "none",
+        pauseError: undefined,
       };
       // Only a pause this rule applied is lifted. A device the user paused by
       // hand is theirs to unpause, and a cycle rolling is not an answer to it.
@@ -216,10 +252,30 @@ export function evaluateMeters(
         });
     }
 
-    if (rule.autoPause && !rule.actedThisCycle && usageBytes(rule) >= rule.allocationBytes) {
-      rule = { ...rule, actedThisCycle: true, pauseState: "pending" };
+    // Reaching an allowance is announced whether or not a pause follows it; only
+    // enforcement turns on autoPause, and a watch-only rule has no write pending.
+    if (!rule.actedThisCycle && usageBytes(rule) >= rule.allocationBytes) {
+      rule = {
+        ...rule,
+        actedThisCycle: true,
+        reachedAtMs: nowMs,
+        ...(rule.autoPause ? { pauseState: "pending" } : {}),
+      };
       transitions.push({
         kind: "reached",
+        clientKey: rule.clientKey,
+        usageBytes: usageBytes(rule),
+        atMs: nowMs,
+        rule,
+      });
+    }
+
+    // Off the stamp, not the pause: a watch-only rule and one whose write failed
+    // announce the same way, so they have to stop announcing the same way.
+    if (rule.reachedAtMs !== undefined && nowMs - rule.reachedAtMs >= METER_ALERT_HOLD_MS) {
+      rule = { ...rule, reachedAtMs: undefined };
+      transitions.push({
+        kind: "expired",
         clientKey: rule.clientKey,
         usageBytes: usageBytes(rule),
         atMs: nowMs,
@@ -231,6 +287,86 @@ export function evaluateMeters(
   }
 
   return { rules: next, transitions };
+}
+
+/**
+ * Rules whose pause is owed another attempt.
+ *
+ * A write in flight settles in seconds, so a "pending" older than the whole retry
+ * window never came back and is as stalled as one that failed outright.
+ */
+export function stalledPauses(
+  rules: readonly MeterRule[],
+  nowMs: number,
+  retryMs: number,
+): MeterRule[] {
+  return rules.filter(
+    (rule) =>
+      rule.autoPause &&
+      (rule.pauseState === "failed" || rule.pauseState === "pending") &&
+      nowMs - (rule.pauseCheckedMs ?? 0) >= retryMs &&
+      usageBytes(rule) >= rule.allocationBytes,
+  );
+}
+
+/** The rule is the only record that a device is still paused, so it stays
+ *  "applied" until a write says otherwise. */
+export function stalledReleases(
+  rules: readonly MeterRule[],
+  nowMs: number,
+  retryMs: number,
+): MeterRule[] {
+  return rules.filter(
+    (rule) =>
+      rule.pauseState === "applied" &&
+      usageBytes(rule) < rule.allocationBytes &&
+      nowMs - (rule.pauseCheckedMs ?? 0) >= retryMs,
+  );
+}
+
+/** The router is the authority on whether a device is paused, so where it and a
+ *  rule disagree the rule is the stale half. A key the poll did not carry is "not
+ *  asked", never "not paused". */
+export function releasedByHand(
+  rules: readonly MeterRule[],
+  blocked: ReadonlyMap<string, boolean>,
+): MeterRule[] {
+  return rules.filter(
+    (rule) => rule.pauseState === "applied" && blocked.get(rule.clientKey) === false,
+  );
+}
+
+/** A recorder's current device roster, as rule reconciliation reads it. */
+export interface MeterRoster {
+  /** Every device key the recorder holds counters for. */
+  keys: readonly string[];
+  /** The key a device answers to now, following any identity merge. */
+  resolveKey: (key: string) => string;
+}
+
+/**
+ * Move rules onto the identities their devices now answer to, dropping any left
+ * on a bucket the recorder no longer holds.
+ *
+ * A reissued id is the same device, so a rule follows the alias the way the
+ * odometer folds the counters. Where two rules land on one key, the one whose
+ * terms were set most recently is the standing intent and wins.
+ *
+ * An empty roster is a recorder that has folded no reading yet, never evidence
+ * that every device is gone, so nothing is dropped against one.
+ */
+export function resolveRuleKeys(rules: readonly MeterRule[], roster: MeterRoster): MeterRule[] {
+  if (roster.keys.length === 0) return [...rules];
+  const known = new Set(roster.keys);
+  const kept = new Map<string, MeterRule>();
+  for (const rule of rules) {
+    const clientKey = roster.resolveKey(rule.clientKey);
+    if (!known.has(clientKey)) continue;
+    const held = kept.get(clientKey);
+    if (held && (held.updatedMs ?? 0) >= (rule.updatedMs ?? 0)) continue;
+    kept.set(clientKey, clientKey === rule.clientKey ? rule : { ...rule, clientKey });
+  }
+  return [...kept.values()];
 }
 
 /**
@@ -248,9 +384,8 @@ export function createRule(options: {
   lifetimeRx: number;
   lifetimeTx: number;
   nowMs: number;
-  billingCycle?: BillingCycle;
 }): MeterRule {
-  const bounds = periodBounds(options.cycle, options.nowMs, options.billingCycle);
+  const bounds = periodBounds(options.cycle, options.nowMs);
   return {
     clientKey: options.clientKey,
     allocationBytes: options.allocationBytes,
@@ -264,17 +399,50 @@ export function createRule(options: {
     periodEndMs: bounds.endMs,
     actedThisCycle: false,
     pauseState: "none",
+    updatedMs: options.nowMs,
   };
+}
+
+/** The rule an edit leaves behind: the anchors stand and a changed cycle moves
+ *  only its boundaries. Clearing the count is restartCycle's job. */
+export function upsertRule(
+  existing: MeterRule | undefined,
+  options: {
+    clientKey: string;
+    allocationBytes: number;
+    autoPause?: boolean;
+    cycle: MeterCycle;
+    lifetimeRx: number;
+    lifetimeTx: number;
+    nowMs: number;
+  },
+): MeterRule {
+  if (!existing) return createRule(options);
+  const movesBoundaries = JSON.stringify(existing.cycle) !== JSON.stringify(options.cycle);
+  const bounds = movesBoundaries ? periodBounds(options.cycle, options.nowMs) : null;
+  const rule = {
+    ...existing,
+    allocationBytes: options.allocationBytes,
+    autoPause: options.autoPause ?? existing.autoPause,
+    cycle: options.cycle,
+    updatedMs: options.nowMs,
+    ...(bounds ? { periodStartMs: bounds.startMs, periodEndMs: bounds.endMs } : {}),
+  };
+  // An allowance raised past what the device has spent is no longer reached, so
+  // the rule arms again.
+  if (usageBytes(rule) < rule.allocationBytes)
+    return { ...rule, actedThisCycle: false, pauseState: "none", pauseError: undefined };
+  // Nothing retries a rule that no longer enforces, so it holds no owed write. A
+  // pause already applied stands: the device is held until something lifts it.
+  if (!rule.autoPause && rule.pauseState !== "applied")
+    return { ...rule, pauseState: "none", pauseError: undefined };
+  return rule;
 }
 
 /** Start a rule's allowance over from now — the top-up for a cycle that does not
  *  roll on its own, and the way back for one whose limit was set too low. */
-export function restartCycle(
-  rule: MeterRule,
-  nowMs: number,
-  billingCycle?: BillingCycle,
-): MeterRule {
-  const bounds = periodBounds(rule.cycle, nowMs, billingCycle);
+export function restartCycle(rule: MeterRule, nowMs: number): MeterRule {
+  const bounds = periodBounds(rule.cycle, nowMs);
   return {
     ...rule,
     anchorRx: rule.observedRx,
@@ -283,5 +451,6 @@ export function restartCycle(
     periodEndMs: bounds.endMs,
     actedThisCycle: false,
     pauseState: "none",
+    pauseError: undefined,
   };
 }

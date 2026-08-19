@@ -25,6 +25,7 @@ import {
   readJsonLines,
   writeJsonLinesAtomically,
 } from "./jsonLinesFile.mts";
+import type { AlertSeverity } from "../core/alertDefinitions.ts";
 
 /** The two devices, plus "system" for conditions the historian observes about
  *  them rather than reads off them — chiefly a device not answering at all,
@@ -39,6 +40,9 @@ export interface AlertEpisode {
   startMs: number;
   /** null while the flag is still set. */
   endMs: number | null;
+  /** What was announced. Absent where the wording is a constant the UI looks up. */
+  label?: string;
+  severity?: AlertSeverity;
 }
 
 // 48 hours, one window shared with the event and thermal logs it sits beside,
@@ -83,9 +87,14 @@ export class AlertStore {
     );
   }
 
-  open(source: AlertSource, key: string, startMs: number): void {
+  open(
+    source: AlertSource,
+    key: string,
+    startMs: number,
+    announced?: { label: string; severity: AlertSeverity },
+  ): void {
     if (this.isOpen(source, key)) return;
-    this.episodes.push({ source, key, startMs, endMs: null });
+    this.episodes.push({ source, key, startMs, endMs: null, ...announced });
     this.flush();
   }
 

@@ -74,6 +74,57 @@ describe("DataMeterDialog", () => {
     expect(text()).not.toContain("Save limit");
   });
 
+  test("given: usage under a gigabyte, should: read the ring in MB rather than round it to 0.9", async () => {
+    render(
+      <Harness value={meter({ rule: rule({ usageBytes: 944_700_000, allocationBytes: GB }) })} />,
+    );
+
+    await expect.poll(text).toContain("MB USED");
+    expect(text()).toContain("945");
+    expect(text()).not.toContain("GB USED");
+  });
+
+  test("given: usage at a gigabyte, should: turn over to GB rather than show 1000 MB", async () => {
+    render(<Harness value={meter({ rule: rule({ usageBytes: GB, allocationBytes: 5 * GB }) })} />);
+
+    await expect.poll(text).toContain("GB USED");
+    expect(text()).not.toContain("MB USED");
+  });
+
+  // The countdown and the cadence move independently: a rule five days out is
+  // five days out whether it is weekly or monthly, so each holds its own tile.
+  test("given: a rule with a cadence, should: report the countdown and the cadence apart", async () => {
+    render(
+      <Harness
+        value={meter({
+          rule: rule({
+            cycle: { kind: "weekly", weekday: 1 },
+            periodEndMs: NOW + 5 * 86_400_000,
+          }),
+        })}
+      />,
+    );
+
+    await expect.poll(text).toContain("Resets in");
+    expect(text()).toContain("5 days");
+    expect(text()).toContain("Cycle");
+    expect(text()).toContain("Weekly");
+  });
+
+  test("given: a one-off allowance, should: say it never resets rather than show a blank slot", async () => {
+    render(
+      <Harness
+        value={meter({
+          rule: rule({ cycle: { kind: "once" }, periodEndMs: Number.POSITIVE_INFINITY }),
+        })}
+      />,
+    );
+
+    await expect.poll(text).toContain("Resets in");
+    expect(text()).toContain("never");
+    expect(text()).toContain("One-off");
+  });
+
   test("given: a device with no rule, should: open on the form, since there is nothing to show", async () => {
     render(<Harness value={meter({ rule: null })} />);
 

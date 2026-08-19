@@ -33,6 +33,34 @@ function withRule(store: MeterStore, clientKey = "111", lifetimeRx = 0) {
   });
 }
 
+const METERED_CYCLE = { kind: "monthly", day: 1 } as const;
+
+/** A rule that has already spent `spent` against `allowance`, so it is latched. */
+function tripped(store: MeterStore, allowance: number, spent: number) {
+  store.upsert({
+    clientKey: "111",
+    allocationBytes: allowance,
+    cycle: METERED_CYCLE,
+    lifetimeRx: 0,
+    lifetimeTx: 0,
+    nowMs: T0,
+  });
+  store.observe([{ clientKey: "111", lifetimeRx: spent, lifetimeTx: 0 }], T0 + 1_000);
+}
+
+/** A new allowance, nothing else touched. */
+function setAllowance(store: MeterStore, allowance: number) {
+  const rule = store.find("111")!;
+  store.upsert({
+    clientKey: "111",
+    allocationBytes: allowance,
+    cycle: METERED_CYCLE,
+    lifetimeRx: rule.observedRx,
+    lifetimeTx: rule.observedTx,
+    nowMs: T0 + 2_000,
+  });
+}
+
 describe("MeterStore", () => {
   it("reloads its rules after a restart", () => {
     const path = tempPath();
@@ -86,6 +114,38 @@ describe("MeterStore", () => {
     expect(store.find("111")!.periodEndMs).toBeGreaterThan(T0 + 2_000);
   });
 
+  it("arms the rule again when the allowance is raised past what was spent", () => {
+    const store = new MeterStore(tempPath());
+    tripped(store, 1 * GB, 2 * GB);
+    store.notePauseState("111", "failed", T0 + 1_000, "cloud proxy answered 502");
+    expect(store.find("111")!.actedThisCycle).toBe(true);
+
+    setAllowance(store, 3 * GB);
+
+    const armed = store.find("111")!;
+    expect(armed.actedThisCycle).toBe(false);
+    expect(armed.pauseState).toBe("none");
+    expect(armed.pauseError).toBeUndefined();
+    expect(usageBytes(armed)).toBe(2 * GB);
+
+    const transitions = store.observe(
+      [{ clientKey: "111", lifetimeRx: 4 * GB, lifetimeTx: 0 }],
+      T0 + 3_000,
+    );
+    expect(transitions.map((t) => t.kind)).toEqual(["reached"]);
+  });
+
+  it("holds the trip when the raised allowance is still under what was spent", () => {
+    const store = new MeterStore(tempPath());
+    tripped(store, 1 * GB, 5 * GB);
+    store.notePauseState("111", "failed", T0 + 1_000, "cloud proxy answered 502");
+    setAllowance(store, 2 * GB);
+    const rule = store.find("111")!;
+    expect(rule.actedThisCycle).toBe(true);
+    expect(rule.pauseState).toBe("failed");
+    expect(rule.pauseError).toBe("cloud proxy answered 502");
+  });
+
   it("clears what a rule counted without touching the device's own counter", () => {
     const store = new MeterStore(tempPath());
     withRule(store, "111", 10 * GB);
@@ -100,10 +160,7 @@ describe("MeterStore", () => {
   it("follows a device whose identity the router reissued", () => {
     const store = new MeterStore(tempPath());
     withRule(store, "111");
-    store.resolve(
-      (key) => (key === "111" ? "222" : key),
-      () => true,
-    );
+    store.resolve({ keys: ["222"], resolveKey: (key) => (key === "111" ? "222" : key) });
     expect(store.find("111")).toBeUndefined();
     expect(store.find("222")).toBeDefined();
   });
@@ -111,30 +168,72 @@ describe("MeterStore", () => {
   it("drops a rule whose device no longer has a record", () => {
     const store = new MeterStore(tempPath());
     withRule(store, "111");
-    store.resolve(
-      (key) => key,
-      () => false,
-    );
+    store.resolve({ keys: ["999"], resolveKey: (key) => key });
     expect(store.all()).toEqual([]);
   });
 
-  it("keeps one rule when two identities merge into a single device", () => {
+  it("keeps every rule when the recorder has folded no reading yet", () => {
+    const path = tempPath();
+    const store = new MeterStore(path);
+    withRule(store, "111");
+    store.resolve({ keys: [], resolveKey: (key) => key });
+    expect(store.all()).toHaveLength(1);
+    expect(new MeterStore(path).all()).toHaveLength(1);
+  });
+
+  const mergeInto222 = {
+    keys: ["222"],
+    resolveKey: (key: string) => (key === "111" ? "222" : key),
+  };
+
+  it("keeps the newer id's rule when it was the one set last", () => {
     const store = new MeterStore(tempPath());
     withRule(store, "111");
     store.upsert({
       clientKey: "222",
       allocationBytes: 5 * GB,
-      cycle: { kind: "monthly", day: 1 },
+      cycle: METERED_CYCLE,
+      lifetimeRx: 0,
+      lifetimeTx: 0,
+      nowMs: T0 + 1_000,
+    });
+    store.resolve(mergeInto222);
+    expect(store.all()).toHaveLength(1);
+    expect(store.find("222")!.allocationBytes).toBe(5 * GB);
+  });
+
+  it("keeps the older id's rule when that is the one set last", () => {
+    const store = new MeterStore(tempPath());
+    store.upsert({
+      clientKey: "222",
+      allocationBytes: 5 * GB,
+      cycle: METERED_CYCLE,
       lifetimeRx: 0,
       lifetimeTx: 0,
       nowMs: T0,
     });
-    store.resolve(
-      (key) => (key === "111" ? "222" : key),
-      () => true,
-    );
+    withRule(store, "111");
+    setAllowance(store, 40 * GB);
+    store.resolve(mergeInto222);
     expect(store.all()).toHaveLength(1);
-    expect(store.find("222")!.allocationBytes).toBe(50 * GB);
+    expect(store.find("222")!.allocationBytes).toBe(40 * GB);
+  });
+
+  it("drops an owed pause when the rule stops enforcing", () => {
+    const store = new MeterStore(tempPath());
+    tripped(store, 1 * GB, 2 * GB);
+    store.notePauseState("111", "failed", T0 + 1_000, "cloud proxy answered 502");
+    store.upsert({
+      clientKey: "111",
+      allocationBytes: 1 * GB,
+      autoPause: false,
+      cycle: METERED_CYCLE,
+      lifetimeRx: 0,
+      lifetimeTx: 0,
+      nowMs: T0 + 2_000,
+    });
+    expect(store.find("111")!.pauseState).toBe("none");
+    expect(store.find("111")!.pauseError).toBeUndefined();
   });
 
   it("reports a pause that could not be sent as failed, not as applied", () => {
@@ -143,5 +242,46 @@ describe("MeterStore", () => {
     store.notePauseState("111", "failed", T0);
     expect(store.find("111")!.pauseState).toBe("failed");
     expect(store.find("111")!.pauseCheckedMs).toBe(T0);
+  });
+
+  it("reports whether any rule took the pause result", () => {
+    const store = new MeterStore(tempPath());
+    withRule(store, "111");
+    expect(store.notePauseState("111", "applied", T0)).toBe(true);
+    expect(store.notePauseState("does-not-exist", "applied", T0)).toBe(false);
+  });
+
+  it("keeps why a pause failed, and survives a reload", () => {
+    const path = tempPath();
+    const store = new MeterStore(path);
+    withRule(store, "111");
+    store.notePauseState("111", "failed", T0, "cloud proxy answered 502");
+    expect(new MeterStore(path).find("111")!.pauseError).toBe("cloud proxy answered 502");
+  });
+
+  it("replaces the reason when a retry fails differently", () => {
+    const store = new MeterStore(tempPath());
+    withRule(store, "111");
+    store.notePauseState("111", "failed", T0, "first reason");
+    store.notePauseState("111", "pending", T0 + 1);
+    store.notePauseState("111", "failed", T0 + 2, "second reason");
+    expect(store.find("111")!.pauseError).toBe("second reason");
+  });
+
+  it("drops the reason once a pause lands, so a stale one cannot be read back", () => {
+    const store = new MeterStore(tempPath());
+    withRule(store, "111");
+    store.notePauseState("111", "failed", T0, "cloud proxy answered 502");
+    store.notePauseState("111", "applied", T0 + 1);
+    expect(store.find("111")!.pauseError).toBeUndefined();
+  });
+
+  it("restarting a cycle clears the reason with the state", () => {
+    const store = new MeterStore(tempPath());
+    withRule(store, "111");
+    store.notePauseState("111", "failed", T0, "cloud proxy answered 502");
+    store.restart("111", T0 + 1);
+    expect(store.find("111")!.pauseState).toBe("none");
+    expect(store.find("111")!.pauseError).toBeUndefined();
   });
 });

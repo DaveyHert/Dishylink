@@ -10,6 +10,7 @@ import { useState } from "react";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import type { MeterCycle } from "@core/dataMeter";
 import type { DataMeter } from "../../hooks/useDataMeter";
+import { useCloudUsage } from "../../hooks/useCloudAccount";
 import { useNow } from "../../hooks/useNow";
 import { formatBytes } from "../../lib/format";
 import { Button } from "../ui/button";
@@ -30,11 +31,23 @@ import {
 
 const GB = 1_000_000_000;
 
+/** The day of the month the account's own cycle turns over, or null when no
+ *  account is connected — in which case the option that needs it is refused
+ *  rather than quietly measuring a calendar month instead.
+ *
+ *  Read as a local date, because the boundaries it feeds are local midnights. */
+function billingDayOf(cycles: { startDate: string }[] | undefined): number | null {
+  const newest = cycles?.[cycles.length - 1];
+  if (!newest?.startDate) return null;
+  const day = new Date(newest.startDate).getDate();
+  return Number.isFinite(day) && day >= 1 ? day : null;
+}
+
 const CYCLE_OPTIONS: { label: string; value: MeterCycle["kind"] }[] = [
   { label: "Daily", value: "daily" },
   { label: "Weekly", value: "weekly" },
   { label: "Monthly", value: "monthly" },
-  { label: "Billing cycle", value: "billing" },
+  { label: "Starlink billing", value: "billing" },
   { label: "One-off", value: "once" },
 ];
 
@@ -50,21 +63,55 @@ function endsIn(endMs: number, nowMs: number): string | null {
   return days === 1 ? "ends tomorrow" : `ends in ${days} days`;
 }
 
+function timeLeft(endMs: number, nowMs: number): string | null {
+  if (!Number.isFinite(endMs)) return null;
+  const hours = Math.max(0, Math.round((endMs - nowMs) / 3_600_000));
+  if (hours < 1) return "under an hour";
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"}`;
+  const days = Math.round(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"}`;
+}
+
+function cycleLabel(cycle: MeterCycle): string {
+  switch (cycle.kind) {
+    case "daily":
+      return "Daily";
+    case "weekly":
+      return "Weekly";
+    case "monthly":
+      return "Monthly";
+    case "custom":
+      return `Every ${cycle.days} days`;
+    case "billing":
+      return "Starlink billing";
+    case "once":
+      return "One-off";
+  }
+}
+
 function cycleFor(
   kind: MeterCycle["kind"],
   weekday: number,
   day: number,
   startedMs: number,
+  billingDay: number | null,
 ): MeterCycle {
   if (kind === "weekly") return { kind, weekday };
   if (kind === "monthly") return { kind, day };
   if (kind === "custom") return { kind, days: 30, startMs: startedMs };
+  if (kind === "billing") return { kind, day: billingDay ?? day };
   return { kind };
 }
 
 /** GB as the field shows it: one decimal, and none when it is round. */
 function gigabytes(bytes: number): string {
   return (bytes / GB).toFixed(1).replace(/\.0$/, "");
+}
+
+function ringReading(bytes: number): { value: string; unit: string } {
+  const megabytes = Math.round(bytes / 1e6);
+  if (megabytes < 1000) return { value: String(megabytes), unit: "MB USED" };
+  return { value: gigabytes(bytes), unit: "GB USED" };
 }
 
 const CEILING_RUNGS_GB = [10, 25, 50, 100, 250, 500, 1000];
@@ -165,7 +212,7 @@ export function DataMeterDialog({
 const NEARING_LIMIT = 0.9;
 
 function UsageRing({ spent, paused }: { spent: number; paused: boolean }) {
-  const radius = 82;
+  const radius = 71;
   const circumference = 2 * Math.PI * radius;
   const stroke =
     paused || spent >= 1
@@ -174,25 +221,25 @@ function UsageRing({ spent, paused }: { spent: number; paused: boolean }) {
         ? "var(--accent)"
         : "var(--series-down)";
   return (
-    <svg width='192' height='192' viewBox='0 0 192 192' aria-hidden='true'>
+    <svg width='168' height='168' viewBox='0 0 168 168' aria-hidden='true'>
       <circle
-        cx='96'
-        cy='96'
+        cx='84'
+        cy='84'
         r={radius}
         fill='none'
-        strokeWidth='14'
+        strokeWidth='12'
         stroke='color-mix(in srgb, var(--ink) 12%, transparent)'
       />
       <circle
-        cx='96'
-        cy='96'
+        cx='84'
+        cy='84'
         r={radius}
         fill='none'
-        strokeWidth='14'
+        strokeWidth='12'
         strokeLinecap='round'
         stroke={stroke}
         strokeDasharray={`${circumference * spent} ${circumference}`}
-        transform='rotate(-90 96 96)'
+        transform='rotate(-90 84 84)'
       />
     </svg>
   );
@@ -219,6 +266,7 @@ function MeterStatus({
   const spent = allowance > 0 ? Math.min(1, used / allowance) : 0;
   const paused = rule.pauseState === "applied";
   const resets = endsIn(rule.periodEndMs, nowMs);
+  const reading = ringReading(used);
 
   return (
     <>
@@ -237,11 +285,11 @@ function MeterStatus({
               </span>
             ) : (
               <>
-                <span className='text-[42px] leading-none font-extrabold tabular-nums text-foreground'>
-                  {gigabytes(used)}
+                <span className='text-[36px] leading-none font-extrabold tabular-nums text-foreground'>
+                  {reading.value}
                 </span>
-                <span className='mt-1.5 text-[12.5px] tracking-wide text-muted-foreground'>
-                  GB USED
+                <span className='mt-1.5 text-[11.5px] tracking-wide text-muted-foreground'>
+                  {reading.unit}
                 </span>
               </>
             )}
@@ -259,19 +307,25 @@ function MeterStatus({
           </Callout>
         )}
 
-        <div className='grid grid-cols-2 gap-3 border-t border-border/60 pt-4'>
+        <div className='grid grid-cols-3 gap-3 border-t border-border/60 pt-4'>
           <div>
             <div className='text-[12px] text-muted-foreground'>Remaining</div>
             <div
-              className={`text-[17px] font-semibold tabular-nums ${remaining <= 0 ? "text-destructive" : "text-foreground"}`}
+              className={`text-[16px] font-semibold tabular-nums ${remaining <= 0 ? "text-destructive" : "text-foreground"}`}
             >
               {formatBytes(remaining)}
             </div>
           </div>
+          <div className='text-center'>
+            <div className='text-[12px] text-muted-foreground'>Resets in</div>
+            <div className='text-[16px] font-semibold text-foreground'>
+              {timeLeft(rule.periodEndMs, nowMs) ?? "never"}
+            </div>
+          </div>
           <div className='text-right'>
             <div className='text-[12px] text-muted-foreground'>Cycle</div>
-            <div className='text-[17px] font-semibold text-foreground'>
-              {resets ? resets.replace(/^ends /, "") : "no reset"}
+            <div className='text-[16px] font-semibold text-foreground'>
+              {cycleLabel(rule.cycle)}
             </div>
           </div>
         </div>
@@ -281,9 +335,10 @@ function MeterStatus({
             Auto-pause is off, so this allowance is watched and announced but never enforced.
           </Callout>
         )}
-        {rule.pauseState === "failed" && (
+        {rule.pauseState === "failed" && used >= allowance && (
           <Callout tone='error'>
             This device reached its limit, but the pause could not be sent to Starlink.
+            {rule.pauseError ? ` ${rule.pauseError}.` : ""} It is retried every minute.
           </Callout>
         )}
         {meter.error && <Callout tone='error'>{meter.error}</Callout>}
@@ -322,13 +377,17 @@ function MeterForm({
   onSaved: () => void;
 }) {
   const { rule, pauseEnforceable, error, save, restart, remove } = meter;
+  const { data: usage } = useCloudUsage(true);
+  const billingDay = billingDayOf(usage?.content?.billingCyclesAnnotated);
   const [allocationGB, setAllocationGB] = useState(rule ? gigabytes(rule.allocationBytes) : "50");
   const [ceiling, setCeiling] = useState(() => ceilingFor(rule ? rule.allocationBytes / GB : 50));
   const [autoPause, setAutoPause] = useState(rule?.autoPause ?? true);
   const [kind, setKind] = useState<MeterCycle["kind"]>(rule?.cycle.kind ?? "monthly");
   const [weekday, setWeekday] = useState(rule?.cycle.kind === "weekly" ? rule.cycle.weekday : 1);
+  // Billing seeds this too, so an edit made with no account reachable saves the
+  // rule's own date back rather than the 1st.
   const [dayText, setDayText] = useState(
-    rule?.cycle.kind === "monthly" ? String(rule.cycle.day) : "1",
+    rule?.cycle.kind === "monthly" || rule?.cycle.kind === "billing" ? String(rule.cycle.day) : "1",
   );
   const [busy, setBusy] = useState(false);
   // The countdown moves whether or not anything re-renders, and only ever reads
@@ -431,8 +490,16 @@ function MeterForm({
               </SelectTrigger>
               <SelectContent>
                 {CYCLE_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
+                  <SelectItem
+                    key={option.value}
+                    value={option.value}
+                    disabled={option.value === "billing" && billingDay === null}
+                  >
+                    {option.value === "billing"
+                      ? billingDay === null
+                        ? "Starlink billing — needs your account"
+                        : `Starlink billing (${billingDay})`
+                      : option.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -543,9 +610,10 @@ function MeterForm({
               the limit is watched and announced, but nothing is paused.
             </Callout>
           ))}
-        {rule?.pauseState === "failed" && (
+        {rule?.pauseState === "failed" && rule.usageBytes >= rule.allocationBytes && (
           <Callout tone='error'>
             This device reached its limit, but the pause could not be sent to Starlink.
+            {rule.pauseError ? ` ${rule.pauseError}.` : ""} It is retried every minute.
           </Callout>
         )}
         {error && <Callout tone='error'>{error}</Callout>}
@@ -593,7 +661,7 @@ function MeterForm({
                 await save({
                   allocationBytes,
                   autoPause,
-                  cycle: cycleFor(kind, weekday, day, nowMs),
+                  cycle: cycleFor(kind, weekday, day, nowMs, billingDay),
                 });
                 onSaved();
               })

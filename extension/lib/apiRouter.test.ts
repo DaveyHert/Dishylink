@@ -4,6 +4,8 @@ import { InMemoryHistory, type AlertSource } from "./history";
 import type { AlertTransition } from "@core/alertEngine";
 import { ClientTotalsCore } from "@core/clientTotals";
 import type { EnergySummary } from "../../src/hooks/useEnergyHistory";
+import { cycleParams } from "../../src/hooks/useDataMeter";
+import type { MeterCycle, MeterRule } from "@core/dataMeter";
 
 const NOW = new Date(1_600_000_000_000);
 const EMPTY_CURSOR = { counter: 0, newestSampleMs: 0 };
@@ -409,5 +411,134 @@ describe("routeApiRequest", () => {
     const body = reply.body as { history: unknown[]; samples: Array<{ atMs: number }> };
     expect(body.history).toEqual([]); // a tail already holds the minute rows
     expect(body.samples.map((s) => s.atMs)).toEqual([t - 1_000]);
+  });
+
+  /** A device the odometer knows, so a rule written against it has counters. */
+  async function meteredStore(): Promise<InMemoryHistory> {
+    const store = new InMemoryHistory();
+    const odometer = new ClientTotalsCore(90_000);
+    const live = odometer.notePoll([{ clientId: 42, macAddress: "aa" }]);
+    odometer.observe(42, "aa", 0, 0, NOW.getTime() - 60_000, "Laptop", live);
+    odometer.observe(42, "aa", 400, 100, NOW.getTime(), "Laptop", live);
+    await store.writeTotalsSnapshot(odometer.toSnapshot());
+    return store;
+  }
+
+  async function saveCycle(store: InMemoryHistory, cycle: MeterCycle): Promise<MeterRule> {
+    const query = new URLSearchParams({
+      client: "42",
+      allocation: String(50_000_000_000),
+      autoPause: "1",
+      ...cycleParams(cycle),
+    });
+    const reply = await routeApiRequest(store, `/api/clients/meters?${query}`, NOW, "POST");
+    expect(reply.status).toBe(200);
+    return (reply.body as { rule: MeterRule }).rule;
+  }
+
+  it("releases a device it is holding when its rule is deleted", async () => {
+    const store = await meteredStore();
+    const saved = await saveCycle(store, { kind: "daily" });
+    await store.writeMeterRules([{ ...saved, pauseState: "applied" }]);
+    const writes: { clientId: number; paused: boolean }[] = [];
+    const host = {
+      signedIn: () => true,
+      setPaused: async (clientId: number, paused: boolean) => {
+        writes.push({ clientId, paused });
+      },
+    };
+
+    const reply = await routeApiRequest(
+      store,
+      "/api/clients/meters?client=42",
+      NOW,
+      "DELETE",
+      undefined,
+      host,
+    );
+
+    expect(reply.body).toEqual({ removed: true });
+    // Nothing else would ever lift it: the rule that applied it is gone.
+    expect(writes).toEqual([{ clientId: 42, paused: false }]);
+  });
+
+  it("releases a device it is holding when its cycle is started over", async () => {
+    const store = await meteredStore();
+    const saved = await saveCycle(store, { kind: "daily" });
+    await store.writeMeterRules([{ ...saved, pauseState: "applied" }]);
+    const writes: { clientId: number; paused: boolean }[] = [];
+    const host = {
+      signedIn: () => true,
+      setPaused: async (clientId: number, paused: boolean) => {
+        writes.push({ clientId, paused });
+      },
+    };
+
+    await routeApiRequest(
+      store,
+      "/api/clients/meters/reset?client=42",
+      NOW,
+      "POST",
+      undefined,
+      host,
+    );
+
+    // A restarted cycle owes nothing, so nothing would lift the pause it applied.
+    expect(writes).toEqual([{ clientId: 42, paused: false }]);
+    expect((await store.readMeterRules())[0]!.pauseState).toBe("none");
+  });
+
+  it("stores the billing day the card sent, not a calendar month", async () => {
+    const store = await meteredStore();
+    const saved = await saveCycle(store, { kind: "billing", day: 6 });
+    expect(saved.cycle).toEqual({ kind: "billing", day: 6 });
+    // Read back, because the answer above could be right while the write is not.
+    const read = await routeApiRequest(store, "/api/clients/meters?client=42", NOW);
+    const { rules } = read.body as { rules: MeterRule[] };
+    expect(rules[0]!.cycle).toEqual({ kind: "billing", day: 6 });
+    expect(new Date(rules[0]!.periodStartMs).getDate()).toBe(6);
+  });
+
+  it("carries every cycle kind's own fields across the query", async () => {
+    const store = await meteredStore();
+    for (const cycle of [
+      { kind: "daily" },
+      { kind: "weekly", weekday: 4 },
+      { kind: "monthly", day: 17 },
+      { kind: "billing", day: 22 },
+      { kind: "once" },
+    ] satisfies MeterCycle[]) {
+      expect(await saveCycle(store, cycle).then((rule) => rule.cycle)).toEqual(cycle);
+    }
+  });
+
+  it("takes Monday, not Sunday, when a weekly rule arrives without a weekday", async () => {
+    const store = await meteredStore();
+    const query = "client=42&allocation=50000000000&autoPause=1&cycle=weekly";
+    const reply = await routeApiRequest(store, `/api/clients/meters?${query}`, NOW, "POST");
+    expect((reply.body as { rule: MeterRule }).rule.cycle).toEqual({ kind: "weekly", weekday: 1 });
+  });
+
+  it("names the device on a rule it serves, falling back as the desktop does", async () => {
+    const store = await meteredStore();
+    await saveCycle(store, { kind: "monthly", day: 1 });
+    const read = await routeApiRequest(store, "/api/clients/meters?client=42", NOW);
+    const { rules, pauseEnforceable } = read.body as {
+      rules: Array<{ deviceName: string }>;
+      pauseEnforceable: boolean;
+    };
+    expect(rules[0]!.deviceName).toBe("Laptop");
+    // No session was injected, so nothing here can enforce a pause and says so.
+    expect(pauseEnforceable).toBe(false);
+  });
+
+  it("falls back to `device <key>` for a rule the odometer has no name for", async () => {
+    const store = await meteredStore();
+    await store.writeMeterRules([
+      { ...(await saveCycle(store, { kind: "monthly", day: 1 })), clientKey: "99" },
+    ]);
+    const read = await routeApiRequest(store, "/api/clients/meters?client=99", NOW);
+    const { rules } = read.body as { rules: Array<{ deviceName: string }> };
+    expect(rules[0]!.deviceName).toBe("device 99");
   });
 });

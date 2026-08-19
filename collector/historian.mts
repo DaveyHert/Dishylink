@@ -52,8 +52,20 @@ import { ClientWindow } from "./clientWindow.mts";
 import { resolveRows, foldMinuteCollisions } from "../core/clientHistory.ts";
 import { ClientTotalsStore } from "./clientTotals.mts";
 import { MeterStore } from "./meterStore.mts";
-import { usageBytes } from "../core/dataMeter.ts";
-import type { BillingCycle, MeterCycle, MeterRule, MeterTransition } from "../core/dataMeter.ts";
+import { CollectorBusyError } from "./collectorLock.mts";
+import {
+  cycleFromParams,
+  releasedByHand,
+  stalledPauses,
+  stalledReleases,
+  usageBytes,
+} from "../core/dataMeter.ts";
+import type { MeterRule, MeterTransition } from "../core/dataMeter.ts";
+import {
+  CONNECT_ACCOUNT_ADVICE,
+  dataLimitAlertKey,
+  dataLimitAlertSpec,
+} from "../core/dataMeterAlert.ts";
 import { ThroughputTracker } from "../core/throughputTracker.ts";
 import { usageKey } from "../core/clientUsage.ts";
 import { AlertStore } from "./alertStore.mts";
@@ -411,13 +423,9 @@ export function setAccountSessionReader(reader: (() => boolean) | null): void {
   readAccountSignedIn = reader;
 }
 
-/** The account's billing cycle, for a rule that follows it. Installed by a host
- *  that can reach the account; without one such a rule falls back to the 1st. */
-let readBillingCycle: () => BillingCycle | undefined = () => undefined;
-
-export function setBillingCycleReader(reader: () => BillingCycle | undefined): void {
-  readBillingCycle = reader;
-}
+/** Whether the router says each device is blocked, as of the last client poll.
+ *  A key it did not carry is absent, which reads as "not asked". */
+let blockedByClientKey: ReadonlyMap<string, boolean> = new Map();
 
 /** Falls back to the key so a message never reads blank. */
 function meterDeviceName(clientKey: string): string {
@@ -429,109 +437,131 @@ function withUsage(rule: MeterRule): MeterRule & { usageBytes: number; deviceNam
   return { ...rule, usageBytes: usageBytes(rule), deviceName: meterDeviceName(rule.clientKey) };
 }
 
-/** A cycle from query parameters, or null if it names no cycle this build has. */
-function cycleFrom(params: URLSearchParams): MeterCycle | null {
-  const kind = params.get("cycle");
-  const number = (name: string, fallback: number) => {
-    const value = Number(params.get(name));
-    return Number.isFinite(value) ? value : fallback;
-  };
-  if (kind === "daily" || kind === "billing" || kind === "once") return { kind };
-  if (kind === "weekly") return { kind, weekday: Math.min(6, Math.max(0, number("weekday", 1))) };
-  if (kind === "monthly") return { kind, day: Math.min(31, Math.max(1, number("day", 1))) };
-  if (kind === "custom")
-    return {
-      kind,
-      days: Math.max(1, number("days", 30)),
-      startMs: number("start", Date.now()),
-    };
-  return null;
-}
-
 function upsertMeterFrom(clientKey: string, params: URLSearchParams): MeterRule | null {
-  const cycle = cycleFrom(params);
+  const cycle = cycleFromParams(params, Date.now());
   const allocationBytes = Number(params.get("allocation"));
   if (!cycle || !Number.isFinite(allocationBytes) || allocationBytes <= 0) return null;
   const counters = clientTotals.lifetimes().find((entry) => entry.clientKey === clientKey);
-  return meters.upsert({
-    clientKey,
-    allocationBytes,
-    autoPause: params.get("autoPause") !== "0",
-    cycle,
-    lifetimeRx: counters?.lifetimeRx ?? 0,
-    lifetimeTx: counters?.lifetimeTx ?? 0,
-    nowMs: Date.now(),
-    billingCycle: readBillingCycle(),
-  });
+  const rule = standDownMeterRule(clientKey, () =>
+    meters.upsert({
+      clientKey,
+      allocationBytes,
+      autoPause: params.get("autoPause") !== "0",
+      cycle,
+      lifetimeRx: counters?.lifetimeRx ?? 0,
+      lifetimeTx: counters?.lifetimeTx ?? 0,
+      nowMs: Date.now(),
+    }),
+  );
+  return rule;
 }
 
-/** Lift a pause this recorder applied, when the rule behind it is stood down. */
-async function releaseMeterPause(clientKey: string): Promise<void> {
+/** Every route that removes, restarts or rewrites a rule goes through here: a
+ *  rule that stops pausing a device is the last thing that could release it. */
+function standDownMeterRule<T>(clientKey: string, change: () => T): T {
+  const wasPausing = meters.find(clientKey)?.pauseState === "applied";
+  const result = change();
+  if (wasPausing && meters.find(clientKey)?.pauseState !== "applied")
+    void unpauseDeviceForRule(clientKey);
+  return result;
+}
+
+/** One device at a time: the gateway takes one write per device, and the whole
+ *  set arriving together is a burst nothing gains from. */
+async function standDownAllMeterRules(): Promise<void> {
+  const pausing = meters.all().filter((rule) => rule.pauseState === "applied");
+  const announced = meters.all().filter((rule) => rule.reachedAtMs !== undefined);
+  meters.clear();
+  for (const rule of announced) retireMeterAlert(rule, Date.now());
+  for (const rule of pausing) await unpauseDeviceForRule(rule.clientKey);
+}
+
+/** Unpause a device this recorder paused, when the rule behind it is gone. */
+async function unpauseDeviceForRule(clientKey: string): Promise<void> {
   const clientId = Number(clientKey);
   if (!sendDevicePause || !Number.isInteger(clientId)) return;
   try {
     await sendDevicePause(clientId, false);
     meters.notePauseState(clientKey, "none", Date.now());
   } catch (error) {
-    console.warn(
-      `[historian] releasing ${meterDeviceName(clientKey)}: ${(error as Error).message}`,
-    );
+    const reason = (error as Error).message;
+    console.warn(`[historian] releasing ${meterDeviceName(clientKey)}: ${reason}`);
+    // No retry covers a rule that has been stood down.
+    meters.notePauseState(clientKey, "failed", Date.now(), `could not be released: ${reason}`);
   }
 }
 
-function formatGigabytes(bytes: number): string {
-  return bytes >= 1e12 ? `${(bytes / 1e12).toFixed(2)} TB` : `${(bytes / 1e9).toFixed(1)} GB`;
+/** Recorded before the pause is attempted, so an unreachable account does not
+ *  cost the record of the limit being reached. */
+function meterAlertTransition(rule: MeterRule, reached: boolean, atMs: number): AlertTransition {
+  const enforceable = sendDevicePause !== null && readAccountSignedIn?.() === true;
+  return {
+    kind: reached ? "fired" : "cleared",
+    source: "system",
+    key: dataLimitAlertKey(rule.clientKey),
+    atMs,
+    spec: dataLimitAlertSpec({
+      clientKey: rule.clientKey,
+      deviceName: meterDeviceName(rule.clientKey),
+      allocationBytes: rule.allocationBytes,
+      advice: rule.autoPause && !enforceable ? CONNECT_ACCOUNT_ADVICE : undefined,
+    }),
+  };
 }
 
-/**
- * Announce a limit being reached, and pause the device if this host can.
- *
- * The alert carries its own spec, since its key names one device and no static
- * definition can. Recorded before the pause is attempted, so an unreachable
- * account does not cost the record of the limit being reached.
- */
 async function deliverMeterTransition(transition: MeterTransition): Promise<void> {
   const { clientKey, kind, atMs, rule } = transition;
-  const name = meterDeviceName(clientKey);
-  const key = `dataLimit:${clientKey}`;
+  // Retiring an announcement reaches no router.
+  if (kind === "expired") {
+    recordAlertTransitions([meterAlertTransition(rule, false, atMs)]);
+    return;
+  }
   const reached = kind === "reached";
-  recordAlertTransitions([
-    {
-      kind: reached ? "fired" : "cleared",
-      source: "system",
-      key,
-      atMs,
-      spec: {
-        key,
-        ok: `${name} is within its data allowance`,
-        firing: `${name} reached its ${formatGigabytes(rule.allocationBytes)} data allowance`,
-        advice:
-          sendDevicePause && readAccountSignedIn?.() === true
-            ? undefined
-            : "Connect your Starlink account to have Dishylink pause a device when it reaches its allowance.",
-        severity: "warning",
-        notify: true,
-      },
-    },
-  ]);
+  // A release is a router write and nothing else: the announcement it would once
+  // have cleared retired a minute after it was raised.
+  if (reached) recordAlertTransitions([meterAlertTransition(rule, true, atMs)]);
+  // A release is raised only for a pause this rule applied, so it is owed whether
+  // or not the rule still enforces.
+  if (!reached || rule.autoPause) await sendMeterPause(clientKey, reached, atMs);
+}
 
-  await sendMeterPause(clientKey, reached, atMs);
+/** Retire a going rule's announcement. Every other one retires off its own stamp
+ *  on a later tick; a rule being removed takes its stamp with it. */
+function retireMeterAlert(rule: MeterRule | undefined, atMs: number): void {
+  if (rule?.reachedAtMs === undefined) return;
+  recordAlertTransitions([meterAlertTransition(rule, false, atMs)]);
 }
 
 async function sendMeterPause(clientKey: string, reached: boolean, atMs: number): Promise<void> {
   const clientId = Number(clientKey);
   if (!sendDevicePause || !Number.isInteger(clientId)) {
-    if (reached) meters.notePauseState(clientKey, "failed", atMs);
+    const reason = sendDevicePause
+      ? "this device has no router id to pause by"
+      : "this host cannot pause a device";
+    if (reached) meters.notePauseState(clientKey, "failed", atMs, reason);
     return;
   }
+  const name = meterDeviceName(clientKey);
+  // Stamped before the write, not after it: this is re-scanned every 200 ms, and
+  // a rule still reporting its old state would be asked for the same write again
+  // on every tick until the first one came back.
+  meters.noteAttempt(clientKey, Date.now());
   try {
     await sendDevicePause(clientId, reached);
-    meters.notePauseState(clientKey, reached ? "applied" : "none", Date.now());
-  } catch (error) {
-    console.warn(
-      `[historian] meter pause for ${meterDeviceName(clientKey)}: ${(error as Error).message}`,
+    const settled = meters.notePauseState(clientKey, reached ? "applied" : "none", Date.now());
+    // A write can land on a device whose rule is already gone; the log is then the
+    // only record that it is held.
+    console.log(
+      settled
+        ? `[historian] ${reached ? "paused" : "released"} ${name}`
+        : `[historian] ${reached ? "paused" : "released"} ${name}, but no rule took the result`,
     );
-    if (reached) meters.notePauseState(clientKey, "failed", Date.now());
+  } catch (error) {
+    const reason = (error as Error).message;
+    console.warn(`[historian] meter pause for ${meterDeviceName(clientKey)}: ${reason}`);
+    // Still "applied" on a failed release: the device is paused and this rule is
+    // the only record of it.
+    meters.notePauseState(clientKey, reached ? "failed" : "applied", Date.now(), reason);
   }
 }
 
@@ -553,6 +583,8 @@ interface WireClient {
    *  odometer uses it to recognise a device whose clientId was reissued. */
   captiveClientId?: string;
   ipAddress?: string;
+  /** True while the router is blocking this device's internet, whoever set it. */
+  blocked?: boolean;
   rxStats?: WireStats;
   txStats?: WireStats;
 }
@@ -584,6 +616,12 @@ async function getClientReadings(): Promise<ClientReading[]> {
   );
   const totalsLiveKeys = clientTotals.notePoll(
     clients.map((client) => ({ clientId: client.clientId, macAddress: client.macAddress })),
+  );
+  blockedByClientKey = new Map(
+    clients.map((client) => [
+      clientTotals.resolveKey(usageKey(client.clientId, client.macAddress)),
+      client.blocked === true,
+    ]),
   );
   for (const client of clients) {
     const entryId = entryIdOf(client);
@@ -756,8 +794,9 @@ export function setLiveThroughputEnabled(enabled: boolean): void {
 function recordAlertTransitions(transitions: AlertTransition[]): void {
   if (transitions.length === 0) return;
   for (const transition of transitions) {
-    const { source, key, atMs, kind } = transition;
-    if (kind === "fired") alertStore.open(source, key, atMs);
+    const { source, key, atMs, kind, spec } = transition;
+    if (kind === "fired")
+      alertStore.open(source, key, atMs, { label: spec.firing, severity: spec.severity });
     else alertStore.close(source, key, atMs);
     // The service's diary. It runs unattended under launchd with no window and
     // no operator, so "did it see the outage?" is answerable only from what it
@@ -1034,11 +1073,16 @@ async function pollClients(): Promise<void> {
  * 200 ms cadence cannot stack a second pause behind the first.
  */
 function runMeters(): void {
-  meters.resolve(
-    (key) => clientTotals.resolveKey(key),
-    (key) => clientTotals.totals(key).length > 0,
-  );
-  const transitions = meters.observe(clientTotals.lifetimes(), Date.now(), readBillingCycle());
+  const lifetimes = clientTotals.lifetimes();
+  meters.resolve({
+    keys: lifetimes.map((entry) => entry.clientKey),
+    resolveKey: (key) => clientTotals.resolveKey(key),
+  });
+  // Ahead of the retry scan below, which would otherwise send a write for a
+  // device that is already free.
+  for (const rule of releasedByHand(meters.all(), blockedByClientKey))
+    meters.notePauseState(rule.clientKey, "none", Date.now());
+  const transitions = meters.observe(lifetimes, Date.now());
   for (const transition of transitions) void deliverMeterTransition(transition);
   retryUnsentPauses();
 }
@@ -1049,20 +1093,15 @@ function retryUnsentPauses(): void {
   const nowMs = Date.now();
   // Cheap scan before asking the host anything: this runs on the 200 ms client
   // poll, and reading the account session decrypts a file off the keychain.
-  const stalled = meters
-    .all()
-    .filter(
-      (rule) =>
-        rule.autoPause &&
-        rule.pauseState === "failed" &&
-        nowMs - (rule.pauseCheckedMs ?? 0) >= PAUSE_RETRY_MS &&
-        usageBytes(rule) >= rule.allocationBytes,
-    );
-  if (stalled.length === 0 || readAccountSignedIn?.() !== true) return;
+  const stalled = stalledPauses(meters.all(), nowMs, PAUSE_RETRY_MS);
+  const owedRelease = stalledReleases(meters.all(), nowMs, PAUSE_RETRY_MS);
+  if ((stalled.length === 0 && owedRelease.length === 0) || readAccountSignedIn?.() !== true)
+    return;
   for (const rule of stalled) {
     meters.notePauseState(rule.clientKey, "pending", nowMs);
     void sendMeterPause(rule.clientKey, true, nowMs);
   }
+  for (const rule of owedRelease) void sendMeterPause(rule.clientKey, false, nowMs);
 }
 
 /**
@@ -1324,7 +1363,7 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
     const reset = client ? clientTotals.reset(client, Date.now()) : false;
     if (reset) clientTotals.snapshot();
     // The rule reads this counter, so emptying it empties what the rule counted.
-    if (reset && client) meters.restart(client, Date.now(), readBillingCycle());
+    if (reset && client) meters.restart(client, Date.now());
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify({ reset }));
     return;
@@ -1360,12 +1399,14 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
       if (client) {
         const removed = clientTotals.remove(client);
         clientTotals.snapshot();
-        meters.remove(client);
+        const going = meters.find(client);
+        standDownMeterRule(client, () => meters.remove(client));
+        retireMeterAlert(going, Date.now());
         response.end(JSON.stringify({ removed }));
       } else {
         clientTotals.clear();
         clientTotals.snapshot();
-        meters.clear();
+        void standDownAllMeterRules();
         response.end(JSON.stringify({ cleared: true }));
       }
       return;
@@ -1404,7 +1445,10 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
     response.setHeader("Content-Type", "application/json");
     const client = url.searchParams.get("client");
     if (request.method === "DELETE") {
-      response.end(JSON.stringify({ removed: client ? meters.remove(client) : false }));
+      const going = client ? meters.find(client) : undefined;
+      const removed = client ? standDownMeterRule(client, () => meters.remove(client)) : false;
+      if (removed) retireMeterAlert(going, Date.now());
+      response.end(JSON.stringify({ removed }));
       return;
     }
     if (request.method === "POST") {
@@ -1427,9 +1471,9 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
   // Start one rule's allowance over, leaving the device's own usage standing.
   if (url.pathname === "/api/clients/meters/reset" && request.method === "POST") {
     const client = url.searchParams.get("client");
-    const rule = client ? meters.restart(client, Date.now(), readBillingCycle()) : undefined;
-    // Released with it: nothing else would lift the pause until the cycle rolled.
-    if (rule && client) void releaseMeterPause(client);
+    const rule = client
+      ? standDownMeterRule(client, () => meters.restart(client, Date.now()))
+      : undefined;
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify({ rule: rule ? withUsage(rule) : null }));
     return;
@@ -1553,10 +1597,10 @@ function claimDataDir(): void {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       const owner = Number(readFileSync(LOCK_FILE, "utf8").trim());
       if (owner && owner !== process.pid && processAlive(owner)) {
-        console.error(
-          `[historian] another collector (pid ${owner}) already owns ${DATA_DIR} — refusing to start a second writer`,
+        refuseToStart(
+          `another collector (pid ${owner}) already owns ${DATA_DIR} — refusing to start a second writer`,
+          true,
         );
-        process.exit(1);
       }
       // The recorded owner is gone; drop its stale lock and race for it again.
       try {
@@ -1566,7 +1610,15 @@ function claimDataDir(): void {
       }
     }
   }
-  console.error(`[historian] could not claim ${DATA_DIR} — refusing to start`);
+  refuseToStart(`could not claim ${DATA_DIR} — refusing to start`);
+}
+
+/** An embedded recorder shares its host's process, so it raises rather than exits
+ *  and leaves the host to decide whether it can carry on without a recorder. */
+function refuseToStart(reason: string, busy = false): never {
+  console.error(`[historian] ${reason}`);
+  if (process.env.HISTORIAN_EMBED === "1")
+    throw busy ? new CollectorBusyError(reason) : new Error(reason);
   process.exit(1);
 }
 
@@ -1591,33 +1643,6 @@ function releaseDataDir(): void {
 
 claimDataDir();
 process.on("exit", releaseDataDir);
-
-// Enforcement in dev, where the recorder is this standalone process rather than
-// the one Electron main embeds. The account lives in the Vite dev server's cloud
-// proxy — the same binding the window's own pause goes through — and the cookie
-// it signs with sits beside this process. Without this a rule set in dev is
-// evaluated and announced but never acted on, which is not a difference dev
-// should have from the built app.
-const DEV_CLOUD_ORIGIN = process.env.HISTORIAN_DEV_CLOUD_ORIGIN;
-if (DEV_CLOUD_ORIGIN) {
-  const cookieFile = resolve(".starlink-cookie");
-  setAccountSessionReader(() => {
-    try {
-      return readFileSync(cookieFile, "utf8").trim().length > 0;
-    } catch {
-      return false;
-    }
-  });
-  setDevicePauser(async (clientId, paused) => {
-    const response = await fetch(`${DEV_CLOUD_ORIGIN}/cloud/device`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ kind: "pause", clientId, paused }),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-    if (!response.ok) throw new Error(`cloud proxy answered ${response.status}`);
-  });
-}
 
 // The dev process serves the collector over loopback HTTP. An embedded host (the
 // Electron app) sets HISTORIAN_EMBED and calls handleRequest directly instead, so

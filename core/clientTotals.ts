@@ -115,6 +115,9 @@ export interface Snapshot {
   /** Merged-away identity -> the key it was folded into, as pairs. Optional: a
    *  stored snapshot may hold no merges, and must still restore at this version. */
   aliases?: [string, string][];
+  /** Alias sources the user asserted by merging. An adoption's alias is inferred,
+   *  and only these survive the old identity reporting again. */
+  userMerged?: string[];
   /** Pairs the user has said are different devices. The other half of `aliases`:
    *  both record an answer about identity that no signal can derive, so both have
    *  to survive a restart or the same question is asked forever. */
@@ -277,6 +280,8 @@ export class ClientTotalsCore {
    *  they name: compact() drops buckets by last-seen, and an alias whose source
    *  bucket is long gone is exactly the one an old history row still needs. */
   private aliases = new Map<string, string>();
+  /** Sources of an alias the user asserted, as against one adoption inferred. */
+  private userMerged = new Set<string>();
   /** Pairs answered "different devices", by canonical pair name, holding the two
    *  keys as asked. Stored raw and compared resolved, so the answer still applies
    *  after either side is merged forward onto a newer identity. */
@@ -292,10 +297,12 @@ export class ClientTotalsCore {
     this.sharedMacs.clear();
     this.aliases.clear();
     this.rejectedPairs.clear();
+    this.userMerged.clear();
     for (const state of snapshot.totals)
       this.states.set(keyOf(state.clientId, state.macAddress), state);
     for (const mac of snapshot.sharedMacs) this.sharedMacs.add(mac);
     for (const [from, to] of snapshot.aliases ?? []) this.aliases.set(from, to);
+    for (const from of snapshot.userMerged ?? []) this.userMerged.add(from);
     for (const [a, b] of snapshot.rejectedPairs ?? [])
       this.rejectedPairs.set(pairKey(a, b), [a, b]);
   }
@@ -307,6 +314,7 @@ export class ClientTotalsCore {
       totals: [...this.states.values()],
       sharedMacs: [...this.sharedMacs],
       aliases: [...this.aliases],
+      userMerged: [...this.userMerged],
       rejectedPairs: [...this.rejectedPairs.values()],
     };
   }
@@ -410,7 +418,11 @@ export class ClientTotalsCore {
     liveKeys: Set<string>,
     captiveClientId?: string,
   ): void {
-    const key = keyOf(clientId, macAddress);
+    // An identity the user merged away routes into its survivor however often it
+    // comes back. An adoption's alias does not: that one is inferred, and the old
+    // id reporting again is evidence against it.
+    const raw = keyOf(clientId, macAddress);
+    const key = this.userMerged.has(raw) ? this.resolveKey(raw) : raw;
     let state = this.states.get(key);
     if (!state)
       state = this.adoptOrCreate(clientId, macAddress, atMs, name, liveKeys, key, captiveClientId);
@@ -602,8 +614,11 @@ export class ClientTotalsCore {
    * Returns false if either key is unknown or they resolve to one bucket.
    */
   merge(fromKey: string, toKey: string): boolean {
-    const from = this.resolveKey(fromKey);
-    const to = this.resolveKey(toKey);
+    // A key holding a bucket names that bucket, aliased or not — it is the one the
+    // caller is looking at, and following the alias past it would fold nothing.
+    const at = (key: string) => (this.states.has(key) ? key : this.resolveKey(key));
+    const from = at(fromKey);
+    const to = at(toKey);
     if (from === to) return false;
     const source = this.states.get(from);
     const survivor = this.states.get(to);
@@ -650,6 +665,7 @@ export class ClientTotalsCore {
     // this one, so every old key reaches the survivor in a single hop.
     for (const [alias, target] of this.aliases) if (target === from) this.aliases.set(alias, to);
     this.aliases.set(from, to);
+    this.userMerged.add(from);
     return true;
   }
 

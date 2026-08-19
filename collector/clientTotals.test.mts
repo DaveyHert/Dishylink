@@ -462,8 +462,8 @@ describe("ClientTotalsStore.merge", () => {
 
   /** Two buckets for one device, the way a private-MAC rotation leaves them:
    *  an idle bucket on the abandoned identity and a live one on the new. */
-  function forked(): ClientTotalsStore {
-    const store = tempStore();
+  function forked(path = tempPath()): ClientTotalsStore {
+    const store = new ClientTotalsStore(path);
     const idle = T0 - 36 * 3_600_000; // seen a day and a half ago
     store.observe(OLD, OLD_MAC, 0, 0, idle, "MacBook Pro M1", live(OLD));
     store.observe(OLD, OLD_MAC, 542_000, 44_000, idle + 1_000, "MacBook Pro M1", live(OLD));
@@ -481,6 +481,38 @@ describe("ClientTotalsStore.merge", () => {
     expect(total.txBytes).toBe(44_000 + 3_000);
     expect(total.clientId).toBe(NEW);
     expect(total.macAddress).toBe(NEW_MAC);
+  });
+
+  it("folds a bucket left standing on an already-merged identity", () => {
+    // Written the way a build that let the retired key mint a fresh bucket left
+    // it: the survivor, the alias onto it, and an orphan back on the merged-away
+    // key. Nothing reaches that state now, but a snapshot from before still holds
+    // it, and the offer to merge keeps coming back until this folds.
+    const path = tempPath();
+    const store = forked(path);
+    store.snapshot();
+    const orphan = JSON.parse(readFileSync(path, "utf8")).totals.find(
+      (total: { clientId: number }) => total.clientId === OLD,
+    );
+    store.merge(String(OLD), String(NEW));
+    store.snapshot();
+    const stranded = JSON.parse(readFileSync(path, "utf8"));
+    stranded.totals.push(orphan);
+    writeFileSync(path, JSON.stringify(stranded));
+
+    const reloaded = new ClientTotalsStore(path);
+    expect(reloaded.totals(String(OLD))).toHaveLength(1);
+    expect(reloaded.merge(String(OLD), String(NEW))).toBe(true);
+    expect(reloaded.totals(String(OLD))).toHaveLength(0);
+    expect(reloaded.mergeCandidates(T0 + 4_000)).toEqual([]);
+  });
+
+  it("keeps a merged-away identity merged when the device reappears under it", () => {
+    const store = forked();
+    store.merge(String(OLD), String(NEW));
+    store.observe(OLD, OLD_MAC, 600_000, 50_000, T0 + 2_000, "MacBook Pro M1", live(OLD));
+    expect(store.totals(String(OLD))).toHaveLength(0);
+    expect(store.mergeCandidates(T0 + 3_000)).toEqual([]);
   });
 
   it("re-baselines, so the reading after a merge adds nothing", () => {

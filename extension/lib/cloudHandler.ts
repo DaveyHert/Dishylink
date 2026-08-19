@@ -149,6 +149,12 @@ async function setCookieRule(cookie: string | null): Promise<void> {
   });
 }
 
+/** Whether a session is held, so a surface can say up front whether a data limit
+ *  will actually be enforced rather than only after one is not. */
+export function accountSignedIn(): boolean {
+  return ourCookie !== null;
+}
+
 /** Answer one /cloud/* request from the dashboard. */
 export async function handleCloudRequest(request: CloudRequest): Promise<CloudReply> {
   const route = new URL(request.path, "http://extension.invalid").pathname;
