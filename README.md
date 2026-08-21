@@ -24,80 +24,132 @@ your plan and billing figures and enables supported router controls such as
 pausing connected devices. Your session remains stored locally and is sent
 only to Starlink.
 
-## What it shows
+## <img src="docs/platforms/download.svg" alt="" width="22" height="22" align="top"> Download
 
-- **Stat tiles** — live downlink/uplink, pop-ping latency, power draw (watts),
-  60s ping-success rate, sky-obstruction fraction, each with a sparkline and an
-  expandable detail panel.
-- **Throughput chart** — down + up over 15m/1h/6h windows on the dashboard, and
-  day/week/month from recorded history (not just what's in the current tab).
-- **Latency chart** — bucketed _max_ so spikes survive downsampling; outages
-  drawn as red bands.
-- **Energy / power chart** — the dish's actual draw over time with kWh
-  totals per day/week/month, honest about any recording gaps.
-- **Sky obstruction map** — the dish's 123×123 SNR grid rendered as a polar
-  sky dome; obstructed cells escalate through a status palette.
-- **Obstruction time-lapse** — scrub back through hourly snapshots of the sky
+| Platform                                                                                     | Format    | Architecture           |                                                                                                                                                          |
+| :------------------------------------------------------------------------------------------- | :-------- | :--------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------: |
+| <img src="docs/platforms/apple.svg" alt="" width="16" align="top"> **macOS** 12+             | `DMG`     | `arm64`: Apple silicon |                                       [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest]                                        |
+| <img src="docs/platforms/apple.svg" alt="" width="16" align="top"> **macOS** 12+             | `DMG`     | `x64`: Intel           |                                       [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest]                                        |
+| <img src="docs/platforms/windows.svg" alt="" width="16" align="top"> **Windows** 10+         | `EXE`     | Universal              |                                       [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest]                                        |
+| <img src="docs/platforms/windows.svg" alt="" width="16" align="top"> **Windows** 10+         | `EXE`     | `x64`                  |                                       [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest]                                        |
+| <img src="docs/platforms/windows.svg" alt="" width="16" align="top"> **Windows** 10+         | `EXE`     | `arm64`                |                                       [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest]                                        |
+| <img src="landing/public/browsers/chrome.svg" alt="" width="16" align="top"> **Chrome** 144+ | Extension | Any                    | [<img src="docs/platforms/download.svg" alt="Download" width="16">](https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna) |
+| <img src="landing/public/browsers/edge.svg" alt="" width="16" align="top"> **Edge**          | Extension | Any                    | [<img src="docs/platforms/download.svg" alt="Download" width="16">](https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna) |
+| <img src="landing/public/browsers/firefox.svg" alt="" width="16" align="top"> **Firefox**    | Extension | Any                    |                     [<img src="docs/platforms/download.svg" alt="Download" width="16">](https://addons.mozilla.org/addon/dishylink/)                     |
+
+[latest]: https://github.com/DaveyHert/dishylink/releases/latest
+
+Not sure which to pick? On Windows, take Universal. On macOS, take `arm64` for
+Apple silicon (M1 and later) or `x64` for Intel.
+
+## Features
+
+### What it shows
+
+- **Stat tiles**: live downlink and uplink, pop-ping latency, power draw in watts,
+  60-second ping-success rate and sky-obstruction fraction. Each carries a
+  sparkline and opens into a detail panel.
+- **Throughput chart**: download and upload across 15m, 1h and 6h windows on the
+  dashboard, or by day, week and month from recorded history rather than only what
+  the current tab has seen.
+- **Latency chart**: bucketed by _max_, so spikes survive downsampling instead of
+  averaging away. Outages are drawn as red bands.
+- **Energy and power chart**: what the dish actually draws over time, with kWh
+  totals by day, week and month, and honest gaps wherever recording stopped.
+- **Sky obstruction map**: the dish's 123×123 SNR grid drawn as a polar sky dome,
+  with obstructed cells escalating through a status palette.
+- **Obstruction time-lapse**: scrub back through hourly snapshots of the sky
   survey, with LIVE as the last stop.
-- **Sky view** — a full-viewport scene of the dome, this dish, and the live
-  satellite constellation overhead; click a satellite for its pass details.
-- **Alignment dials** — rotation and tilt against the desired azimuth/elevation
+- **Sky view**: a full-viewport scene of the dome, your dish, and the satellite
+  constellation passing overhead. Click any satellite for its pass details.
+- **Alignment dials**: rotation and tilt against the desired azimuth and elevation
   band, ported from the dish's own web app.
-- **Data usage** — self-measured download/upload volume by day/week/month, plus
-  **per-device usage** for the billing month from the router's own per-client
-  counters: name your devices, see vendor and device type, last-seen times.
-- **Network** — router radio temps, client list, per-client throughput, and
-  the router's own event log.
-- **Outage + thermal event log**, terminal panel — firmware, GPS, alignment,
-  mesh routers, alerts.
-- **Speed test**, **alerts** with severity and an in-app bell, light/dark/system
-  instrument themes.
-- **Cloud account tab** (optional, opt-in) — your Starlink plan, billing
-  cycles, and authoritative monthly data usage, plus authenticated controls
-  supported by the connected router.
+- **Data usage**: self-measured download and upload volume by day, week and month,
+  plus **per-device usage** for the billing month taken from the router's own
+  per-client counters. Name your devices and see vendor, device type and last-seen
+  times.
+- **Network**: router radio temperatures, the client list, per-client throughput
+  and the router's own event log.
+- **Event logs**: outages, thermal events, and a terminal panel covering firmware,
+  GPS, alignment, mesh routers and alerts.
+- **Speed test and alerts**: on-demand speed tests, alerts graded by severity with
+  an in-app bell, and light, dark or system instrument themes.
+- **Cloud account tab** (optional, opt-in): your Starlink plan, billing cycles and
+  authoritative monthly data usage, plus the authenticated controls your router
+  supports.
 
-## What it controls
+### What it controls
 
 Monitoring is only half of it. Most settings write to the dish or router over
 the same LAN API; controls that current firmware rejects locally are identified
 below as requiring an optional Starlink account connection:
 
-- **Snow melt** — automatic, always on, or off.
-- **Sleep schedule** — power the dish down for a set number of hours each day.
-- **Software updates** — pick the reboot window, or defer updates for 3 days.
-- **Maintenance** — reboot the dish, reset the learned obstruction map, and
+- **Snow melt**: automatic, always on, or off.
+- **Sleep schedule**: power the dish down for a set number of hours each day.
+- **Software updates**: pick the reboot window, or defer updates for 3 days.
+- **Maintenance**: reboot the dish, reset the learned obstruction map, and
   stow/unstow motorized kits.
-- **Router** — SSIDs and their bands, mesh node trust, firmware and country, and
+- **Router**: SSIDs and their bands, mesh node trust, firmware and country, and
   a router reboot.
-- **Connected devices** — pause or unpause another device while it is connected.
+- **Router address and subnet**: point Dishylink at a router that isn't on the
+  default address, and change the address range the router hands out. Changing the
+  subnet needs a connected account.
+- **Custom DNS**: point the router at your own resolvers.
+- **Bypass mode**: put the router into bridge mode for your own networking gear.
+- **Connected devices**: pause or unpause another device while it is connected.
   Available in the desktop app and web development harness, this control requires
   an optional Starlink account sign-in: Dishylink reads the router configuration
   locally, prepares the smallest accepted client update on the trusted host, and
   sends it only to Starlink's authenticated device endpoint. The device running
-  Dishylink cannot pause itself. The browser extension does not expose this control
+  Dishylink cannot pause itself, which is what **Your device on this network** in
+  app settings pins down. The browser extension does not expose this control
   because ordinary desktop extensions cannot reliably read the host computer's LAN
   IP or MAC address. Although the extension can send the update, it cannot prove
   which router client is itself and therefore cannot safely prevent self-pausing.
-- **Copy debug data** — diagnostics + status + config as JSON, for bug reports.
+- **Copy debug data**: diagnostics + status + config as JSON, for bug reports.
 
-Custom DNS, bypass mode, and content filtering are deliberately _not_ exposed: a
-bad write there can take the WiFi down until a physical reset.
+Content filtering is deliberately _not_ exposed: a bad write there can take the
+WiFi down until a physical reset.
 
-## Three ways to run it
+### Network rules
 
-Dishylink ships as three independent products from one codebase — pick
-whichever fits:
+Meter any device on your network and pause it automatically when it goes over.
+
+- **Three kinds of limit**: a data allowance, a schedule that pauses by the clock,
+  or a countdown that runs for a set stretch of time.
+- **One device or a group**: meter a device on its own, or group several together.
+  A group can either pool its allowance, so members spend from one shared budget
+  and run out together, or give each member the full allowance to spend
+  independently.
+- **One list for everything**: every rule on the network appears in one place,
+  whether you wrote it there or from a device's own card, each showing how much of
+  its limit is left.
+- Rules use the same account-connected pausing described above, including the
+  protection that stops Dishylink pausing the device it is running on.
+
+## Three ways to run it in dev
+
+Dishylink ships as three independent products from one codebase. To run any of
+them from source:
 
 ```bash
 npm install
 
-npm run dev             # web dev harness — requires being on the Starlink LAN
-npm run dev:electron    # desktop app (Mac/Windows), packaged via electron-builder
-npm run dev:extension   # browser extension (Chrome, Edge, Firefox, via WXT)
+npm run dev              # web harness on localhost:5173
+npm run dev:electron     # desktop app on Mac and Linux
+npm run dev:electron:win # desktop app on Windows
+npm run dev:extension    # browser extension, loaded unpacked from .output/ (WXT)
 ```
 
-They don't talk to each other or share a runtime — each independently polls
-the dish/router and records its own history. Packaging:
+Windows needs `dev:electron:win` rather than `dev:electron`: it sets the
+environment variable through `cross-env` and skips the icon generation step,
+neither of which works from a Windows shell.
+
+All three read the real hardware, so you have to be on the Starlink LAN for
+anything to appear. Tests and typechecks run anywhere.
+
+They don't talk to each other or share a runtime: each independently polls the
+dish/router and records its own history. Packaging:
 
 ```bash
 npm run pack:mac        # signed Mac build
@@ -106,6 +158,16 @@ npm run build:extension # Chromium extension bundle
 npm run build:extension:firefox
 npm run build:extension:edge
 ```
+
+Useful while working on it:
+
+```bash
+npm run historian       # standalone energy collector, serving /api/energy
+npm run test:watch      # vitest in watch mode
+npm run lint:fix        # eslint with --fix
+```
+
+A fresh desktop build opens with no history by design: it fills up as it runs.
 
 ### Desktop app (Mac, Windows)
 
