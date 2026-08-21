@@ -10,6 +10,7 @@
 
 import { type DishModelMesh } from "./dishModels/types";
 import type { DishModel } from "../../lib/dishMesh";
+import { gridCellToEnu, type ObstructionMapFrame } from "../obstruction/obstructionFrame";
 
 export interface SkySurvey {
   gridSize: number;
@@ -18,6 +19,8 @@ export interface SkySurvey {
   kinds: Uint8Array;
   boresightAzimuthDeg: number;
   boresightElevationDeg: number;
+  /** How the grid is oriented. Defaults to earth-north when omitted (tests). */
+  mapReferenceFrame?: ObstructionMapFrame;
   /** Which kit to draw at the centre. Rides the survey because it comes from the
    *  same status reply as the boresight, and lands just as late — so the rebuild
    *  that follows a status poll picks the model up without a second channel. */
@@ -79,14 +82,18 @@ function spokeAt(east: number, north: number): number {
  */
 export function observedEnvelope(survey: SkySurvey): Float64Array | null {
   const { gridSize, kinds } = survey;
-  const centre = (gridSize - 1) / 2;
   const deepest = new Float64Array(ENVELOPE_SPOKES).fill(-1);
   let anyReading = false;
   for (let row = 0; row < gridSize; row++) {
     for (let col = 0; col < gridSize; col++) {
       if (kinds[row * gridSize + col] === 0) continue;
-      const east = (col - centre) / centre;
-      const north = (centre - row) / centre;
+      const { east, north } = gridCellToEnu(
+        row,
+        col,
+        gridSize,
+        survey.mapReferenceFrame ?? "FRAME_EARTH",
+        survey.boresightAzimuthDeg,
+      );
       const radial = Math.hypot(east, north);
       if (radial > 1) continue;
       anyReading = true;
@@ -133,14 +140,18 @@ export function observedEnvelope(survey: SkySurvey): Float64Array | null {
  */
 export function buildDomePoints(survey: SkySurvey, trimUnmapped = false) {
   const { gridSize, kinds } = survey;
-  const centre = (gridSize - 1) / 2;
   const maxTheta = (survey.maxThetaDeg * Math.PI) / 180;
   const envelope = trimUnmapped ? observedEnvelope(survey) : null;
   const out: number[] = [];
   for (let row = 0; row < gridSize; row++) {
     for (let col = 0; col < gridSize; col++) {
-      const east = (col - centre) / centre;
-      const north = (centre - row) / centre;
+      const { east, north } = gridCellToEnu(
+        row,
+        col,
+        gridSize,
+        survey.mapReferenceFrame ?? "FRAME_EARTH",
+        survey.boresightAzimuthDeg,
+      );
       const radial = Math.hypot(east, north);
       if (radial > 1) continue;
       const kind = kinds[row * gridSize + col];

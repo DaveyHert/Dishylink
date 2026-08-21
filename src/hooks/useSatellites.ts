@@ -8,6 +8,11 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { DishObstructionMapJson } from "@core/dishClient";
+import type { DishModel } from "../lib/dishMesh";
+import {
+  resolveObstructionFrame,
+  skyDirectionToGrid,
+} from "../components/obstruction/obstructionFrame";
 import {
   loadStarlinkTles,
   StarlinkTracker,
@@ -71,29 +76,40 @@ const EMPTY_STATS: SatelliteStats = {
 };
 
 /** Is the sky cell toward this az/el clear according to the dish's map? */
-function isUnobstructed(sky: SatelliteSky, obstructionMap: DishObstructionMapJson | null): boolean {
+function isUnobstructed(
+  sky: SatelliteSky,
+  obstructionMap: DishObstructionMapJson | null,
+  dishModel: DishModel,
+  boresightAzimuthDeg: number,
+): boolean {
   const grid = obstructionMap?.snr;
   if (!grid || grid.length === 0) return true;
   const gridSize = obstructionMap.numRows ?? Math.round(Math.sqrt(grid.length));
   const maxThetaDeg = obstructionMap.maxThetaDeg ?? 80;
   const radialFraction = (90 - sky.elevationDeg) / maxThetaDeg;
   if (radialFraction > 1) return false;
-  const azimuthRad = (sky.azimuthDeg * Math.PI) / 180;
-  const gridCenter = (gridSize - 1) / 2;
-  const columnIndex = Math.round(gridCenter + Math.sin(azimuthRad) * radialFraction * gridCenter);
-  const rowIndex = Math.round(gridCenter - Math.cos(azimuthRad) * radialFraction * gridCenter);
-  const fractionUsable = grid[rowIndex * gridSize + columnIndex];
+  const frame = resolveObstructionFrame(obstructionMap.mapReferenceFrame, dishModel);
+  const { row, col } = skyDirectionToGrid(
+    sky.azimuthDeg,
+    radialFraction,
+    gridSize,
+    frame,
+    boresightAzimuthDeg,
+  );
+  const fractionUsable = grid[row * gridSize + col];
   return fractionUsable === undefined || fractionUsable < 0 || 1 - fractionUsable <= 0.05;
 }
 
 function pickServingCandidate(
   inView: SatelliteSky[],
   obstructionMap: DishObstructionMapJson | null,
+  dishModel: DishModel,
+  boresightAzimuthDeg: number,
 ): SatelliteSky | null {
   let bestUnobstructed: SatelliteSky | null = null;
   for (const sky of inView) {
     if (sky.elevationDeg < SERVING_ELEVATION_FLOOR_DEG) break; // sorted by elevation
-    if (isUnobstructed(sky, obstructionMap)) {
+    if (isUnobstructed(sky, obstructionMap, dishModel, boresightAzimuthDeg)) {
       bestUnobstructed = sky;
       break;
     }
@@ -106,6 +122,8 @@ function pickServingCandidate(
 export function useSatellites(
   observerLocation: ObserverLocation | null,
   obstructionMap: DishObstructionMapJson | null,
+  dishModel: DishModel = "unknown",
+  boresightAzimuthDeg = 0,
 ): SatelliteFeed {
   const [stats, setStats] = useState<SatelliteStats>(EMPTY_STATS);
   const [load, setLoad] = useState<EphemerisLoad>(LOADING);
@@ -113,10 +131,10 @@ export function useSatellites(
   // What the stats interval reads the current obstruction map from, so a new map
   // does not restart the tracker. Written after commit rather than while
   // rendering, which React may repeat or discard.
-  const obstructionMapRef = useRef(obstructionMap);
+  const lookupRef = useRef({ obstructionMap, dishModel, boresightAzimuthDeg });
   useEffect(() => {
-    obstructionMapRef.current = obstructionMap;
-  }, [obstructionMap]);
+    lookupRef.current = { obstructionMap, dishModel, boresightAzimuthDeg };
+  }, [obstructionMap, dishModel, boresightAzimuthDeg]);
 
   const latitude = observerLocation?.latitudeDeg;
   const longitude = observerLocation?.longitudeDeg;
@@ -152,7 +170,13 @@ export function useSatellites(
 
         const updateStats = () => {
           const inView = tracker.finePass();
-          const servingCandidate = pickServingCandidate(inView, obstructionMapRef.current);
+          const lookup = lookupRef.current;
+          const servingCandidate = pickServingCandidate(
+            inView,
+            lookup.obstructionMap,
+            lookup.dishModel,
+            lookup.boresightAzimuthDeg,
+          );
           setStats((previousStats) => ({
             ...previousStats,
             inViewCount: inView.length,

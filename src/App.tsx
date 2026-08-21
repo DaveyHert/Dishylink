@@ -35,6 +35,7 @@ import { useLiveReadings } from "./hooks/useLiveReadings";
 import { formatThroughput } from "./lib/format";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { useTheme } from "./hooks/useTheme";
+import { dishModelFor } from "./lib/dishMesh";
 
 export default function App() {
   const { theme, cycleTheme } = useTheme();
@@ -58,7 +59,12 @@ export default function App() {
     telemetry.dishLocation?.lla,
   );
   const lanOnline = useLanPresence(telemetry.status, telemetry.connectionState);
-  const satellites = useSatellites(observerLocation, telemetry.obstructionMap);
+  const satellites = useSatellites(
+    observerLocation,
+    telemetry.obstructionMap,
+    dishModelFor(telemetry.status),
+    telemetry.status?.boresightAzimuthDeg ?? 0,
+  );
   useOutageNotifications(telemetry);
   const deviceAlerts = useDeviceAlerts(telemetry.status, telemetry.connectionState);
   const thermalEvents = useThermalEvents();
