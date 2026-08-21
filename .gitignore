@@ -15,9 +15,8 @@ collector/data
 .starlink-cookie
 .router-address
 
-# Claude Code's local settings/session state — machine-specific, not shared config.
+# Machine-specific agent state.
 .claude/
-CLAUDE.md
 
 # Working notes and throwaway probe scripts. Local to whoever is mid-task.
 HANDOFF.md
