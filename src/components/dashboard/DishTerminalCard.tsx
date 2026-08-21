@@ -6,20 +6,7 @@ import { formatAttitudeState, formatRelativeTime, formatUptime } from "../../lib
 import { FactGrid, FactRow } from "../ui/fact-row";
 import { DishIcon } from "../../assets/icons/DishIcon";
 import { ExpandIcon } from "../../assets/icons/ExpandIcon";
-
-/** Plan tier. The API's CONSUMER is what the Starlink app labels "Residential". */
-function formatServiceClass(classOfService?: string): string {
-  switch (classOfService) {
-    case "CONSUMER":
-      return "residential";
-    case "BUSINESS":
-      return "business";
-    case "BUSINESS_PLUS":
-      return "business plus";
-    default:
-      return (classOfService ?? "—").replaceAll("_", " ").toLowerCase();
-  }
-}
+import { formatServiceClass } from "./serviceClass";
 
 /** Why downlink is capped, if it is. NO_LIMIT / NO_RESTRICTION read as "none". */
 function formatBandwidthLimit(reason?: string): string {
@@ -107,7 +94,10 @@ export function DishTerminalCard({
     { label: "Country", value: status.deviceInfo?.countryCode ?? "—" },
     { label: "Uptime", value: formatUptime(Number(status.deviceState?.uptimeS ?? 0)) },
     { label: "Boot count", value: String(status.deviceInfo?.bootcount ?? "—") },
-    { label: "Service class", value: formatServiceClass(status.classOfService) },
+    {
+      label: "Service class",
+      value: formatServiceClass(status.classOfService, status.mobilityClass),
+    },
     {
       label: "Satellites in View (GPS)",
       value: status.gpsStats?.gpsValid ? `${status.gpsStats.gpsSats ?? 0} satellites` : "no fix",
