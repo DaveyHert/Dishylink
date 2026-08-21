@@ -13,6 +13,7 @@ import {
   resolveObstructionFrame,
   skyDirectionToGrid,
 } from "../components/obstruction/obstructionFrame";
+import { chooseServingCandidate, type ServingHold } from "../lib/servingSlot";
 import {
   loadStarlinkTles,
   StarlinkTracker,
@@ -100,25 +101,6 @@ function isUnobstructed(
   return fractionUsable === undefined || fractionUsable < 0 || 1 - fractionUsable <= 0.05;
 }
 
-function pickServingCandidate(
-  inView: SatelliteSky[],
-  obstructionMap: DishObstructionMapJson | null,
-  dishModel: DishModel,
-  boresightAzimuthDeg: number,
-): SatelliteSky | null {
-  let bestUnobstructed: SatelliteSky | null = null;
-  for (const sky of inView) {
-    if (sky.elevationDeg < SERVING_ELEVATION_FLOOR_DEG) break; // sorted by elevation
-    if (isUnobstructed(sky, obstructionMap, dishModel, boresightAzimuthDeg)) {
-      bestUnobstructed = sky;
-      break;
-    }
-  }
-  return (
-    bestUnobstructed ?? (inView[0]?.elevationDeg >= SERVING_ELEVATION_FLOOR_DEG ? inView[0] : null)
-  );
-}
-
 export function useSatellites(
   observerLocation: ObserverLocation | null,
   obstructionMap: DishObstructionMapJson | null,
@@ -151,6 +133,7 @@ export function useSatellites(
   useEffect(() => {
     if (!hasLocation) return;
     let disposed = false;
+    let hold: ServingHold | null = null;
     const timerIds: number[] = [];
     const retryIds: number[] = [];
 
@@ -171,19 +154,24 @@ export function useSatellites(
         const updateStats = () => {
           const inView = tracker.finePass();
           const lookup = lookupRef.current;
-          const servingCandidate = pickServingCandidate(
-            inView,
-            lookup.obstructionMap,
-            lookup.dishModel,
-            lookup.boresightAzimuthDeg,
+          // The 1 Hz sampler reads the boundary up to a second late: a fixed
+          // offset, not per-slot jitter.
+          const serving = chooseServingCandidate(inView, Date.now(), hold, (sky) =>
+            isUnobstructed(
+              sky,
+              lookup.obstructionMap,
+              lookup.dishModel,
+              lookup.boresightAzimuthDeg,
+            ),
           );
+          hold = serving.hold;
           setStats((previousStats) => ({
             ...previousStats,
             inViewCount: inView.length,
             serviceableCount: inView.filter(
               (sky) => sky.elevationDeg >= SERVING_ELEVATION_FLOOR_DEG,
             ).length,
-            servingCandidate,
+            servingCandidate: serving.candidate,
             constellationSize: tracker.constellationSize,
           }));
         };
