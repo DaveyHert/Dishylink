@@ -9,7 +9,7 @@
 // random hostname) carries nothing and falls back to a generic glyph.
 
 export type DeviceKind =
-  "phone" | "laptop" | "desktop" | "tablet" | "watch" | "tv" | "console" | "unknown";
+  "phone" | "laptop" | "desktop" | "tablet" | "watch" | "tv" | "console" | "light" | "unknown";
 
 // Most-specific first — "Galaxy Watch"/"Galaxy Tab" must beat the "galaxy" phone
 // hint, "Apple TV" must beat "apple".
@@ -47,6 +47,13 @@ const KIND_RULES: { kind: DeviceKind; tokens: string[]; text: string[] }[] = [
       "smarttv",
       "google tv",
     ],
+  },
+  // Ahead of "console" — a rename like "Console Lamp" is a lamp near a console,
+  // not the console itself.
+  {
+    kind: "light",
+    tokens: ["lamp", "light", "led"],
+    text: [],
   },
   {
     kind: "console",

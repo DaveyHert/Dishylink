@@ -1,16 +1,23 @@
-// The allowance, timer and membership controls, shared by every card that sets a
-// limit.
-//
-// One device or several is the only structural difference between a rule and a
-// group, so the same fields write both. A limit that read one way on a device and
-// another on a group would be two features wearing one name.
+// The allowance, timer and membership controls, shared by every form that sets a
+// limit, so a rule and the group it can become are never worded two ways.
 
 import { useMemo, useState } from "react";
-import { ChevronDownIcon, ChevronUpIcon, TimerIcon } from "lucide-react";
+import {
+  CalendarClockIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  GaugeIcon,
+  InfoIcon,
+  TimerIcon,
+} from "lucide-react";
 import { MAX_COUNTDOWN_MS, type MeterCycle } from "@core/dataMeter";
-import { Input } from "../ui/input";
-import { Slider } from "../ui/slider";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { classifyDevice } from "../../../lib/deviceKind";
+import { vendorForMac } from "../../../lib/macVendor";
+import { DeviceTypeIcon } from "../../../assets/icons/DeviceTypeIcon";
+import { Input } from "../../ui/input";
+import { Slider } from "../../ui/slider";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/select";
 import {
   CYCLE_OPTIONS,
   MINUTE_MS,
@@ -25,28 +32,86 @@ import {
   stepFor,
   type AllowanceDraft,
   type MemberCandidate,
+  type RuleMode,
 } from "./allowanceTerms";
 
-/** The chip that turns the form from an allowance into a countdown. Sits in the
- *  header, where it reads as which of the two this rule is rather than as a
- *  setting within one of them. */
-export function AllowanceModeToggle({ draft }: { draft: AllowanceDraft }) {
-  const { timer, setTimer } = draft;
+export type { RuleMode };
+
+const RULE_MODES: { mode: RuleMode; label: string; icon: typeof TimerIcon; detail: string }[] = [
+  {
+    mode: "limit",
+    label: "Limit",
+    icon: GaugeIcon,
+    detail: "Pauses once a set amount of data is used, and frees up when the cycle turns over.",
+  },
+  {
+    mode: "schedule",
+    label: "Schedule",
+    icon: CalendarClockIcon,
+    detail: "Pauses outside the hours you set, on chosen weekdays or dates.",
+  },
+  {
+    mode: "timer",
+    label: "Timer",
+    icon: TimerIcon,
+    detail: "Pauses once a countdown runs out, starting from when you save.",
+  },
+];
+
+/** Sits beside a rule form's title, explaining what each of the three kinds does. */
+export function RuleModesInfo() {
   return (
-    <button
-      type='button'
-      onClick={() => setTimer(!timer)}
-      aria-pressed={timer}
-      title={timer ? "Measure an allowance instead" : "Count down instead"}
-      className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-medium transition-colors ${
-        timer
-          ? "border-transparent bg-[color-mix(in_srgb,var(--ink)_88%,var(--baseline))] text-[var(--baseline)]"
-          : "border-border/70 text-muted-foreground hover:bg-accent hover:text-foreground"
-      }`}
-    >
-      <TimerIcon className='size-3.5' />
-      Timer
-    </button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type='button'
+          aria-label='What each kind of rule does'
+          className='grid size-5 shrink-0 translate-y-px cursor-help place-items-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground'
+        >
+          <InfoIcon className='size-3.5' />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side='bottom' align='start' className='max-w-64 space-y-1.5 text-left'>
+        {RULE_MODES.map((option) => (
+          <p key={option.mode}>
+            <span className='font-semibold'>{option.label}:</span> {option.detail}
+          </p>
+        ))}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+export function RuleModeToggle({
+  mode,
+  onChange,
+}: {
+  mode: RuleMode;
+  onChange: (next: RuleMode) => void;
+}) {
+  return (
+    <div className='flex items-center gap-1 rounded-full border border-border/70 p-0.5'>
+      {RULE_MODES.map((option) => {
+        const Icon = option.icon;
+        const on = mode === option.mode;
+        return (
+          <button
+            key={option.mode}
+            type='button'
+            onClick={() => onChange(option.mode)}
+            aria-pressed={on}
+            className={`flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors ${
+              on
+                ? "bg-[color-mix(in_srgb,var(--ink)_88%,var(--baseline))] text-[var(--baseline)]"
+                : "text-muted-foreground hover:bg-accent hover:text-foreground"
+            }`}
+          >
+            <Icon className='size-3.5' />
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -104,19 +169,15 @@ function CountdownFields({ draft }: { draft: AllowanceDraft }) {
   );
 }
 
-/**
- * Which devices this limit covers, and how it reaches them.
- *
- * One device is a rule on that device. More than one is a group, and the choice
- * below it is the whole difference a group makes: shared spends one allowance
- * between them, each gives every device the allowance on its own.
- */
+/** Which devices this limit covers, and how an allowance is divided between
+ *  them. More than one device makes it a group. */
 export function AppliesToField({
   candidates,
   selected,
   onToggle,
   shared,
   onSharedChange,
+  carriesAllowance,
   timer,
 }: {
   candidates: MemberCandidate[];
@@ -124,12 +185,21 @@ export function AppliesToField({
   onToggle: (clientKey: string) => void;
   shared: boolean;
   onSharedChange: (next: boolean) => void;
-  /** A countdown starts and ends on one clock for every member, so sharing and
-   *  each would do the same thing and the choice is not offered. */
+  /** Sharing one allowance or giving each its own only means something when the
+   *  rule sets an allowance, so without one the choice is not offered. */
+  carriesAllowance: boolean;
   timer: boolean;
 }) {
-  const [open, setOpen] = useState(selected.length > 1);
-  const summary = selected.length <= 1 ? "This device" : `${selected.length} devices`;
+  // Open when the selection is not the single device a card opens with — a rule
+  // written from the list starts with none, and a collapsed picker hides the one
+  // thing it still needs.
+  const [open, setOpen] = useState(selected.length !== 1);
+  const summary =
+    selected.length === 0
+      ? "Pick devices"
+      : selected.length === 1
+        ? "This device"
+        : `${selected.length} devices`;
   // Held still while the picker is open. The odometer's list refreshes on its own
   // poll, and a row that moves under the cursor is one the user has to chase.
   const rows = useMemo(() => orderedCandidates(candidates), [candidates]);
@@ -150,28 +220,41 @@ export function AppliesToField({
       </div>
       {open && (
         <>
-          <div className='thin-scroll max-h-36 space-y-0.5 overflow-y-auto rounded-lg border border-border/60 p-1'>
-            {rows.map((candidate) => (
-              <label
-                key={candidate.clientKey}
-                className='flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] transition-colors hover:bg-accent'
-              >
-                <input
-                  type='checkbox'
-                  className='size-3.5 accent-[var(--ink)]'
-                  checked={selected.includes(candidate.clientKey)}
-                  onChange={() => onToggle(candidate.clientKey)}
-                />
-                <span className='truncate'>{candidate.name}</span>
-                {candidate.active && (
-                  <span className='ml-auto shrink-0 text-[10.5px] tracking-wide text-muted-foreground'>
-                    ACTIVE NOW
+          <div className='thin-scroll max-h-52 space-y-0.5 overflow-y-auto rounded-lg border border-border/60 p-1'>
+            {rows.map((candidate) => {
+              const vendor = vendorForMac(candidate.macAddress);
+              return (
+                <label
+                  key={candidate.clientKey}
+                  className='flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] transition-colors hover:bg-accent'
+                >
+                  <input
+                    type='checkbox'
+                    className='size-3.5 shrink-0 accent-[var(--ink)]'
+                    checked={selected.includes(candidate.clientKey)}
+                    onChange={() => onToggle(candidate.clientKey)}
+                  />
+                  <DeviceTypeIcon
+                    kind={classifyDevice(candidate.name)}
+                    size={18}
+                    className='shrink-0 text-ink-secondary'
+                  />
+                  <span className='flex min-w-0 flex-col gap-px'>
+                    <span className='truncate'>{candidate.name}</span>
+                    {vendor && (
+                      <span className='truncate text-[11px] text-muted-foreground'>{vendor}</span>
+                    )}
                   </span>
-                )}
-              </label>
-            ))}
+                  {candidate.active && (
+                    <span className='ml-auto shrink-0 text-[10.5px] tracking-wide text-muted-foreground'>
+                      ACTIVE NOW
+                    </span>
+                  )}
+                </label>
+              );
+            })}
           </div>
-          {selected.length > 1 && !timer && (
+          {selected.length > 1 && carriesAllowance && (
             <div className='grid grid-cols-2 gap-2 pt-1'>
               <MemberModeChoice
                 selected={!shared}
@@ -187,9 +270,11 @@ export function AppliesToField({
               />
             </div>
           )}
-          {selected.length > 1 && timer && (
+          {selected.length > 1 && !carriesAllowance && (
             <p className='pt-1 text-[11.5px] text-muted-foreground'>
-              All {selected.length} devices start and end on one clock.
+              {timer
+                ? `All ${selected.length} devices start and end on one clock.`
+                : `These hours apply to all ${selected.length} devices.`}
             </p>
           )}
         </>
@@ -267,7 +352,7 @@ export function AllowanceFields({ draft }: { draft: AllowanceDraft }) {
                 >
                   {option.value === "billing"
                     ? billingDay === null
-                      ? "Starlink billing — needs your account"
+                      ? "Starlink billing (needs your account)"
                       : `Starlink billing (${billingDay})`
                     : option.label}
                 </SelectItem>

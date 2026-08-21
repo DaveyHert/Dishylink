@@ -15,7 +15,7 @@ import { DeviceSignalIcon } from "../../assets/icons/DeviceSignalIcon";
 import { MeterIcon } from "../../assets/icons/MeterIcon";
 import { usageKey } from "@core/clientUsage";
 import { useMeterIndicators } from "../../hooks/useDataMeter";
-import { METER_INDICATOR_COLOR, type MeterIndicator } from "./meterIndicator";
+import { METER_INDICATOR_COLOR, type MeterIndicator } from "./rules/meterIndicator";
 import { bandLabel, clientEntryKey, displayName, signalQuality } from "./networkFormat";
 
 export function NetworkRow({
@@ -78,7 +78,7 @@ export function NetworkRow({
           {meterIndicator && (
             <MeterIcon
               active
-              className={`size-[21px] flex-none ${METER_INDICATOR_COLOR[meterIndicator] || "text-muted-foreground"}`}
+              className={`size-[18px] flex-none ${METER_INDICATOR_COLOR[meterIndicator] || "text-muted-foreground"}`}
             />
           )}
           {paused && <Badge>{meterIndicator === "held" ? "Paused · limit" : "Paused"}</Badge>}

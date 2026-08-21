@@ -14,10 +14,10 @@ import { DeviceFactsList } from "./DeviceFactsList";
 import { DeviceNameEditor, RenameButton } from "./DeviceNameEditor";
 import { DeviceSignalIcon } from "../../assets/icons/DeviceSignalIcon";
 import { MeterIcon } from "../../assets/icons/MeterIcon";
-import { METER_INDICATOR_COLOR, meterIndicatorForRule } from "./meterIndicator";
+import { METER_INDICATOR_COLOR, meterIndicatorForRule } from "./rules/meterIndicator";
 import { DeviceThroughput } from "./DeviceThroughput";
-import { DataMeterDialog } from "./DataMeterDialog";
-import type { MemberCandidate } from "./allowanceTerms";
+import { DataMeterDialog } from "./rules/DataMeterDialog";
+import type { MemberCandidate } from "./rules/allowanceTerms";
 import { useDataMeter } from "../../hooks/useDataMeter";
 import { buildDeviceFacts } from "./deviceFacts";
 import { deviceRowSubtitle } from "./deviceRowSubtitle";
@@ -99,6 +99,9 @@ export function DeviceDetail({
   const meter = useDataMeter(
     client.macAddress ? usageKey(client.clientId, client.macAddress) : null,
   );
+  // A pause a rule is holding, as against one someone set by hand: the row in the
+  // list already tells the two apart, and the detail behind it has to agree.
+  const heldByRule = meter.rules.some((rule) => rule.holding);
   const showPauseControl = clientPauseControlAvailable({
     clientId: client.clientId,
     isThisDevice,
@@ -196,7 +199,7 @@ export function DeviceDetail({
               {client.clientId}
             </span>
           )}
-          {paused && <Badge className='mt-1'>Paused</Badge>}
+          {paused && <Badge className='mt-1'>{heldByRule ? "Paused · limit" : "Paused"}</Badge>}
         </div>
         <div className='flex items-center justify-end gap-1.5'>
           {showMeterControl && client.macAddress && (
@@ -296,6 +299,7 @@ export function DeviceDetail({
           meter={meter}
           clientKey={usageKey(client.clientId, client.macAddress)}
           deviceName={name}
+          macAddress={client.macAddress}
           candidates={meterCandidates}
           open={editingMeter}
           onOpenChange={setEditingMeter}

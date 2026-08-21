@@ -55,20 +55,22 @@ import { MeterStore } from "./meterStore.mts";
 import { DeviceGroupStore } from "./groupStore.mts";
 import { CollectorBusyError } from "./collectorLock.mts";
 import {
-  allowanceSpent,
   announcementSubject,
   announcesAsGroup,
   chargedBytes,
   collapseGroupAnnouncements,
   cycleFromParams,
   MAX_COUNTDOWN_MS,
-  releasedByHand,
+  ruleHoldsDevice,
+  ruleSpent,
   sharedUsageByGroup,
-  stalledPauses,
-  stalledReleases,
+  usageBytes,
 } from "../core/dataMeter.ts";
 import type { MeterRule, MeterTransition } from "../core/dataMeter.ts";
+import { blocksLanded, pausesOwed, releasedByHand, releasesOwed } from "../core/devicePause.ts";
+import type { PauseState } from "../core/devicePause.ts";
 import type { DeviceGroup, GroupAllowanceMode } from "../core/deviceGroup.ts";
+import { parseScheduleParam } from "../core/schedule.ts";
 import { CONNECT_ACCOUNT_ADVICE, dataLimitAlertSpec } from "../core/dataMeterAlert.ts";
 import { ThroughputTracker } from "../core/throughputTracker.ts";
 import { usageKey } from "../core/clientUsage.ts";
@@ -454,18 +456,32 @@ function withUsage(
   sharedUsage: ReadonlyMap<string, number> = sharedUsageByGroup(meters.all()),
 ): MeterRule & {
   usageBytes: number;
+  ownUsageBytes: number;
   deviceName: string;
   reached: boolean;
+  pauseState: PauseState;
+  holding: boolean;
+  pauseError?: string;
   groupName?: string;
 } {
   const group = rule.groupId === undefined ? undefined : deviceGroups.find(rule.groupId);
   const nowMs = Date.now();
+  const pause = meters.pauses().get(rule.clientKey);
   return {
     ...rule,
     usageBytes: chargedBytes(rule, sharedUsage),
+    // What this device itself put through, which on a pooled member is not what
+    // the rule charges it. A card listing the members reads this.
+    ownUsageBytes: usageBytes(rule),
     // Decided here, where the group's sum and the countdown's clock both are. A
     // surface re-deriving it from the two figures below gets a timer wrong.
-    reached: allowanceSpent(rule, nowMs, sharedUsage),
+    reached: ruleSpent(rule, nowMs, sharedUsage),
+    // The device's block, carried on each of its rules: a card has a rule in hand
+    // and needs to say whether the device is actually off the network, and
+    // whether this rule is one of the reasons.
+    pauseState: pause?.state ?? "none",
+    holding: ruleHoldsDevice(rule),
+    ...(pause?.error === undefined ? {} : { pauseError: pause.error }),
     deviceName: meterDeviceName(rule.clientKey),
     // A group down to one device covers nothing but that device, so the card has
     // nothing to say about others.
@@ -487,24 +503,28 @@ function upsertMeterFrom(clientKey: string, params: URLSearchParams): MeterRule 
   const cycle = cycleFromParams(params, Date.now());
   const allocationBytes = Number(params.get("allocation"));
   const countdownMs = countdownFromParams(params);
+  const schedule = parseScheduleParam(params.get("schedule"));
   if (!cycle) return null;
-  // A countdown measures the clock, so it needs no allowance behind it.
-  if (countdownMs === null && (!Number.isFinite(allocationBytes) || allocationBytes <= 0))
+  // A countdown measures the clock and a timetable measures it too, so neither
+  // needs an allowance behind it.
+  if (
+    countdownMs === null &&
+    schedule === null &&
+    (!Number.isFinite(allocationBytes) || allocationBytes <= 0)
+  )
     return null;
   const counters = clientTotals.lifetimes().find((entry) => entry.clientKey === clientKey);
-  const rule = standDownMeterRule(clientKey, () =>
-    meters.upsert({
-      clientKey,
-      allocationBytes: Number.isFinite(allocationBytes) ? Math.max(0, allocationBytes) : 0,
-      autoPause: params.get("autoPause") !== "0",
-      cycle,
-      lifetimeRx: counters?.lifetimeRx ?? 0,
-      lifetimeTx: counters?.lifetimeTx ?? 0,
-      nowMs: Date.now(),
-      ...(countdownMs === null ? {} : { countdownMs }),
-    }),
-  );
-  return rule;
+  return meters.upsert({
+    clientKey,
+    allocationBytes: Number.isFinite(allocationBytes) ? Math.max(0, allocationBytes) : 0,
+    autoPause: params.get("autoPause") !== "0",
+    cycle,
+    lifetimeRx: counters?.lifetimeRx ?? 0,
+    lifetimeTx: counters?.lifetimeTx ?? 0,
+    nowMs: Date.now(),
+    ...(countdownMs === null ? {} : { countdownMs }),
+    ...(schedule === null ? {} : { schedule }),
+  });
 }
 
 function upsertGroupFrom(params: URLSearchParams): DeviceGroup | null {
@@ -519,8 +539,13 @@ function upsertGroupFrom(params: URLSearchParams): DeviceGroup | null {
   // thing here and another on the card that sent it.
   const mode: GroupAllowanceMode = params.get("mode") === "pooled" ? "pooled" : "perMember";
   const countdownMs = countdownFromParams(params);
+  const schedule = parseScheduleParam(params.get("schedule"));
   if (!cycle || !name || memberKeys.length === 0) return null;
-  if (countdownMs === null && (!Number.isFinite(allocationBytes) || allocationBytes <= 0))
+  if (
+    countdownMs === null &&
+    schedule === null &&
+    (!Number.isFinite(allocationBytes) || allocationBytes <= 0)
+  )
     return null;
   return deviceGroups.upsert({
     groupId: params.get("group") ?? undefined,
@@ -532,18 +557,20 @@ function upsertGroupFrom(params: URLSearchParams): DeviceGroup | null {
     mode,
     nowMs: Date.now(),
     ...(countdownMs === null ? {} : { countdownMs }),
+    ...(schedule === null ? {} : { schedule }),
   });
 }
 
 /**
- * Settle the rules a projection took away.
+ * Retire the announcements a projection took away.
  *
- * A device dropped from a group is no longer metered by anything, so the pause
- * its rule was holding has nothing left that knows to lift it. A rule whose
- * announcement moved to its group owes the device key a clearing, since nothing
- * filed under the group can close an episode opened under the device.
+ * A rule being dropped, or having its announcement move to its group, takes its
+ * stamp with it, and nothing filed under the new key can close an episode opened
+ * under the old one. The device's block is not settled here and does not need to
+ * be: it is held on the device, and the next poll releases it if the rules that
+ * are left have all let go.
  */
-function standDownProjectedOut(
+function retireProjectedOut(
   went: { dropped: MeterRule[]; reannounced: MeterRule[] },
   groups: readonly DeviceGroup[],
 ): void {
@@ -551,47 +578,29 @@ function standDownProjectedOut(
   // `groups` is the set as it stood before reconciliation, which is the only
   // place a group whose last member has just left the roster can still be named.
   const heldBy = (rule: MeterRule) => groups.find((group) => group.groupId === rule.groupId);
-  for (const rule of went.reannounced) retireMeterAlert(rule, nowMs, heldBy(rule));
-  for (const rule of went.dropped) {
+  for (const rule of [...went.reannounced, ...went.dropped])
     retireMeterAlert(rule, nowMs, heldBy(rule));
-    if (rule.pauseState === "applied") void unpauseDeviceForRule(rule.clientKey);
-  }
 }
 
-/** A group's members are unmetered the moment it is gone, so any pause it is
- *  holding is released here rather than waiting for a cycle that never rolls. */
-async function standDownGroup(groupId: string): Promise<void> {
+/** A group's members are unmetered the moment it is gone. Any block they were
+ *  under is lifted by the poll, which finds the devices with no rule holding
+ *  them. */
+function standDownGroup(groupId: string): void {
   const nowMs = Date.now();
   const going = deviceGroups.find(groupId);
   const members = meters.all().filter((rule) => rule.groupId === groupId);
   const announced = members.filter((rule) => rule.reachedAtMs !== undefined);
   const shared = members.some(announcesAsGroup);
   // Rules first, so the retire below sees no member still announcing; the group
-  // last, so the announcement it is keyed to can still be named. Nothing can
-  // interleave: this is all one synchronous run before the first await.
-  for (const rule of members) meters.remove(rule.clientKey);
+  // last, so the announcement it is keyed to can still be named.
+  meters.removeGroup(groupId);
   for (const rule of shared ? announced.slice(0, 1) : announced)
     retireMeterAlert(rule, nowMs, going);
   deviceGroups.remove(groupId);
-  for (const rule of members)
-    if (rule.pauseState === "applied") await unpauseDeviceForRule(rule.clientKey);
 }
 
-/** Every route that removes, restarts or rewrites a rule goes through here: a
- *  rule that stops pausing a device is the last thing that could release it. */
-function standDownMeterRule<T>(clientKey: string, change: () => T): T {
-  const wasPausing = meters.find(clientKey)?.pauseState === "applied";
-  const result = change();
-  if (wasPausing && meters.find(clientKey)?.pauseState !== "applied")
-    void unpauseDeviceForRule(clientKey);
-  return result;
-}
-
-/** One device at a time: the gateway takes one write per device, and the whole
- *  set arriving together is a burst nothing gains from. */
-async function standDownAllMeterRules(): Promise<void> {
+function standDownAllMeterRules(): void {
   const nowMs = Date.now();
-  const pausing = meters.all().filter((rule) => rule.pauseState === "applied");
   const announced = meters.all().filter((rule) => rule.reachedAtMs !== undefined);
   const groups = deviceGroups.all();
   // Rules first, so the retire below sees no member still announcing; the groups
@@ -611,22 +620,6 @@ async function standDownAllMeterRules(): Promise<void> {
     );
   }
   deviceGroups.clear();
-  for (const rule of pausing) await unpauseDeviceForRule(rule.clientKey);
-}
-
-/** Unpause a device this recorder paused, when the rule behind it is gone. */
-async function unpauseDeviceForRule(clientKey: string): Promise<void> {
-  const clientId = Number(clientKey);
-  if (!sendDevicePause || !Number.isInteger(clientId)) return;
-  try {
-    await sendDevicePause(clientId, false);
-    meters.notePauseState(clientKey, "none", Date.now());
-  } catch (error) {
-    const reason = (error as Error).message;
-    console.warn(`[historian] releasing ${meterDeviceName(clientKey)}: ${reason}`);
-    // No retry covers a rule that has been stood down.
-    meters.notePauseState(clientKey, "failed", Date.now(), `could not be released: ${reason}`);
-  }
 }
 
 /** Recorded before the pause is attempted, so an unreachable account does not
@@ -647,28 +640,18 @@ function meterAlertTransition(
   const group = announcesAsGroup(rule) ? (heldBy ?? deviceGroups.find(rule.groupId!)) : undefined;
   const spec = dataLimitAlertSpec(rule, meterDeviceName(rule.clientKey), {
     advice: rule.autoPause && !enforceable ? CONNECT_ACCOUNT_ADVICE : undefined,
-    groupName: group?.name,
+    // A group down to this one device is just this device, and reads as it. The
+    // same test as the extension's: one announcement worded two ways reads back
+    // from history as two different events.
+    groupName: group && group.memberKeys.length > 1 ? group.name : undefined,
   });
   return { kind: reached ? "fired" : "cleared", source: "system", key: spec.key, atMs, spec };
 }
 
-/** A release is a router write and nothing else: the announcement it would once
- *  have cleared retired a minute after it was raised. */
 function recordMeterAnnouncement(transition: MeterTransition): void {
-  if (transition.kind === "released") return;
   recordAlertTransitions([
     meterAlertTransition(transition.rule, transition.kind === "reached", transition.atMs),
   ]);
-}
-
-async function deliverMeterPause(transition: MeterTransition): Promise<void> {
-  const { clientKey, kind, atMs, rule } = transition;
-  // Retiring an announcement reaches no router.
-  if (kind === "expired") return;
-  const reached = kind === "reached";
-  // A release is raised only for a pause this rule applied, so it is owed whether
-  // or not the rule still enforces.
-  if (!reached || rule.autoPause) await sendMeterPause(clientKey, reached, atMs);
 }
 
 /**
@@ -694,36 +677,30 @@ function retireMeterAlert(rule: MeterRule | undefined, atMs: number, heldBy?: De
   recordAlertTransitions([meterAlertTransition(rule, false, atMs, heldBy)]);
 }
 
-async function sendMeterPause(clientKey: string, reached: boolean, atMs: number): Promise<void> {
+async function sendMeterPause(clientKey: string, blocking: boolean, atMs: number): Promise<void> {
   const clientId = Number(clientKey);
   if (!sendDevicePause || !Number.isInteger(clientId)) {
     const reason = sendDevicePause
       ? "this device has no router id to pause by"
       : "this host cannot pause a device";
-    if (reached) meters.notePauseState(clientKey, "failed", atMs, reason);
+    if (blocking) meters.notePauseState(clientKey, "failed", atMs, reason);
     return;
   }
   const name = meterDeviceName(clientKey);
   // Stamped before the write, not after it: this is re-scanned every 200 ms, and
-  // a rule still reporting its old state would be asked for the same write again
-  // on every tick until the first one came back.
-  meters.noteAttempt(clientKey, Date.now());
+  // a device still reporting its old state would be asked for the same write
+  // again on every tick until the first one came back.
+  meters.noteAttempt(clientKey, blocking ? "pause" : "release", Date.now());
   try {
-    await sendDevicePause(clientId, reached);
-    const settled = meters.notePauseState(clientKey, reached ? "applied" : "none", Date.now());
-    // A write can land on a device whose rule is already gone; the log is then the
-    // only record that it is held.
-    console.log(
-      settled
-        ? `[historian] ${reached ? "paused" : "released"} ${name}`
-        : `[historian] ${reached ? "paused" : "released"} ${name}, but no rule took the result`,
-    );
+    await sendDevicePause(clientId, blocking);
+    meters.notePauseState(clientKey, blocking ? "applied" : "none", Date.now());
+    console.log(`[historian] ${blocking ? "paused" : "released"} ${name}`);
   } catch (error) {
     const reason = (error as Error).message;
-    console.warn(`[historian] meter pause for ${meterDeviceName(clientKey)}: ${reason}`);
-    // Still "applied" on a failed release: the device is paused and this rule is
-    // the only record of it.
-    meters.notePauseState(clientKey, reached ? "failed" : "applied", Date.now(), reason);
+    console.warn(`[historian] meter pause for ${name}: ${reason}`);
+    // Still "applied" on a failed release: the device is blocked, and this record
+    // is the only thing that knows it.
+    meters.notePauseState(clientKey, blocking ? "failed" : "applied", Date.now(), reason);
   }
 }
 
@@ -1227,12 +1204,10 @@ async function pollClients(): Promise<void> {
 }
 
 /**
- * Check every allowance against the counters this poll folded.
+ * Check every rule against the counters this poll folded.
  *
  * Runs whether or not the router answered: a cycle rolls on the clock, so a rule
- * whose device is away still has to release the pause it applied when the cycle
- * turns over. Transitions latch inside the store before any is delivered, so the
- * 200 ms cadence cannot stack a second pause behind the first.
+ * whose device is away still lets go of it when the cycle turns over.
  */
 function runMeters(): void {
   const lifetimes = clientTotals.lifetimes();
@@ -1243,34 +1218,66 @@ function runMeters(): void {
   meters.resolve(roster);
   const groupsBefore = deviceGroups.all();
   deviceGroups.resolve(roster);
-  standDownProjectedOut(meters.project(deviceGroups.all(), lifetimes, Date.now()), groupsBefore);
-  // Ahead of the retry scan below, which would otherwise send a write for a
-  // device that is already free.
-  for (const rule of releasedByHand(meters.all(), blockedByClientKey))
-    meters.notePauseState(rule.clientKey, "none", Date.now());
+  retireProjectedOut(meters.project(deviceGroups.all(), lifetimes, Date.now()), groupsBefore);
+  // First, because until a block is known to have landed the reading below cannot
+  // be read at all: a roster that has not caught up with the write yet and one
+  // that has caught up with a person's release look exactly alike.
+  for (const clientKey of blocksLanded(meters.pauses(), blockedByClientKey))
+    meters.noteBlockLanded(clientKey, Date.now());
+  // Ahead of the scan below, which would otherwise send a write for a device that
+  // is already free. Recorded as overruled rather than merely unblocked: the
+  // rules go on holding it, and the next poll would pause it straight back.
+  for (const clientKey of releasedByHand(meters.pauses(), blockedByClientKey))
+    meters.noteReleasedByHand(clientKey, Date.now());
   const transitions = meters.observe(lifetimes, Date.now());
-  // Every member of a shared allowance is paused, and the group announces once.
+  // Every member of a shared allowance is held, and the group announces once.
   for (const transition of collapseGroupAnnouncements(transitions))
     recordMeterAnnouncement(transition);
-  for (const transition of transitions) void deliverMeterPause(transition);
-  retryUnsentPauses();
+  settleDeviceBlocks();
 }
 
 const PAUSE_RETRY_MS = 60_000;
 
-function retryUnsentPauses(): void {
+/**
+ * Bring the router's view of every device in line with the rules.
+ *
+ * The whole enforcement path, and it asks the rules rather than remembering an
+ * edge: a device some rule holds is blocked, one no rule holds is free. That is
+ * what makes every way a rule can end — rolled, edited, deleted, its group
+ * emptied, its member moved elsewhere — settle here without each of those paths
+ * having to send a write of its own.
+ */
+function settleDeviceBlocks(): void {
   const nowMs = Date.now();
+  const rules = meters.all();
+  // An override outlives nothing: once the rules behind it have let go, the next
+  // limit this device reaches is enforced as normal.
+  meters.settleOverrides();
   // Cheap scan before asking the host anything: this runs on the 200 ms client
   // poll, and reading the account session decrypts a file off the keychain.
-  const stalled = stalledPauses(meters.all(), nowMs, PAUSE_RETRY_MS);
-  const owedRelease = stalledReleases(meters.all(), nowMs, PAUSE_RETRY_MS);
-  if ((stalled.length === 0 && owedRelease.length === 0) || readAccountSignedIn?.() !== true)
+  const owedPause = pausesOwed(rules, meters.pauses(), nowMs, PAUSE_RETRY_MS);
+  const owedRelease = releasesOwed(rules, meters.pauses(), nowMs, PAUSE_RETRY_MS);
+  if (owedPause.length === 0 && owedRelease.length === 0) return;
+  // An unreachable account is a write that failed, not one that never happened:
+  // the card says so, and a device left blocked is recorded as still held, since
+  // this is the only thing that knows to free it.
+  if (readAccountSignedIn?.() !== true) {
+    const reason = "No Starlink account connected";
+    for (const clientKey of owedPause) {
+      meters.noteAttempt(clientKey, "pause", nowMs);
+      meters.notePauseState(clientKey, "failed", nowMs, reason);
+    }
+    for (const clientKey of owedRelease) {
+      meters.noteAttempt(clientKey, "release", nowMs);
+      meters.notePauseState(clientKey, "applied", nowMs, reason);
+    }
     return;
-  for (const rule of stalled) {
-    meters.notePauseState(rule.clientKey, "pending", nowMs);
-    void sendMeterPause(rule.clientKey, true, nowMs);
   }
-  for (const rule of owedRelease) void sendMeterPause(rule.clientKey, false, nowMs);
+  for (const clientKey of owedPause) {
+    meters.notePauseState(clientKey, "pending", nowMs);
+    void sendMeterPause(clientKey, true, nowMs);
+  }
+  for (const clientKey of owedRelease) void sendMeterPause(clientKey, false, nowMs);
 }
 
 /**
@@ -1531,8 +1538,9 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
     const client = url.searchParams.get("client");
     const reset = client ? clientTotals.reset(client, Date.now()) : false;
     if (reset) clientTotals.snapshot();
-    // The rule reads this counter, so emptying it empties what the rule counted.
-    if (reset && client) meters.restart(client, Date.now());
+    // Every rule reads this counter, so emptying it leaves all of them anchored
+    // above a counter that has gone back to nothing.
+    if (reset && client) meters.restartForCounterReset(client, Date.now());
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify({ reset }));
     return;
@@ -1568,15 +1576,15 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
       if (client) {
         const removed = clientTotals.remove(client);
         clientTotals.snapshot();
-        const going = meters.find(client);
+        const going = meters.forDevice(client);
         deviceGroups.removeMember(client);
-        standDownMeterRule(client, () => meters.remove(client));
-        retireMeterAlert(going, Date.now());
+        meters.remove(client);
+        for (const rule of going) retireMeterAlert(rule, Date.now());
         response.end(JSON.stringify({ removed }));
       } else {
         clientTotals.clear();
         clientTotals.snapshot();
-        void standDownAllMeterRules();
+        standDownAllMeterRules();
         response.end(JSON.stringify({ cleared: true }));
       }
       return;
@@ -1615,12 +1623,19 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
     response.setHeader("Content-Type", "application/json");
     const client = url.searchParams.get("client");
     if (request.method === "DELETE") {
-      const going = client ? meters.find(client) : undefined;
+      // `own` drops only the rule the device carries itself, for a surface deleting
+      // one rule of the several a device can answer to. Without it the device is
+      // unmetered outright, which is what a card offering to stop metering it means.
+      const ownOnly = url.searchParams.get("scope") === "own";
+      const all = client ? meters.forDevice(client) : [];
+      const going = ownOnly ? all.filter((rule) => rule.groupId === undefined) : all;
       // A member's rule is the group's, and the projection would write it straight
-      // back on the next poll. Unmetering the device means leaving the group.
-      if (client && going?.groupId !== undefined) deviceGroups.removeMember(client);
-      const removed = client ? standDownMeterRule(client, () => meters.remove(client)) : false;
-      if (removed) retireMeterAlert(going, Date.now());
+      // back on the next poll. Unmetering the device means leaving every group
+      // that names it, not only the one whose rule is being deleted here.
+      if (client && !ownOnly && going.some((rule) => rule.groupId !== undefined))
+        deviceGroups.removeMember(client);
+      const removed = client ? (ownOnly ? meters.removeOwn(client) : meters.remove(client)) : false;
+      if (removed) for (const rule of going) retireMeterAlert(rule, Date.now());
       response.end(JSON.stringify({ removed }));
       return;
     }
@@ -1651,7 +1666,7 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
     if (request.method === "DELETE") {
       const groupId = url.searchParams.get("group");
       const removed = groupId !== null && deviceGroups.find(groupId) !== undefined;
-      if (groupId !== null && removed) void standDownGroup(groupId);
+      if (groupId !== null && removed) standDownGroup(groupId);
       response.end(JSON.stringify({ removed }));
       return;
     }
@@ -1661,7 +1676,7 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
       // card reading them back sees devices the group covers as unmetered.
       if (group) {
         const groups = deviceGroups.all();
-        standDownProjectedOut(meters.project(groups, clientTotals.lifetimes(), Date.now()), groups);
+        retireProjectedOut(meters.project(groups, clientTotals.lifetimes(), Date.now()), groups);
       }
       response.statusCode = group ? 200 : 400;
       response.end(JSON.stringify(group ? { group } : { error: "bad_request" }));
@@ -1675,29 +1690,27 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
     );
     return;
   }
-  // Start one rule's allowance over, leaving the device's own usage standing.
+  // Start a device's rules over, leaving its own usage standing.
   if (url.pathname === "/api/clients/meters/reset" && request.method === "POST") {
     const client = url.searchParams.get("client");
-    // A member's allowance is the group's, so starting it over starts the group
-    // over. Leaving the others where they were would have them sharing a cycle
-    // from different anchors.
-    const groupId = client ? meters.find(client)?.groupId : undefined;
-    const restarting =
-      groupId === undefined
-        ? client
-          ? [client]
-          : []
-        : meters
-            .all()
-            .filter((rule) => rule.groupId === groupId)
-            .map((rule) => rule.clientKey);
-    let rule: MeterRule | undefined;
-    for (const memberKey of restarting) {
-      const restarted = standDownMeterRule(memberKey, () => meters.restart(memberKey, Date.now()));
-      if (memberKey === client) rule = restarted;
-    }
+    // One rule, named the way a rule is: its group, or the device carrying its
+    // own. A device can answer to several, and resetting by device alone would
+    // start over every rule that names it — including other devices' months.
+    const group = url.searchParams.get("group");
+    const restarted =
+      group !== null
+        ? meters.restart({ groupId: group }, Date.now())
+        : client
+          ? meters.restart({ clientKey: client }, Date.now())
+          : [];
     response.setHeader("Content-Type", "application/json");
-    response.end(JSON.stringify({ rule: rule ? withUsage(rule) : null }));
+    response.end(
+      JSON.stringify({
+        rules: restarted
+          .filter((rule) => client === null || rule.clientKey === client)
+          .map((rule) => withUsage(rule)),
+      }),
+    );
     return;
   }
   if (url.pathname === "/api/clients") {

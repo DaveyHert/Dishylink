@@ -6,8 +6,13 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { announcementSubject, type MeterCycle, type MeterRule } from "@core/dataMeter";
+import type { PauseState } from "@core/devicePause";
+import { formatScheduleParam, type Schedule } from "@core/schedule";
 import { apiRequest } from "../lib/apiHost";
-import { meterIndicatorForRule, type MeterIndicator } from "../components/network/meterIndicator";
+import {
+  meterIndicatorForDevice,
+  type MeterIndicator,
+} from "../components/network/rules/meterIndicator";
 
 const REFRESH_MS = 10_000;
 
@@ -15,28 +20,47 @@ export interface MeterRuleView extends MeterRule {
   /** What the rule is judged against: the group's sum for a member of a shared
    *  allowance, the device's own spend otherwise. */
   usageBytes: number;
+  /** What this device itself put through. On a pooled member the rule charges the
+   *  group's sum instead, so the two differ. */
+  ownUsageBytes: number;
   deviceName: string;
   /** Whether the rule has reached what it measures — the recorder's answer, since
    *  only it holds the group's sum alongside the countdown's clock. */
   reached: boolean;
+  /** Whether the device is blocked at the router. Its own state, not this rule's:
+   *  several rules can name one device, and the block belongs to the device. */
+  pauseState: PauseState;
+  /** Whether this rule is one of the reasons the device is held. A card showing
+   *  several rules has to say which of them is the one stopping it. */
+  holding: boolean;
+  pauseError?: string;
   /** The group that set this rule, when a group did. */
   groupName?: string;
 }
 
+/** The terms of a rule a device carries of its own, as either surface writes them. */
+export interface DeviceRuleTerms {
+  allocationBytes: number;
+  autoPause: boolean;
+  cycle: MeterCycle;
+  /** Set to make the rule a countdown rather than an allowance. */
+  countdownMs?: number;
+  /** The hours the rule lets the device online, alongside its allowance. */
+  schedule?: Schedule;
+}
+
 export interface DataMeter {
+  /** Every rule naming this device: its own, and one for each group it is in. */
+  rules: MeterRuleView[];
+  /** The one a card leads with — whichever is holding the device, else the first.
+   *  A device with no rule has none. */
   rule: MeterRuleView | null;
   /** Whether the recorder can actually pause: the write needs an account session,
    *  and a rule that cannot be enforced should say so before it is relied on. */
   pauseEnforceable: boolean;
   loading: boolean;
   error: string | null;
-  save: (options: {
-    allocationBytes: number;
-    autoPause: boolean;
-    cycle: MeterCycle;
-    /** Set to make the rule a countdown rather than an allowance. */
-    countdownMs?: number;
-  }) => Promise<void>;
+  save: (terms: DeviceRuleTerms) => Promise<void>;
   restart: () => Promise<void>;
   remove: () => Promise<void>;
   /** Read this rule again now, for a write made outside this hook. */
@@ -58,8 +82,34 @@ export function cycleParams(cycle: MeterCycle): Record<string, string> {
   }
 }
 
+/** The rule a card leads with: whichever is holding the device, since that is the
+ *  one answering "why is this off?". Its own rule breaks a tie, being the one this
+ *  card can edit. */
+export function leadingRule(rules: readonly MeterRuleView[]): MeterRuleView | null {
+  return (
+    rules.find((rule) => rule.holding) ??
+    rules.find((rule) => rule.groupId === undefined) ??
+    rules[0] ??
+    null
+  );
+}
+
+function deviceRulePath(clientKey: string, terms: DeviceRuleTerms): string {
+  const query = new URLSearchParams({
+    client: clientKey,
+    allocation: String(Math.round(terms.allocationBytes)),
+    autoPause: terms.autoPause ? "1" : "0",
+    ...cycleParams(terms.cycle),
+    ...(terms.countdownMs === undefined
+      ? {}
+      : { countdown: String(Math.round(terms.countdownMs)) }),
+    ...(terms.schedule === undefined ? {} : { schedule: formatScheduleParam(terms.schedule) }),
+  });
+  return `/api/clients/meters?${query.toString()}`;
+}
+
 export function useDataMeter(clientKey: string | null): DataMeter {
-  const [rule, setRule] = useState<MeterRuleView | null>(null);
+  const [rules, setRules] = useState<MeterRuleView[]>([]);
   const [pauseEnforceable, setPauseEnforceable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -75,7 +125,7 @@ export function useDataMeter(clientKey: string | null): DataMeter {
         rules?: MeterRuleView[];
         pauseEnforceable?: boolean;
       };
-      setRule(body.rules?.[0] ?? null);
+      setRules(body.rules ?? []);
       setPauseEnforceable(body.pauseEnforceable === true);
       setError(null);
     } catch {
@@ -114,37 +164,83 @@ export function useDataMeter(clientKey: string | null): DataMeter {
   );
 
   const save: DataMeter["save"] = useCallback(
-    async ({ allocationBytes, autoPause, cycle, countdownMs }) => {
+    async (terms) => {
       if (!clientKey) return;
-      const query = new URLSearchParams({
-        client: clientKey,
-        allocation: String(Math.round(allocationBytes)),
-        autoPause: autoPause ? "1" : "0",
-        ...cycleParams(cycle),
-        ...(countdownMs === undefined ? {} : { countdown: String(Math.round(countdownMs)) }),
-      });
-      await write(`/api/clients/meters?${query.toString()}`);
+      await write(deviceRulePath(clientKey, terms));
     },
     [clientKey, write],
   );
 
+  // The rule the card is showing, not every rule the device answers to: the
+  // figures beside this button belong to one of them, and the others are other
+  // people's months.
+  const leading = leadingRule(rules);
+  const leadingGroupId = leading?.groupId;
   const restart = useCallback(async () => {
     if (!clientKey) return;
-    await write(`/api/clients/meters/reset?client=${encodeURIComponent(clientKey)}`);
-  }, [clientKey, write]);
+    const query = new URLSearchParams(
+      leadingGroupId === undefined
+        ? { client: clientKey }
+        : { group: leadingGroupId, client: clientKey },
+    );
+    await write(`/api/clients/meters/reset?${query.toString()}`);
+  }, [clientKey, leadingGroupId, write]);
 
   const remove = useCallback(async () => {
     if (!clientKey) return;
     await write(`/api/clients/meters?client=${encodeURIComponent(clientKey)}`, "DELETE");
   }, [clientKey, write]);
 
-  return { rule, pauseEnforceable, loading, error, save, restart, remove, reload: load };
+  return {
+    rules,
+    rule: leading,
+    pauseEnforceable,
+    loading,
+    error,
+    save,
+    restart,
+    remove,
+    reload: load,
+  };
 }
 
 /** Read the rules again outside this hook's own poll, for a write that changes
  *  them without going through it — a group covers several devices at once. */
 export async function refreshMeterIndicators(): Promise<void> {
   await loadMeteredKeys();
+}
+
+/**
+ * Start one rule over, for a surface holding a rule rather than a device.
+ *
+ * Named by its group, or by the device carrying its own. Never by device alone: a
+ * device answers to as many rules as name it, so that restarts every one of them
+ * — a timer on a phone would clear the month's usage of every device that phone
+ * shares an allowance with.
+ */
+export async function restartRule(scope: { groupId?: string; clientKey?: string }): Promise<void> {
+  const query = new URLSearchParams(
+    scope.groupId === undefined ? { client: scope.clientKey ?? "" } : { group: scope.groupId },
+  );
+  await apiRequest(`/api/clients/meters/reset?${query.toString()}`, { method: "POST" }).catch(
+    () => {},
+  );
+}
+
+/** Write the rule a device carries of its own, for a surface holding a rule rather
+ *  than a device. Throws, so the form that called it can say the write was refused. */
+export async function saveDeviceRule(clientKey: string, terms: DeviceRuleTerms): Promise<void> {
+  const response = await apiRequest(deviceRulePath(clientKey, terms), { method: "POST" });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+}
+
+/** Drop the rule a device carries of its own, leaving the groups that name it
+ *  alone — each of those is a rule in its own right, deleted through its group.
+ *  Unmetering the device altogether is `DataMeter.remove`, which does both. */
+export async function removeDeviceRule(clientKey: string): Promise<void> {
+  await apiRequest(`/api/clients/meters?client=${encodeURIComponent(clientKey)}&scope=own`, {
+    method: "DELETE",
+  }).catch(() => {});
 }
 
 let meterIndicators = new Map<string, MeterIndicator>();
@@ -177,8 +273,20 @@ async function loadMeteredKeys(): Promise<void> {
     const rules = body.rules ?? [];
     const nextEnforceable = body.pauseEnforceable === true;
     if (meteredListeners.size === 0) return;
+    // Folded per device, not per rule: a device can be named by several rules,
+    // and its row shows the strongest mark among them rather than whichever
+    // happened to be read last.
+    const byDevice = new Map<string, MeterRuleView[]>();
+    for (const rule of rules) {
+      const held = byDevice.get(rule.clientKey);
+      if (held) held.push(rule);
+      else byDevice.set(rule.clientKey, [rule]);
+    }
     const nextIndicators = new Map(
-      rules.map((rule) => [rule.clientKey, meterIndicatorForRule(rule)] as const),
+      [...byDevice].flatMap(([clientKey, forDevice]) => {
+        const mark = meterIndicatorForDevice(forDevice);
+        return mark === null ? [] : [[clientKey, mark] as const];
+      }),
     );
     const indicatorsMoved =
       meterIndicatorSignature(nextIndicators) !== meterIndicatorSignature(meterIndicators);

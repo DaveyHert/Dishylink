@@ -16,6 +16,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import type { MeterRule } from "../core/dataMeter.ts";
 
 const DATA_DIR = mkdtempSync(join(tmpdir(), "historian-meters-"));
 const ALERTS_FILE = join(DATA_DIR, "alerts.ndjson");
@@ -162,6 +163,21 @@ describe("the recorder's meter routes", () => {
     expect(episodes().find((e) => e.key === `dataLimit:${KEY}`)?.endMs).toEqual(expect.any(Number));
   });
 
+  it("drops only a device's own rule when the write says so", async () => {
+    // The rules list deletes one of the several rules a device can answer to.
+    // Without the scope the device leaves every group naming it, taking a limit
+    // set over other devices with it.
+    const member = MEMBERS[0];
+    await call("POST", `/api/clients/meters?client=${member}&allocation=1000000000&cycle=daily`);
+    const dropped = await call("DELETE", `/api/clients/meters?client=${member}&scope=own`);
+    expect(JSON.parse(dropped.body).removed).toBe(true);
+
+    const left = await call("GET", `/api/clients/meters?client=${member}`);
+    expect(JSON.parse(left.body).rules.map((rule: MeterRule) => rule.groupId)).toEqual([GROUP]);
+    const groups = await call("GET", "/api/clients/groups");
+    expect(JSON.parse(groups.body).groups[0].memberKeys).toContain(member);
+  });
+
   it("leaves nothing behind for a rule that was never there", async () => {
     const before = episodes().length;
     const { body } = await call("DELETE", "/api/clients/meters?client=does-not-exist");
@@ -215,5 +231,67 @@ describe("the recorder's group routes", () => {
     const { body } = await call("DELETE", "/api/clients/groups?group=does-not-exist");
     expect(JSON.parse(body).removed).toBe(false);
     expect(episodes()).toHaveLength(before);
+  });
+
+  it("words a one-member group's announcement as the extension does", async () => {
+    // A timer over one device is a group as far as the rules go, but there is
+    // nobody else to speak for. Worded as a plural here and a singular on the
+    // other recorder, one announcement reads back from history as two events.
+    const write = await call(
+      "POST",
+      `/api/clients/groups?name=${encodeURIComponent("My phone use")}&members=999&allocation=0&cycle=once&countdown=1800000`,
+    );
+    expect(write.status).toBe(200);
+
+    const { body } = await call("GET", "/api/clients/meters?client=999");
+    const [rule] = JSON.parse(body).rules;
+    // The rule announces for its group, and the group covers this device alone.
+    expect(rule.groupId).toBeDefined();
+    expect(rule.groupName).toBeUndefined();
+  });
+});
+
+describe("the recorder's schedule parameter", () => {
+  const SCHEDULED = "555";
+  const HOURS = "allow;12345@960-1200;06@540-1260";
+
+  it("takes a timetable with no allowance behind it, and hands it back", async () => {
+    const write = await call(
+      "POST",
+      `/api/clients/meters?client=${SCHEDULED}&allocation=0&cycle=monthly&day=1&schedule=${encodeURIComponent(HOURS)}`,
+    );
+    expect(write.status).toBe(200);
+
+    const { body } = await call("GET", `/api/clients/meters?client=${SCHEDULED}`);
+    const [rule] = JSON.parse(body).rules;
+    expect(rule.schedule).toEqual({
+      mode: "allow",
+      windows: [
+        { weekdays: [1, 2, 3, 4, 5], startMinute: 960, endMinute: 1200 },
+        { weekdays: [0, 6], startMinute: 540, endMinute: 1260 },
+      ],
+    });
+    // Worked out on the write, so the first poll after it can act on the hours.
+    expect(typeof rule.windowEndMs).toBe("number");
+    expect(Number.isFinite(rule.windowEndMs)).toBe(true);
+  });
+
+  it("still refuses a rule that measures nothing at all", async () => {
+    const { status } = await call(
+      "POST",
+      "/api/clients/meters?client=666&allocation=0&cycle=daily",
+    );
+    expect(status).toBe(400);
+  });
+
+  it("puts a group's timetable on its members", async () => {
+    const write = await call(
+      "POST",
+      `/api/clients/groups?name=Kids&members=777,888&allocation=0&cycle=daily&schedule=${encodeURIComponent("block;0123456@1320-420")}`,
+    );
+    expect(write.status).toBe(200);
+
+    const { body } = await call("GET", "/api/clients/meters?client=888");
+    expect(JSON.parse(body).rules[0].schedule.mode).toBe("block");
   });
 });

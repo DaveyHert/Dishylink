@@ -7,17 +7,24 @@
 import { useState } from "react";
 import { expect, describe, test, afterEach, vi } from "vitest";
 import { render, cleanup } from "vitest-browser-react";
-import { page } from "@vitest/browser/context";
+import { page } from "vitest/browser";
 import type { DeviceGroup } from "@core/deviceGroup";
-import type { DataMeter, MeterRuleView } from "../../hooks/useDataMeter";
-import { TooltipProvider } from "../ui/tooltip";
+import type { DataMeter, MeterRuleView } from "../../../hooks/useDataMeter";
+import { TooltipProvider } from "../../ui/tooltip";
 import { DataMeterDialog } from "./DataMeterDialog";
 
 let heldGroups: DeviceGroup[] = [];
 const groupsSaved: { memberKeys: string[]; groupId?: string }[] = [];
 const groupsRemoved: string[] = [];
+const deviceRulesRemoved: string[] = [];
 
-vi.mock("../../hooks/useDeviceGroups", () => ({
+vi.mock("../../../hooks/useDataMeter", () => ({
+  removeDeviceRule: async (clientKey: string) => {
+    deviceRulesRemoved.push(clientKey);
+  },
+}));
+
+vi.mock("../../../hooks/useDeviceGroups", () => ({
   useDeviceGroups: () => ({
     groups: heldGroups,
     pauseEnforceable: true,
@@ -48,8 +55,11 @@ function rule(over: Partial<MeterRuleView> = {}): MeterRuleView {
     periodStartMs: NOW - 86_400_000,
     periodEndMs: NOW + 5 * 86_400_000,
     actedThisCycle: false,
+    createdMs: NOW,
     pauseState: "none",
+    holding: false,
     usageBytes: 12 * GB,
+    ownUsageBytes: 12 * GB,
     reached: false,
     deviceName: "PS5 Console",
     ...over,
@@ -57,7 +67,9 @@ function rule(over: Partial<MeterRuleView> = {}): MeterRuleView {
 }
 
 function meter(over: Partial<DataMeter> = {}): DataMeter {
+  const held = over.rule === undefined || over.rule === null ? [] : [over.rule];
   return {
+    rules: held,
     rule: null,
     pauseEnforceable: true,
     loading: false,
@@ -75,10 +87,22 @@ const text = () => document.body.textContent ?? "";
 /** Open state held outside the card, as the drill-in holds it, so closing and
  *  reopening is the same sequence a user performs. */
 const CANDIDATES = [
-  { clientKey: "42", name: "PS5 Console", active: true, lastSeenMs: NOW },
+  {
+    clientKey: "42",
+    name: "PS5 Console",
+    macAddress: "aa:bb:cc:00:00:01",
+    active: true,
+    lastSeenMs: NOW,
+  },
   // Away right now, and still pickable: a rule on an absent device rolls its
   // cycle and releases its pause the same as one on a device that is here.
-  { clientKey: "43", name: "Kids iPad", active: false, lastSeenMs: NOW - 86_400_000 },
+  {
+    clientKey: "43",
+    name: "Kids iPad",
+    macAddress: "aa:bb:cc:00:00:02",
+    active: false,
+    lastSeenMs: NOW - 86_400_000,
+  },
 ];
 
 function Harness({ value }: { value: DataMeter }) {
@@ -90,6 +114,7 @@ function Harness({ value }: { value: DataMeter }) {
         meter={value}
         clientKey='42'
         deviceName='PS5 Console'
+        macAddress='aa:bb:cc:00:00:01'
         candidates={CANDIDATES}
         open={open}
         onOpenChange={setOpen}
@@ -104,6 +129,23 @@ describe("DataMeterDialog", () => {
     heldGroups = [];
     groupsSaved.length = 0;
     groupsRemoved.length = 0;
+    deviceRulesRemoved.length = 0;
+  });
+
+  test("given: this device's own rule widened to a second device, should: take the first rule with it", async () => {
+    // Left standing, it goes on holding this device against a limit the group's
+    // card never shows — and it counts from its own anchors, not the group's.
+    render(<Harness value={meter({ rule: rule() })} />);
+    await expect.poll(text).toContain("Edit limit");
+    await page.getByRole("button", { name: "Edit limit" }).click();
+
+    await page.getByRole("button", { name: "This device" }).click();
+    await page.getByText("Kids iPad").click();
+    await page.getByRole("button", { name: "Save limit for all" }).click();
+
+    await expect.poll(() => groupsSaved).toHaveLength(1);
+    expect(groupsSaved[0].memberKeys).toEqual(["42", "43"]);
+    expect(deviceRulesRemoved).toEqual(["42"]);
   });
 
   test("given: a device with a rule, should: show what it is doing before offering to edit it", async () => {
@@ -113,6 +155,7 @@ describe("DataMeterDialog", () => {
     expect(text()).toContain("Remaining");
     expect(text()).toContain("38 GB");
     expect(text()).not.toContain("Save limit");
+    expect(text()).toContain("Created");
   });
 
   test("given: usage under a gigabyte, should: read the ring in MB rather than round it to 0.9", async () => {
@@ -261,6 +304,7 @@ describe("DataMeterDialog", () => {
         cycle: { kind: "monthly", day: 1 },
         mode: "pooled",
         updatedMs: NOW,
+        createdMs: NOW,
       },
     ];
     const saved: unknown[] = [];
@@ -341,5 +385,70 @@ describe("DataMeterDialog", () => {
 
     await page.elementLocator(day!).fill("7");
     expect(day!.value).toBe("7");
+  });
+
+  test("given: the Schedule chip, should: offer hours and an allowance beside them, off", async () => {
+    render(<Harness value={meter({ rule: null })} />);
+    await expect.poll(text).toContain("Allowance");
+
+    await page.getByRole("button", { name: "Schedule" }).click();
+
+    await expect.poll(text).toContain("Every week");
+    expect(text()).toContain("Data allowance");
+    // Those hours are usually unrestricted, so the cap starts off.
+    expect(text()).not.toContain("Resets on day");
+  });
+
+  test("given: a device's own rule with a schedule and an allowance, should: keep the schedule when only the allowance is re-saved", async () => {
+    // The device card predates the schedule feature and never sent one back, so
+    // saving anything from it — even just the allowance — read as a rule with no
+    // schedule at all, and the recorder wiped the one already set.
+    const schedule = {
+      mode: "allow" as const,
+      windows: [{ weekdays: [1, 2, 3, 4, 5], startMinute: 8 * 60, endMinute: 18 * 60 }],
+    };
+    const saved: unknown[] = [];
+    render(
+      <Harness
+        value={meter({
+          rule: rule({ schedule, allocationBytes: 20 * GB }),
+          save: async (terms) => void saved.push(terms),
+        })}
+      />,
+    );
+    await expect.poll(text).toContain("Edit limit");
+    await page.getByRole("button", { name: "Edit limit" }).click();
+
+    await expect.poll(text).toContain("Every week");
+    await page.getByRole("button", { name: "Save limit" }).click();
+
+    await expect.poll(() => saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({ schedule });
+  });
+
+  test("given: a device's own rule with a schedule, should: drop it when switched to Limit by hand", async () => {
+    // The opposite of the case above: picking a different chip is the person's own
+    // choice to stop keeping the schedule, not a save that never knew about it.
+    const schedule = {
+      mode: "allow" as const,
+      windows: [{ weekdays: [1, 2, 3, 4, 5], startMinute: 8 * 60, endMinute: 18 * 60 }],
+    };
+    const saved: unknown[] = [];
+    render(
+      <Harness
+        value={meter({
+          rule: rule({ schedule, allocationBytes: 20 * GB }),
+          save: async (terms) => void saved.push(terms),
+        })}
+      />,
+    );
+    await page.getByRole("button", { name: "Edit limit" }).click();
+    await expect.poll(text).toContain("Every week");
+
+    await page.getByRole("button", { name: "Limit", exact: true }).click();
+    await page.getByRole("button", { name: "Save limit" }).click();
+
+    await expect.poll(() => saved).toHaveLength(1);
+    expect(saved[0]).not.toHaveProperty("schedule");
   });
 });
