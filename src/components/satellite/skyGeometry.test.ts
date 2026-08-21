@@ -106,6 +106,22 @@ describe("buildDomePoints", () => {
     expect(after[3]).toBe(before[3]);
   });
 
+  it("places a UT-frame Mini's bottom rim on the north side of the dome", () => {
+    // A single reading on the bottom-center cell. In FRAME_UT with the dish
+    // facing north that cell is the boresight azimuth — geographic north —
+    // which is −z in the scene (x east, y up, z south).
+    const grid = survey(11, -1, { mapReferenceFrame: "FRAME_UT", boresightAzimuthDeg: 0 });
+    grid.kinds[10 * 11 + 5] = 1;
+    const points = buildDomePoints(grid);
+    let found: [number, number, number] | null = null;
+    for (let i = 0; i < points.length; i += 4) {
+      if (points[i + 3] === 1) found = [points[i], points[i + 1], points[i + 2]];
+    }
+    expect(found).not.toBeNull();
+    expect(found![0]).toBeCloseTo(0, 5); // east
+    expect(found![2]).toBeLessThan(0); // south-axis: north is negative
+  });
+
   it("spares unmapped sky that sits inside the envelope", () => {
     // A hole punched in the middle of the readings is never-observed sky the
     // trim must leave alone — it is the band overhead, not the skirt.

@@ -8,6 +8,7 @@ import type { DishObstructionMapJson, DishStatusJson } from "@core/dishClient";
 import { dishModelFor } from "../../lib/dishMesh";
 import { unpackCells, type ObstructionSnapshot } from "../../lib/obstructionSnapshots";
 import { liveKindAtCell, snapshotKindAtCell } from "../obstruction/obstructionGrid";
+import { resolveObstructionFrame } from "../obstruction/obstructionFrame";
 import type { SkySurvey } from "./skyGeometry";
 
 const KIND_CODE = { unmapped: 0, clear: 1, partial: 2, obstructed: 3 } as const;
@@ -26,13 +27,15 @@ export function liveSurvey(
       kinds[row * gridSize + col] = KIND_CODE[kindAt(row, col)];
     }
   }
+  const dishModel = dishModelFor(status);
   return {
     gridSize,
     maxThetaDeg: map.maxThetaDeg ?? 80,
     kinds,
     boresightAzimuthDeg: status?.boresightAzimuthDeg ?? 0,
     boresightElevationDeg: status?.boresightElevationDeg ?? 90,
-    dishModel: dishModelFor(status),
+    dishModel,
+    mapReferenceFrame: resolveObstructionFrame(map.mapReferenceFrame, dishModel),
   };
 }
 
@@ -41,6 +44,7 @@ export function snapshotSurvey(
   snapshot: ObstructionSnapshot,
   fallbackMaxTheta: number,
   status: DishStatusJson | null,
+  reportedFrame?: DishObstructionMapJson["mapReferenceFrame"],
 ): SkySurvey {
   const gridSize = snapshot.gridSize;
   const kindAt = snapshotKindAtCell(unpackCells(snapshot), gridSize);
@@ -50,12 +54,14 @@ export function snapshotSurvey(
       kinds[row * gridSize + col] = KIND_CODE[kindAt(row, col)];
     }
   }
+  const dishModel = dishModelFor(status);
   return {
     gridSize,
     maxThetaDeg: snapshot.maxThetaDeg ?? fallbackMaxTheta,
     kinds,
     boresightAzimuthDeg: status?.boresightAzimuthDeg ?? 0,
     boresightElevationDeg: status?.boresightElevationDeg ?? 90,
-    dishModel: dishModelFor(status),
+    dishModel,
+    mapReferenceFrame: resolveObstructionFrame(reportedFrame, dishModel),
   };
 }
