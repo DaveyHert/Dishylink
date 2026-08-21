@@ -22,7 +22,7 @@ function rule(over: Partial<MeterRule> = {}): MeterRule {
     periodStartMs: NOW,
     periodEndMs: NOW + 86_400_000,
     actedThisCycle: false,
-    pauseState: "none",
+    createdMs: NOW,
     ...over,
   };
 }

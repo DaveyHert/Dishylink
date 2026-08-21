@@ -66,6 +66,16 @@ export function formatClockTimeShort(timestampMs: number): string {
   return new Date(timestampMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
+export function formatDateTime(timestampMs: number): string {
+  const date = new Date(timestampMs);
+  const datePart = date.toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  return `${datePart} · ${formatClockTimeShort(timestampMs)}`;
+}
+
 /** The dish's `hasActuators` enum ("HAS_ACTUATORS_YES"/"_NO") → plain Yes/No.
  *  Anything else — the "_UNKNOWN" default or an absent field — reads as Unknown
  *  rather than a blank, so the row still says something. */

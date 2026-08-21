@@ -31,6 +31,7 @@ import { Callout } from "../ui/callout";
 import { SegmentedControl } from "../ui/segmented-control";
 import { RouterIcon } from "../../assets/icons/RouterIcon";
 import { DeviceDetail } from "./DeviceDetail";
+import { RulesTab } from "./rules/RulesTab";
 import { NodeDetail } from "./NodeDetail";
 import { DeviceRow, NetworkRow } from "./NetworkRow";
 import { buildNodeRoster } from "./nodeRoster";
@@ -83,7 +84,7 @@ function NetworkPanelBody({
   selectedKey: string | null;
   onSelect: (entryKey: string | null) => void;
 }) {
-  const [tab, setTab] = useState<"connected" | "nodes">("connected");
+  const [tab, setTab] = useState<"connected" | "nodes" | "rules">("connected");
   useOuiRegistry();
   // Radio temps come from the historian, not the router directly. Poll only
   // while the panel is mounted (i.e. the Network panel is open).
@@ -142,6 +143,7 @@ function NetworkPanelBody({
     return {
       clientKey,
       name: total.name?.trim() || total.macAddress,
+      macAddress: total.macAddress,
       active: liveKeys.has(clientKey),
       lastSeenMs: total.lastSeenMs,
     };
@@ -231,6 +233,7 @@ function NetworkPanelBody({
         options={[
           { value: "connected", label: <TabLabel text='Connected' count={devices.length} /> },
           { value: "nodes", label: <TabLabel text='Nodes' count={nodes.length} /> },
+          { value: "rules", label: <TabLabel text='Rules' /> },
         ]}
       />
 
@@ -346,6 +349,8 @@ function NetworkPanelBody({
           ))}
         </ListSection>
       )}
+
+      {tab === "rules" && <RulesTab candidates={meterCandidates} />}
     </div>
   );
 }

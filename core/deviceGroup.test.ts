@@ -6,13 +6,15 @@
 import { describe, expect, it } from "vitest";
 import {
   collapseGroupAnnouncements,
+  countdownStartMs,
   evaluateMeters,
+  ruleHoldsDevice,
   usageBytes,
   type MeterReading,
   type MeterRule,
 } from "./dataMeter";
 import {
-  groupForDevice,
+  groupsForDevice,
   projectGroupRules,
   resolveGroupMembers,
   type DeviceGroup,
@@ -34,6 +36,7 @@ function group(over: Partial<DeviceGroup> = {}): DeviceGroup {
     cycle: { kind: "monthly", day: 1 },
     mode: "pooled",
     updatedMs: T0,
+    createdMs: T0,
     ...over,
   };
 }
@@ -96,7 +99,7 @@ describe("projectGroupRules", () => {
           periodStartMs: T0,
           periodEndMs: T0 + 86_400_000,
           actedThisCycle: false,
-          pauseState: "none",
+          createdMs: T0,
         },
       ],
       counters: counters({ [TABLET]: 4 * GB }),
@@ -108,8 +111,14 @@ describe("projectGroupRules", () => {
       counters: counters({ [TABLET]: 4 * GB }),
       nowMs: T0,
     });
-    expect(usageBytes(joined[0])).toBe(4 * GB);
-    expect(joined[0].allocationBytes).toBe(50 * GB);
+    // The device keeps its own rule and its own count; the group's is a second
+    // rule beside it, opening its allowance from the counter as it reads now.
+    const carried = joined.find((rule) => rule.groupId === undefined)!;
+    const fromGroup = joined.find((rule) => rule.groupId !== undefined)!;
+    expect(usageBytes(carried)).toBe(4 * GB);
+    expect(carried.allocationBytes).toBe(10 * GB);
+    expect(usageBytes(fromGroup)).toBe(0);
+    expect(fromGroup.allocationBytes).toBe(50 * GB);
   });
 
   it("given: a member that left the group, should: drop its rule rather than restore its own", () => {
@@ -140,7 +149,9 @@ describe("projectGroupRules", () => {
     expect(again[1]).toBe(first[1]);
   });
 
-  it("given: a device listed by two groups, should: meter it under the one set most recently", () => {
+  it("given: a device listed by two groups, should: meter it under both", () => {
+    // Neither group's limit is a reason to stop keeping the other's: whichever
+    // runs out first holds the device, and it is free when both have let go.
     const older = group({ groupId: "old", memberKeys: [TABLET], updatedMs: T0 - 1000 });
     const newer = group({ groupId: "new", memberKeys: [TABLET], updatedMs: T0 });
     const rules = projectGroupRules({
@@ -149,8 +160,8 @@ describe("projectGroupRules", () => {
       counters: counters({ [TABLET]: 0 }),
       nowMs: T0,
     });
-    expect(rules).toHaveLength(1);
-    expect(rules[0].groupId).toBe("new");
+    expect(rules.map((rule) => rule.groupId).sort()).toEqual(["new", "old"]);
+    expect(rules.every((rule) => rule.clientKey === TABLET)).toBe(true);
   });
 });
 
@@ -158,7 +169,7 @@ describe("a shared allowance", () => {
   it("given: members under it alone but over it together, should: take them all", () => {
     const rules = rulesAt(group(), { [TABLET]: 30 * GB, [CONSOLE]: 25 * GB });
     expect(rules.every((rule) => rule.actedThisCycle)).toBe(true);
-    expect(rules.every((rule) => rule.pauseState === "pending")).toBe(true);
+    expect(rules.every(ruleHoldsDevice)).toBe(true);
   });
 
   it("given: the group under its allowance, should: take neither", () => {
@@ -168,13 +179,13 @@ describe("a shared allowance", () => {
 
   it("given: one member over the allowance alone, should: still take the whole group", () => {
     const rules = rulesAt(group(), { [TABLET]: 55 * GB, [CONSOLE]: 0 });
-    expect(rules.every((rule) => rule.pauseState === "pending")).toBe(true);
+    expect(rules.every(ruleHoldsDevice)).toBe(true);
   });
 
   it("given: a per-member group, should: take only the member that is over", () => {
     const rules = rulesAt(group({ mode: "perMember" }), { [TABLET]: 55 * GB, [CONSOLE]: 10 * GB });
-    expect(rules.find((rule) => rule.clientKey === TABLET)?.pauseState).toBe("pending");
-    expect(rules.find((rule) => rule.clientKey === CONSOLE)?.pauseState).toBe("none");
+    expect(ruleHoldsDevice(rules.find((rule) => rule.clientKey === TABLET)!)).toBe(true);
+    expect(ruleHoldsDevice(rules.find((rule) => rule.clientKey === CONSOLE)!)).toBe(false);
   });
 
   it("given: a group that crossed, should: announce once rather than once per member", () => {
@@ -263,7 +274,7 @@ describe("a rule the projection takes away", () => {
           periodEndMs: T0 + 86_400_000,
           actedThisCycle: true,
           reachedAtMs: T0,
-          pauseState: "applied",
+          createdMs: T0,
         },
       ],
       counters: counters({ [TABLET]: 20 * GB }),
@@ -301,8 +312,7 @@ describe("a countdown across a group", () => {
       counters: [],
       nowMs: T0 + 600_000,
     });
-    const starts = new Set(rules.map((rule) => rule.periodStartMs));
-    expect(starts).toEqual(new Set([T0]));
+    expect(new Set(rules.map(countdownStartMs))).toEqual(new Set([T0]));
   });
 
   it("given: a member that already carried its own rule, should: join the group's clock too", () => {
@@ -321,7 +331,11 @@ describe("a countdown across a group", () => {
       counters: [],
       nowMs: T0 + 600_000,
     });
-    expect(new Set(rules.map((rule) => rule.periodStartMs))).toEqual(new Set([T0]));
+    // Its own rule stands beside the group's and keeps no countdown; what has to
+    // agree is the clock every member of the group is timing.
+    const timing = rules.filter((rule) => rule.countdownMs !== undefined);
+    expect(timing).toHaveLength(2);
+    expect(new Set(timing.map(countdownStartMs))).toEqual(new Set([T0]));
   });
 
   it("given: a device moved to another group on the same duration, should: start that group's clock", () => {
@@ -339,7 +353,44 @@ describe("a countdown across a group", () => {
       counters: [],
       nowMs: T0 + 3_000_000,
     });
-    expect(moved[0]!.periodStartMs).toBe(T0 + 3_000_000);
+    expect(countdownStartMs(moved[0]!)).toBe(T0 + 3_000_000);
+  });
+
+  it("given: the allowance beside it edited, should: leave the clock where it was", () => {
+    // Nothing about raising an allowance mentions the timer, so restarting it
+    // here hands back a sitting silently — the one edit nobody would connect to
+    // the device coming back online.
+    const rules = projectGroupRules({
+      groups: [timer({ memberKeys: [TABLET], allocationBytes: 5 * GB })],
+      rules: running(),
+      counters: [],
+      nowMs: T0 + 600_000,
+    });
+    expect(countdownStartMs(rules[0]!)).toBe(T0);
+  });
+
+  it("given: a spent timer and an unrelated edit, should: keep holding the device", () => {
+    const spent = running().map((rule) => ({ ...rule, countdownActed: true }));
+    const rules = projectGroupRules({
+      groups: [timer({ memberKeys: [TABLET], autoPause: false })],
+      rules: spent,
+      counters: [],
+      nowMs: T0 + 3_700_000,
+    });
+    expect(rules[0]!.countdownActed).toBe(true);
+  });
+
+  it("given: the duration itself changed, should: start the new one from now", () => {
+    // The only way to restart a timer that has run out, so this must survive the
+    // two cases above.
+    const rules = projectGroupRules({
+      groups: [timer({ memberKeys: [TABLET], countdownMs: 1_800_000 })],
+      rules: running().map((rule) => ({ ...rule, countdownActed: true })),
+      counters: [],
+      nowMs: T0 + 600_000,
+    });
+    expect(countdownStartMs(rules[0]!)).toBe(T0 + 600_000);
+    expect(rules[0]!.countdownActed).toBe(false);
   });
 
   it("given: every member out of time, should: announce once for the group", () => {
@@ -357,8 +408,50 @@ describe("a countdown across a group", () => {
   });
 });
 
-describe("groupForDevice", () => {
+describe("a group keeping a timetable", () => {
+  const hours = (startMinute: number) => ({
+    mode: "allow" as const,
+    windows: [{ weekdays: [1, 2, 3, 4, 5], startMinute, endMinute: 20 * 60 }],
+  });
+
+  it("given: a group with hours, should: put them on every member", () => {
+    const rules = projectGroupRules({
+      groups: [group({ schedule: hours(16 * 60) })],
+      rules: [],
+      counters: [],
+      nowMs: T0,
+    });
+    expect(rules.map((rule) => rule.schedule)).toEqual([hours(16 * 60), hours(16 * 60)]);
+  });
+
+  it("given: hours edited on the group, should: rewrite the members that hold the old ones", () => {
+    const before = projectGroupRules({
+      groups: [group({ schedule: hours(16 * 60) })],
+      rules: [],
+      counters: [],
+      nowMs: T0,
+    });
+    const after = projectGroupRules({
+      groups: [group({ schedule: hours(9 * 60) })],
+      rules: before,
+      counters: [],
+      nowMs: T0,
+    });
+    expect(after.map((rule) => rule.schedule)).toEqual([hours(9 * 60), hours(9 * 60)]);
+  });
+});
+
+describe("groupsForDevice", () => {
   it("given: a device in no group, should: report none", () => {
-    expect(groupForDevice([group()], LAPTOP)).toBeUndefined();
+    expect(groupsForDevice([group()], LAPTOP)).toEqual([]);
+  });
+
+  it("given: a device in two groups, should: report both, newest first", () => {
+    const older = group({ groupId: "old", memberKeys: [LAPTOP], updatedMs: T0 - 1000 });
+    const newer = group({ groupId: "new", memberKeys: [LAPTOP], updatedMs: T0 });
+    expect(groupsForDevice([older, newer], LAPTOP).map((held) => held.groupId)).toEqual([
+      "new",
+      "old",
+    ]);
   });
 });

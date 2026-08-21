@@ -41,6 +41,7 @@
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.6.0",
+    "@number-flow/react": "^0.6.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "electron-updater": "^6.8.9",
@@ -48,6 +49,7 @@
     "motion": "^12.42.2",
     "radix-ui": "^1.6.2",
     "react": "^19.1.0",
+    "react-day-picker": "^10.0.1",
     "react-dom": "^19.1.0",
     "satellite.js": "^7.0.1",
     "tailwind-merge": "^3.6.0",

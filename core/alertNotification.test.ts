@@ -51,7 +51,7 @@ describe("describeTransition", () => {
         periodStartMs: NOW,
         periodEndMs: NOW + 86_400_000,
         actedThisCycle: false,
-        pauseState: "none",
+        createdMs: NOW,
       },
       "iPhone",
     );

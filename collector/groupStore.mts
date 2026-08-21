@@ -7,12 +7,13 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import {
-  groupForDevice,
+  newGroupId,
   resolveGroupMembers,
   type DeviceGroup,
   type GroupAllowanceMode,
 } from "../core/deviceGroup.ts";
 import { listChanged, type MeterCycle, type MeterRoster } from "../core/dataMeter.ts";
+import type { Schedule } from "../core/schedule.ts";
 
 const VERSION = 1;
 
@@ -60,12 +61,6 @@ export class DeviceGroupStore {
     return this.groups.find((group) => group.groupId === groupId);
   }
 
-  /** The group metering a device, for a surface that has a device and needs to
-   *  say why it is limited. */
-  forDevice(clientKey: string): DeviceGroup | undefined {
-    return groupForDevice(this.groups, clientKey);
-  }
-
   /** Reconcile membership against the odometer's roster. True when any moved. */
   resolve(roster: MeterRoster): boolean {
     const resolved = resolveGroupMembers(this.groups, roster);
@@ -86,11 +81,16 @@ export class DeviceGroupStore {
     cycle: MeterCycle;
     mode: GroupAllowanceMode;
     countdownMs?: number;
+    schedule?: Schedule;
     nowMs: number;
   }): DeviceGroup {
     const existing = options.groupId ? this.find(options.groupId) : undefined;
     const group: DeviceGroup = {
-      groupId: existing?.groupId ?? options.groupId ?? `group-${options.nowMs.toString(36)}`,
+      // A write naming a group this store does not hold is a new group, not that
+      // id: ids are this store's to mint, and honouring one from the wire lets a
+      // caller land on a key it chose — including one a later group would collide
+      // with.
+      groupId: existing?.groupId ?? newGroupId(this.groups, options.nowMs),
       name: options.name,
       memberKeys: [...new Set(options.memberKeys)],
       allocationBytes: options.allocationBytes,
@@ -101,9 +101,15 @@ export class DeviceGroupStore {
       cycle: options.countdownMs === undefined ? options.cycle : { kind: "once" },
       mode: options.mode,
       updatedMs: options.nowMs,
+      createdMs: existing?.createdMs ?? options.nowMs,
       ...(options.countdownMs === undefined ? {} : { countdownMs: options.countdownMs }),
+      ...(options.schedule === undefined ? {} : { schedule: options.schedule }),
     };
-    this.groups = [...this.groups.filter((other) => other.groupId !== group.groupId), group];
+    const index = this.groups.findIndex((other) => other.groupId === group.groupId);
+    this.groups =
+      index === -1
+        ? [...this.groups, group]
+        : this.groups.map((other, position) => (position === index ? group : other));
     this.persist();
     return group;
   }

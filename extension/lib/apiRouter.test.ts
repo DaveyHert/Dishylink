@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { routeApiRequest } from "./apiRouter";
+import { runMeters } from "./meterEnforcement";
+import type { MeterHost } from "./meterHost";
 import { InMemoryHistory, type AlertSource } from "./history";
 import type { AlertTransition } from "@core/alertEngine";
 import { ClientTotalsCore } from "@core/clientTotals";
 import type { EnergySummary } from "../../src/hooks/useEnergyHistory";
 import { cycleParams } from "../../src/hooks/useDataMeter";
-import type { MeterCycle, MeterRule } from "@core/dataMeter";
+import { usageBytes, type MeterCycle, type MeterRule } from "@core/dataMeter";
 
 const NOW = new Date(1_600_000_000_000);
+const GB = 1_000_000_000;
 const EMPTY_CURSOR = { counter: 0, newestSampleMs: 0 };
 
 /** A transition as core/alertEngine would report it. The store records edges it
@@ -436,17 +439,40 @@ describe("routeApiRequest", () => {
     return (reply.body as { rule: MeterRule }).rule;
   }
 
-  it("releases a device it is holding when its rule is deleted", async () => {
+  /** A store metering device 42, with the router already holding it. */
+  async function holdingStore(): Promise<InMemoryHistory> {
     const store = await meteredStore();
     const saved = await saveCycle(store, { kind: "daily" });
-    await store.writeMeterRules([{ ...saved, pauseState: "applied" }]);
+    await store.writeMeterRules([{ ...saved, actedThisCycle: true }]);
+    await store.writeDevicePauses([{ clientKey: "42", state: "applied", checkedMs: 0 }]);
+    return store;
+  }
+
+  function recordingHost() {
     const writes: { clientId: number; paused: boolean }[] = [];
-    const host = {
-      signedIn: () => true,
-      setPaused: async (clientId: number, paused: boolean) => {
-        writes.push({ clientId, paused });
+    return {
+      writes,
+      host: {
+        signedIn: () => true,
+        setPaused: async (clientId: number, paused: boolean) => {
+          writes.push({ clientId, paused });
+        },
       },
     };
+  }
+
+  /** The drain that settles what the routes leave: it releases any device the
+   *  rules no longer hold, whatever became of the rule that asked for the block. */
+  async function drain(store: InMemoryHistory, host: MeterHost) {
+    const odometer = new ClientTotalsCore();
+    const snapshot = await store.readTotalsSnapshot();
+    if (snapshot) odometer.loadSnapshot(snapshot);
+    await runMeters(store, odometer, host, NOW.getTime() + 120_000);
+  }
+
+  it("releases a device it is holding once its rule is deleted", async () => {
+    const store = await holdingStore();
+    const { host, writes } = recordingHost();
 
     const reply = await routeApiRequest(
       store,
@@ -456,23 +482,18 @@ describe("routeApiRequest", () => {
       undefined,
       host,
     );
-
     expect(reply.body).toEqual({ removed: true });
-    // Nothing else would ever lift it: the rule that applied it is gone.
+
+    await drain(store, host);
+
+    // Nothing holds the device now, and the block outlived the rule so there is
+    // still something that knows to lift it.
     expect(writes).toEqual([{ clientId: 42, paused: false }]);
   });
 
-  it("releases a device it is holding when its cycle is started over", async () => {
-    const store = await meteredStore();
-    const saved = await saveCycle(store, { kind: "daily" });
-    await store.writeMeterRules([{ ...saved, pauseState: "applied" }]);
-    const writes: { clientId: number; paused: boolean }[] = [];
-    const host = {
-      signedIn: () => true,
-      setPaused: async (clientId: number, paused: boolean) => {
-        writes.push({ clientId, paused });
-      },
-    };
+  it("releases a device it is holding once its cycle is started over", async () => {
+    const store = await holdingStore();
+    const { host, writes } = recordingHost();
 
     await routeApiRequest(
       store,
@@ -482,10 +503,12 @@ describe("routeApiRequest", () => {
       undefined,
       host,
     );
+    expect((await store.readMeterRules())[0]!.actedThisCycle).toBe(false);
 
-    // A restarted cycle owes nothing, so nothing would lift the pause it applied.
+    await drain(store, host);
+
     expect(writes).toEqual([{ clientId: 42, paused: false }]);
-    expect((await store.readMeterRules())[0]!.pauseState).toBe("none");
+    expect((await store.readDevicePauses())[0]?.state).toBe("none");
   });
 
   it("stores the billing day the card sent, not a calendar month", async () => {
@@ -542,6 +565,24 @@ describe("routeApiRequest", () => {
     expect(rules[0]!.deviceName).toBe("device 99");
   });
 
+  it("keeps an edited device's own rule where it already sat rather than moving it to the end", async () => {
+    const store = await pairedStore();
+    const query = (client: string) =>
+      `client=${client}&allocation=50000000000&autoPause=1&cycle=monthly&day=1`;
+    await routeApiRequest(store, `/api/clients/meters?${query("42")}`, NOW, "POST");
+    await routeApiRequest(store, `/api/clients/meters?${query("43")}`, NOW, "POST");
+
+    await routeApiRequest(
+      store,
+      `/api/clients/meters?${query("42")}&allocation=90000000000`,
+      NOW,
+      "POST",
+    );
+
+    const rules = await store.readMeterRules();
+    expect(rules.map((rule) => rule.clientKey)).toEqual(["42", "43"]);
+  });
+
   /** Two devices the odometer knows, so a group written over them has counters. */
   async function pairedStore(): Promise<InMemoryHistory> {
     const store = new InMemoryHistory();
@@ -584,6 +625,19 @@ describe("routeApiRequest", () => {
     expect(rules.every((rule) => rule.allocationBytes === 50_000_000_000)).toBe(true);
   });
 
+  it("keeps an edited group where it already sat rather than moving it to the end", async () => {
+    const store = await pairedStore();
+    const first = (await saveGroup(store, { name: "First", members: "42" })).body as {
+      group: { groupId: string };
+    };
+    await saveGroup(store, { name: "Second", members: "43" });
+
+    await saveGroup(store, { group: first.group.groupId, name: "First, renamed", members: "42" });
+
+    const groups = await store.readDeviceGroups();
+    expect(groups.map((group) => group.name)).toEqual(["First, renamed", "Second"]);
+  });
+
   it("takes each, not shared, when a group arrives naming no mode", async () => {
     const store = await pairedStore();
     await saveGroup(store);
@@ -610,22 +664,47 @@ describe("routeApiRequest", () => {
     for (const rule of rules) expect(rule.usageBytes).toBe(1000);
   });
 
+  it("releases a device the group it was edited out of was holding", async () => {
+    const store = await pairedStore();
+    await saveGroup(store);
+    await store.writeDevicePauses([{ clientKey: "43", state: "applied", checkedMs: 0 }]);
+    const groupId = (await store.readDeviceGroups())[0]!.groupId;
+    const { host, writes } = recordingHost();
+
+    await routeApiRequest(
+      store,
+      `/api/clients/groups?${new URLSearchParams({
+        group: groupId,
+        name: "Kids",
+        members: "42",
+        allocation: String(50_000_000_000),
+        autoPause: "1",
+        cycle: "monthly",
+        day: "1",
+      })}`,
+      NOW,
+      "POST",
+      undefined,
+      host,
+    );
+    expect((await store.readMeterRules()).map((rule) => rule.clientKey)).toEqual(["42"]);
+
+    await drain(store, host);
+
+    // The rule that asked for the block went with the membership; the block did
+    // not, so the drain still finds a device nothing is holding.
+    expect(writes).toEqual([{ clientId: 43, paused: false }]);
+  });
+
   it("releases every device a deleted group was holding", async () => {
     const store = await pairedStore();
     await saveGroup(store, { mode: "pooled" });
-    const held = (await store.readMeterRules()).map((rule) => ({
-      ...rule,
-      pauseState: "applied" as const,
-    }));
-    await store.writeMeterRules(held);
+    await store.writeDevicePauses([
+      { clientKey: "42", state: "applied", checkedMs: 0 },
+      { clientKey: "43", state: "applied", checkedMs: 0 },
+    ]);
     const groupId = (await store.readDeviceGroups())[0]!.groupId;
-    const writes: { clientId: number; paused: boolean }[] = [];
-    const host = {
-      signedIn: () => true,
-      setPaused: async (clientId: number, paused: boolean) => {
-        writes.push({ clientId, paused });
-      },
-    };
+    const { host, writes } = recordingHost();
 
     const reply = await routeApiRequest(
       store,
@@ -635,12 +714,13 @@ describe("routeApiRequest", () => {
       undefined,
       host,
     );
-
     expect(reply.body).toEqual({ removed: true });
-    // Nothing else would lift them: the rules that applied the pauses are gone.
+    expect(await store.readMeterRules()).toEqual([]);
+
+    await drain(store, host);
+
     expect(writes.map((write) => write.clientId).sort()).toEqual([42, 43]);
     expect(writes.every((write) => !write.paused)).toBe(true);
-    expect(await store.readMeterRules()).toEqual([]);
   });
 
   it("retires a deleted timer group's announcement once, not once per member", async () => {
@@ -685,6 +765,65 @@ describe("routeApiRequest", () => {
 
     expect((await store.readDeviceGroups())[0]!.memberKeys).toEqual(["42"]);
     expect((await store.readMeterRules()).map((rule) => rule.clientKey)).toEqual(["42"]);
+  });
+
+  it("restarts one rule without touching another naming the same device", async () => {
+    // A phone in a group's monthly allowance with a timer of its own beside it.
+    // Restarting the timer must not hand back the month, on this device or on the
+    // others sharing that group's allowance.
+    const store = await pairedStore();
+    await saveGroup(store);
+    const groupId = (await store.readDeviceGroups())[0]!.groupId;
+    const timer = new URLSearchParams({
+      client: "42",
+      allocation: "0",
+      cycle: "once",
+      countdown: "1800000",
+    });
+    const written = await routeApiRequest(store, `/api/clients/meters?${timer}`, NOW, "POST");
+    expect(written.status).toBe(200);
+    // Traffic on every rule, so a cycle that starts over is one that visibly
+    // hands its usage back.
+    await store.writeMeterRules(
+      (await store.readMeterRules()).map((rule) => ({ ...rule, observedRx: rule.anchorRx + GB })),
+    );
+    const spent = async (clientKey: string, group: string | undefined) => {
+      const rule = (await store.readMeterRules()).find(
+        (other) => other.clientKey === clientKey && other.groupId === group,
+      )!;
+      return usageBytes(rule);
+    };
+
+    const later = new Date(NOW.getTime() + 86_400_000);
+    await routeApiRequest(store, "/api/clients/meters/reset?client=42", later, "POST");
+
+    // Only the device's own rule started over. This is the bug as it was seen: a
+    // timer restarted on one phone handed back the month of every device sharing
+    // its group.
+    expect(await spent("42", undefined)).toBe(0);
+    expect(await spent("42", groupId)).toBe(GB);
+    expect(await spent("43", groupId)).toBe(GB);
+
+    // Named by its group instead, every member starts over together.
+    await routeApiRequest(store, `/api/clients/meters/reset?group=${groupId}`, later, "POST");
+
+    expect(await spent("42", groupId)).toBe(0);
+    expect(await spent("43", groupId)).toBe(0);
+  });
+
+  it("drops only a device's own rule when the write says so, as the desktop recorder does", async () => {
+    const store = await pairedStore();
+    await saveGroup(store);
+    const terms = new URLSearchParams({ client: "43", allocation: "1000000000", cycle: "daily" });
+    await routeApiRequest(store, `/api/clients/meters?${terms}`, NOW, "POST");
+
+    await routeApiRequest(store, "/api/clients/meters?client=43&scope=own", NOW, "DELETE");
+
+    // Its group still names it, and still keeps a rule for it.
+    const held = (await store.readDeviceGroups())[0]!;
+    expect(held.memberKeys).toEqual(["42", "43"]);
+    const left = (await store.readMeterRules()).filter((rule) => rule.clientKey === "43");
+    expect(left.map((rule) => rule.groupId)).toEqual([held.groupId]);
   });
 
   it("forgets a deleted device's rule and its membership, as the desktop recorder does", async () => {
