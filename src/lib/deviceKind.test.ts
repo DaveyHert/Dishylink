@@ -44,6 +44,14 @@ describe("classifyDevice", () => {
     expect(classifyDevice("Nintendo Switch")).toBe("console");
   });
 
+  it("reads a lamp/light/LED name as a light rather than what it sits near", () => {
+    expect(classifyDevice("Lamp")).toBe("light");
+    expect(classifyDevice("Living Room Light")).toBe("light");
+    expect(classifyDevice("Bedroom LED")).toBe("light");
+    // Carries "console" too — the lamp reading must win.
+    expect(classifyDevice("Console Lamp")).toBe("light");
+  });
+
   it("is 'unknown' when there is no type signal", () => {
     expect(classifyDevice(undefined)).toBe("unknown");
     expect(classifyDevice("")).toBe("unknown");

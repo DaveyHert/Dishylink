@@ -26,7 +26,8 @@ import {
   type TelemetrySample,
 } from "@core/telemetry";
 import type { Snapshot as TotalsSnapshot } from "@core/clientTotals";
-import type { MeterRule } from "@core/dataMeter";
+import { restoredRule, type MeterRule } from "@core/dataMeter";
+import type { DevicePause } from "@core/devicePause";
 import type { DeviceGroup } from "@core/deviceGroup";
 import type { AlertSeverity } from "@core/alertDefinitions";
 
@@ -144,6 +145,11 @@ export interface HistoryStore {
    *  device the user had released by hand. */
   readMeterRules(): Promise<MeterRule[]>;
   writeMeterRules(rules: MeterRule[]): Promise<void>;
+  /** What the router was last told about each device. Apart from the rules for
+   *  the reason it is: several rules can hold one device, so the block belongs to
+   *  the device and outlives any one of them being edited away. */
+  readDevicePauses(): Promise<DevicePause[]>;
+  writeDevicePauses(pauses: DevicePause[]): Promise<void>;
   /** Every allowance set across several devices. Held apart from the rules it
    *  projects, so a pooled allowance keeps the membership it was divided across. */
   readDeviceGroups(): Promise<DeviceGroup[]>;
@@ -242,6 +248,7 @@ const CURSOR_KEY = "cursor";
 const RADIO_CURRENT_KEY = "radioCurrent";
 const CLIENT_TOTALS_KEY = "clientTotals";
 const METER_RULES_KEY = "meterRules";
+const DEVICE_PAUSES_KEY = "devicePauses";
 const DEVICE_GROUPS_KEY = "deviceGroups";
 
 function request<T>(req: IDBRequest<T>): Promise<T> {
@@ -496,12 +503,48 @@ export class IndexedDbHistory implements HistoryStore {
   async readMeterRules(): Promise<MeterRule[]> {
     const tx = this.db.transaction(META, "readonly");
     const rules = await request<MeterRule[] | undefined>(tx.objectStore(META).get(METER_RULES_KEY));
-    return rules ?? [];
+    // A structured clone keeps Infinity where JSON cannot, but a rule written
+    // before the countdown had a clock of its own still needs one.
+    return (rules ?? []).map(restoredRule);
   }
 
   async writeMeterRules(rules: MeterRule[]): Promise<void> {
     const tx = this.db.transaction(META, "readwrite");
     tx.objectStore(META).put(rules, METER_RULES_KEY);
+    await transactionDone(tx);
+  }
+
+  async readDevicePauses(): Promise<DevicePause[]> {
+    const tx = this.db.transaction(META, "readonly");
+    const pauses = await request<DevicePause[] | undefined>(
+      tx.objectStore(META).get(DEVICE_PAUSES_KEY),
+    );
+    if (pauses) return pauses;
+    // Before the block moved onto the device it was a field on each rule, and a
+    // device held by one of those must not be forgotten on the upgrade: nothing
+    // else knows the router is still holding it.
+    const stored = (await this.readMeterRules()) as (MeterRule & {
+      pauseState?: DevicePause["state"];
+      pauseCheckedMs?: number;
+      pauseError?: string;
+    })[];
+    return stored.flatMap((rule) =>
+      rule.pauseState === undefined || rule.pauseState === "none"
+        ? []
+        : [
+            {
+              clientKey: rule.clientKey,
+              state: rule.pauseState,
+              ...(rule.pauseCheckedMs === undefined ? {} : { checkedMs: rule.pauseCheckedMs }),
+              ...(rule.pauseError === undefined ? {} : { error: rule.pauseError }),
+            },
+          ],
+    );
+  }
+
+  async writeDevicePauses(pauses: DevicePause[]): Promise<void> {
+    const tx = this.db.transaction(META, "readwrite");
+    tx.objectStore(META).put(pauses, DEVICE_PAUSES_KEY);
     await transactionDone(tx);
   }
 
@@ -557,6 +600,7 @@ export class InMemoryHistory implements HistoryStore {
   private readonly samples = new Map<number, TelemetrySample>();
   private totalsSnapshot: TotalsSnapshot | null = null;
   private meterRules: MeterRule[] = [];
+  private devicePauses: DevicePause[] = [];
   private deviceGroups: DeviceGroup[] = [];
   private cursor: SampleCursor = EMPTY_CURSOR;
 
@@ -690,11 +734,19 @@ export class InMemoryHistory implements HistoryStore {
   }
 
   async readMeterRules(): Promise<MeterRule[]> {
-    return this.meterRules;
+    return this.meterRules.map(restoredRule);
   }
 
   async writeMeterRules(rules: MeterRule[]): Promise<void> {
     this.meterRules = rules;
+  }
+
+  async readDevicePauses(): Promise<DevicePause[]> {
+    return this.devicePauses;
+  }
+
+  async writeDevicePauses(pauses: DevicePause[]): Promise<void> {
+    this.devicePauses = pauses;
   }
 
   async readDeviceGroups(): Promise<DeviceGroup[]> {

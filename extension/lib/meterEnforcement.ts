@@ -11,12 +11,22 @@ import {
   evaluateMeters,
   listChanged,
   resolveRuleKeys,
-  releasedByHand,
-  stalledPauses,
-  stalledReleases,
+  ruleKey,
   type MeterRule,
   type MeterTransition,
 } from "@core/dataMeter";
+import {
+  blocksLanded,
+  clearSettledOverrides,
+  forgetSettled,
+  notePause,
+  pausesOwed,
+  releasedByHand,
+  releasesOwed,
+  type DevicePause,
+  type DevicePauses,
+  type PauseState,
+} from "@core/devicePause";
 import { projectGroupRules, resolveGroupMembers, type DeviceGroup } from "@core/deviceGroup";
 import type { AlertState } from "@core/alertDefinitions";
 import { CONNECT_ACCOUNT_ADVICE, dataLimitAlertSpec } from "@core/dataMeterAlert";
@@ -30,20 +40,19 @@ import type { MeterHost } from "./meterHost";
  *  attempts rather than following the tick. */
 const PAUSE_RETRY_MS = 60_000;
 
-/** How one pause write went, applied to the rules in a single pass rather than
- *  re-reading the whole set per device. */
+/** How one pause write went. */
 interface PauseOutcome {
   clientKey: string;
-  state: MeterRule["pauseState"];
+  state: PauseState;
   error?: string;
 }
 
 /**
- * Check every allowance against the counters the odometer holds.
+ * Check every rule against the counters the odometer holds.
  *
  * Enforcement here lands on the next alarm and only while the browser runs, which
  * is the one thing that differs from the desktop recorder. Whether a device is
- * over is decided by the same function on both.
+ * over is decided by the same functions on both.
  */
 export async function runMeters(
   store: HistoryStore,
@@ -54,7 +63,9 @@ export async function runMeters(
 ): Promise<{ transitions: AlertTransition[]; active: AlertState[] }> {
   const stored = await store.readMeterRules();
   const storedGroups = await store.readDeviceGroups();
-  if (stored.length === 0 && storedGroups.length === 0) return { transitions: [], active: [] };
+  const storedPauses = await store.readDevicePauses();
+  if (stored.length === 0 && storedGroups.length === 0 && storedPauses.length === 0)
+    return { transitions: [], active: [] };
   const lifetimes = odometer.lifetimes();
   const roster = {
     keys: lifetimes.map((entry) => entry.clientKey),
@@ -69,44 +80,43 @@ export async function runMeters(
     counters: lifetimes,
     nowMs: now,
   });
-  await standDownProjectedOut(store, host, odometer, groups, resolved, onLiveKeys, now);
-  // Before anything is retried: a device someone already unpaused owes no write,
-  // and the rule's own record of pausing it is the stale half.
-  const alreadyUnpaused = new Set(
-    releasedByHand(onLiveKeys, blocked).map((rule) => rule.clientKey),
-  );
-  const reconciled = onLiveKeys.map((rule) =>
-    alreadyUnpaused.has(rule.clientKey) ? { ...rule, pauseState: "none" as const } : rule,
-  );
-  const { rules, transitions } = evaluateMeters(reconciled, lifetimes, now);
+  await retireProjectedOut(store, odometer, groups, resolved, onLiveKeys, now);
+  const { rules, transitions } = evaluateMeters(onLiveKeys, lifetimes, now);
   const signedIn = host.signedIn();
   const groupById = new Map(groups.map((group) => [group.groupId, group]));
-  // A release is a router write, not news: the announcement it would once have
-  // cleared retired a minute after it was raised. Members of a shared allowance
-  // are every one of them paused, and the group announces once.
-  const announcements = collapseGroupAnnouncements(transitions).flatMap((transition) =>
-    transition.kind === "released"
-      ? []
-      : [meterAlert(transition, deviceName(odometer, transition.clientKey), signedIn, groupById)],
+  // Members of a shared allowance are every one of them held, and the group
+  // announces once.
+  const announcements = collapseGroupAnnouncements(transitions).map((transition) =>
+    meterAlert(transition, deviceName(odometer, transition.clientKey), signedIn, groupById),
   );
 
-  const outcomes = signedIn
-    ? await sendPauses(host, rules, transitions, now)
-    : transitions.flatMap((transition): PauseOutcome[] => {
-        const unreachable = "No Starlink account connected";
-        // The cycle rolled on a device this rule is holding, and the release
-        // cannot be sent. It stays recorded as held so the retry has something to
-        // find; forgetting it leaves the device blocked at the router with
-        // nothing left that knows to free it.
-        if (transition.kind === "released")
-          return [{ clientKey: transition.clientKey, state: "applied", error: unreachable }];
-        if (transition.kind === "reached" && transition.rule.autoPause)
-          return [{ clientKey: transition.clientKey, state: "failed", error: unreachable }];
-        return [];
-      });
+  // Before anything is written: a device someone already unpaused owes no write,
+  // and this record of holding it is the stale half.
+  let pauses: DevicePauses = new Map(storedPauses.map((pause) => [pause.clientKey, pause]));
+  // First, because until a block is known to have landed the reading below cannot
+  // be read at all: a roster that has not caught up with the write yet and one
+  // that has caught up with a person's release look exactly alike.
+  for (const clientKey of blocksLanded(pauses, blocked)) {
+    const held = pauses.get(clientKey)!;
+    const { clientKey: _key, ...rest } = held;
+    pauses = notePause(pauses, clientKey, { ...rest, confirmedMs: now });
+  }
+  for (const clientKey of releasedByHand(pauses, blocked))
+    // Overruled, not merely unblocked: the rules go on holding it, and the next
+    // drain would otherwise pause it straight back.
+    pauses = notePause(pauses, clientKey, {
+      state: "none",
+      attempted: "release",
+      checkedMs: now,
+      overridden: true,
+    });
+  // An override outlives nothing: once the rules behind it have let go, the next
+  // limit this device reaches is enforced as normal.
+  pauses = clearSettledOverrides(pauses, rules);
+  pauses = await settleDeviceBlocks(host, rules, pauses, signedIn, now);
 
-  applyPauseOutcomes(rules, outcomes, now);
   await store.writeMeterRules(rules);
+  await store.writeDevicePauses([...forgetSettled(pauses, rules).values()]);
   if (announcements.length > 0) await store.applyAlertTransitions(announcements, now);
   const announcing = rules.filter((rule) => rule.reachedAtMs !== undefined);
   const seen = new Set<string>();
@@ -120,23 +130,22 @@ export async function runMeters(
 }
 
 /**
- * Settle the rules the projection took away.
+ * Retire the announcements the projection took away.
  *
- * A device dropped from a group is no longer metered by anything, so the pause
- * its rule was holding has nothing left that knows to lift it. A rule whose
- * announcement moved to its group owes the device key a clearing, since nothing
- * filed under the group can close an episode opened under the device.
+ * A rule being dropped, or having its announcement move to its group, takes its
+ * stamp with it, and nothing filed under the new key can close an episode opened
+ * under the old one. The device's block is not settled here: it is held on the
+ * device, and the scan below releases it once no rule holds it.
  */
-async function standDownProjectedOut(
+export async function retireProjectedOut(
   store: HistoryStore,
-  host: MeterHost,
   odometer: ClientTotalsCore,
   groups: readonly DeviceGroup[],
   before: readonly MeterRule[],
   after: readonly MeterRule[],
   nowMs: number,
 ): Promise<void> {
-  const byKey = new Map(after.map((rule) => [rule.clientKey, rule]));
+  const byKey = new Map(after.map((rule) => [ruleKey(rule), rule]));
   const groupsById = new Map(groups.map((group) => [group.groupId, group]));
   const stillAnnouncing = (rule: MeterRule) =>
     announcesAsGroup(rule) &&
@@ -147,48 +156,95 @@ async function standDownProjectedOut(
         other.reachedAtMs !== undefined,
     );
   for (const rule of before) {
-    const still = byKey.get(rule.clientKey);
+    const still = byKey.get(ruleKey(rule));
     if (still && announcementSubject(still) === announcementSubject(rule)) continue;
     if (!stillAnnouncing(rule))
       await retireMeterAlert(store, rule, deviceName(odometer, rule.clientKey), nowMs, groupsById);
-    if (!still) await standDownMeterRule(host, rule, undefined);
   }
 }
 
-async function sendPauses(
+/**
+ * Bring the router's view of every device in line with the rules.
+ *
+ * Asked of the rules rather than remembered from an edge, so every way a rule can
+ * end — rolled, edited, deleted, its group emptied — settles here rather than in
+ * whichever path made the change. One write per device, however many rules are
+ * holding it.
+ */
+async function settleDeviceBlocks(
   host: MeterHost,
   rules: readonly MeterRule[],
-  transitions: readonly MeterTransition[],
+  pauses: DevicePauses,
+  signedIn: boolean,
   now: number,
-): Promise<PauseOutcome[]> {
-  const outcomes: PauseOutcome[] = [];
-  // Stamped before the write, not after it: a failure that repeats word for word
-  // reports no change, and a rule left holding its old timestamp would be asked
-  // for the same write again on the next drain rather than after the window.
-  const attempt = async (clientKey: string, paused: boolean) => {
-    const rule = rules.find((other) => other.clientKey === clientKey);
-    if (rule) rule.pauseCheckedMs = now;
-    const outcome = await sendMeterPause(host, clientKey, paused);
-    if (outcome) outcomes.push(outcome);
+): Promise<DevicePauses> {
+  const owedPause = pausesOwed(rules, pauses, now, PAUSE_RETRY_MS);
+  const owedRelease = releasesOwed(rules, pauses, now, PAUSE_RETRY_MS);
+  let settled = pauses;
+  const note = (clientKey: string, next: Omit<DevicePause, "clientKey">) => {
+    settled = notePause(settled, clientKey, next);
   };
-  for (const transition of transitions) {
-    // Retiring an announcement reaches no router.
-    if (transition.kind === "expired") continue;
-    const reached = transition.kind === "reached";
-    // A release is raised only for a pause this rule applied, so it is owed
-    // whether or not the rule still enforces.
-    if (!reached || transition.rule.autoPause) await attempt(transition.clientKey, reached);
+  // The confirmation belongs to the block, so a record staying "applied" — a
+  // release that would not go through — keeps it: it is the same block the router
+  // was seen holding, not a new write still on its way to the roster.
+  const stillLanded = (clientKey: string) => {
+    const confirmedMs = settled.get(clientKey)?.confirmedMs;
+    return confirmedMs === undefined ? {} : { confirmedMs };
+  };
+
+  if (!signedIn) {
+    const error = "No Starlink account connected";
+    // Recorded as still held rather than forgotten: the device is blocked at the
+    // router and this record is the only thing that knows to free it.
+    for (const clientKey of owedPause)
+      note(clientKey, { state: "failed", error, attempted: "pause", checkedMs: now });
+    for (const clientKey of owedRelease)
+      note(clientKey, {
+        state: "applied",
+        error,
+        ...stillLanded(clientKey),
+        attempted: "release",
+        checkedMs: now,
+      });
+    return settled;
   }
-  // A write that failed or never came back is owed another try. The transition
-  // that raised it has already latched, so nothing else returns to that rule.
-  const latched = new Set(
-    transitions.filter((t) => t.kind !== "expired").map((transition) => transition.clientKey),
-  );
-  for (const rule of stalledPauses(rules, now, PAUSE_RETRY_MS))
-    if (!latched.has(rule.clientKey)) await attempt(rule.clientKey, true);
-  for (const rule of stalledReleases(rules, now, PAUSE_RETRY_MS))
-    if (!latched.has(rule.clientKey)) await attempt(rule.clientKey, false);
-  return outcomes;
+
+  for (const clientKey of owedPause) {
+    // Stamped before the write: a failure that repeats word for word records no
+    // change, and a device left holding its old stamp would be asked for the same
+    // write on the next drain rather than after the window.
+    note(clientKey, {
+      state: pauses.get(clientKey)?.state ?? "none",
+      attempted: "pause",
+      checkedMs: now,
+    });
+    const outcome = await sendMeterPause(host, clientKey, true);
+    if (outcome)
+      note(clientKey, {
+        state: outcome.state,
+        ...(outcome.error === undefined ? {} : { error: outcome.error }),
+        attempted: "pause",
+        checkedMs: now,
+      });
+  }
+  for (const clientKey of owedRelease) {
+    note(clientKey, {
+      state: "applied",
+      ...stillLanded(clientKey),
+      attempted: "release",
+      checkedMs: now,
+    });
+    const outcome = await sendMeterPause(host, clientKey, false);
+    if (outcome)
+      note(clientKey, {
+        state: outcome.state,
+        ...(outcome.error === undefined ? {} : { error: outcome.error }),
+        ...(outcome.state === "applied" ? stillLanded(clientKey) : {}),
+        attempted: "release",
+        checkedMs: now,
+      });
+  }
+  return settled;
 }
 
 /**
@@ -214,23 +270,10 @@ export async function retireMeterAlert(
   );
 }
 
-/** Every route that removes, restarts or rewrites a rule goes through here: a
- *  rule that stops pausing a device is the last thing that could release it. */
-export async function standDownMeterRule(
-  host: MeterHost,
-  before: MeterRule | undefined,
-  after: MeterRule | undefined,
-): Promise<void> {
-  if (before?.pauseState !== "applied" || after?.pauseState === "applied") return;
-  const clientId = Number(before.clientKey);
-  if (!Number.isInteger(clientId)) return;
-  await host.setPaused(clientId, false).catch(() => {});
-}
-
 /**
  * Pause or release the device through the account rather than the LAN — current
- * firmware refuses a LAN write. A release that does not land is left unrecorded:
- * the rule already says the device is held, which stays true until one does.
+ * firmware refuses a LAN write. A release that does not land is left recorded as
+ * held: the device is still blocked, and this record is what knows to retry.
  */
 async function sendMeterPause(
   host: MeterHost,
@@ -246,26 +289,7 @@ async function sendMeterPause(
     await host.setPaused(clientId, paused);
     return { clientKey, state: paused ? "applied" : "none" };
   } catch (error) {
-    // A release that did not land leaves the device held, and the rule is the
-    // only record of that. Saying "none" here would lose the device behind a rule
-    // claiming nothing is wrong.
     return { clientKey, state: paused ? "failed" : "applied", error: (error as Error).message };
-  }
-}
-
-function applyPauseOutcomes(
-  rules: MeterRule[],
-  outcomes: readonly PauseOutcome[],
-  nowMs: number,
-): void {
-  for (const outcome of outcomes) {
-    const rule = rules.find((other) => other.clientKey === outcome.clientKey);
-    if (!rule) continue;
-    if (rule.pauseState === outcome.state && rule.pauseError === outcome.error) continue;
-    rule.pauseState = outcome.state;
-    rule.pauseCheckedMs = nowMs;
-    if (outcome.error === undefined) delete rule.pauseError;
-    else rule.pauseError = outcome.error;
   }
 }
 

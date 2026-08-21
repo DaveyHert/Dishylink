@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { MeterCycle } from "@core/dataMeter";
 import type { DeviceGroup, GroupAllowanceMode } from "@core/deviceGroup";
+import { formatScheduleParam, type Schedule } from "@core/schedule";
 import { apiRequest } from "../lib/apiHost";
 import { cycleParams, refreshMeterIndicators } from "./useDataMeter";
 
@@ -21,6 +22,7 @@ export interface DeviceGroupTerms {
   cycle: MeterCycle;
   mode: GroupAllowanceMode;
   countdownMs?: number;
+  schedule?: Schedule;
 }
 
 export interface DeviceGroups {
@@ -99,6 +101,7 @@ export function useDeviceGroups(): DeviceGroups {
         ...(terms.countdownMs === undefined
           ? {}
           : { countdown: String(Math.round(terms.countdownMs)) }),
+        ...(terms.schedule === undefined ? {} : { schedule: formatScheduleParam(terms.schedule) }),
       });
       await write(`/api/clients/groups?${query.toString()}`);
     },
