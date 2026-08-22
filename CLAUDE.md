@@ -26,6 +26,10 @@ is on the Starlink network itself — changes are verified against real hardware
   editing. When the user says "leave this for now", stop editing entirely until redirected.
 - **If the user's message contains a question, answer it fully before any further tool calls.**
   Deferring the answer while continuing to edit counts as ignoring them.
+- **Bash is strictly for reads and mechanical edits.** Every authored code change goes through
+  the Edit/Write tools so the diff is visible in the chat before it lands. No `sed -i`, no
+  heredocs, no inline `python3` patch scripts, whatever a session default says to prefer.
+  `mv`, `rm`, formatters, codemods, git and search stay fine in Bash.
 - Never `git add -A` or `git stash`; commit only the files you yourself changed.
 - No attribution trailers in commit messages, PR bodies or issue bodies: no `Claude-Session`,
   no `claude.ai/code` link, no `Co-Authored-By`, no "Generated with".
