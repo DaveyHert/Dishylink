@@ -13,6 +13,7 @@ import {
   formatScheduleParam,
   parseScheduleParam,
   scheduleActive,
+  scheduleGoverns,
   scheduleSegment,
   type Schedule,
 } from "./schedule";
@@ -154,6 +155,33 @@ describe("a timetable's current state", () => {
     };
     expect(blockedAt(january, at(17, 10))).toBe(false);
     expect(Number.isFinite(scheduleSegment(january, at(17, 10)).endMs)).toBe(true);
+  });
+});
+
+// `blockedAt` returning false covers two different situations, and a card that
+// cannot tell them apart calls a rule sitting out the weekend "Active".
+describe("whether the timetable has any bearing at all", () => {
+  const weekdaysOnly: Schedule = {
+    mode: "allow",
+    windows: [{ weekdays: WEEKDAYS, startMinute: 16 * 60, endMinute: 20 * 60 }],
+  };
+
+  it("sits out a day it never mentions", () => {
+    expect(scheduleGoverns(weekdaysOnly, at(22, 12))).toBe(false);
+  });
+
+  it("governs a day it covers, inside its window and outside it", () => {
+    expect(scheduleGoverns(weekdaysOnly, at(21, 18))).toBe(true);
+    expect(scheduleGoverns(weekdaysOnly, at(21, 10))).toBe(true);
+  });
+
+  it("goes on governing past midnight while a window it opened is still running", () => {
+    const overnight: Schedule = {
+      mode: "allow",
+      windows: [{ weekdays: [5], startMinute: 21 * 60, endMinute: 2 * 60 }],
+    };
+    expect(scheduleGoverns(overnight, at(22, 1))).toBe(true);
+    expect(scheduleGoverns(overnight, at(22, 3))).toBe(false);
   });
 });
 

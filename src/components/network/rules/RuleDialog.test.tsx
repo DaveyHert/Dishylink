@@ -97,6 +97,7 @@ function deviceRule(over: Partial<Rule> = {}): Rule {
     members: [],
     memberCount: 1,
     paused: false,
+    pausedCount: 0,
     reached: false,
     windowBlocked: false,
     periodEndMs: NOW + 5 * 86_400_000,

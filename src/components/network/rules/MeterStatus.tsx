@@ -20,7 +20,7 @@ import {
   splitDuration,
   timeLeft,
 } from "./allowanceTerms";
-import { leadingMeasure, meterTone, NEARING_LIMIT } from "./ruleMeasure";
+import { leadingMeasure, meterTone, NEARING_LIMIT, scheduleDormant } from "./ruleMeasure";
 import { Bar, RuleStats, Section, Stat } from "./ruleReadout";
 import { ScheduleWindows } from "./scheduleFields";
 
@@ -246,12 +246,24 @@ export function MeterStatus({
         {leading === "schedule" ? (
           <div className='grid grid-cols-2 gap-3 border-t border-border/60 pt-4'>
             <Stat
-              label={rule.windowBlocked ? "Opens in" : "Closes in"}
+              label={
+                scheduleDormant(rule, nowMs)
+                  ? "Resumes in"
+                  : rule.windowBlocked
+                    ? "Opens in"
+                    : "Closes in"
+              }
               value={rule.windowEndMs ? (timeLeft(rule.windowEndMs, nowMs) ?? "—") : "—"}
             />
             <Stat
               label='Right now'
-              value={rule.windowBlocked ? "Paused" : "Online"}
+              value={
+                scheduleDormant(rule, nowMs)
+                  ? "Not scheduled"
+                  : rule.windowBlocked
+                    ? "Paused"
+                    : "Online"
+              }
               align='right'
             />
           </div>

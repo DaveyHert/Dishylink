@@ -26,6 +26,7 @@ function rule(over: Partial<Rule> = {}): Rule {
     members: [],
     memberCount: 3,
     paused: false,
+    pausedCount: 0,
     reached: false,
     windowBlocked: false,
     periodEndMs: NOW + 5 * 86_400_000,
@@ -41,6 +42,15 @@ const hours = {
   windows: [
     { weekdays: [1, 2, 3, 4, 5], startMinute: 16 * 60, endMinute: 20 * 60 },
     { weekdays: [0, 6], startMinute: 9 * 60, endMinute: 21 * 60 },
+  ],
+};
+
+/** A timetable naming a weekday that is never today, so the rule is sitting the
+ *  day out whenever this suite runs. */
+const notToday = {
+  mode: "allow" as const,
+  windows: [
+    { weekdays: [(new Date().getDay() + 3) % 7], startMinute: 16 * 60, endMinute: 20 * 60 },
   ],
 };
 
@@ -103,6 +113,7 @@ describe("RuleCard", () => {
       allocationBytes: 0,
       schedule: hours,
       paused: true,
+      pausedCount: 3,
       windowBlocked: true,
       windowEndMs: NOW + 3_600_000,
     });
@@ -112,8 +123,43 @@ describe("RuleCard", () => {
     expect(text()).toContain("Opens in");
   });
 
+  // One device out of bytes stops that device, not the rule. Reading the group
+  // as paused turned a card sitting at 22 of 30 GB fully red while two of its
+  // three devices were still online.
+  test("given: one device of three paused, should: stay active and say how many", async () => {
+    show({
+      usageBytes: 22 * GB,
+      capacityBytes: 30 * GB,
+      allocationBytes: 10 * GB,
+      paused: true,
+      pausedCount: 1,
+      reached: true,
+    });
+
+    await expect.poll(text).toContain("Active · 1 of 3 paused");
+    expect(text()).not.toContain("Paused, limit reached");
+    expect(document.querySelector("[class*='status-critical']")).toBeNull();
+  });
+
+  // A weekday rule read on a Saturday allows nothing and blocks nothing, and
+  // reporting that as "Active, closes in 1 day" reads as the hours shutting.
+  test("given: a timetable that does not cover today, should: say it is not scheduled", async () => {
+    show({ allocationBytes: 0, schedule: notToday, windowEndMs: NOW + 32 * 3_600_000 });
+
+    await expect.poll(text).toContain("Not scheduled today");
+    expect(text()).toContain("Resumes in");
+    expect(text()).not.toContain("Active");
+    expect(text()).not.toContain("Closes in");
+  });
+
   test("given: a rule over its allowance, should: name the limit as the reason", async () => {
-    show({ usageBytes: 20 * GB, capacityBytes: 20 * GB, paused: true, reached: true });
+    show({
+      usageBytes: 20 * GB,
+      capacityBytes: 20 * GB,
+      paused: true,
+      pausedCount: 3,
+      reached: true,
+    });
     await expect.poll(text).toContain("Paused, limit reached");
   });
 
@@ -134,6 +180,7 @@ describe("RuleCard", () => {
       schedule: hours,
       usageBytes: 60 * GB,
       paused: true,
+      pausedCount: 3,
       reached: true,
       windowEndMs: NOW + 3_600_000,
     });

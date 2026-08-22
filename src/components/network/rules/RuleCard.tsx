@@ -14,6 +14,7 @@ import {
   meterTone,
   NEARING_LIMIT,
   pauseCause,
+  scheduleDormant,
   type RuleMeasure,
 } from "./ruleMeasure";
 import { Bar } from "./ruleReadout";
@@ -58,6 +59,10 @@ export function RuleCard({
   // both the group's and the bar measures the two against each other.
   const shared = rule.mode === "pooled" && rule.memberCount > 1;
   const capped = rule.allocationBytes > 0;
+  const dormant = scheduleDormant(rule, nowMs);
+  // A rule is only paused when it is holding every device it names. One member
+  // out of bytes leaves the rest online, and the rule running.
+  const allPaused = rule.pausedCount > 0 && rule.pausedCount === rule.memberCount;
   const capLabel = `${formatBytes(rule.allocationBytes)}${perDevice ? " each" : shared ? " shared" : ""}`;
 
   return (
@@ -108,7 +113,7 @@ export function RuleCard({
                   </span>
                   <span className='text-muted-foreground'>of {capLabel}</span>
                 </div>
-                <Bar spent={spent} tone={meterTone(spent, rule.paused)} />
+                <Bar spent={spent} tone={meterTone(spent, allPaused)} />
               </div>
             )}
           </div>
@@ -124,7 +129,7 @@ export function RuleCard({
             </div>
             <Bar
               spent={spent}
-              tone={rule.paused ? "bg-[var(--status-critical)]" : "bg-[var(--accent)]"}
+              tone={allPaused ? "bg-[var(--status-critical)]" : "bg-[var(--accent)]"}
             />
           </div>
         ) : (
@@ -137,7 +142,7 @@ export function RuleCard({
                 {capped ? `Limit: ${capLabel}` : "No cap"}
               </span>
             </div>
-            {capped && <Bar spent={spent} tone={meterTone(spent, rule.paused)} />}
+            {capped && <Bar spent={spent} tone={meterTone(spent, allPaused)} />}
           </div>
         )}
 
@@ -145,18 +150,28 @@ export function RuleCard({
           <span
             className={cn(
               "flex items-center gap-1.5",
-              rule.paused ? "text-[var(--status-critical)]" : "text-muted-foreground",
+              allPaused ? "text-[var(--status-critical)]" : "text-muted-foreground",
             )}
           >
             <span
               className={cn(
                 "size-1.5 rounded-full",
-                rule.paused ? "bg-[var(--status-critical)]" : "bg-[var(--status-good)]",
+                allPaused
+                  ? "bg-[var(--status-critical)]"
+                  : dormant
+                    ? "bg-muted-foreground"
+                    : "bg-[var(--status-good)]",
               )}
             />
-            {rule.paused ? PAUSED_BECAUSE[pauseCause(rule)] : "Active"}
+            {allPaused
+              ? PAUSED_BECAUSE[pauseCause(rule)]
+              : rule.pausedCount > 0
+                ? `Active · ${rule.pausedCount} of ${rule.memberCount} paused`
+                : dormant
+                  ? "Not scheduled today"
+                  : "Active"}
           </span>
-          <RuleNote rule={rule} measure={measure} nowMs={nowMs} spent={spent} />
+          <RuleNote rule={rule} measure={measure} nowMs={nowMs} spent={spent} dormant={dormant} />
         </div>
       </div>
     </div>
@@ -169,18 +184,20 @@ function RuleNote({
   measure,
   nowMs,
   spent,
+  dormant,
 }: {
   rule: Rule;
   measure: RuleMeasure;
   nowMs: number;
   spent: number;
+  dormant: boolean;
 }) {
   if (measure === "schedule") {
     const turns = rule.windowEndMs ? timeLeft(rule.windowEndMs, nowMs) : null;
     if (!turns) return null;
     return (
       <span className='text-muted-foreground'>
-        {rule.windowBlocked ? "Opens" : "Closes"} in {turns}
+        {dormant ? "Resumes" : rule.windowBlocked ? "Opens" : "Closes"} in {turns}
       </span>
     );
   }

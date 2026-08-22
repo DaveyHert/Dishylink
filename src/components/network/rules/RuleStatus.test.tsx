@@ -41,6 +41,7 @@ function rule(over: Partial<Rule> = {}): Rule {
       member("3", "Laptop", 3 * GB),
     ],
     paused: false,
+    pausedCount: 0,
     reached: false,
     windowBlocked: false,
     periodEndMs: NOW + 5 * 86_400_000,
@@ -102,6 +103,7 @@ describe("RuleStatus", () => {
   test("given: some devices held, should: name the ones actually paused", async () => {
     show({
       paused: true,
+      pausedCount: 1,
       reached: true,
       members: [
         member("1", "iPad", 50 * GB, true),

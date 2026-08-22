@@ -1,4 +1,4 @@
-import { scheduleActive, type Schedule } from "@core/schedule";
+import { scheduleActive, scheduleGoverns, type Schedule } from "@core/schedule";
 
 export type RuleMeasure = "schedule" | "timer" | "allowance";
 
@@ -20,6 +20,12 @@ interface Measured {
 export function leadingMeasure(rule: Measured): RuleMeasure {
   if (rule.countdownMs !== undefined) return "timer";
   return scheduleActive(rule.schedule) ? "schedule" : "allowance";
+}
+
+/** A timetable sitting out the day rather than running: it neither allows nor
+ *  blocks, so "Active" and "Closes" both misread it. */
+export function scheduleDormant(rule: Measured, nowMs: number): boolean {
+  return scheduleActive(rule.schedule) && !scheduleGoverns(rule.schedule, nowMs);
 }
 
 /** Which measure is doing the holding — not always the one the rule leads with,
