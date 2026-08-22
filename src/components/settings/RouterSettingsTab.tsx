@@ -1,7 +1,7 @@
 // Router information and maintenance — the Router half of the settings panel.
 // Read-mostly by design: the one write here is a reboot.
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Callout } from "@/components/ui/callout";
 import { Loading } from "@/components/ui/loading";
 import { DishClient, type WifiNetworkConfigJson } from "@core/dishClient";
@@ -18,6 +18,8 @@ import { routerAddressHost } from "../../lib/routerAddressHost";
 import { applyRouterConfigUpdate } from "../../lib/routerConfigUpdate";
 import { useCloudAccount, useCloudRouterSubnet } from "../../hooks/useCloudAccount";
 import { useRouterAddressState } from "../../hooks/useRouterAddress";
+import { routerPresence } from "@core/routerPresence";
+import type { DishStatusJson } from "@core/dishClient";
 
 /** SSIDs with the bands each is broadcast on. One network can appear on several
  *  radios, so they are folded by name rather than listed once per radio. */
@@ -49,12 +51,14 @@ function controllerBypassed(account: CloudAccount | null): boolean | null {
 
 export function RouterSettingsTab({
   wifiConfig,
+  dishStatus,
   routerReachable,
   viaAccount,
   unreachable,
   onConfigChanged,
 }: {
   wifiConfig: WifiNetworkConfigJson | null;
+  dishStatus: DishStatusJson | null;
   routerReachable: boolean | null;
   /** Whether `wifiConfig` was read through the account because the LAN could not
    *  serve it. What it says is the same either way; what still cannot be done
@@ -73,6 +77,10 @@ export function RouterSettingsTab({
   // front rather than failing at the moment Save is pressed.
   const account = useCloudAccount(true);
   const accountConnected = account.status === "ready";
+  // A store still on its first read says nothing either way, and the retry loop
+  // keeps flicking it back through "loading", so the first answer is remembered.
+  const [accountAnswered, setAccountAnswered] = useState(false);
+  if (!accountAnswered && account.status !== "loading") setAccountAnswered(true);
   // Read from the account rather than the router: a bypassed router answers
   // nothing on the LAN, so `wifiConfig` is silent exactly when the answer is yes.
   const bypassed = controllerBypassed(account.data);
@@ -97,14 +105,6 @@ export function RouterSettingsTab({
       {/* Branch on the diagnosis rather than on `routerReachable` again: it is
           derived from that same flag, so this cannot render an empty callout. */}
       {unreachable && <Callout tone='error'>{unreachable.message}</Callout>}
-      {/* Populated sections under that error would otherwise read as if the
-          router were answering after all. */}
-      {viaAccount && (
-        <Callout tone='info' className='mt-2.5'>
-          What follows is read through your Starlink account. Anything that dials the router
-          directly — a reboot — stays unavailable until it answers here.
-        </Callout>
-      )}
 
       {configKnown && (
         <>
@@ -214,7 +214,10 @@ export function RouterSettingsTab({
         <BypassSection
           reported={bypassed}
           routerAnswering={answering}
-          disabled={!accountConnected}
+          dishPresence={routerPresence(dishStatus)}
+          // A failed read is not an absent session, and bypass is what fails reads.
+          disabled={!accountAnswered || account.status === "not-connected"}
+          accountAnswering={accountConnected}
           onReload={account.reload}
           onSave={async (enabled) => {
             await applyRouterConfigUpdate({ kind: "bypass", enabled });

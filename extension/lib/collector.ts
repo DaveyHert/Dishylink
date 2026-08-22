@@ -8,6 +8,7 @@
 
 import { DishClient, throughputMbps, type WifiClientJson } from "@core/dishClient";
 import { GrpcWebError } from "@core/grpcWeb";
+import { routerPresence } from "@core/routerPresence";
 import {
   decodeHistoryWindow,
   decodeOutageEvents,
@@ -168,6 +169,7 @@ async function readDishAlerts(dish: DishClient): Promise<DishReading> {
       // Carried because one of the flags contradicts it: the engine needs the
       // negotiated speed to tell a dead link from the firmware's latched one.
       ethSpeedMbps: status.ethSpeedMbps,
+      routerPresence: routerPresence(status),
       atMs: Date.now(),
     };
   } catch {

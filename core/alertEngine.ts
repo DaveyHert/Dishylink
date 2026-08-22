@@ -32,6 +32,7 @@ import {
   type AlertSource,
   type AlertState,
 } from "./alertDefinitions";
+import { routerSilenceExpected, type RouterPresence } from "./routerPresence";
 
 /** One device's reply, stamped when it arrived. */
 export interface DeviceReading {
@@ -46,6 +47,10 @@ export interface DishReading extends DeviceReading {
   /** The dish's negotiated Ethernet speed, when the reply carried one. Read to
    *  catch a flag the firmware latches — see correctLatchedEthernetFlag. */
   ethSpeedMbps?: number;
+  /** What the dish says about the routers downstream of it. A router cannot
+   *  report its own absence, so this is the only thing that tells a bypassed or
+   *  missing router from one that has stopped answering. */
+  routerPresence?: RouterPresence;
 }
 
 /** Conditions a host observes about itself rather than off a device. It governs
@@ -123,6 +128,9 @@ export class AlertEngine {
   /** The last reading's checks per device, kept so an unanswered poll leaves the
    *  previous values standing rather than reading as an all-clear. */
   private dishChecks: AlertState[] = resolveAlerts(DISH_ALERTS, undefined, "dish");
+  /** The dish's last word on whether a router should be answering at all. Held
+   *  across a silent dish poll: a dish that stops replying has no new opinion. */
+  private routerPresence: RouterPresence | null = null;
   private routerChecks: AlertState[] = resolveAlerts(ROUTER_ALERTS, undefined, "router");
 
   /**
@@ -142,12 +150,13 @@ export class AlertEngine {
     const transitions: AlertTransition[] = [];
 
     if (observation.dish) {
-      const { alerts, atMs, ethSpeedMbps } = observation.dish;
+      const { alerts, atMs, ethSpeedMbps, routerPresence } = observation.dish;
       if (alerts !== null) {
         this.dishChecks = correctLatchedEthernetFlag(
           resolveAlerts(DISH_ALERTS, alerts, "dish"),
           ethSpeedMbps,
         );
+        if (routerPresence !== undefined) this.routerPresence = routerPresence;
       }
       transitions.push(
         ...this.reconcile(
@@ -169,11 +178,15 @@ export class AlertEngine {
       if (alerts !== null) {
         this.routerChecks = resolveAlerts(ROUTER_ALERTS, alerts, "router");
       }
+      const expected = routerSilenceExpected(this.routerPresence);
       transitions.push(
         ...this.reconcile(
           ROUTER_SCOPE,
           alerts === null
-            ? [...this.heldFor("router"), firingSystemAlert(SYSTEM_ALERTS.routerUnreachable)]
+            ? [
+                ...this.heldFor("router"),
+                ...(expected ? [] : [firingSystemAlert(SYSTEM_ALERTS.routerUnreachable)]),
+              ]
             : this.routerChecks.filter((check) => check.active),
           atMs,
         ),

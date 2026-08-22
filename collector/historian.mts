@@ -30,6 +30,8 @@ import { join, resolve } from "node:path";
 import { createFileRegistry, fromBinary, toJson, type DescMessage } from "@bufbuild/protobuf";
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { grpcWebUnaryCall } from "../core/grpcWeb.ts";
+import { routerPresence, type RouterPresence } from "../core/routerPresence.ts";
+import type { DishStatusJson } from "../core/dishClient.ts";
 import { createRouterOrigins } from "../core/routerEndpoint.ts";
 import { readDevRouterAddress } from "./devRouterAddress.mts";
 import {
@@ -296,15 +298,18 @@ async function getWifiHistory(): Promise<{ eventLog?: { events?: unknown[] } }> 
 async function getStatusAlerts(): Promise<{
   alerts: Record<string, boolean>;
   ethSpeedMbps?: number;
+  routerPresence: RouterPresence;
 }> {
   const json = (await deviceCall(DISH_URL, GET_STATUS_FIELD)) as {
-    dishGetStatus?: { alerts?: Record<string, boolean>; ethSpeedMbps?: number };
+    dishGetStatus?: DishStatusJson;
   };
+  const status = json.dishGetStatus ?? null;
   return {
-    alerts: json.dishGetStatus?.alerts ?? {},
+    alerts: status?.alerts ?? {},
     // Carried alongside the flags because one of them contradicts it: the engine
     // needs the negotiated speed to tell a real dead link from a latched flag.
-    ethSpeedMbps: json.dishGetStatus?.ethSpeedMbps,
+    ethSpeedMbps: status?.ethSpeedMbps,
+    routerPresence: routerPresence(status),
   };
 }
 
@@ -1108,6 +1113,7 @@ async function pollAlerts(): Promise<void> {
     observation.dish = {
       alerts: dishStatus.alerts,
       ethSpeedMbps: dishStatus.ethSpeedMbps,
+      routerPresence: dishStatus.routerPresence,
       atMs: Date.now(),
     };
   } catch {
@@ -1125,7 +1131,8 @@ async function pollAlerts(): Promise<void> {
     latestRouterPingSuccessPercent = readRouterPingSuccessPercent(routerStatus.popPingDropRate5m);
     observation.router = { alerts: routerStatus.alerts ?? {}, atMs: Date.now() };
   } catch {
-    // router unreachable (or bypass mode) — leave its open episodes open
+    // router unreachable — leave its open episodes open. Whether the silence is
+    // a fault or a bypassed kit is the engine's call, off the dish reading above.
     latestRouterLatencyMs = null;
     latestRouterPingSuccessPercent = null;
     observation.router = { alerts: null, atMs: Date.now() };

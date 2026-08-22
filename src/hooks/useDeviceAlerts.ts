@@ -33,6 +33,7 @@ import {
   type AlertState,
 } from "@core/alertDefinitions";
 import { announceAlert } from "../lib/notifications";
+import { routerPresence, routerSilenceExpected } from "@core/routerPresence";
 import { apiRequest, recorderRunsInHostProcess } from "../lib/apiHost";
 import { useMetersEnforceable, useTrippedMeters, type MeterRuleView } from "./useDataMeter";
 import { CONNECT_ACCOUNT_ADVICE, dataLimitAlertSpec } from "@core/dataMeterAlert";
@@ -159,6 +160,9 @@ export function useDeviceAlerts(
   // would mean the two disagree about the same fact for seconds at a time.
   // Flapping is a bug in whatever makes polls fail, not something to smooth over.
   const dishReachable = dishConnection !== "unreachable";
+  // Collapsed to a string before the memo below: the status object is new every
+  // poll, and reading it there would rebuild the alert list once a second.
+  const presence = dishReachable ? routerPresence(dishStatus) : null;
   const trippedMeters = useTrippedMeters();
   const metersEnforceable = useMetersEnforceable();
   const [routerAlerts, setRouterAlerts] = useState<Record<string, boolean> | null>(null);
@@ -249,9 +253,10 @@ export function useDeviceAlerts(
     // above uses. The connection status indicator and this panel therefore never
     // disagree: anything that turns the indicator red is an active alert in the
     // same render.
+    const routerSilenceIsExpected = routerSilenceExpected(presence);
     const system = [
       ...(dishReachable ? [] : [DISH_UNREACHABLE]),
-      ...(routerReachable === false ? [ROUTER_UNREACHABLE] : []),
+      ...(routerReachable === false && !routerSilenceIsExpected ? [ROUTER_UNREACHABLE] : []),
       // Never on a host that runs the recorder in its own process: there the
       // thing that would be down is the thing asking, so the alert can only ever
       // be a false alarm about a request that was slow.
@@ -259,7 +264,15 @@ export function useDeviceAlerts(
       ...trippedMeters.map((rule) => dataLimitAlert(rule, metersEnforceable)),
     ];
     return sortBySeverity([...firing, ...system]);
-  }, [statusList, dishReachable, routerReachable, historianUp, trippedMeters, metersEnforceable]);
+  }, [
+    statusList,
+    dishReachable,
+    routerReachable,
+    presence,
+    historianUp,
+    trippedMeters,
+    metersEnforceable,
+  ]);
 
   // Announce an alert opening or clearing. Seeded lazily so an alert already
   // firing when the app opens still gets announced once.

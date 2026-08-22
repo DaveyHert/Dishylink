@@ -20,9 +20,16 @@
 //   • the viewer's own LAN address says whether the router's address is local to
 //     this machine or somewhere it would have to route to.
 //
+// Role BYPASSED                         → switched off on purpose; expected.
 // Router up + we are inside its subnet  → something else here holds the address.
 // Router up + we are outside it         → we are simply not on its network.
-// No router                             → bypass mode, or the router is off.
+// No router at all                      → no router on this kit, or it is off.
+//
+// Bypass is read from the dish's role, never from the router's absence: probed
+// on a Gen 3 kit on 2026-08-21, a bypassed router stays listed downstream with
+// its role changed to BYPASSED. Read as an absence it lands on one of the rows
+// above instead, which sends the user to join a WiFi that bypass has switched
+// off.
 //
 // That table reads the address as a fact about the kit, which holds only for the
 // factory default. An address the user set is a claim about where the router is,
@@ -31,6 +38,7 @@
 // neighbouring device of holding an address the router was never on.
 
 import { ROUTER_LAN_ADDRESS } from "@core/dishClient";
+import type { RouterPresence } from "@core/routerPresence";
 
 export type RouterUnreachableCause =
   /** Too early to say. An outage that heals on its own must not be described as
@@ -43,7 +51,9 @@ export type RouterUnreachableCause =
   | "configuredAddressSilent"
   /** The router is up, but this device is not on its network. */
   | "differentNetwork"
-  /** The kit has no router: bypass mode, or the router is powered off. */
+  /** The kit's router is in bypass mode, so it serves nothing by design. */
+  | "bypassed"
+  /** The kit has no router at all, or it is powered off. */
   | "noRouter"
   /** Not enough signal to choose between the above. */
   | "unknown";
@@ -56,10 +66,10 @@ export interface RouterUnreachable {
 }
 
 export interface RouterUnreachableSignals {
-  /** Whether the dish reports a router downstream of it (lib/lanPresence's
-   *  `dishSeesRouter`). `null` when the dish is not answering either, which is
-   *  no evidence in either direction. */
-  routerPresent: boolean | null;
+  /** What the dish says about the routers downstream of it (core/routerPresence).
+   *  `null` when the dish is not answering either, which is no evidence in any
+   *  direction. */
+  presence: RouterPresence | null;
   /** Whether the viewer's own address sits in the router's subnet. `null` when
    *  the host cannot resolve its own IPv4 — under the extension, and on an
    *  IPv6-only viewer — which costs precision, not correctness. */
@@ -136,10 +146,14 @@ function messagesFor(routerAddress: string): Record<RouterUnreachableCause, stri
       `Your Starlink router is running, but this device isn't on the network ${routerAddress} ` +
       `belongs to. Connect to your Starlink WiFi, or if the router's subnet was changed, point ` +
       `Dishylink's router address at where it is now.`,
+    bypassed:
+      `Bypass mode is on, so the Starlink router is switched off and a third-party router runs ` +
+      `your network. WiFi, the client list and the router's own settings all come from it, so ` +
+      `there's nothing to show here. Everything on the dish is unaffected.`,
     noRouter:
-      `The dish isn't reporting a Starlink router — it's in bypass mode, or the router is off. ` +
-      `WiFi and connected devices come from the router, so there's nothing to show here. ` +
-      `Everything on the dish is unaffected.`,
+      `The dish isn't reporting a Starlink router, so this kit either doesn't have one or it's ` +
+      `powered off. WiFi and connected devices come from the router, so there's nothing to show ` +
+      `here. Everything on the dish is unaffected.`,
     unknown:
       `Couldn't reach the Starlink router at ${routerAddress}. Another device may be using ` +
       `that address, the router may be in bypass mode or on a different network, or it may be ` +
@@ -156,9 +170,14 @@ export function diagnoseRouterUnreachable(
   signals: RouterUnreachableSignals,
   routerAddress: string = ROUTER_LAN_ADDRESS,
 ): RouterUnreachable {
-  const { routerPresent, onRouterSubnet, addressConfigured, silencePersisted } = signals;
+  const { presence, onRouterSubnet, addressConfigured, silencePersisted } = signals;
+  const routerPresent = presence === null ? null : presence !== "absent";
   let cause: RouterUnreachableCause = "unknown";
-  if (!silencePersisted) {
+  // Ahead of the settling wait: the other causes are inferences a short outage
+  // can invalidate, while bypass is the dish stating a fact.
+  if (presence === "bypassed") {
+    cause = "bypassed";
+  } else if (!silencePersisted) {
     cause = "checking";
   } else if (routerPresent === false) {
     cause = "noRouter";

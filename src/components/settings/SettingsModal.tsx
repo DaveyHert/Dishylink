@@ -139,6 +139,7 @@ export function SettingsModal({
             {tab === "router" && (
               <RouterSettingsTab
                 wifiConfig={wifiConfig}
+                dishStatus={status}
                 routerReachable={routerReachable}
                 viaAccount={routerViaAccount}
                 unreachable={routerUnreachable}
