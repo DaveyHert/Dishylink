@@ -652,7 +652,11 @@ describe("updateRouterConfig", () => {
             ok: true,
             headers: {
               get: (name: string) =>
-                name === "grpc-status" ? "5" : name === "grpc-message" ? "DEVICE_NOT_CONNECTED" : null,
+                name === "grpc-status"
+                  ? "5"
+                  : name === "grpc-message"
+                    ? "DEVICE_NOT_CONNECTED"
+                    : null,
             },
             arrayBuffer: async () => new Uint8Array().buffer,
           } as unknown as Response;
@@ -757,9 +761,10 @@ describe("updateRouterConfig", () => {
       prepareRouterConfigUpdate: async () => new Uint8Array(),
     });
 
-    await expect(
-      handler.updateRouterConfig({ kind: "factoryReset" }),
-    ).resolves.toMatchObject({ status: 200, body: { applied: true } });
+    await expect(handler.updateRouterConfig({ kind: "factoryReset" })).resolves.toMatchObject({
+      status: 200,
+      body: { applied: true },
+    });
   });
 
   it("given: a target cached during a flip, should: re-derive it rather than write to it", async () => {

@@ -61,8 +61,12 @@ function slide(label: string) {
   grip.setPointerCapture = () => {};
   grip.releasePointerCapture = () => {};
   grip.dispatchEvent(new PointerEvent("pointerdown", { clientX: from, bubbles: true }));
-  grip.dispatchEvent(new PointerEvent("pointermove", { clientX: from + travel * 1.2, bubbles: true }));
-  grip.dispatchEvent(new PointerEvent("pointerup", { clientX: from + travel * 1.2, bubbles: true }));
+  grip.dispatchEvent(
+    new PointerEvent("pointermove", { clientX: from + travel * 1.2, bubbles: true }),
+  );
+  grip.dispatchEvent(
+    new PointerEvent("pointerup", { clientX: from + travel * 1.2, bubbles: true }),
+  );
 }
 
 async function settle(ms = 30): Promise<void> {

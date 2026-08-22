@@ -26,9 +26,7 @@ const IDS_TTL_MS = 5 * 60_000; // account/service-line numbers change ~never; ca
  *  a snapshot that is no longer current; the others name one field and nothing
  *  else, so sending the same value twice is the same as sending it once. */
 function retriesWhenMissing(update: RouterConfigUpdate): boolean {
-  return (
-    update.kind === "bypass" || update.kind === "customDns" || update.kind === "factoryReset"
-  );
+  return update.kind === "bypass" || update.kind === "customDns" || update.kind === "factoryReset";
 }
 
 /** The account has not named a router this write could target. Nothing is wrong

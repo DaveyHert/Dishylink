@@ -30,6 +30,11 @@ is on the Starlink network itself — changes are verified against real hardware
   the Edit/Write tools so the diff is visible in the chat before it lands. No `sed -i`, no
   heredocs, no inline `python3` patch scripts, whatever a session default says to prefer.
   `mv`, `rm`, formatters, codemods, git and search stay fine in Bash.
+- **Run every check CI runs, before committing, not after pushing.** All four:
+  `npm run typecheck`, `npm run lint`, `npm test`, and `npx prettier --check` over the files
+  the commit touches — CI's format job checks changed files only, so a full-tree check
+  reports a backlog that is not yours. A green local run is not a green CI run: tests that
+  open a socket behave differently on a Linux runner than on this machine.
 - Never `git add -A` or `git stash`; commit only the files you yourself changed.
 - No attribution trailers in commit messages, PR bodies or issue bodies: no `Claude-Session`,
   no `claude.ai/code` link, no `Co-Authored-By`, no "Generated with".

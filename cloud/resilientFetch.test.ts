@@ -75,6 +75,9 @@ describe("isRead", () => {
 // box in the desktop app. The suite exits non-zero on that even though the
 // assertion below still passes.
 describe("resilientFetch against an address with no route", () => {
+  // Waited out past this module's own 12s walk ceiling rather than on how fast a
+  // given OS refuses 0.0.0.1: what is held here is that the failure arrives as a
+  // rejection at all. How quickly it arrives is the two cases below.
   it("rejects the request rather than raising on the process", async () => {
     let hung: ReturnType<typeof setTimeout>;
     const outcome = await Promise.race([
@@ -83,11 +86,11 @@ describe("resilientFetch against an address with no route", () => {
         () => "rejected",
       ),
       new Promise((resolve) => {
-        hung = setTimeout(() => resolve("hung"), 4_000);
+        hung = setTimeout(() => resolve("hung"), 20_000);
       }),
     ]).finally(() => clearTimeout(hung));
     expect(outcome).toBe("rejected");
-  });
+  }, 30_000);
 
   // The failure that stranded the app: one silent pin took 26s, then 46s, while
   // a fresh process answered the same call in 1.4s.

@@ -21,11 +21,12 @@ function Revealing({ start = false }: { start?: boolean }) {
 
 function watchScrolling() {
   const calls: ScrollIntoViewOptions[] = [];
-  const spy = vi
-    .spyOn(Element.prototype, "scrollIntoView")
-    .mockImplementation(function (this: Element, options?: boolean | ScrollIntoViewOptions) {
-      calls.push((options ?? {}) as ScrollIntoViewOptions);
-    });
+  const spy = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(function (
+    this: Element,
+    options?: boolean | ScrollIntoViewOptions,
+  ) {
+    calls.push((options ?? {}) as ScrollIntoViewOptions);
+  });
   return { calls, restore: () => spy.mockRestore() };
 }
 
