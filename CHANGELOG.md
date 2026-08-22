@@ -4,18 +4,28 @@ All notable changes to Dishylink are documented here.
 
 ## [1.1.0] - 2026-08-22
 
-### Data allowances & metering
+### Network rules
 
-- Set a data allowance per device, or pool one allowance across a group of
-  devices, on a daily, weekly, monthly, custom, Starlink billing-cycle, or
-  one-time basis.
-- Devices are automatically paused once they spend their allowance, and
-  released when the next cycle starts.
+- Put a rule on a single device, or on a group of them, in one of three forms:
+  a **limit** that pauses once a set amount of data is used, a **schedule** that
+  pauses outside the hours you set, or a **timer** that pauses once a countdown
+  runs out.
+- A limit runs on a daily, weekly, monthly, custom, Starlink billing-cycle, or
+  one-time basis. Across a group its allowance is either pooled between the
+  devices or applied to each of them separately.
+- A schedule holds several windows, so "4pm to 8pm on weekdays, 9am to 9pm at
+  the weekend" is one rule rather than two. Windows run on chosen weekdays or
+  between chosen dates, may cross midnight, and keep the hours you set across a
+  daylight saving shift.
+- A timer counts down from the moment you save it, and runs for at most 24
+  hours.
+- Devices are automatically paused once a rule is spent, and released when the
+  next cycle starts.
 - A device's spend carries over correctly when its limit is edited mid-cycle,
   and survives an app or dish restart without double-counting.
 - Six months of per-device usage history is now kept.
-- A metered device is marked in the network list, with its allowance and
-  status reachable from its drill-in.
+- A device under a rule is marked in the network list, with the rule and its
+  status reachable from the device's drill-in.
 - Byte figures of a terabyte or more are now shown in TB.
 
 ### Starlink account & cloud control
@@ -58,7 +68,7 @@ All notable changes to Dishylink are documented here.
 ### Fixed
 
 - The desktop app no longer shows "A JavaScript error occurred in the main
-  process" when the network drops out from under it — waking from sleep, a VPN
+  process" when the network drops out from under it: waking from sleep, a VPN
   connecting, or the router being switched into bypass. Faults that are not a
   lost connection still surface exactly as before.
 - A router change that timed out no longer claims Starlink rejected it. Nothing
