@@ -169,6 +169,29 @@ export function RouterSettingsTab({
           return "Reboot sent — the router is restarting.";
         }}
       />
+      <DangerAction
+        title='Factory reset router'
+        caption={
+          answering || accountConnected
+            ? "Wipes the WiFi name, password and every router setting. Not reversible."
+            : "Needs the router on this network, or your Starlink account"
+        }
+        buttonLabel='Factory reset'
+        slideLabel='Slide to factory reset the router'
+        confirmLabel='Factory reset router'
+        warning='Factory reset will clear your WiFi network name, password, and other settings. This will interrupt your service until you set it up again.'
+        disabled={!answering && !accountConnected}
+        onRun={async () => {
+          // A bypassed router is off the LAN, which is exactly when a reset is
+          // wanted: the account reaches it there and nothing local does.
+          if (!answering) {
+            await applyRouterConfigUpdate({ kind: "factoryReset" });
+            return "Factory reset sent through your Starlink account — the router is wiping and restarting.";
+          }
+          await (await DishClient.load("router")).factoryReset();
+          return "Factory reset sent — the router is wiping and restarting.";
+        }}
+      />
       <CollapsibleSection title='Advanced'>
         {addresses && (
           <>

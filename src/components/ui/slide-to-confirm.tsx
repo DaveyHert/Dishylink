@@ -188,7 +188,7 @@ export function SlideToConfirm({
           "absolute inset-y-[3px] flex items-center justify-center rounded-full",
           "touch-none outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
           locked ? "cursor-not-allowed" : dragging ? "cursor-grabbing" : "cursor-grab",
-          danger ? "bg-[var(--status-critical)] text-white" : "bg-ink text-surface",
+          danger ? "bg-(--status-critical) text-white" : "bg-ink text-(--surface)",
           glide,
         )}
         style={{
