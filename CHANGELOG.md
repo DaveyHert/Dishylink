@@ -2,7 +2,7 @@
 
 All notable changes to Dishylink are documented here.
 
-## [1.1.0] - Unreleased
+## [1.1.0] - 2026-08-22
 
 ### Data allowances & metering
 
