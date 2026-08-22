@@ -24,6 +24,7 @@ import {
   type ToolbarStyle,
 } from "../../lib/toolbarStyle";
 import { selfDeviceHost } from "../../lib/selfDeviceHost";
+import { badgeModeHost, DEFAULT_BADGE_MODE, type BadgeMode } from "../../lib/badgeMode";
 import { displayName, isClientDevice } from "../network/networkFormat";
 import type { WifiClientJson } from "@core/dishClient";
 
@@ -169,6 +170,57 @@ function SelfDeviceRow({ clients }: { clients: WifiClientJson[] }) {
   );
 }
 
+/** What the extension's toolbar badge counts. Absent on every other host, which
+ *  is what keeps the row out of the desktop app and a plain browser tab. */
+function BadgeModeRow() {
+  const host = badgeModeHost();
+  const [mode, setMode] = useState<BadgeMode>(DEFAULT_BADGE_MODE);
+
+  useEffect(() => {
+    if (!host) return;
+    let active = true;
+    void host.read().then((stored) => {
+      if (active) setMode(stored);
+    });
+    return () => {
+      active = false;
+    };
+  }, [host]);
+
+  if (!host) return null;
+
+  const choose = (value: string) => {
+    const next = value as BadgeMode;
+    setMode(next);
+    void host.write(next);
+  };
+
+  return (
+    <SettingRow
+      title='Toolbar badge'
+      info='The count on the extension icon. Being away from your Starlink makes both devices unreachable, and the badge cannot tell that from a device that has actually failed — so "Device faults only" leaves both out. Alerts still reach the panel and your notifications either way.'
+      caption='What the count on the extension icon includes'
+    >
+      <Select value={mode} onValueChange={choose}>
+        <SelectTrigger className={triggerClass} style={{ width: 158 }}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent className={selectContentClass}>
+          <SelectItem value='all' className={selectItemClass}>
+            All alerts
+          </SelectItem>
+          <SelectItem value='faults' className={selectItemClass}>
+            Device faults only
+          </SelectItem>
+          <SelectItem value='off' className={selectItemClass}>
+            No badge
+          </SelectItem>
+        </SelectContent>
+      </Select>
+    </SettingRow>
+  );
+}
+
 export function AppSettingsTab({ clients }: { clients: WifiClientJson[] }) {
   const toolbarStyle = useSyncExternalStore(subscribeToToolbarStyle, readToolbarStyle);
   const menuBar = useMenuBarThroughput();
@@ -198,6 +250,8 @@ export function AppSettingsTab({ clients }: { clients: WifiClientJson[] }) {
       </SettingRow>
 
       <SelfDeviceRow clients={clients} />
+
+      <BadgeModeRow />
 
       {menuBar && (
         <SettingRow
