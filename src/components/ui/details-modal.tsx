@@ -47,27 +47,19 @@ export function DetailsModal({ title, onClose, children, size, onBack }: Details
   return (
     <DialogPrimitive.Root open onOpenChange={(open) => !open && onClose()}>
       <DialogPrimitive.Portal>
+        {/* The scrim, kept outside the scrolling Overlay: backdrop-filter is
+            re-resolved every frame its subtree scrolls, and Chromium presents the
+            frames where that has not finished. */}
+        <div
+          aria-hidden
+          className='pointer-events-none fixed inset-0 z-40 bg-[rgba(0,0,0,0.55)] backdrop-blur-[5px]'
+        />
         {/* Content nests inside Overlay (not Radix's usual sibling layout) so the
             backdrop stays the scroll container. */}
         <DialogPrimitive.Overlay
           data-slot='details-modal-overlay'
           className='thin-scroll fixed inset-0 z-50 flex items-start justify-center overflow-y-auto pt-[6vh] pr-5 pb-10 pl-5'
         >
-          {/* The scrim. It carries the blur, and it has to stay on a layer of its own
-              that neither scrolls nor parents the panel — a backdrop-filter is
-              re-resolved against what lies behind it on every frame its element
-              scrolls, and Chromium presents the frames where that has not finished, so
-              the surface blinks out and back for as long as the scroll runs. Fixed to
-              the viewport it never scrolls, and as a sibling it keeps backdrop-filter
-              off the ancestor chain of the lists that scroll inside the panel. Blur
-              belongs here and nowhere above the content.
-
-              pointer-events-none so dismiss-on-outside-pointerdown reaches the overlay
-              beneath; -z-10 to sit behind the panel in the overlay's stacking context. */}
-          <div
-            aria-hidden
-            className='pointer-events-none fixed inset-0 -z-10 bg-[rgba(0,0,0,0.55)] backdrop-blur-[5px]'
-          />
           <DialogPrimitive.Content
             data-slot='details-modal'
             className={cn(panel({ size }))}
