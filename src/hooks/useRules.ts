@@ -56,6 +56,9 @@ export interface Rule {
   members: RuleMember[];
   /** Any of its devices held by the router because of this rule. */
   paused: boolean;
+  /** How many of them, so a rule still running for the rest is not read as
+   *  stopped on the strength of one device out of bytes. */
+  pausedCount: number;
   reached: boolean;
   /** Shut by its timetable, as against out of allowance. */
   windowBlocked: boolean;
@@ -112,6 +115,8 @@ function ruleFromGroup(group: DeviceGroup, members: MeterRuleView[]): Rule {
     // another rule holds it, and a card claiming that pause for its own limit
     // reads as "paused" beside a figure nowhere near the limit.
     paused: members.some((member) => member.pauseState === "applied" && member.holding),
+    pausedCount: members.filter((member) => member.pauseState === "applied" && member.holding)
+      .length,
     reached: members.some((member) => member.reached),
     windowBlocked: members.some((member) => member.windowBlocked === true),
     windowEndMs: first?.windowEndMs,
@@ -146,6 +151,7 @@ function ruleFromDevice(rule: MeterRuleView): Rule {
       },
     ],
     paused: rule.pauseState === "applied" && rule.holding,
+    pausedCount: rule.pauseState === "applied" && rule.holding ? 1 : 0,
     reached: rule.reached,
     windowBlocked: rule.windowBlocked === true,
     windowEndMs: rule.windowEndMs,

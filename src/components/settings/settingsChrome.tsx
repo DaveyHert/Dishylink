@@ -15,6 +15,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SlideToConfirm } from "@/components/ui/slide-to-confirm";
+import { Callout } from "@/components/ui/callout";
+import { useScrollIntoViewWhen } from "../../hooks/useScrollIntoViewWhen";
 import { InfoDot } from "../shared/InfoDot";
 import type { Severity } from "../ui/severity-icon";
 
@@ -116,6 +118,7 @@ export function DangerAction({
   buttonLabel,
   confirmLabel,
   slideLabel,
+  warning,
   disabled = false,
   onRun,
 }: {
@@ -124,6 +127,7 @@ export function DangerAction({
   buttonLabel: string;
   confirmLabel: string;
   slideLabel?: string;
+  warning?: string;
   /** Shown but not runnable, for an action whose device is not answering. */
   disabled?: boolean;
   onRun: () => Promise<string>;
@@ -132,6 +136,7 @@ export function DangerAction({
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const armedRef = useScrollIntoViewWhen<HTMLDivElement>(armed);
 
   const run = async () => {
     setBusy(true);
@@ -154,7 +159,7 @@ export function DangerAction({
         note={
           <>
             {armed && slideLabel && (
-              <div className='pt-1 pb-0.5'>
+              <div ref={armedRef} className='flex flex-col gap-2 pt-1 pb-0.5'>
                 <SlideToConfirm
                   label={slideLabel}
                   busyLabel={busy ? "Sending…" : "Confirm to continue"}
@@ -162,6 +167,11 @@ export function DangerAction({
                   busy={confirming || busy}
                   onConfirm={() => setConfirming(true)}
                 />
+                {warning && (
+                  <Callout tone='error' icon='warning'>
+                    {warning}
+                  </Callout>
+                )}
               </div>
             )}
             {result && (

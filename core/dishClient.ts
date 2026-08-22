@@ -56,6 +56,7 @@ export const DISH_LAN_HANDLE_URL = `http://${DISH_LAN_ADDRESS}:9201/SpaceX.API.D
 // Oneof field numbers inside SpaceX.API.Device.Request (from the dish schema).
 const REQUEST_FIELD = {
   reboot: 1001,
+  factoryReset: 1011,
   getStatus: 1004,
   getHistory: 1007,
   getDeviceInfo: 1008,
@@ -584,6 +585,13 @@ export class DishClient {
   /** Reboot this device (dish or router). Drops connectivity for a few minutes. */
   async reboot(abortSignal?: AbortSignal): Promise<void> {
     await this.call(REQUEST_FIELD.reboot, abortSignal);
+  }
+
+  /** Wipe the device back to its shipped state. On a router that includes the
+   *  WiFi name and passphrase, and bypass mode with them: it is the only exit
+   *  the official app leaves once bypass is on. FactoryResetRequest is empty. */
+  async factoryReset(abortSignal?: AbortSignal): Promise<void> {
+    await this.call(REQUEST_FIELD.factoryReset, abortSignal);
   }
 
   /** Stow (fold flat) or unstow the dish. Motorized (mast) models only. */

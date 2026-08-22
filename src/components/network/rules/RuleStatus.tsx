@@ -14,7 +14,7 @@ import { Callout } from "../../ui/callout";
 import { DialogFooter, DialogHeader, DialogTitle, DialogDescription } from "../../ui/dialog";
 import type { MemberCandidate } from "./allowanceTerms";
 import { cycleLabel, endsAtLabel, formatDuration, timeLeft } from "./allowanceTerms";
-import { leadingMeasure, meterTone } from "./ruleMeasure";
+import { leadingMeasure, meterTone, scheduleDormant } from "./ruleMeasure";
 import { Bar, RuleStats, Section, Stat } from "./ruleReadout";
 import { ScheduleWindows } from "./scheduleFields";
 
@@ -87,6 +87,9 @@ export function RuleStatus({
   const leftMs = timing ? Math.max(0, rule.countdownStartMs + rule.countdownMs! - nowMs) : 0;
   const capped = rule.allocationBytes > 0;
   const pooled = rule.mode === "pooled" && rule.memberCount > 1;
+  // One device out of bytes is not the whole rule stopping, so the headline bar
+  // stays on its own figure rather than reddening for a member.
+  const allPaused = rule.pausedCount > 0 && rule.pausedCount === rule.memberCount;
   // Every device carries the whole allowance, so each is read on its own.
   const perDevice = rule.mode === "perMember" && rule.memberCount > 1 && capped;
   // Pooled reads as one meter; a lone device is the same shape with one member.
@@ -137,7 +140,7 @@ export function RuleStatus({
             </div>
             <Bar
               spent={1 - leftMs / (rule.countdownMs || 1)}
-              tone={rule.paused ? "bg-[var(--status-critical)]" : "bg-[var(--accent)]"}
+              tone={allPaused ? "bg-[var(--status-critical)]" : "bg-[var(--accent)]"}
             />
           </div>
         ) : leading === "schedule" ? (
@@ -155,7 +158,7 @@ export function RuleStatus({
                 {pooled ? " shared" : ""}
               </span>
             </div>
-            <Bar spent={spent} tone={meterTone(spent, rule.paused)} />
+            <Bar spent={spent} tone={meterTone(spent, allPaused)} />
           </div>
         ) : null}
 
@@ -185,10 +188,25 @@ export function RuleStatus({
         ) : leading === "schedule" ? (
           <RuleStats>
             <Stat
-              label={rule.windowBlocked ? "Opens in" : "Closes in"}
+              label={
+                scheduleDormant(rule, nowMs)
+                  ? "Resumes in"
+                  : rule.windowBlocked
+                    ? "Opens in"
+                    : "Closes in"
+              }
               value={rule.windowEndMs ? (timeLeft(rule.windowEndMs, nowMs) ?? "—") : "—"}
             />
-            <Stat label='Right now' value={rule.windowBlocked ? "Paused" : "Online"} />
+            <Stat
+              label='Right now'
+              value={
+                scheduleDormant(rule, nowMs)
+                  ? "Not scheduled"
+                  : rule.windowBlocked
+                    ? "Paused"
+                    : "Online"
+              }
+            />
             <Stat
               label='Devices'
               value={`${rule.memberKeys.length} device${rule.memberKeys.length === 1 ? "" : "s"}`}

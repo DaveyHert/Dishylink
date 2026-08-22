@@ -7,7 +7,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ROUTER_LAN_ADDRESS, type DishStatusJson } from "@core/dishClient";
-import { dishSeesRouter } from "../lib/lanPresence";
+import { routerPresence } from "@core/routerPresence";
 import { resolveSelfIdentity, type SelfIdentity } from "../lib/selfIdentity";
 import {
   diagnoseRouterUnreachable,
@@ -75,7 +75,7 @@ export function useRouterUnreachable(
   // one identity across the dish polls underneath it — the status object is new
   // every second, and a fresh message object each time would re-render the
   // callout showing it for no change in what it says.
-  const routerPresent = dishReachable ? dishSeesRouter(dishStatus, true) : null;
+  const presence = dishReachable ? routerPresence(dishStatus) : null;
   // Only addresses belonging to the machine that makes the router request say
   // anything about why that request failed. A phone viewing this dashboard over
   // the LAN is answered with its own address, which is not where the request
@@ -95,17 +95,10 @@ export function useRouterUnreachable(
     () =>
       unreachable
         ? diagnoseRouterUnreachable(
-            { routerPresent, onRouterSubnet, addressConfigured, silencePersisted },
+            { presence, onRouterSubnet, addressConfigured, silencePersisted },
             routerAddress,
           )
         : null,
-    [
-      unreachable,
-      silencePersisted,
-      routerPresent,
-      onRouterSubnet,
-      addressConfigured,
-      routerAddress,
-    ],
+    [unreachable, silencePersisted, presence, onRouterSubnet, addressConfigured, routerAddress],
   );
 }

@@ -6,6 +6,7 @@
 import {
   app,
   BrowserWindow,
+  dialog,
   Tray,
   Menu,
   nativeImage,
@@ -17,7 +18,7 @@ import {
 } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
-import { existsSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { registerAppProtocolScheme, handleAppProtocol, APP_ENTRY_URL } from "./appProtocol";
 import {
   startCollector,
@@ -63,6 +64,79 @@ app.setName("Dishylink");
 
 // Must run before the app is ready, so it's at module load rather than in whenReady.
 registerAppProtocolScheme();
+
+// This process keeps a recorder and a cloud session reaching the network with no
+// window open, so a route that goes away under a request in flight — sleep, a
+// VPN, switching the router into bypass — arrives here as a modal "A JavaScript
+// error occurred" box the user can neither act on nor prevent. Only that class
+// is absorbed; anything else is re-thrown and stays as fatal as it was, because
+// a guard that hid real faults would trade a visible crash for a silent one.
+const NETWORK_FAILURES = new Set([
+  "ECONNABORTED",
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "EAI_AGAIN",
+  "EHOSTUNREACH",
+  "ENETDOWN",
+  "ENETUNREACH",
+  "ENOTFOUND",
+  "EPIPE",
+  "ETIMEDOUT",
+]);
+
+function networkFailure(value: unknown): boolean {
+  const code = (value as NodeJS.ErrnoException | null)?.code;
+  return typeof code === "string" && NETWORK_FAILURES.has(code);
+}
+
+/** The last thing written, so a machine that stays offline repeating the same
+ *  failure every tick does not grow the file without bound. */
+let lastFailureLogged = "";
+
+function logFailure(kind: string, value: unknown): void {
+  // The code lives on the object rather than in the message, and without it a
+  // network fault reads as an ordinary error.
+  const detail =
+    value instanceof Error
+      ? `${(value as NodeJS.ErrnoException).code ?? ""} ${value.stack ?? value.message}`.trim()
+      : String(value);
+  console.error(`[main] ${kind}: ${detail}`);
+  if (detail === lastFailureLogged) return;
+  lastFailureLogged = detail;
+  try {
+    const directory = app.getPath("logs");
+    mkdirSync(directory, { recursive: true });
+    appendFileSync(
+      join(directory, "main.log"),
+      `[${new Date().toISOString()}] ${kind}: ${detail}\n`,
+    );
+  } catch {
+    // Nowhere to write it is not itself worth bringing the app down for.
+  }
+}
+
+// Installing a handler replaces Electron's, which is what puts the box on
+// screen, so anything not absorbed has to raise it again: a real fault must stay
+// exactly as loud and as fatal as it is without this. Re-throwing from here does
+// not recurse — Node exits with the stack printed.
+function fatal(kind: string, value: unknown): never {
+  const detail = value instanceof Error ? (value.stack ?? value.message) : String(value);
+  try {
+    dialog.showErrorBox("A JavaScript error occurred in the main process", detail);
+  } catch {
+    // Before the app is ready there is no window server to ask; the throw stands.
+  }
+  throw value instanceof Error ? value : new Error(`${kind}: ${detail}`);
+}
+
+process.on("unhandledRejection", (reason) => {
+  logFailure("unhandled rejection", reason);
+  if (!networkFailure(reason)) fatal("unhandled rejection", reason);
+});
+process.on("uncaughtException", (error) => {
+  logFailure("uncaught exception", error);
+  if (!networkFailure(error)) fatal("uncaught exception", error);
+});
 
 // Set by vite-plugin-electron while serving; absent in a packaged build.
 const devServerUrl = process.env.VITE_DEV_SERVER_URL;

@@ -44,7 +44,7 @@ describe("diagnoseRouterUnreachable", () => {
   it("blames the address when a live router is unreachable from its own subnet", () => {
     const { cause, message } = diagnoseRouterUnreachable({
       ...AT_DEFAULT_ADDRESS_AND_PERSISTENT,
-      routerPresent: true,
+      presence: "present",
       onRouterSubnet: true,
     });
     expect(cause).toBe("addressTaken");
@@ -55,7 +55,7 @@ describe("diagnoseRouterUnreachable", () => {
     expect(
       diagnoseRouterUnreachable({
         ...AT_DEFAULT_ADDRESS_AND_PERSISTENT,
-        routerPresent: true,
+        presence: "present",
         onRouterSubnet: false,
       }).cause,
     ).toBe("differentNetwork");
@@ -66,20 +66,20 @@ describe("diagnoseRouterUnreachable", () => {
     // new range while the app still dials the old default.
     const { message } = diagnoseRouterUnreachable({
       ...AT_DEFAULT_ADDRESS_AND_PERSISTENT,
-      routerPresent: true,
+      presence: "present",
       onRouterSubnet: false,
     });
     expect(message).toContain("subnet was changed");
   });
 
   it("reports no router when the dish says there is none", () => {
-    // Bypass mode: the dish answers, and names nothing downstream of it. Our own
-    // position is irrelevant — there is nothing at any address to reach.
+    // An enterprise kit or a powered-down router: the dish answers and names
+    // nothing downstream, so our own position is irrelevant.
     for (const onRouterSubnet of [true, false, null]) {
       for (const addressConfigured of [true, false]) {
         expect(
           diagnoseRouterUnreachable({
-            routerPresent: false,
+            presence: "absent",
             onRouterSubnet,
             addressConfigured,
             silencePersisted: true,
@@ -89,11 +89,47 @@ describe("diagnoseRouterUnreachable", () => {
     }
   });
 
+  it("names bypass rather than blaming the network the kit moved us onto", () => {
+    // Bypass leaves the router listed downstream and moves the viewer onto a
+    // CGNAT lease, so presence alone reads as a router up on another network.
+    const { cause, message } = diagnoseRouterUnreachable({
+      ...AT_DEFAULT_ADDRESS_AND_PERSISTENT,
+      presence: "bypassed",
+      onRouterSubnet: false,
+    });
+    expect(cause).toBe("bypassed");
+    expect(message).not.toContain("Connect to your Starlink WiFi");
+  });
+
+  it("names bypass whatever our own address and settings say", () => {
+    for (const onRouterSubnet of [true, false, null]) {
+      for (const addressConfigured of [true, false]) {
+        expect(
+          diagnoseRouterUnreachable({
+            presence: "bypassed",
+            onRouterSubnet,
+            addressConfigured,
+            silencePersisted: true,
+          }).cause,
+        ).toBe("bypassed");
+      }
+    }
+  });
+
+  it("keeps bypass out of the wording for a kit with no router", () => {
+    const { message } = diagnoseRouterUnreachable({
+      ...AT_DEFAULT_ADDRESS_AND_PERSISTENT,
+      presence: "absent",
+      onRouterSubnet: null,
+    });
+    expect(message).not.toContain("bypass");
+  });
+
   it("stays unknown while the dish cannot say whether a router exists", () => {
     expect(
       diagnoseRouterUnreachable({
         ...AT_DEFAULT_ADDRESS_AND_PERSISTENT,
-        routerPresent: null,
+        presence: null,
         onRouterSubnet: true,
       }).cause,
     ).toBe("unknown");
@@ -103,20 +139,20 @@ describe("diagnoseRouterUnreachable", () => {
     expect(
       diagnoseRouterUnreachable({
         ...AT_DEFAULT_ADDRESS_AND_PERSISTENT,
-        routerPresent: true,
+        presence: "present",
         onRouterSubnet: null,
       }).cause,
     ).toBe("unknown");
   });
 
   it("gives every cause something to read", () => {
-    for (const routerPresent of [true, false, null]) {
+    for (const presence of ["present", "absent", "bypassed", null] as const) {
       for (const onRouterSubnet of [true, false, null]) {
         for (const addressConfigured of [true, false]) {
           for (const silencePersisted of [true, false]) {
             expect(
               diagnoseRouterUnreachable({
-                routerPresent,
+                presence,
                 onRouterSubnet,
                 addressConfigured,
                 silencePersisted,
@@ -130,7 +166,7 @@ describe("diagnoseRouterUnreachable", () => {
 
   it("names the address actually being dialled, not the default", () => {
     const message = diagnoseRouterUnreachable(
-      { ...AT_DEFAULT_ADDRESS_AND_PERSISTENT, routerPresent: null, onRouterSubnet: null },
+      { ...AT_DEFAULT_ADDRESS_AND_PERSISTENT, presence: null, onRouterSubnet: null },
       "192.168.2.1",
     ).message;
     expect(message).toContain("192.168.2.1");
@@ -142,7 +178,7 @@ describe("diagnoseRouterUnreachable with an address the user chose", () => {
   it("blames the setting, not a neighbour, wherever this device sits", () => {
     for (const onRouterSubnet of [true, false, null]) {
       const { cause, message } = diagnoseRouterUnreachable(
-        { routerPresent: true, onRouterSubnet, addressConfigured: true, silencePersisted: true },
+        { presence: "present", onRouterSubnet, addressConfigured: true, silencePersisted: true },
         "192.168.2.1",
       );
       expect(cause).toBe("configuredAddressSilent");
@@ -153,7 +189,7 @@ describe("diagnoseRouterUnreachable with an address the user chose", () => {
   it("still reports bypass ahead of the setting", () => {
     expect(
       diagnoseRouterUnreachable({
-        routerPresent: false,
+        presence: "absent",
         onRouterSubnet: true,
         addressConfigured: true,
         silencePersisted: true,
@@ -164,11 +200,12 @@ describe("diagnoseRouterUnreachable with an address the user chose", () => {
 
 describe("diagnoseRouterUnreachable before the outage settles", () => {
   it("names no cause at all, however strong the signals", () => {
-    for (const routerPresent of [true, false, null]) {
+    // Bypass is excluded: it is a fact from the dish, so it is named at once.
+    for (const presence of ["present", "absent", null] as const) {
       for (const addressConfigured of [true, false]) {
         expect(
           diagnoseRouterUnreachable({
-            routerPresent,
+            presence,
             onRouterSubnet: true,
             addressConfigured,
             silencePersisted: false,
@@ -176,6 +213,19 @@ describe("diagnoseRouterUnreachable before the outage settles", () => {
         ).toBe("checking");
       }
     }
+  });
+
+  it("names bypass immediately, without waiting for the silence to settle", () => {
+    // The alert list stops raising the unreachability the moment the dish reports
+    // the role, so a panel that waited would contradict it for 15 seconds.
+    expect(
+      diagnoseRouterUnreachable({
+        presence: "bypassed",
+        onRouterSubnet: true,
+        addressConfigured: false,
+        silencePersisted: false,
+      }).cause,
+    ).toBe("bypassed");
   });
 });
 
@@ -195,7 +245,7 @@ describe("viewerOnRouterSubnet with a configured address", () => {
 it("never suggests the address the router already answers on", () => {
   for (const routerAddress of ["192.168.1.1", "192.168.2.1", "10.0.0.1"]) {
     const { message } = diagnoseRouterUnreachable(
-      { ...AT_DEFAULT_ADDRESS_AND_PERSISTENT, routerPresent: true, onRouterSubnet: true },
+      { ...AT_DEFAULT_ADDRESS_AND_PERSISTENT, presence: "present", onRouterSubnet: true },
       routerAddress,
     );
     const suggestion = /different address \(like ([\d.]+)\)/.exec(message)?.[1];

@@ -22,6 +22,9 @@ import {
 
 type Status = "loading" | "ready" | "not-connected" | "error";
 
+const RETRY_BASE_MS = 2_000;
+const RETRY_MAX_MS = 30_000;
+
 interface CloudStoreState<T> {
   data: T | null;
   status: Status;
@@ -50,9 +53,29 @@ function createCloudStore<T>(fetcher: () => Promise<T>): CloudStore<T> {
   // cancel it for the others.
   let token = 0;
 
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let retryDelayMs = RETRY_BASE_MS;
+
   function set(next: CloudStoreState<T>) {
     snapshot = next;
     for (const listener of [...listeners]) listener();
+  }
+
+  function cancelRetry() {
+    if (retryTimer !== null) clearTimeout(retryTimer);
+    retryTimer = null;
+    retryDelayMs = RETRY_BASE_MS;
+  }
+
+  /** Backed off so a network that is down for minutes is not dialled every
+   *  second, and capped so it still recovers on its own once it returns. */
+  function scheduleRetry() {
+    if (retryTimer !== null || listeners.size === 0) return;
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      retryDelayMs = Math.min(retryDelayMs * 2, RETRY_MAX_MS);
+      if (listeners.size) load();
+    }, retryDelayMs);
   }
 
   function load() {
@@ -66,39 +89,56 @@ function createCloudStore<T>(fetcher: () => Promise<T>): CloudStore<T> {
         if (mine !== token) return;
         loaded = true;
         inFlight = false;
+        cancelRetry();
         set({ data, status: "ready" });
       })
       .catch((error: unknown) => {
         if (mine !== token) return;
-        loaded = true;
         inFlight = false;
-        set({
-          data: null,
-          status: error instanceof CloudNotConnectedError ? "not-connected" : "error",
-        });
+        const missing = error instanceof CloudNotConnectedError;
+        // A refused session is an answer and stays answered. A transport failure
+        // is not: the network changing under a request is exactly when this
+        // fails, and it is also when the controls behind it matter most — the
+        // bypass switch is unusable while this reads error, and turning bypass on
+        // is itself what breaks the request. Latching here strands the only
+        // control that undoes it.
+        loaded = missing;
+        // Same reason the status is not latched: a request that failed in
+        // transit learned nothing, so it cannot be what discards the last answer.
+        // Dropping it here swings every caption keyed on it once per retry, which
+        // the panel's height animation then chases.
+        set({ data: missing ? null : snapshot.data, status: missing ? "not-connected" : "error" });
+        if (!missing) scheduleRetry();
       });
   }
 
   return {
     subscribe(listener) {
       listeners.add(listener);
+      // A retry cannot be pending with nobody watching, so one arriving over a
+      // failed read is what starts it.
+      if (snapshot.status === "error" && !inFlight) scheduleRetry();
       return () => {
         listeners.delete(listener);
+        if (listeners.size === 0) cancelRetry();
       };
     },
     getSnapshot: () => snapshot,
     ensure() {
       if (loaded || inFlight) return;
+      cancelRetry();
       load();
     },
     reload() {
       loaded = false;
+      cancelRetry();
       load();
     },
     invalidate() {
       loaded = false;
       token++; // abandon anything in flight against the old session
       inFlight = false;
+      cancelRetry();
       if (listeners.size) load();
       else set({ data: null, status: "loading" });
     },

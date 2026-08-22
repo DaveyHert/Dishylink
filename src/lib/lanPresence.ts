@@ -16,12 +16,7 @@
 // opinion", never "offline", and the caller falls back to cloud freshness.
 
 import type { DishStatusJson, WifiStatusJson } from "@core/dishClient";
-
-/** How recently the dish must have heard from a downstream router to count it
- *  present. The dish drops a dead node from the map on its own, so this is a
- *  backstop against an entry that lingers; it is a LAN-local reading, hence
- *  seconds rather than the minutes the cloud path needs. */
-const LAST_SEEN_MS = 60_000;
+import { freshDownstreamRouterIds } from "@core/routerPresence";
 
 export interface LanPresenceInput {
   /** The dish's own get_status reply, and whether that poll is currently succeeding. */
@@ -31,36 +26,6 @@ export interface LanPresenceInput {
   router: WifiStatusJson | null;
   routerReachable: boolean;
   nowMs?: number;
-}
-
-/** Nanosecond epoch string → milliseconds, or null when unparseable. */
-function lastSeenMs(value: string | undefined): number | null {
-  if (value == null) return null;
-  const ns = Number(value);
-  return Number.isFinite(ns) && ns > 0 ? ns / 1e6 : null;
-}
-
-/**
- * The routers the dish is currently vouching for, by cloud DeviceId.
- *
- * downstreamRouters is preferred wherever the dish sends it, because its
- * per-router lastSeen can catch an entry that outlives the link it describes.
- * connectedRouters carries the same ids with no timestamp, so it stands in only
- * when the timestamped map is absent altogether rather than supplementing it —
- * re-adding those ids unconditionally would hand back exactly the staleness the
- * lastSeen check exists to filter.
- */
-function freshDownstreamRouterIds(dish: DishStatusJson | null, nowMs: number): string[] {
-  const downstream = dish?.downstreamRouters;
-  if (!downstream) return (dish?.connectedRouters ?? []).filter((id): id is string => !!id);
-  const ids: string[] = [];
-  for (const [routerId, entry] of Object.entries(downstream)) {
-    const seenMs = lastSeenMs(entry?.lastSeen);
-    // A missing or unreadable timestamp still counts: the dish listing the
-    // router at all is its statement that the link is up.
-    if (seenMs == null || nowMs - seenMs < LAST_SEEN_MS) ids.push(routerId);
-  }
-  return ids;
 }
 
 /**

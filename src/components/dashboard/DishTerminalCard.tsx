@@ -1,6 +1,7 @@
 // Hardware, alignment, GPS, and network facts from the live status message.
 
 import type { DishStatusJson, DishReadyStatesJson } from "@core/dishClient";
+import { routerPresence } from "@core/routerPresence";
 import { dishModelFor, specForModel } from "../../lib/dishMesh";
 import { formatAttitudeState, formatRelativeTime, formatUptime } from "../../lib/format";
 import { FactGrid, FactRow } from "../ui/fact-row";
@@ -128,10 +129,12 @@ export function DishTerminalCard({
     },
     {
       // The dish sends router identities, not a count — keep both: the count
-      // reads at a glance, the ids say which routers.
-      label: "Mesh routers",
+      // reads at a glance, the ids say which routers. The controller counts here
+      // too, so this is every router the dish is talking to, mesh or not.
+      label: "Downstream routers",
       value: status.connectedRouters?.length
-        ? `${status.connectedRouters.length} · ${status.connectedRouters.join(", ")}`
+        ? `${status.connectedRouters.length} · ${status.connectedRouters.join(", ")}` +
+          (routerPresence(status) === "bypassed" ? " · bypassed" : "")
         : "0",
     },
     { label: "Bandwidth limit", value: formatBandwidthLimit(status.dlBandwidthRestrictedReason) },

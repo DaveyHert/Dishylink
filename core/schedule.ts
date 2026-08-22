@@ -102,6 +102,18 @@ function dayIsScheduled(schedule: Schedule, atMs: number): boolean {
 }
 
 /**
+ * Whether the timetable has any bearing at this instant.
+ *
+ * False on a day it never names, where the rule neither allows nor blocks and is
+ * simply sitting the day out. Distinct from `blockedAt` returning false, which
+ * also covers being inside a window that is letting traffic through.
+ */
+export function scheduleGoverns(schedule: Schedule, atMs: number): boolean {
+  if (schedule.windows.some((window) => windowContains(window, atMs))) return true;
+  return dayIsScheduled(schedule, atMs);
+}
+
+/**
  * Whether the schedule holds the device shut at this instant.
  *
  * A day the timetable does not cover is unrestricted rather than shut: a

@@ -87,7 +87,7 @@ describe("buildRouterConfigRequest", () => {
     });
     // The passphrase lives under `networks`, which this must never carry: it only
     // ever reads back masked, so resending it would write the mask.
-    expect(Object.keys(request.wifiSetConfig.wifiConfig)).toEqual([
+    expect(Object.keys(request.wifiSetConfig!.wifiConfig)).toEqual([
       "nameservers",
       "applyNameservers",
     ]);
@@ -95,7 +95,7 @@ describe("buildRouterConfigRequest", () => {
 
   it("still sets the apply flag when clearing, so the router acts on the empty list", () => {
     const request = buildRouterConfigRequest(TARGET, { kind: "customDns", nameservers: [] });
-    expect(request.wifiSetConfig.wifiConfig).toEqual({ nameservers: [], applyNameservers: true });
+    expect(request.wifiSetConfig!.wifiConfig).toEqual({ nameservers: [], applyNameservers: true });
   });
 
   it("names only the bypass fields, so no other setting rides along", () => {
@@ -104,7 +104,7 @@ describe("buildRouterConfigRequest", () => {
       targetId: TARGET,
       wifiSetConfig: { wifiConfig: { bypassMode: true, applyBypassMode: true } },
     });
-    expect(Object.keys(request.wifiSetConfig.wifiConfig)).toEqual([
+    expect(Object.keys(request.wifiSetConfig!.wifiConfig)).toEqual([
       "bypassMode",
       "applyBypassMode",
     ]);
@@ -112,9 +112,17 @@ describe("buildRouterConfigRequest", () => {
 
   it("sends the apply flag when switching bypass off, not just when turning it on", () => {
     const request = buildRouterConfigRequest(TARGET, { kind: "bypass", enabled: false });
-    expect(request.wifiSetConfig.wifiConfig).toEqual({
+    expect(request.wifiSetConfig!.wifiConfig).toEqual({
       bypassMode: false,
       applyBypassMode: true,
+    });
+  });
+
+  it("sends a factory reset as its own oneof arm, carrying no config with it", () => {
+    // The router's only exit from bypass, and it must not smuggle a wifi write.
+    expect(buildRouterConfigRequest(TARGET, { kind: "factoryReset" })).toEqual({
+      targetId: TARGET,
+      factoryReset: {},
     });
   });
 
@@ -217,8 +225,8 @@ describe("buildRouterConfigRequest for a subnet", () => {
       { kind: "subnet", subnet: "192.168.2.1/24", password: "hunter2hunter2" },
       ROUTER_NETWORKS,
     );
-    expect(Object.keys(request.wifiSetConfig.wifiConfig)).toEqual(["networks", "applyNetworks"]);
-    expect(request.wifiSetConfig.wifiConfig.applyNetworks).toBe(true);
+    expect(Object.keys(request.wifiSetConfig!.wifiConfig)).toEqual(["networks", "applyNetworks"]);
+    expect(request.wifiSetConfig!.wifiConfig.applyNetworks).toBe(true);
   });
 
   it("refuses when the router reported no networks, rather than wiping them", () => {

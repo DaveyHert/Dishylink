@@ -551,10 +551,282 @@ describe("updateRouterConfig", () => {
       prepareRouterConfigUpdate: async (_update, _targetId, send) => send(new Uint8Array()),
     });
 
+    // Nothing was dispatched, so the router not answering describes no call made.
     await expect(handler.updateRouterConfig(SUBNET)).resolves.toMatchObject({
       status: 504,
-      body: { error: "device_call_timeout" },
+      body: { error: "prepare_call_timeout" },
     });
+  });
+
+  it("given: a slow preamble, should: leave the write a full window of its own", async () => {
+    // Each phase fits the budget and the two together do not. DNS is the subject
+    // because it does not sever its own reply, so a timeout is still reported.
+    const PHASE_MS = 90;
+    // Abortable, or the deadline under test has nothing to cut short.
+    const wait = (signal?: AbortSignal | null) =>
+      new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, PHASE_MS);
+        signal?.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(timer);
+            reject(signal.reason);
+          },
+          { once: true },
+        );
+      });
+    const accepted = () =>
+      ({
+        status: 200,
+        ok: true,
+        headers: { get: () => null },
+        arrayBuffer: async () => new Uint8Array([0, 0, 0, 0, 0]).buffer,
+      }) as unknown as Response;
+    const inner = gateway(async (init) => {
+      await wait(init?.signal);
+      return accepted();
+    });
+
+    const handler = createCloudHandler({
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input) === AUTH_URL) await wait(init?.signal);
+        return inner(input, init);
+      }) as typeof fetch,
+      readCookie: () => SESSION,
+      retryDelayMs: 0,
+      deviceCallTimeoutMs: PHASE_MS + 60,
+      prepareRouterConfigUpdate: async () => new Uint8Array(),
+    });
+
+    await expect(
+      handler.updateRouterConfig({ kind: "customDns", nameservers: ["1.1.1.1"] }),
+    ).resolves.toMatchObject({ status: 200 });
+  });
+
+  it("given: a session miss and then a stalled retry, should: not report the router as silent", async () => {
+    // The refused first attempt is retried whole, so how far that one got says
+    // nothing about the second, which never reaches the router at all.
+    let authCalls = 0;
+    let deviceCalls = 0;
+    const denied = () =>
+      ({
+        status: 200,
+        ok: true,
+        headers: { get: (name: string) => (name === "grpc-status" ? "16" : null) },
+        arrayBuffer: async () => new Uint8Array().buffer,
+      }) as unknown as Response;
+    const inner = gateway(async () => {
+      deviceCalls += 1;
+      return denied();
+    });
+
+    const handler = createCloudHandler({
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input) === AUTH_URL && ++authCalls > 1) return stall(init);
+        return inner(input, init);
+      }) as typeof fetch,
+      readCookie: () => SESSION,
+      retryDelayMs: 0,
+      deviceCallTimeoutMs: 20,
+      prepareRouterConfigUpdate: async () => new Uint8Array(),
+    });
+
+    await expect(handler.updateRouterConfig(SUBNET)).resolves.toMatchObject({
+      status: 504,
+      body: { error: "prepare_call_timeout" },
+    });
+    expect(deviceCalls).toBe(1);
+  });
+
+  it("given: the gateway briefly having no session to the router, should: try again", async () => {
+    // Measured on hardware: the write that ends bypass is refused with
+    // DEVICE_NOT_CONNECTED and accepted six seconds later, because a bypassed
+    // router holds only an intermittent session with the gateway.
+    let calls = 0;
+    const handler = createCloudHandler({
+      fetch: gateway(async () => {
+        calls += 1;
+        if (calls === 1)
+          return {
+            status: 200,
+            ok: true,
+            headers: {
+              get: (name: string) =>
+                name === "grpc-status"
+                  ? "5"
+                  : name === "grpc-message"
+                    ? "DEVICE_NOT_CONNECTED"
+                    : null,
+            },
+            arrayBuffer: async () => new Uint8Array().buffer,
+          } as unknown as Response;
+        return {
+          status: 200,
+          ok: true,
+          headers: { get: () => null },
+          arrayBuffer: async () => new Uint8Array([0, 0, 0, 0, 0]).buffer,
+        } as unknown as Response;
+      }),
+      readCookie: () => SESSION,
+      retryDelayMs: 0,
+      deviceRetryDelayMs: 0,
+      prepareRouterConfigUpdate: async () => new Uint8Array(),
+    });
+
+    await expect(
+      handler.updateRouterConfig({ kind: "bypass", enabled: false }),
+    ).resolves.toMatchObject({ status: 200 });
+    expect(calls).toBe(2);
+  });
+
+  it("given: a router the gateway never has a session to, should: stop rather than retry forever", async () => {
+    let calls = 0;
+    const handler = createCloudHandler({
+      fetch: gateway(async () => {
+        calls += 1;
+        return {
+          status: 200,
+          ok: true,
+          headers: { get: (name: string) => (name === "grpc-status" ? "5" : null) },
+          arrayBuffer: async () => new Uint8Array().buffer,
+        } as unknown as Response;
+      }),
+      readCookie: () => SESSION,
+      retryDelayMs: 0,
+      deviceRetryDelayMs: 0,
+      prepareRouterConfigUpdate: async () => new Uint8Array(),
+    });
+
+    // The far end refused, so this is not one of the writes that severs its own
+    // reply: it never took effect and must not be reported as applied. Tried
+    // exactly twice, the second time having thrown away everything learned,
+    // because resending the same bytes could only earn the same refusal.
+    await expect(
+      handler.updateRouterConfig({ kind: "bypass", enabled: false }),
+    ).resolves.toMatchObject({ status: 502 });
+    expect(calls).toBe(2);
+  });
+
+  it("given: an account read that lists only a mesh node, should: not cache it as the target", async () => {
+    // A bypass flip drops the controller out of telemetry for a moment. A lone
+    // router left in that gap is the mesh node, which is never the controller
+    // and answers DEVICE_NOT_CONNECTED to everything.
+    const MESH = "Router-01000000000000000049375B";
+    let listController = false;
+    const handler = createCloudHandler({
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes("/device-data/cache/v1/telemetry"))
+          return res(200, {
+            data: {
+              columnNamesByDeviceType: {
+                r: ["DeviceType", "DeviceId", "WifiHopsFromController"],
+              },
+              values: listController
+                ? [
+                    ["r", TARGET, 0],
+                    ["r", MESH, 1],
+                  ]
+                : [["r", MESH, 1]],
+            },
+          });
+        return gateway(async () => res(200))(input, init);
+      }) as typeof fetch,
+      readCookie: () => SESSION,
+      retryDelayMs: 0,
+      readRouterConfig: async (targetId) => ({ countryCode: targetId }),
+    });
+
+    // A background account read landing in the gap. It may cache a controller
+    // for later writes, but a lone mesh node is not one.
+    await handler.handle("/cloud/account");
+    listController = true;
+    // The controller is back, and the read must go to it rather than to whatever
+    // the gap left behind.
+    await expect(handler.handle("/cloud/router-config")).resolves.toEqual({
+      status: 200,
+      body: { wifiConfig: { countryCode: TARGET } },
+    });
+  });
+
+  it("given: a factory reset whose reply dies with the router, should: report it as applied", async () => {
+    // A reset restarts the device it was sent to, so the reply is lost the same
+    // way a bypass flip loses its own. Reporting that as a failure would send the
+    // user to reset a router that is already wiping.
+    const handler = createCloudHandler({
+      fetch: gateway(stall),
+      readCookie: () => SESSION,
+      retryDelayMs: 0,
+      deviceCallTimeoutMs: 5,
+      prepareRouterConfigUpdate: async () => new Uint8Array(),
+    });
+
+    await expect(handler.updateRouterConfig({ kind: "factoryReset" })).resolves.toMatchObject({
+      status: 200,
+      body: { applied: true },
+    });
+  });
+
+  it("given: a target cached during a flip, should: re-derive it rather than write to it", async () => {
+    // The snapshot taken mid-flip can omit the controller and leave only the mesh
+    // node, which is never connected. Cached, that answer refuses every write
+    // behind it for as long as it lives, which no amount of retrying survives.
+    const MESH = "Router-01000000000000000049375B";
+    let listController = false;
+    const targets: string[] = [];
+    const handler = createCloudHandler({
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).includes("/device-data/cache/v1/telemetry"))
+          return res(200, {
+            data: {
+              columnNamesByDeviceType: { r: ["DeviceType", "DeviceId", "WifiHopsFromController"] },
+              values: listController
+                ? [
+                    ["r", TARGET, 0],
+                    ["r", MESH, 1],
+                  ]
+                : [["r", MESH, 1]],
+            },
+          });
+        return gateway(async () => res(200))(input, init);
+      }) as typeof fetch,
+      readCookie: () => SESSION,
+      retryDelayMs: 0,
+      readRouterConfig: async (targetId) => ({ countryCode: targetId }),
+      prepareRouterConfigUpdate: async (_update, targetId) => {
+        targets.push(targetId);
+        return new Uint8Array();
+      },
+    });
+
+    // A read during the gap caches the only router the account listed.
+    await handler.handle("/cloud/router-config");
+    listController = true;
+    await handler.updateRouterConfig({ kind: "bypass", enabled: false });
+
+    expect(targets).toEqual([TARGET]);
+  });
+
+  it("given: a refused subnet write, should: not repeat a networks block read before it", async () => {
+    let calls = 0;
+    const handler = createCloudHandler({
+      fetch: gateway(async () => {
+        calls += 1;
+        return {
+          status: 200,
+          ok: true,
+          headers: { get: (name: string) => (name === "grpc-status" ? "5" : null) },
+          arrayBuffer: async () => new Uint8Array().buffer,
+        } as unknown as Response;
+      }),
+      readCookie: () => SESSION,
+      retryDelayMs: 0,
+      deviceRetryDelayMs: 0,
+      prepareRouterConfigUpdate: async () => new Uint8Array(),
+    });
+
+    await expect(handler.updateRouterConfig(SUBNET)).resolves.toMatchObject({ status: 502 });
+    expect(calls).toBe(1);
   });
 
   it("given: a DNS write that stalls, should: stay retryable rather than claim success", async () => {

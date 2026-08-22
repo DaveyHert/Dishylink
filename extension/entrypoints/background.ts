@@ -10,6 +10,8 @@ import type { MeterHost } from "../lib/meterHost";
 import { IndexedDbHistory } from "../lib/history";
 import { singleFlight } from "../lib/singleFlight";
 import { NOTIFICATIONS_ENABLED_KEY, type NotifyResult } from "../lib/notificationHost";
+import { BADGE_MODE_KEY, storedBadgeMode } from "../lib/badgeModeHost";
+import { badgeAlerts } from "@/lib/badgeMode";
 import { loadRouterAddress, watchRouterAddress } from "../lib/endpoints";
 
 // The toolbar icon opens the full dashboard page, never a toolbar-anchored
@@ -21,6 +23,7 @@ const SURFACE_KEY = "surface";
 const WINDOW_BOUNDS_KEY = "dashboardWindowBounds";
 const DASHBOARD_WINDOW_ID_KEY = "dashboardWindowId";
 const LAST_DRAIN_KEY = "lastDrain";
+const LAST_ACTIVE_KEY = "lastActiveAlerts";
 
 /** The account this worker holds, as the recorder and the API router use it. */
 const meterHost: MeterHost = {
@@ -208,28 +211,22 @@ const BADGE_COLOR: Record<AlertSeverity, string> = {
 // `browser_action` for Firefox at build time, but the JS namespace does not.
 const action = browser.action ?? browser.browserAction;
 
-/**
- * Reflect the live alert set onto the toolbar icon — the same count the app's
- * bell shows, so it reads identically inside and out.
- *
- * Driven from `active` — the episodes still open after this tick's reconcile,
- * worst first — not from the tick's transitions. A badge set from edges would
- * blank on the next service-worker restart, which happens between every alarm;
- * the standing count has to come from the standing state. An empty set clears
- * the badge, so a cleared alert removes it with no separate step.
- *
- * Starlink outages are left out, exactly as the bell leaves them out: a healthy
- * dish drops its link to the satellites many times an hour as they hand over,
- * and a badge that counted each one would sit permanently lit over something
- * that needs no attention. Outages surface as their own thing, not as a device
- * fault to be tallied here.
- */
-function badgeWorthy(alert: AlertState): boolean {
-  return !(alert.source === "system" && alert.key === "starlinkOutage");
+/** The last tick's alert set, so a setting changed between ticks can re-render
+ *  the badge without polling the devices again. */
+async function rememberActive(active: AlertState[]): Promise<void> {
+  await browser.storage.local.set({ [LAST_ACTIVE_KEY]: active });
 }
 
+async function repaintBadge(): Promise<void> {
+  const stored = await browser.storage.local.get(LAST_ACTIVE_KEY);
+  await updateBadge((stored[LAST_ACTIVE_KEY] as AlertState[] | undefined) ?? []);
+}
+
+/** Driven from the standing `active` set, never from the tick's transitions: a
+ *  badge set from edges would blank on the next service-worker restart, which
+ *  happens between every alarm. */
 async function updateBadge(active: AlertState[]): Promise<void> {
-  const shown = active.filter(badgeWorthy);
+  const shown = badgeAlerts(active, await storedBadgeMode());
   await action.setBadgeText({ text: shown.length === 0 ? "" : String(shown.length) });
   if (shown.length === 0) return;
   // activeAlerts() sorts worst-first, so the head sets the tint.
@@ -327,9 +324,15 @@ export default defineBackground(() => {
   const drain = async () => {
     const { status, alerts, active } = await drainOnce(meterHost);
     await browser.storage.local.set({ [LAST_DRAIN_KEY]: status });
+    await rememberActive(active);
     await updateBadge(active);
     await announceAlerts(alerts);
   };
+  // The tick is half a minute away at worst, which is long enough for a setting
+  // that changed nothing on screen to read as broken.
+  browser.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && BADGE_MODE_KEY in changes) void repaintBadge();
+  });
   // Waking on an alarm evaluates this module and dispatches onAlarm, so both
   // paths below ask for a tick at once. Data limits are read-modify-write: two
   // ticks in flight together would each read an unspent allowance, each pause the
