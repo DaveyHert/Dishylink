@@ -47,9 +47,12 @@ export function isSubnetPreset(value: string): value is SubnetPreset {
   return (SUBNET_PRESETS as readonly string[]).includes(value);
 }
 
+/** One `Request` oneof arm, as proto3 JSON renders it: the chosen field present
+ *  and the rest absent. */
 export interface RouterConfigRequestJson {
   targetId: string;
-  wifiSetConfig: { wifiConfig: Record<string, unknown> };
+  wifiSetConfig?: { wifiConfig: Record<string, unknown> };
+  factoryReset?: Record<string, never>;
 }
 
 /** The writes this builds. Each names one field, so two in flight cannot clobber
@@ -67,6 +70,12 @@ export type RouterConfigUpdate =
        *  router reports the stored one as `•••••` and takes that string
        *  literally if it is written back, locking every device off the WiFi. */
       password: string;
+    }
+  | {
+      /** Not a config field but the same shape of request: one targeted mutation
+       *  over the gateway, whose reply its own effect destroys. Carried here so
+       *  it inherits that handling rather than growing a parallel path. */
+      kind: "factoryReset";
     }
   | {
       kind: "bypass";
@@ -236,6 +245,8 @@ export function buildRouterConfigRequest(
       wifiSetConfig: { wifiConfig: { bypassMode: update.enabled, applyBypassMode: true } },
     };
   }
+  // FactoryResetRequest carries no fields.
+  if (update.kind === "factoryReset") return { targetId, factoryReset: {} };
   const nameservers = normalizeNameservers(update.nameservers);
   if (!nameservers) throw new Error("invalid DNS server address");
   return {

@@ -6,7 +6,15 @@
 // exactly as the dev proxy relies on.
 
 import { app, safeStorage, BrowserWindow, session } from "electron";
-import { existsSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  rmSync,
+  appendFileSync,
+  mkdirSync,
+  statSync,
+} from "node:fs";
 import { join } from "node:path";
 import { createCloudHandler } from "../cloud/starlinkCloudHandler";
 import { resilientFetch } from "../cloud/resilientFetch";
@@ -67,6 +75,54 @@ function clearCookie(): void {
   }
 }
 
+/** Roughly a day of calls at this app's rate, and small enough to paste. */
+const TIMING_LOG_MAX_BYTES = 256 * 1024;
+
+/** One line per cloud call into logs/cloud-timing.log. A write that fails here
+ *  reports a deadline with no record of which call spent it, and the phase is
+ *  the whole diagnosis. */
+const timedFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  const url = String(input instanceof Request ? input.url : input);
+  const name = url.includes("auth-rp")
+    ? "auth"
+    : url.includes("service-lines")
+      ? "service-lines"
+      : url.includes("telemetry")
+        ? "telemetry"
+        : url.includes("Handle")
+          ? "gateway"
+          : // Path only: a query string carries the session, and an account or
+            // service-line number in the path is the customer's, not a route name.
+            new URL(url).pathname.replace(/\/(AST|SL)-[\w-]+/gi, "/…");
+  const started = Date.now();
+  const note = (outcome: string) => {
+    try {
+      const directory = app.getPath("logs");
+      mkdirSync(directory, { recursive: true });
+      const file = join(directory, "cloud-timing.log");
+      // Truncated rather than rotated: this is a rolling window for diagnosing
+      // the call in front of you, not a record worth keeping.
+      if ((statSync(file, { throwIfNoEntry: false })?.size ?? 0) > TIMING_LOG_MAX_BYTES)
+        rmSync(file);
+      appendFileSync(
+        file,
+        `[${new Date().toISOString()}] ${name} ${Date.now() - started}ms ${outcome}\n`,
+      );
+    } catch {
+      // Nowhere to write it is not worth failing the request over.
+    }
+  };
+  try {
+    const response = await resilientFetch(input, init);
+    note(`HTTP ${response.status}`);
+    return response;
+  } catch (error) {
+    const held = error as { name?: string; code?: string; cause?: { code?: string } };
+    note(`FAILED ${held.cause?.code ?? held.code ?? held.name ?? "unknown"}`);
+    throw error;
+  }
+}) as typeof fetch;
+
 /** Create the cloud client once, after the app is ready (the data path needs it). */
 export function startCloud(rendererRoot: string, sessionFile?: string): void {
   cookieFile = sessionFile ?? join(app.getPath("userData"), "starlink-session.bin");
@@ -84,7 +140,7 @@ export function startCloud(rendererRoot: string, sessionFile?: string): void {
       protosetBytes: new Uint8Array(readFileSync(protosetPath)),
     }));
   handler = createCloudHandler({
-    fetch: resilientFetch,
+    fetch: timedFetch,
     readCookie,
     writeCookie,
     clearCookie,
