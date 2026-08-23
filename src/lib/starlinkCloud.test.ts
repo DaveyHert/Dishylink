@@ -7,6 +7,7 @@ import {
   isUnlimited,
   dishDisplayName,
   allTimeUsage,
+  isCycleReported,
   type CloudTerminal,
   type DeviceTelemetry,
   type UsageCycle,
@@ -112,11 +113,52 @@ describe("dishDisplayName", () => {
   });
 });
 
+describe("isCycleReported", () => {
+  it("is false for a cycle carrying no days at all", () => {
+    // What the feed sends for a cycle it has nothing for: 0 GB across 0 days.
+    // That is an absence, not a measurement of zero.
+    expect(
+      isCycleReported({
+        startDate: "2026-02-04T00:00:00+00:00",
+        endDate: "2026-03-04T00:00:00+00:00",
+        totalAmountGB: 0,
+        dailyData: [],
+      }),
+    ).toBe(false);
+  });
+
+  it("is true for a cycle whose days really do add up to zero", () => {
+    // A dish that was off all cycle genuinely used nothing. The days are there,
+    // so the zero is a reading and must not be washed out as missing.
+    expect(
+      isCycleReported({
+        startDate: "2026-02-04T00:00:00+00:00",
+        endDate: "2026-03-04T00:00:00+00:00",
+        totalAmountGB: 0,
+        dailyData: [[0], [0], [0]],
+      }),
+    ).toBe(true);
+  });
+
+  it("is false when dailyData is missing entirely", () => {
+    expect(isCycleReported({ dailyData: undefined } as unknown as UsageCycle)).toBe(false);
+  });
+});
+
 describe("allTimeUsage", () => {
-  const cycle = (startDate: string, totalAmountGB: number): UsageCycle => ({
+  /** A reported cycle: `days` of daily figures behind the total. */
+  const cycle = (startDate: string, totalAmountGB: number, days = 1): UsageCycle => ({
     startDate,
     endDate: startDate,
     totalAmountGB,
+    dailyData: Array.from({ length: days }, () => [0]),
+  });
+
+  /** A cycle the feed sent nothing for. */
+  const unreported = (startDate: string): UsageCycle => ({
+    startDate,
+    endDate: startDate,
+    totalAmountGB: 0,
     dailyData: [],
   });
 
@@ -135,27 +177,50 @@ describe("allTimeUsage", () => {
     // one is what keeps "all time" an honest label rather than a claim about
     // every byte the account ever moved.
     const summary = allTimeUsage([
-      cycle("2026-02-04T00:00:00+00:00", 0),
+      cycle("2026-02-04T00:00:00+00:00", 3),
       cycle("2026-03-04T00:00:00+00:00", 12),
     ]);
     expect(summary.from).toBe("2026-02-04T00:00:00+00:00");
   });
 
-  it("counts a zero-usage activation cycle in the window but not the total", () => {
-    // The first cycle of a new service line reports 0 GB across 0 days. It is
-    // still where billing started, so it belongs in the span and the count.
+  it("starts the span at the first cycle with data, not the first one listed", () => {
+    // A service line whose opening cycle was never reported has no usage behind
+    // that month. Dating the total from it would claim coverage that does not
+    // exist.
     const summary = allTimeUsage([
-      cycle("2026-02-04T00:00:00+00:00", 0),
+      unreported("2026-02-04T00:00:00+00:00"),
       cycle("2026-03-04T00:00:00+00:00", 500),
     ]);
-    expect(summary.totalGB).toBe(500);
+    expect(summary.from).toBe("2026-03-04T00:00:00+00:00");
+  });
+
+  it("counts only the cycles that were reported", () => {
+    const summary = allTimeUsage([
+      unreported("2026-02-04T00:00:00+00:00"),
+      cycle("2026-03-04T00:00:00+00:00", 500),
+      cycle("2026-04-04T00:00:00+00:00", 250),
+    ]);
+    expect(summary.totalGB).toBe(750);
     expect(summary.cycles).toBe(2);
+    expect(summary.unreported).toBe(1);
+  });
+
+  it("keeps a genuine zero in the count and the span", () => {
+    // Days present, all zero: the dish was off, and that is a real reading.
+    const summary = allTimeUsage([
+      cycle("2026-02-04T00:00:00+00:00", 0, 28),
+      cycle("2026-03-04T00:00:00+00:00", 500),
+    ]);
+    expect(summary.cycles).toBe(2);
+    expect(summary.unreported).toBe(0);
+    expect(summary.from).toBe("2026-02-04T00:00:00+00:00");
   });
 
   it("is zero — never NaN — when no cycle has been reported", () => {
     const summary = allTimeUsage([]);
     expect(summary.totalGB).toBe(0);
     expect(summary.cycles).toBe(0);
+    expect(summary.unreported).toBe(0);
     expect(summary.from).toBeNull();
   });
 

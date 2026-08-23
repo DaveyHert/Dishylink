@@ -152,6 +152,175 @@ describe("CloudDataUsage", () => {
     expect(text()).not.toContain("Jul 6, 2026");
   });
 
+  test("marks a cycle the account never reported instead of drawing it as zero", async () => {
+    // The opening cycle of a service line arrives as 0 GB across zero days.
+    // Drawn as a bar it would claim a month of measured silence; it is an
+    // absence, and the total must not be dated from it either.
+    stubUsage({
+      content: {
+        servicePlan: { usageLimitGB: 100_000 },
+        dataBuckets: [{ name: "Residential Data" }],
+        billingCyclesAnnotated: [
+          {
+            startDate: "2026-02-06T00:00:00+00:00",
+            endDate: "2026-03-06T00:00:00+00:00",
+            totalAmountGB: 0,
+            dailyData: [],
+          },
+          {
+            startDate: "2026-03-06T00:00:00+00:00",
+            endDate: "2026-04-06T00:00:00+00:00",
+            totalAmountGB: 463.49,
+            dailyData: [[1], [2]],
+          },
+          {
+            startDate: "2026-04-06T00:00:00+00:00",
+            endDate: "2026-05-06T00:00:00+00:00",
+            totalAmountGB: 304.24,
+            dailyData: [[3], [4]],
+          },
+        ],
+      },
+    });
+    render(<CloudDataUsage active />);
+
+    const all = await waitFor(
+      () =>
+        [...document.querySelectorAll("[data-slot='segmented-control-item']")].find(
+          (item) => item.textContent?.trim() === "All",
+        ) ?? null,
+      "All stop",
+    );
+    (all as HTMLElement).click();
+
+    await waitFor(
+      () => document.querySelector("[data-slot='cycle-not-reported']"),
+      "not-reported wash",
+    );
+    expect(text()).toContain("Feb 2026 · not reported");
+    expect(text()).not.toContain("Feb 2026 · 0 GB");
+    // Two reported cycles out of the three listed, dated from the first with data.
+    expect(text()).toContain("2 billing cycles");
+    expect(text()).toContain("Mar 6, 2026");
+    expect(text()).not.toContain("Feb 6, 2026");
+  });
+
+  test("says so on an unreported cycle's own tab instead of showing a bare 0 GB", async () => {
+    // Selected on its own, an unreported cycle has no columns to draw, so the
+    // chart area collapses to nothing and the headline claims a measured zero.
+    // Both need to say that nothing was reported.
+    stubUsage({
+      content: {
+        servicePlan: { usageLimitGB: 100_000 },
+        dataBuckets: [{ name: "Residential Data" }],
+        billingCyclesAnnotated: [
+          {
+            startDate: "2026-02-06T00:00:00+00:00",
+            endDate: "2026-03-06T00:00:00+00:00",
+            totalAmountGB: 0,
+            dailyData: [],
+          },
+          {
+            startDate: "2026-03-06T00:00:00+00:00",
+            endDate: "2026-04-06T00:00:00+00:00",
+            totalAmountGB: 463.49,
+            dailyData: [[1], [2]],
+          },
+        ],
+      },
+    });
+    render(<CloudDataUsage active />);
+
+    const feb = await waitFor(
+      () =>
+        [...document.querySelectorAll("[data-slot='segmented-control-item']")].find(
+          (item) => item.textContent?.trim() === "Feb",
+        ) ?? null,
+      "Feb stop",
+    );
+    (feb as HTMLElement).click();
+
+    await waitFor(
+      () => document.querySelector("[data-slot='empty-state']"),
+      "not-reported empty state",
+    );
+    expect(text()).toContain("Not reported");
+    expect(text()).toContain("No daily usage was reported for this billing cycle");
+    // The allowance line would imply a cycle that was measured against it.
+    expect(text()).not.toContain("Usage Limit");
+    // The billing dates are still true and stay on screen.
+    expect(text()).toContain("billing cycle");
+  });
+
+  test("draws the chart normally on a reported cycle's own tab", async () => {
+    stubUsage({
+      content: {
+        servicePlan: { usageLimitGB: 100_000 },
+        dataBuckets: [{ name: "Residential Data" }],
+        billingCyclesAnnotated: [
+          {
+            startDate: "2026-02-06T00:00:00+00:00",
+            endDate: "2026-03-06T00:00:00+00:00",
+            totalAmountGB: 0,
+            dailyData: [],
+          },
+          {
+            startDate: "2026-03-06T00:00:00+00:00",
+            endDate: "2026-04-06T00:00:00+00:00",
+            totalAmountGB: 463.49,
+            dailyData: [[1], [2]],
+          },
+        ],
+      },
+    });
+    render(<CloudDataUsage active />);
+
+    // Defaults to the newest cycle, which is the reported one.
+    await waitFor(() => (text().includes("463") ? true : null), "usage headline");
+    expect(document.querySelector("[data-slot='empty-state']")).toBeNull();
+    expect(text()).toContain("Usage Limit");
+    expect(text()).not.toContain("Not reported");
+  });
+
+  test("keeps a genuine zero cycle as a bar, since its days were reported", async () => {
+    // Days present and all zero is a dish that was off. That is a reading, and
+    // washing it out would hide a real month.
+    stubUsage({
+      content: {
+        servicePlan: { usageLimitGB: 100_000 },
+        billingCyclesAnnotated: [
+          {
+            startDate: "2026-02-06T00:00:00+00:00",
+            endDate: "2026-03-06T00:00:00+00:00",
+            totalAmountGB: 0,
+            dailyData: [[0], [0]],
+          },
+          {
+            startDate: "2026-03-06T00:00:00+00:00",
+            endDate: "2026-04-06T00:00:00+00:00",
+            totalAmountGB: 463.49,
+            dailyData: [[1], [2]],
+          },
+        ],
+      },
+    });
+    render(<CloudDataUsage active />);
+
+    const all = await waitFor(
+      () =>
+        [...document.querySelectorAll("[data-slot='segmented-control-item']")].find(
+          (item) => item.textContent?.trim() === "All",
+        ) ?? null,
+      "All stop",
+    );
+    (all as HTMLElement).click();
+
+    await waitFor(() => (text().includes("billing cycles") ? true : null), "all view");
+    expect(document.querySelector("[data-slot='cycle-not-reported']")).toBeNull();
+    expect(text()).toContain("Feb 2026 · 0 GB");
+    expect(text()).toContain("2 billing cycles");
+  });
+
   test("has no All stop with a single cycle — it would restate the figure on screen", async () => {
     stubUsage({
       content: {

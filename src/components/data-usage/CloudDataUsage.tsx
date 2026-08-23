@@ -8,6 +8,7 @@ import { useMemo, useState } from "react";
 import { useCloudUsage } from "../../hooks/useCloudAccount";
 import {
   allTimeUsage,
+  isCycleReported,
   isUnlimited,
   formatAllowance,
   type UsageCycle,
@@ -45,8 +46,8 @@ function cycleMonthYearLabel(cycle: UsageCycle): string {
 }
 
 /** "Feb 4, 2026" — the year matters once the span crosses one. */
-function cycleStartLabel(cycle: UsageCycle): string {
-  return new Date(cycle.startDate).toLocaleDateString([], {
+function startLabel(isoDate: string): string {
+  return new Date(isoDate).toLocaleDateString([], {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -96,15 +97,25 @@ function CycleBars({ cycle }: { cycle: UsageCycle }) {
 function AllCyclesBars({ cycles }: { cycles: UsageCycle[] }) {
   const maxGB = Math.max(...cycles.map(cycleTotalGB), 1e-9);
   const columns: RangeBarColumn[] = cycles.map((cycle, index) => {
+    const reported = isCycleReported(cycle);
     const gb = cycleTotalGB(cycle);
+    const when = cycleMonthYearLabel(cycle);
     return {
       key: index,
       label: cycleMonthLabel(cycle),
-      title: `${cycleMonthYearLabel(cycle)} · ${formatGB(gb)}`,
-      bar: (
+      title: reported ? `${when} · ${formatGB(gb)}` : `${when} · not reported`,
+      bar: reported ? (
         <div
           className='w-full rounded-t-[3px] bg-chart-ink opacity-80'
           style={{ height: `${(gb / maxGB) * 100}%` }}
+        />
+      ) : (
+        // An empty slot, not a zero one: mark the hole rather than draw a bar
+        // claiming no traffic passed. The same treatment the local usage chart
+        // gives a stretch the historian did not cover.
+        <div
+          data-slot='cycle-not-reported'
+          style={{ height: "100%", width: "100%", background: "var(--ink-muted)", opacity: 0.06 }}
         />
       ),
     };
@@ -183,18 +194,29 @@ export function CloudDataUsage({ active }: { active: boolean }) {
   }
 
   const unlimited = isUnlimited(plan);
+  // A single cycle the account reported nothing for. In the All view the same
+  // cycle is one washed column among many, so this only applies on its own tab.
+  const missingCycle = !showAll && !isCycleReported(cycle);
 
   return (
     <div>
       <div className='mt-3 mb-3.5'>
         <div className='text-[34px] leading-[1.05] font-bold tracking-[-0.01em]'>
-          {formatGB(showAll ? allTime.totalGB : cycleTotalGB(cycle))}
-          <span className='ml-[6px] align-baseline text-[13px] font-medium'>
-            {data?.content?.dataBuckets?.[0]?.name ?? "Data"}
-          </span>
+          {/* No figure rather than a figure of zero: nothing measured this
+              cycle, so there is nothing to state. */}
+          {missingCycle
+            ? "Not reported"
+            : formatGB(showAll ? allTime.totalGB : cycleTotalGB(cycle))}
+          {!missingCycle && (
+            <span className='ml-[6px] align-baseline text-[13px] font-medium'>
+              {data?.content?.dataBuckets?.[0]?.name ?? "Data"}
+            </span>
+          )}
         </div>
         <div className='mt-0.5 text-[12px] font-medium text-muted-foreground'>
-          {showAll ? (
+          {missingCycle ? (
+            "Starlink sent no usage for this cycle"
+          ) : showAll ? (
             // The allowance is a per-cycle figure, so it says nothing about a
             // total across cycles. What the total does need stated is how much
             // of history it covers.
@@ -223,12 +245,20 @@ export function CloudDataUsage({ active }: { active: boolean }) {
         />
       )}
 
-      {showAll ? <AllCyclesBars cycles={cycles} /> : <CycleBars cycle={cycle} />}
+      {showAll ? (
+        <AllCyclesBars cycles={cycles} />
+      ) : missingCycle ? (
+        // RangeBars draws nothing without columns, which leaves a hole that
+        // reads as a broken chart rather than as an absence. Say which it is.
+        <EmptyState className='py-14'>
+          No daily usage was reported for this billing cycle.
+        </EmptyState>
+      ) : (
+        <CycleBars cycle={cycle} />
+      )}
       <div className='mt-1 text-[12px] font-medium'>
         {showAll ? (
-          <>
-            {allTime.from ? cycleStartLabel(cycles[0]) : "—"} – now · every reported billing cycle
-          </>
+          <>{allTime.from ? startLabel(allTime.from) : "—"} – now · every reported billing cycle</>
         ) : (
           <>
             {new Date(cycle.startDate).toLocaleDateString([], {
@@ -252,6 +282,9 @@ export function CloudDataUsage({ active }: { active: boolean }) {
         UTC — the authoritative figure your statement uses.
         {showAll
           ? " “All time” adds up every cycle your account reports, which is as far back as Starlink sends — not necessarily the whole life of the service line. The newest cycle is still running, so the total grows with it."
+          : ""}
+        {missingCycle
+          ? " Your account listed this cycle but sent no daily figures for it, so there is nothing to show rather than a measured zero."
           : ""}
       </Explainer>
     </div>
