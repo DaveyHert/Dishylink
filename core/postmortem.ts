@@ -28,7 +28,9 @@ export interface BeforeDropStats {
   windowStartMs: number;
   windowEndMs: number;
   /** Seconds of the window actually covered by a recording — the honesty number
-   *  behind every average. 300 is a fully covered window at 1 Hz. */
+   *  behind every average. 300 is a fully covered window at 1 Hz; the
+   *  minute-row fallback counts whole minutes only, so its fully covered window
+   *  is 240–300 s depending on where in the minute the drop landed. */
   coverageSeconds: number;
   /** Mean dish → PoP ping latency (ms). Null once the outage is older than the
    *  6 h sample window: the per-minute rows that reach back further carry no
@@ -38,10 +40,12 @@ export interface BeforeDropStats {
   uplinkAvgBps: number | null;
   /** Mean share of pings dropped across the covered seconds (0–1). */
   dropRateAvg: number | null;
-  /** Tri-state on purpose: get_status omits a false snowMeltActive field, so
-   *  "active" is the only state the dish ever asserts outright — "off" needs a
-   *  recorded false, and a window with no reading at all is "unknown". */
-  snowMelt: "active" | "off" | "unknown";
+  /** Two-state on purpose: get_status omits a false snowMeltActive field, so
+   *  "active" is the only state the dish ever asserts outright, and the
+   *  recorder's only producer normalizes everything else to an absent field. A
+   *  window with no assertion — or with a recorded false, which the current
+   *  producer chain cannot even emit — reads "unknown", never "off". */
+  snowMelt: "active" | "unknown";
   /** Which recording fed the numbers: the 1 s sample window when it reaches
    *  back to the pre-drop minutes, else the per-minute energy rows. */
   source: "samples" | "minute-buckets";
@@ -90,7 +94,9 @@ export interface OutageReportInput {
   samples: TelemetrySample[];
   /** Per-minute energy rows for the window — the fallback for outages that have
    *  aged past the sample window. Minutes are the whole-minute span their
-   *  bucket covers; the caller hands over the ones overlapping the window. */
+   *  bucket covers; the caller hands over the ones overlapping the window, and
+   *  the drop-minute bucket is excluded here regardless of how it was asked
+   *  for. */
   minuteBuckets: MinuteBucket[];
   /** The thermal log, whole — overlap with the outage is judged here. */
   thermal: ReportThermalEpisode[];
@@ -99,8 +105,11 @@ export interface OutageReportInput {
 
 /** Below this many sample-seconds covering the window, the sample window is no
  *  longer the honest source: it usually means the window's start has aged out,
- *  and the per-minute rows describe it better. Whole-minute rows cover the
- *  window with ~300 s either way. */
+ *  and the per-minute rows describe it better. Whole-minute rows count only the
+ *  minutes fully inside the window — the partial minute the window starts in
+ *  and the drop-minute bucket are both left out — so a fully recorded window is
+ *  300 s only when the drop lands on a minute boundary; the usual drop reads
+ *  240 s (four whole minutes). */
 const MIN_SAMPLE_COVERAGE_SECONDS = 60;
 
 /** The cause the dish's event log assigns, or null when none of its events
@@ -122,16 +131,15 @@ function causeOf(dishEvents: OutageEvent[], startMs: number, endMs: number): str
   );
 }
 
-/** Window tri-state: any asserted active wins; a recorded false everywhere is
- *  "off"; silence everywhere is "unknown" (see BeforeDropStats.snowMelt). */
-function snowMeltOf(samples: TelemetrySample[]): "active" | "off" | "unknown" {
-  let sawReading = false;
+/** Window verdict: any asserted active wins; everything else — silence, or a
+ *  recorded false, which today's producer chain cannot even emit — reads
+ *  "unknown" (see BeforeDropStats.snowMelt). Claiming "off" would assert
+ *  something the reply never said. */
+function snowMeltOf(samples: TelemetrySample[]): "active" | "unknown" {
   for (const sample of samples) {
-    if (sample.snowMeltActive === null || sample.snowMeltActive === undefined) continue;
-    sawReading = true;
     if (sample.snowMeltActive === true) return "active";
   }
-  return sawReading ? "off" : "unknown";
+  return "unknown";
 }
 
 function mean(values: number[]): number | null {
@@ -168,8 +176,16 @@ function beforeDropFromSamples(samples: TelemetrySample[], startMs: number): Bef
  *  those rows, so they stay null/unknown rather than being invented. */
 function beforeDropFromBuckets(buckets: MinuteBucket[], startMs: number): BeforeDropStats {
   const windowStartMs = startMs - BEFORE_WINDOW_MS;
+  // Bucket minutes are whole-minute epoch seconds; the window bounds are ms.
+  const windowStartSec = windowStartMs / 1000;
+  // The whole-minute bucket the drop second falls in is excluded no matter how
+  // the caller asked: it mixes pre-drop and dropped seconds, and its start can
+  // precede the drop stamp (only a drop exactly on the minute boundary makes
+  // the naive `bucket.minute < startMs / 1000` cut). A bucket whose minute
+  // start lies inside the window is then a whole minute fully inside it.
+  const dropMinuteSec = Math.floor(startMs / 60_000) * 60;
   const inWindow = buckets.filter(
-    (bucket) => bucket.minute >= windowStartMs && bucket.minute < startMs,
+    (bucket) => bucket.minute >= windowStartSec && bucket.minute < dropMinuteSec,
   );
   const coverageSeconds = inWindow.reduce((sum, bucket) => sum + bucket.samples, 0);
   const downlinkBits = inWindow.reduce((sum, bucket) => sum + (bucket.downlinkBits ?? 0), 0);

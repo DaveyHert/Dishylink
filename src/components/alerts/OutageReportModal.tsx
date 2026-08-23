@@ -17,13 +17,9 @@ import {
   causeLabel,
   outageReportText,
   SNOW_MELT_LABEL,
+  SOURCE_LABEL,
   THERMAL_LABEL,
 } from "../../lib/outageReportText";
-
-const KEY_LABEL: Record<OutageReport["source"], string> = {
-  starlinkOutage: "Link outage",
-  dishUnreachable: "Dish unreachable",
-};
 
 export function OutageReportModal({
   report,
@@ -59,7 +55,7 @@ export function OutageReportModal({
           </div>
           <span className='text-[12.5px] text-muted-foreground'>
             {formatDateTime(report.startMs)} → {formatClockTimeShort(report.endMs)}
-            <span className='text-muted-foreground/70'> · {KEY_LABEL[report.source]}</span>
+            <span className='text-muted-foreground/70'> · {SOURCE_LABEL[report.source]}</span>
           </span>
         </div>
 

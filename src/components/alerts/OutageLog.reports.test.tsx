@@ -111,3 +111,9 @@ test("unknown figures are worded as not recorded, never invented", () => {
   expect(text).not.toContain("Packet loss");
   expect(text).toContain("Snow melt: Unknown");
 });
+
+test("a dish-unreachable report with no dish cause is not mislabeled Link outage", () => {
+  const text = outageReportText(report({ source: "dishUnreachable", cause: null }));
+  expect(text).toContain("Dishylink outage report — Dish unreachable");
+  expect(text).not.toContain("— Link outage");
+});

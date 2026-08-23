@@ -11,9 +11,10 @@ import {
   formatThroughputLabel,
 } from "./format";
 
+// Two-state because the report is: the dish never asserts "off" (proto3 JSON
+// omits a false snowMeltActive), so only "Active" or "Unknown" can ever occur.
 export const SNOW_MELT_LABEL: Record<OutageReport["beforeDrop"]["snowMelt"], string> = {
   active: "Active",
-  off: "Off",
   unknown: "Unknown",
 };
 
@@ -23,8 +24,16 @@ export const THERMAL_LABEL: Record<string, string> = {
   powerSupplyThermalThrottle: "Power supply throttling",
 };
 
+/** The episode name behind a report the dish's event log blames for nothing — a
+ *  dish-unreachable outage has no dish events at all (the dish wasn't
+ *  answering), so "Link outage" would misname it. */
+export const SOURCE_LABEL: Record<OutageReport["source"], string> = {
+  starlinkOutage: "Link outage",
+  dishUnreachable: "Dish unreachable",
+};
+
 export function causeLabel(report: OutageReport): string {
-  return report.cause ? outageEventMeta(report.cause).label : "Link outage";
+  return report.cause ? outageEventMeta(report.cause).label : SOURCE_LABEL[report.source];
 }
 
 /** The card as text: header, the five minutes before the drop, thermal state. */

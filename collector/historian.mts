@@ -78,7 +78,7 @@ import { parseScheduleParam } from "../core/schedule.ts";
 import { CONNECT_ACCOUNT_ADVICE, dataLimitAlertSpec } from "../core/dataMeterAlert.ts";
 import { ThroughputTracker } from "../core/throughputTracker.ts";
 import { usageKey } from "../core/clientUsage.ts";
-import { AlertStore } from "./alertStore.mts";
+import { AlertStore, type AlertEpisode } from "./alertStore.mts";
 import { AlertEngine, type AlertObservation, type AlertTransition } from "../core/alertEngine.ts";
 import { ObstructionStore, packCells } from "./obstructionStore.mts";
 
@@ -951,9 +951,12 @@ export function recordAlertTransitions(transitions: AlertTransition[]): void {
   if (transitions.length === 0) return;
   for (const transition of transitions) {
     const { source, key, atMs, kind, spec } = transition;
+    // `close` hands back the episode it closed: an outage can start before the
+    // alert log's 48 h window, and `all()` only serves that window.
+    let closedEpisode: AlertEpisode | null = null;
     if (kind === "fired")
       alertStore.open(source, key, atMs, { label: spec.firing, severity: spec.severity });
-    else alertStore.close(source, key, atMs);
+    else closedEpisode = alertStore.close(source, key, atMs);
     // The service's diary. It runs unattended under launchd with no window and
     // no operator, so "did it see the outage?" is answerable only from what it
     // wrote down. Every transition is logged, not a chosen few, so an
@@ -977,22 +980,16 @@ export function recordAlertTransitions(transitions: AlertTransition[]): void {
       source === "system" &&
       (key === "starlinkOutage" || key === "dishUnreachable")
     ) {
-      const episode = alertStore
-        .all()
-        .find(
-          (candidate) =>
-            candidate.source === source && candidate.key === key && candidate.endMs === atMs,
-        );
-      if (episode) {
+      if (closedEpisode) {
         // The per-minute fallback rows for the same five-minute window: the
         // whole-minute bucket that covers the drop second is left out, since
         // it mixes pre-drop and dropped seconds.
-        const beforeStartSec = Math.floor((episode.startMs - BEFORE_WINDOW_MS) / 60_000) * 60;
-        const beforeEndSec = Math.floor(episode.startMs / 60_000) * 60;
+        const beforeStartSec = Math.floor((closedEpisode.startMs - BEFORE_WINDOW_MS) / 60_000) * 60;
+        const beforeEndSec = Math.floor(closedEpisode.startMs / 60_000) * 60;
         const added = postmortemStore.add(
           buildOutageReport({
             source: key,
-            startMs: episode.startMs,
+            startMs: closedEpisode.startMs,
             endMs: atMs,
             generatedAtMs: Date.now(),
             dishEvents: eventStore.all(),

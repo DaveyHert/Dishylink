@@ -165,4 +165,49 @@ describe("the recorder's post-mortem path", () => {
     const { body } = await call("GET", "/api/outages/reports");
     expect((JSON.parse(body) as { reports: unknown[] }).reports).toHaveLength(before);
   });
+
+  it("still reports an outage whose episode started outside the 48 h alert window", () => {
+    // The episode is long (started yesterday), so it has aged out of the alert
+    // log's served window by the time it clears — the report must not depend on
+    // `AlertStore.all()` for the episode lookup.
+    const oldStart = END - 49 * 3_600_000;
+    historian.recordAlertTransitions([
+      {
+        kind: "fired",
+        source: "system",
+        key: "dishUnreachable",
+        atMs: oldStart,
+        spec: SYSTEM_ALERTS.dishUnreachable,
+      },
+    ]);
+    historian.recordAlertTransitions([
+      {
+        kind: "cleared",
+        source: "system",
+        key: "dishUnreachable",
+        atMs: END,
+        spec: SYSTEM_ALERTS.dishUnreachable,
+      },
+    ]);
+
+    const rows = readFileSync(POSTMORTEMS_FILE, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(rows).toHaveLength(2); // the seeded outage plus this one
+    const report = rows.find((row) => row.id === `system:dishUnreachable:${oldStart}`);
+    expect(report).toMatchObject({
+      source: "dishUnreachable",
+      startMs: oldStart,
+      endMs: END,
+      durationMs: END - oldStart,
+    });
+    // The pre-drop window has no samples or minute rows this far back: the
+    // honest zero-invention fallback, not a swallowed report.
+    expect(report!.beforeDrop).toMatchObject({
+      coverageSeconds: 0,
+      latencyAvgMs: null,
+      source: "minute-buckets",
+    });
+  });
 });

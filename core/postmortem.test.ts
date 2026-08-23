@@ -107,11 +107,11 @@ describe("the five minutes before the drop", () => {
       input({
         samples: [],
         minuteBuckets: [
-          bucket(WINDOW_START, 60, 6e9),
-          bucket(WINDOW_START + 60_000, 60, 6e9),
-          bucket(WINDOW_START + 120_000, 60, 6e9),
-          bucket(WINDOW_START + 180_000, 60, 6e9),
-          bucket(WINDOW_START + 240_000, 60, 6e9),
+          bucket(WINDOW_START / 1000, 60, 6e9),
+          bucket(WINDOW_START / 1000 + 60, 60, 6e9),
+          bucket(WINDOW_START / 1000 + 120, 60, 6e9),
+          bucket(WINDOW_START / 1000 + 180, 60, 6e9),
+          bucket(WINDOW_START / 1000 + 240, 60, 6e9),
         ],
       }),
     );
@@ -146,13 +146,40 @@ describe("the five minutes before the drop", () => {
       input({
         samples: [],
         minuteBuckets: [
-          bucket(WINDOW_START, 60, 6e9),
-          ...Array.from({ length: 4 }, (_, i) => bucket(WINDOW_START + (i + 1) * 60_000, 60, 6e9)),
-          bucket(dropMinuteSec, 60, 6e9), // must not count — it starts after the window
+          bucket(WINDOW_START / 1000, 60, 6e9),
+          ...Array.from({ length: 4 }, (_, i) =>
+            bucket(WINDOW_START / 1000 + (i + 1) * 60, 60, 6e9),
+          ),
+          bucket(dropMinuteSec, 60, 6e9), // must not count — it covers the drop second
         ],
       }),
     );
     expect(report.beforeDrop.coverageSeconds).toBe(300);
+    expect(report.beforeDrop.downlinkAvgBps).toBe(100_000_000);
+  });
+
+  it("excludes the drop-second bucket even when the caller hands it in — the drop rarely lands on a minute boundary", () => {
+    // Drop at :37 of the minute: the drop-minute bucket starts before the drop
+    // stamp, so a naive `bucket.minute < startMs` cut would let it through and
+    // average its mixed pre-drop/dropped seconds.
+    const startMs = START + 37_000;
+    const dropMinuteSec = Math.floor(startMs / 60_000) * 60;
+    const report = buildOutageReport(
+      input({
+        startMs,
+        endMs: startMs + 180_000,
+        samples: [],
+        minuteBuckets: [
+          bucket(dropMinuteSec - 60, 60, 6e9),
+          bucket(dropMinuteSec - 120, 60, 6e9),
+          bucket(dropMinuteSec - 180, 60, 6e9),
+          bucket(dropMinuteSec - 240, 60, 6e9),
+          // The drop minute, with a volume that would skew the average if it leaked in.
+          bucket(dropMinuteSec, 60, 297e9),
+        ],
+      }),
+    );
+    expect(report.beforeDrop.coverageSeconds).toBe(240);
     expect(report.beforeDrop.downlinkAvgBps).toBe(100_000_000);
   });
 });
@@ -164,13 +191,13 @@ describe("snow melt — what may be asserted", () => {
     expect(buildOutageReport(input({ samples: window })).beforeDrop.snowMelt).toBe("active");
   });
 
-  it("says off when every recorded reading was false", () => {
+  it("reports unknown for recorded falses too — the producer never emits them, so 'off' would be an invention", () => {
     const report = buildOutageReport(
       input({
         samples: fullWindow().map((s) => ({ ...s, snowMeltActive: false })),
       }),
     );
-    expect(report.beforeDrop.snowMelt).toBe("off");
+    expect(report.beforeDrop.snowMelt).toBe("unknown");
   });
 
   it("says unknown when the reply never asserted anything — the field is absent while false", () => {
