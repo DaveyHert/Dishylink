@@ -26,6 +26,7 @@ function minuteOfSamples(): TelemetrySample[] {
     powerW: 30,
     routerLatencyMs: null,
     routerPingSuccessPercent: null,
+    snowMeltActive: null,
   }));
 }
 

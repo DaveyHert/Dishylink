@@ -20,6 +20,7 @@ function window(newestCounter: number, count: number, endMs: number) {
     powerW: 30,
     routerLatencyMs: null,
     routerPingSuccessPercent: null,
+    snowMeltActive: null,
   }));
   return { samples, newestCounter };
 }

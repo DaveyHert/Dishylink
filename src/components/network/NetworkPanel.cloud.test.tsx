@@ -91,6 +91,7 @@ test("given: recorded readings older than the window, should: say so rather than
     powerW: 0,
     routerLatencyMs: null,
     routerPingSuccessPercent: null,
+    snowMeltActive: null,
   });
 
   const renderedPanel = await render(

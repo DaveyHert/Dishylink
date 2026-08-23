@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { DishStatusJson, DishObstructionMapJson } from "@core/dishClient";
 import { readRouterLatencyMs, type OutageEvent, type TelemetrySample } from "@core/telemetry";
+import type { OutageReport } from "@core/postmortem";
 import type { DishConnectionState } from "../../hooks/useDishTelemetry";
 import type { LiveSparklines } from "../../hooks/useLiveReadings";
 import { StatTile, type StatTileProps as StatTileConfig } from "./StatTile";
@@ -59,6 +60,7 @@ interface DashboardViewProps {
   averagePowerW: number;
   outageEvents: OutageEvent[];
   thermalEvents: OutageEvent[];
+  reports: OutageReport[];
   samples: TelemetrySample[];
   onOpenSatelliteView: () => void;
   onExpandTerminal: () => void;
@@ -82,6 +84,7 @@ export function DashboardView({
   averagePowerW,
   outageEvents,
   thermalEvents,
+  reports,
   samples,
   onOpenSatelliteView,
   onExpandTerminal,
@@ -257,7 +260,7 @@ export function DashboardView({
         </SectionCard>
 
         {/* Outage log */}
-        <OutageLog outageEvents={[...outageEvents, ...thermalEvents]} />
+        <OutageLog outageEvents={[...outageEvents, ...thermalEvents]} reports={reports} />
 
         {/* Terminal card */}
         {status ? (
