@@ -4,6 +4,8 @@ import { readRouterLatencyMs, type OutageEvent, type TelemetrySample } from "@co
 import type { DishConnectionState } from "../../hooks/useDishTelemetry";
 import type { LiveSparklines } from "../../hooks/useLiveReadings";
 import { StatTile, type StatTileProps as StatTileConfig } from "./StatTile";
+import { LatencyQualityTile } from "./LatencyQualityTile";
+import { LatencyQualityPanel } from "./LatencyQualityPanel";
 import { TelemetryChart } from "../shared/TelemetryChart";
 import { ObstructionCard } from "../obstruction/ObstructionCard";
 import { OutageLog } from "../alerts/OutageLog";
@@ -87,6 +89,7 @@ export function DashboardView({
   onExpandTerminal,
 }: DashboardViewProps) {
   const [openDetailId, setOpenDetailId] = useState<string | null>(null);
+  const [openLatencyQuality, setOpenLatencyQuality] = useState(false);
   const statDetails = useMemo(
     () =>
       buildStatDetails({
@@ -113,6 +116,11 @@ export function DashboardView({
     return (
       <>
         {detailModal}
+        {openLatencyQuality && (
+          <DetailsModal title='Latency quality' onClose={() => setOpenLatencyQuality(false)}>
+            <LatencyQualityPanel />
+          </DetailsModal>
+        )}
         <SearchingHero />
       </>
     );
@@ -179,10 +187,11 @@ export function DashboardView({
   return (
     <main className='mx-auto flex max-w-[1400px] flex-col gap-3.5 px-6 pt-3.5 pb-20 animate-[rise_400ms_ease_both]'>
       {/* Stat tiles */}
-      <section className='grid grid-cols-6 gap-3.5 max-[1080px]:grid-cols-3'>
+      <section className='grid grid-cols-3 min-[1080px]:grid-cols-7 gap-3.5 max-[1080px]:grid-cols-3'>
         {statTiles.map((tile) => (
           <StatTile key={tile.label} {...tile} />
         ))}
+        <LatencyQualityTile onOpen={() => setOpenLatencyQuality(true)} />
       </section>
 
       <section className='grid grid-cols-12 gap-3.5 max-[1080px]:flex max-[1080px]:flex-col'>
@@ -275,6 +284,11 @@ export function DashboardView({
         )}
       </section>
       {detailModal}
+      {openLatencyQuality && (
+        <DetailsModal title='Latency quality' onClose={() => setOpenLatencyQuality(false)}>
+          <LatencyQualityPanel />
+        </DetailsModal>
+      )}
     </main>
   );
 }
