@@ -3,8 +3,7 @@
 // survives reloads and reaches back days/weeks via the per-minute histogram
 // store, but only exists while `npm run historian` has been running.
 
-import { useEffect, useState } from "react";
-import { apiRequest } from "../lib/apiHost";
+import { usePersistedHistory, type PersistedHistoryState } from "./usePersistedHistory";
 import type { EnergyRange } from "./useEnergyHistory";
 
 export interface LatencyStatMetrics {
@@ -38,48 +37,8 @@ export interface LatencySummary {
   buckets: LatencyBucket[];
 }
 
-export interface LatencyHistoryState {
-  data: LatencySummary | null;
-  loading: boolean;
-  /** True when the historian service isn't reachable. */
-  unavailable: boolean;
-}
-
-const REFRESH_MS = 30_000;
+export type LatencyHistoryState = PersistedHistoryState<LatencySummary>;
 
 export function useLatencyHistory(range: EnergyRange, active: boolean): LatencyHistoryState {
-  const [data, setData] = useState<LatencySummary | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [unavailable, setUnavailable] = useState(false);
-
-  useEffect(() => {
-    if (!active) return;
-    let cancelled = false;
-
-    const load = async () => {
-      setLoading(true);
-      try {
-        const response = await apiRequest(`/api/latency?range=${range}`);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const summary = (await response.json()) as LatencySummary;
-        if (cancelled) return;
-        setData(summary);
-        setUnavailable(false);
-      } catch {
-        if (cancelled) return;
-        setUnavailable(true);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    void load();
-    const timer = window.setInterval(load, REFRESH_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [range, active]);
-
-  return { data, loading, unavailable };
+  return usePersistedHistory<LatencySummary>(`/api/latency?range=${range}`, active);
 }

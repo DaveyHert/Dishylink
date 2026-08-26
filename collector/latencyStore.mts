@@ -20,7 +20,7 @@ import {
 import {
   foldLatencyMinutesToMonths,
   latencyMonthKeyOf,
-  latencyMonthStartSec,
+  latencyYearStartSec,
   addLatencyMonthBucket,
   type LatencyMinuteBucket,
   type LatencyMonthBucket,
@@ -32,7 +32,7 @@ import {
 export {
   foldLatencyMinutesToMonths,
   latencyMonthKeyOf,
-  latencyMonthStartSec,
+  latencyYearStartSec,
   addLatencyMonthBucket,
   type LatencyMinuteBucket,
   type LatencyMonthBucket,
@@ -59,7 +59,7 @@ export class LatencyStore {
    */
   compact(): number {
     const all = this.readAll();
-    const cutoffSec = latencyMonthStartSec(new Date());
+    const cutoffSec = latencyYearStartSec(new Date());
     const kept = all.filter((bucket) => bucket.minute >= cutoffSec);
     const expired = all.filter((bucket) => bucket.minute < cutoffSec);
     if (expired.length === 0) return 0;

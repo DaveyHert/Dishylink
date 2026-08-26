@@ -42,14 +42,16 @@ describe("foldSamplesToLatencyMinutes", () => {
     expect(second.dish.sumMs).toBe(80);
   });
 
-  it("rolls drop rate into the bucket only where a dish latency was read", () => {
+  it("rolls every recorded second's drop rate in, outage seconds included", () => {
     const samples = [
       sample(60_000, 25, 0.02),
-      sample(61_000, null, 0.9), // no latency → drop not counted
+      sample(61_000, null, 1), // outage second: no latency, but 100% loss counts
     ];
     const bucket = foldSamplesToLatencyMinutes(samples).get(60)!;
-    expect(bucket.dropSum).toBeCloseTo(0.02);
-    expect(bucket.dropCount).toBe(1);
+    expect(bucket.dropSum).toBeCloseTo(1.02);
+    expect(bucket.dropCount).toBe(2);
+    expect(bucket.samples).toBe(2);
+    expect(bucket.dish.count).toBe(1);
   });
 
   it("places a reading in the right histogram bin", () => {

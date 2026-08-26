@@ -104,14 +104,14 @@ export function foldSamplesToLatencyMinutes(
       dropSum: 0,
       dropCount: 0,
     };
-    if (isReading(sample.latencyMs)) {
-      addReading(bucket.dish, sample.latencyMs);
-      bucket.samples += 1;
-    }
+    // samples is seconds recorded, not seconds up: an outage second still rode a
+    // poll and counts toward coverage, matching the energy fold.
+    bucket.samples += 1;
+    if (isReading(sample.latencyMs)) addReading(bucket.dish, sample.latencyMs);
     if (isReading(sample.routerLatencyMs)) addReading(bucket.router, sample.routerLatencyMs);
-    // dropRate is the dish's own fraction of pings lost; only meaningful where
-    // the dish reported a latency too (the two ride the same ring).
-    if (isReading(sample.latencyMs) && Number.isFinite(sample.dropRate)) {
+    // dropRate is the dish's own fraction of pings lost, and it is valid exactly
+    // when latency is null: an outage second is dropRate 1 with no ping to time.
+    if (Number.isFinite(sample.dropRate)) {
       bucket.dropSum += sample.dropRate;
       bucket.dropCount += 1;
     }
@@ -151,7 +151,9 @@ export function latencyMonthKeyOf(minuteSec: number): number {
   return Math.floor(date.getTime() / 1000);
 }
 
-export function latencyMonthStartSec(now: Date): number {
+/** Local start of the current calendar year, epoch seconds — the boundary the
+ *  minute store keeps detail back to. */
+export function latencyYearStartSec(now: Date): number {
   const date = new Date(now);
   date.setHours(0, 0, 0, 0);
   date.setMonth(0, 1);

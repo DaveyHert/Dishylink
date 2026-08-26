@@ -18,6 +18,7 @@ import {
   RANGE_SPECS,
 } from "./energySummary";
 import {
+  LATENCY_BIN_COUNT,
   LATENCY_BIN_UPPER_EDGES_MS,
   LATENCY_OVERFLOW_EDGE_MS,
   type LatencyMinuteBucket,
@@ -96,6 +97,9 @@ function sourceMetrics(
   dropSum: number,
   dropCount: number,
 ): LatencyStatMetrics {
+  // Loss is measured even across a total outage (dropRate rides seconds with no
+  // latency reading), so it must survive the no-reading early return.
+  const dropPct = dropCount > 0 ? (dropSum / dropCount) * 100 : null;
   if (stats.count === 0) {
     return {
       count: 0,
@@ -105,7 +109,7 @@ function sourceMetrics(
       p99: null,
       jitter: null,
       spread: null,
-      dropPct: null,
+      dropPct,
     };
   }
   const mean = stats.sumMs / stats.count;
@@ -121,7 +125,7 @@ function sourceMetrics(
     p99,
     jitter: Math.sqrt(variance),
     spread: p50 !== null && p99 !== null ? p99 - p50 : null,
-    dropPct: dropCount > 0 ? (dropSum / dropCount) * 100 : null,
+    dropPct,
   };
 }
 
@@ -153,6 +157,13 @@ export function gradeFor(score: number): string {
   return "F";
 }
 
+/** The app's status-good/warm/critical vocabulary, for a grade letter's color. */
+export function gradeColorVar(grade: string): string {
+  if (grade === "A" || grade === "B") return "--status-good";
+  if (grade === "C") return "--chart-warm";
+  return "--status-critical";
+}
+
 type AnyLatencyBucket = LatencyMinuteBucket | LatencyMonthBucket;
 
 function emptySourceStats(): LatencySourceStats {
@@ -162,7 +173,7 @@ function emptySourceStats(): LatencySourceStats {
     sumSqMs: 0,
     minMs: null,
     maxMs: null,
-    bins: new Array(LATENCY_BIN_UPPER_EDGES_MS.length + 1).fill(0),
+    bins: new Array(LATENCY_BIN_COUNT).fill(0),
   };
 }
 
@@ -206,8 +217,10 @@ function rangeSummary(
   const merged = mergeBuckets(buckets);
   const dish = sourceMetrics(merged.dish, merged.dropSum, merged.dropCount);
   const routerCount = merged.router.count;
-  const router =
-    routerCount > 0 ? sourceMetrics(merged.router, merged.dropSum, merged.dropCount) : null;
+  // The buckets carry only the dish's drop accumulator; the router's own loss is
+  // a five-minute rolling value, not a per-second series we can fold, so its loss
+  // is reported as unknown rather than borrowing the dish's figure.
+  const router = routerCount > 0 ? sourceMetrics(merged.router, 0, 0) : null;
   const score = qualityScore(dish);
 
   return {
