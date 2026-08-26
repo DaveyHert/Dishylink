@@ -33,6 +33,8 @@ export default tseslint.config(
       "collector/data",
       "public",
       "**/__screenshots__",
+      ".venv",
+      "**/.venv",
     ],
   },
 

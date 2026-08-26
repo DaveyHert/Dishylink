@@ -11,5 +11,9 @@ src/assets/dishes
 **/__screenshots__/
 .vitest-attachments/
 
+# Python virtual environment (local only).
+.venv
+**/.venv
+
 # Lockfile: npm owns its formatting.
 package-lock.json

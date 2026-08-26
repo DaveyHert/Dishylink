@@ -3,8 +3,7 @@
 // the in-memory telemetry samples — it survives reloads and reaches back days,
 // but only exists while `npm run historian` has been running.
 
-import { useEffect, useState } from "react";
-import { apiRequest } from "../lib/apiHost";
+import { usePersistedHistory, type PersistedHistoryState } from "./usePersistedHistory";
 
 export type EnergyRange = "1h" | "6h" | "12h" | "today" | "day" | "week" | "month";
 
@@ -24,48 +23,8 @@ export interface EnergySummary {
   buckets: EnergyBucket[];
 }
 
-export interface EnergyHistoryState {
-  data: EnergySummary | null;
-  loading: boolean;
-  /** True when the historian service isn't reachable. */
-  unavailable: boolean;
-}
-
-const REFRESH_MS = 30_000;
+export type EnergyHistoryState = PersistedHistoryState<EnergySummary>;
 
 export function useEnergyHistory(range: EnergyRange, active: boolean): EnergyHistoryState {
-  const [data, setData] = useState<EnergySummary | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [unavailable, setUnavailable] = useState(false);
-
-  useEffect(() => {
-    if (!active) return;
-    let cancelled = false;
-
-    const load = async () => {
-      setLoading(true);
-      try {
-        const response = await apiRequest(`/api/energy?range=${range}`);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const summary = (await response.json()) as EnergySummary;
-        if (cancelled) return;
-        setData(summary);
-        setUnavailable(false);
-      } catch {
-        if (cancelled) return;
-        setUnavailable(true);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    void load();
-    const timer = window.setInterval(load, REFRESH_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [range, active]);
-
-  return { data, loading, unavailable };
+  return usePersistedHistory<EnergySummary>(`/api/energy?range=${range}`, active);
 }

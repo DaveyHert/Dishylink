@@ -1,13 +1,14 @@
 // Stat tile in the Starlink app layout: bold title, big number with the
 // sparkline running inline to its right, gray caption underneath.
 
+import type { ReactNode } from "react";
 import { Sparkline } from "../../assets/icons/Sparkline";
 
 export interface StatTileProps {
   label: string;
   value: string;
   unit?: string;
-  caption?: string;
+  caption?: ReactNode;
   sparkValues?: (number | null)[];
   sparkColorVar?: string;
   /** Opens the stat's detail panel; renders the tile as a button with a chevron. */
