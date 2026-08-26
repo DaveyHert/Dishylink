@@ -1827,13 +1827,25 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
 // dir, not the HTTP port — the embedded host never opens a port, so the port never
 // guarded it. The pidfile is reclaimed when its recorded owner is gone, so a crash
 // (which cannot run the release) does not wedge the next start.
+//
+// globalThis, not module-scope state or a PID compare: Vite's SSR restart can
+// re-evaluate this module within one process, and this must survive that.
+const CLAIM_SENTINEL = Symbol.for("dishylink.historian.dataDirClaim");
+
 function claimDataDir(): void {
   mkdirSync(DATA_DIR, { recursive: true });
+  if ((globalThis as Record<symbol, unknown>)[CLAIM_SENTINEL] === DATA_DIR) {
+    refuseToStart(
+      `this process already owns ${DATA_DIR} — refusing to start a second writer in the same process`,
+      true,
+    );
+  }
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
       const fd = openSync(LOCK_FILE, "wx");
       writeSync(fd, String(process.pid));
       closeSync(fd);
+      (globalThis as Record<symbol, unknown>)[CLAIM_SENTINEL] = DATA_DIR;
       return;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
