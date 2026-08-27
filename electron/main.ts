@@ -44,6 +44,7 @@ import {
 import {
   NOTIFICATION_STATE_CHANNEL,
   MENUBAR_THROUGHPUT_CHANNEL,
+  HIDE_TRAY_ICON_CHANNEL,
   UPDATE_STATE_CHANNEL,
 } from "./ipc";
 import { formatMenuBarRate, formatSpacedRate } from "./menuBarThroughput";
@@ -57,6 +58,10 @@ import { startUpdateChecks, updateState, onUpdateStateChanged } from "./updater"
 const here = dirname(fileURLToPath(import.meta.url));
 const rendererRoot = join(here, "../dist");
 const iconPath = join(here, "../build/icon.png");
+// A "…Template" name makes Electron treat this as a macOS template image: the OS
+// tints it for light/dark and dims it when the menu is inactive, matching every
+// other menu-bar icon. The colour icon stays on the dock and the Windows tray.
+const trayIconPath = join(here, "../build/trayTemplate.png");
 
 // Drives the menu-bar title and per-app data directory; must be set before anything
 // reads it.
@@ -147,11 +152,13 @@ let tray: Tray | null = null;
 const NOTIFY_ITEM_ID = "notify-alerts";
 const NOTIFY_REASON_ITEM_ID = "notify-alerts-reason";
 const THROUGHPUT_ITEM_ID = "menubar-throughput";
+const HIDE_ICON_ITEM_ID = "hide-tray-icon";
 
 // Tray items updated in place after build (rebuilding would drop an open popup).
 let notifyItem: MenuItem | null = null;
 let notifyReasonItem: MenuItem | null = null;
 let throughputItem: MenuItem | null = null;
+let hideIconItem: MenuItem | null = null;
 
 // The live throughput readout: the macOS tray title, or the Windows floating widget
 // (throughputWidget.ts) — one preference, two paint targets, nothing on Linux.
@@ -288,8 +295,12 @@ function windowIsForeground(): boolean {
 }
 
 function createTray(): void {
-  const image = nativeImage.createFromPath(iconPath);
-  tray = new Tray(image.isEmpty() ? image : image.resize({ width: 18, height: 18 }));
+  if (process.platform === "darwin") {
+    tray = new Tray(nativeImage.createFromPath(trayIconPath));
+  } else {
+    const image = nativeImage.createFromPath(iconPath);
+    tray = new Tray(image.isEmpty() ? image : image.resize({ width: 18, height: 18 }));
+  }
   tray.setToolTip("Dishylink");
   const menu = Menu.buildFromTemplate([
     { label: "Open Dishylink", click: showWindow },
@@ -336,6 +347,18 @@ function createTray(): void {
           },
         ]
       : []),
+    ...(process.platform === "darwin"
+      ? [
+          {
+            id: HIDE_ICON_ITEM_ID,
+            label: "Hide Menu Bar Icon",
+            type: "checkbox" as const,
+            checked: preferences().hideTrayIcon,
+            visible: preferences().menuBarThroughput,
+            click: (item: MenuItem) => setPreference("hideTrayIcon", item.checked),
+          },
+        ]
+      : []),
     {
       // openAsHidden + the wasOpenedAtLogin check below start collection with no window.
       label: "Start at Login",
@@ -349,6 +372,7 @@ function createTray(): void {
   notifyItem = menu.getMenuItemById(NOTIFY_ITEM_ID);
   notifyReasonItem = menu.getMenuItemById(NOTIFY_REASON_ITEM_ID);
   throughputItem = menu.getMenuItemById(THROUGHPUT_ITEM_ID);
+  hideIconItem = menu.getMenuItemById(HIDE_ICON_ITEM_ID);
   applyMenuBarThroughput();
   updateThroughputWatchdog();
   // Left click opens the app; right click shows the menu (setContextMenu would make a
@@ -364,6 +388,15 @@ function throughputTitle(downBps: number, upBps: number): string {
   return readout.padStart(THROUGHPUT_TITLE_WIDTH, FIGURE_SPACE);
 }
 
+/** Blank the tray icon when the readout stands in for it, else show the template
+ *  glyph. macOS only; the guard against a hidden icon with no title lives in the
+ *  `menuBarThroughput` half of the condition. */
+function applyTrayIcon(): void {
+  if (tray === null || process.platform !== "darwin") return;
+  const hidden = preferences().menuBarThroughput && preferences().hideTrayIcon;
+  tray.setImage(hidden ? nativeImage.createEmpty() : nativeImage.createFromPath(trayIconPath));
+}
+
 /** Paint the readout from the latest throughput, or clear it when off. A stale
  *  sample (dish unreachable) reads as 0, not a frozen value. macOS writes the tray
  *  title; Windows drives the floating widget. */
@@ -371,6 +404,8 @@ function applyMenuBarThroughput(): void {
   if (!MENU_BAR_THROUGHPUT_SUPPORTED || tray === null) return;
   const on = preferences().menuBarThroughput;
   if (throughputItem !== null) throughputItem.checked = on;
+  if (hideIconItem !== null) hideIconItem.visible = on;
+  applyTrayIcon();
   if (!on) {
     if (process.platform === "darwin") tray.setTitle("");
     else hideThroughputWidget();
@@ -632,6 +667,13 @@ function registerMenuBarThroughputHandler(): void {
     setPreference("menuBarThroughput", on === true);
     return preferences().menuBarThroughput;
   });
+  if (process.platform === "darwin") {
+    ipcMain.handle("get-hide-tray-icon", () => preferences().hideTrayIcon);
+    ipcMain.handle("set-hide-tray-icon", (_event, hidden: boolean) => {
+      setPreference("hideTrayIcon", hidden === true);
+      return preferences().hideTrayIcon;
+    });
+  }
   // The open window's live throughput — the same 1s dish reading the dashboard draws.
   // The timestamp marks the renderer as reporting, so the recorder's poll defers.
   ipcMain.on("report-throughput", (_event, downBps: number, upBps: number) => {
@@ -646,6 +688,8 @@ function registerMenuBarThroughputHandler(): void {
     applyMenuBarThroughput();
     updateThroughputWatchdog();
     mainWindow?.webContents.send(MENUBAR_THROUGHPUT_CHANNEL, prefs.menuBarThroughput);
+    if (hideIconItem !== null) hideIconItem.checked = prefs.hideTrayIcon;
+    mainWindow?.webContents.send(HIDE_TRAY_ICON_CHANNEL, prefs.hideTrayIcon);
   });
 }
 
