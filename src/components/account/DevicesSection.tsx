@@ -126,9 +126,7 @@ export function DevicesSection({
               className={`flex w-full cursor-pointer appearance-none items-center gap-2.5 rounded-lg border-0 py-2 pr-2.5 text-left transition-colors ${
                 item.kind === "router" ? "pl-7" : "pl-2.5"
               } ${
-                item.key === selected?.key
-                  ? "bg-surface-raised"
-                  : "bg-transparent hover:bg-[color-mix(in_srgb,var(--surface-raised)_55%,transparent)]"
+                item.key === selected?.key ? "bg-fill-raised" : "bg-transparent hover:bg-fill-hover"
               }`}
             >
               <DeviceIcon item={item} />

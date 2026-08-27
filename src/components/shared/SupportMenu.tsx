@@ -13,6 +13,7 @@ import { XIcon } from "../../assets/icons/XIcon";
 import { LinkedinIcon } from "../../assets/icons/LinkedinIcon";
 import { ShieldIcon } from "../../assets/icons/ShieldIcon";
 import { ScaleIcon } from "../../assets/icons/ScaleIcon";
+import { SUPPORT_LINKS } from "./supportLinks";
 
 type IconComponent = React.ComponentType<React.ComponentProps<"svg"> & { size?: number }>;
 
@@ -20,23 +21,6 @@ type IconComponent = React.ComponentType<React.ComponentProps<"svg"> & { size?: 
 // wxt.config.ts's `define`. Bumping package.json's version is the only edit a
 // release needs; nothing here goes stale.
 const APP_VERSION = __APP_VERSION__;
-
-const REPO = "https://github.com/DaveyHert/dishylink";
-
-const SUPPORT_LINKS = {
-  starRepo: REPO,
-  githubSponsors: "https://github.com/sponsors/daveyhert",
-  buyMeACoffee: "https://buymeacoffee.com/daveyhert",
-  patreon: "https://www.patreon.com/DaveyHert",
-  latestRelease: `${REPO}/releases/latest`,
-  reportIssue: `${REPO}/issues/new?labels=bug`,
-  requestFeature: `${REPO}/issues/new?labels=enhancement`,
-  contact: "mailto:hello@dishylink.com",
-  x: "https://x.com/daveyhert",
-  linkedin: "http://linkedin.com/in/daveyhert/",
-  privacyPolicy: `${REPO}/blob/master/PRIVACY.md`,
-  disclaimer: `${REPO}/blob/master/DISCLAIMER.md`,
-};
 
 // Electron's renderer is sandboxed with no shell access, so it has to cross
 // the preload bridge to main, which owns `shell.openExternal`. The web dev

@@ -5,20 +5,28 @@ import { useHashRoute } from "./useHashRoute";
 export type PanelName =
   "speedtest" | "alignment" | "datausage" | "network" | "account" | "settings" | "terminal";
 
+export type SettingsTab = "starlink" | "router" | "app";
+
 // Panels are opened by the toolbar, which owns this state, but a control buried
 // in one panel sometimes has to send the user to another. Module-level so it can
 // be called from anywhere without threading a setter through every layer.
-let openRequest: ((panel: PanelName) => void) | null = null;
+let openRequest: ((panel: PanelName, tab?: SettingsTab) => void) | null = null;
 
-export function requestPanel(panel: PanelName): void {
-  openRequest?.(panel);
+/** `tab` sends the settings modal straight to one section, for a control that
+ *  names a setting living somewhere else. */
+export function requestPanel(panel: PanelName, tab?: SettingsTab): void {
+  openRequest?.(panel, tab);
 }
 
 export function usePanelRouting() {
   const [openPanel, setOpenPanel] = useState<PanelName | null>(null);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("starlink");
 
   useEffect(() => {
-    openRequest = setOpenPanel;
+    openRequest = (panel, tab) => {
+      setSettingsTab(tab ?? "starlink");
+      setOpenPanel(panel);
+    };
     return () => {
       openRequest = null;
     };
@@ -35,7 +43,12 @@ export function usePanelRouting() {
   const openNav = useCallback(
     (id: ToolbarItemId) => {
       if (id === "satellite") openSkyView();
-      else setOpenPanel(id);
+      else {
+        // Reached from the toolbar rather than from a control naming one setting,
+        // so settings opens where it always does.
+        setSettingsTab("starlink");
+        setOpenPanel(id);
+      }
     },
     [openSkyView],
   );
@@ -43,6 +56,7 @@ export function usePanelRouting() {
   return {
     openPanel,
     setOpenPanel,
+    settingsTab,
     skyViewOpen,
     setSkyViewOpen,
     openNav,

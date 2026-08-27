@@ -6,14 +6,15 @@
 // costs a request, and there is nothing to explain while the router answers.
 
 import { useEffect, useMemo, useState } from "react";
-import type { DishStatusJson } from "@core/dishClient";
-import { dishSeesRouter } from "../lib/lanPresence";
+import { ROUTER_LAN_ADDRESS, type DishStatusJson } from "@core/dishClient";
+import { routerPresence } from "@core/routerPresence";
 import { resolveSelfIdentity, type SelfIdentity } from "../lib/selfIdentity";
 import {
   diagnoseRouterUnreachable,
   viewerOnRouterSubnet,
   type RouterUnreachable,
 } from "../lib/routerDiagnosis";
+import { useRouterAddressState } from "./useRouterAddress";
 
 /**
  * How long the router must stay silent before the specific causes are allowed.
@@ -28,11 +29,7 @@ import {
  * the dish poll (1s, 4s timeout) has not yet caught up and withdrawn the
  * evidence the diagnosis leans on.
  */
-const SETTLE_MS = 15_000;
-
-/** What the diagnosis is told before the outage has lasted long enough to be
- *  worth explaining: nothing, which lands it on the general wording. */
-const UNSETTLED = { routerPresent: null, onRouterSubnet: null } as const;
+const SILENCE_BEFORE_DIAGNOSIS_MS = 15_000;
 
 /**
  * The reason the router is unreachable, or `null` while it is answering or
@@ -50,9 +47,9 @@ export function useRouterUnreachable(
    *  during one outage is no longer evidence during the next, which may well be
    *  on a different network. */
   const [identity, setIdentity] = useState<SelfIdentity | null>(null);
-  /** Whether this outage has lasted past SETTLE_MS. Timed rather than counted in
-   *  polls so it does not shift with the poll interval. */
-  const [settled, setSettled] = useState(false);
+  /** Timed rather than counted in polls, so it does not shift with the poll
+   *  interval. */
+  const [silencePersisted, setSilencePersisted] = useState(false);
   const unreachable = routerReachable === false;
 
   useEffect(() => {
@@ -63,14 +60,14 @@ export function useRouterUnreachable(
     void resolveSelfIdentity(controller.signal).then((resolved) => {
       if (!controller.signal.aborted) setIdentity(resolved);
     });
-    const settleTimer = setTimeout(() => setSettled(true), SETTLE_MS);
+    const diagnosisTimer = setTimeout(() => setSilencePersisted(true), SILENCE_BEFORE_DIAGNOSIS_MS);
     return () => {
       controller.abort();
-      clearTimeout(settleTimer);
+      clearTimeout(diagnosisTimer);
       // The outage this was resolved during is over, so drop it rather than
       // let it seed the next one — which may be on a different network.
       setIdentity(null);
-      setSettled(false);
+      setSilencePersisted(false);
     };
   }, [unreachable]);
 
@@ -78,18 +75,30 @@ export function useRouterUnreachable(
   // one identity across the dish polls underneath it — the status object is new
   // every second, and a fresh message object each time would re-render the
   // callout showing it for no change in what it says.
-  const routerPresent = dishReachable ? dishSeesRouter(dishStatus, true) : null;
+  const presence = dishReachable ? routerPresence(dishStatus) : null;
   // Only addresses belonging to the machine that makes the router request say
   // anything about why that request failed. A phone viewing this dashboard over
   // the LAN is answered with its own address, which is not where the request
   // comes from, so it is no evidence and the diagnosis stays general.
-  const onRouterSubnet = viewerOnRouterSubnet(identity?.describesHost ? identity.ips : undefined);
+  // The address actually being dialled, so the wording names what failed rather
+  // than the default this host may not be using. Whether it was chosen matters
+  // too: silence at a typed address points at the setting, not the network.
+  const [addresses] = useRouterAddressState();
+  const routerAddress = addresses?.router ?? ROUTER_LAN_ADDRESS;
+  const addressConfigured = Boolean(addresses?.router);
+  const onRouterSubnet = viewerOnRouterSubnet(
+    identity?.describesHost ? identity.ips : undefined,
+    routerAddress,
+  );
 
   return useMemo(
     () =>
       unreachable
-        ? diagnoseRouterUnreachable(settled ? { routerPresent, onRouterSubnet } : UNSETTLED)
+        ? diagnoseRouterUnreachable(
+            { presence, onRouterSubnet, addressConfigured, silencePersisted },
+            routerAddress,
+          )
         : null,
-    [unreachable, settled, routerPresent, onRouterSubnet],
+    [unreachable, silencePersisted, presence, onRouterSubnet, addressConfigured, routerAddress],
   );
 }

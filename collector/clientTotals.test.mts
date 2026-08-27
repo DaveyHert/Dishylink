@@ -72,6 +72,27 @@ describe("ClientTotalsStore.observe arithmetic (single device)", () => {
     expect(rx(store)).toBe(1_500);
   });
 
+  // A device that sleeps or roams re-associates constantly, and the router
+  // restarts its counter each time. Billing every restart as a fresh counter's
+  // worth is what took a laptop whose counter reads under a gigabyte to a
+  // recorded terabyte in a fortnight.
+  it("ignores a restart claiming more traffic than the interval could carry", () => {
+    const store = tempStore();
+    obs(store, 1_000, 0, T0); // baseline
+    obs(store, 900_000_000, 0, T0 + 200); // +899999000, a plausible 200ms burst
+    // Backwards, and 800 MB is far past what 200ms of a 2.5 Gbps link holds:
+    // a stale reply repeating a counter already counted, not 800 MB of traffic.
+    obs(store, 800_000_000, 0, T0 + 400);
+    expect(rx(store)).toBe(899_999_000);
+  });
+
+  it("still counts a restart small enough to have happened in the interval", () => {
+    const store = tempStore();
+    obs(store, 900_000_000, 0, T0); // baseline
+    obs(store, 5_000, 0, T0 + 200); // genuine reconnect: counter restarted low
+    expect(rx(store)).toBe(5_000);
+  });
+
   it("starts a fresh bucket at the month boundary without carrying traffic over", () => {
     const store = tempStore();
     obs(store, 1_000, 0, T0); // baseline, July
@@ -298,13 +319,17 @@ describe("ClientTotalsStore seed / reset / remove / compact / persistence", () =
     expect(store.totals(String(A))).toHaveLength(0);
   });
 
-  it("compact drops devices unseen since before last month, keeps recent ones", () => {
+  it("compact drops devices unseen for longer than the history window", () => {
     const store = tempStore();
-    const old = new Date(2026, 4, 20).getTime(); // May — two months before July
-    store.observe(999, "old:mac", 0, 0, old, "old", live(999));
+    const gone = new Date(2025, 11, 20).getTime(); // Dec 2025 — beyond six months
+    const away = new Date(2026, 4, 20).getTime(); // May — inside the window
+    store.observe(999, "old:mac", 0, 0, gone, "old", live(999));
+    store.observe(998, "away:mac", 0, 0, away, "away", live(998));
     store.observe(A, MAC, 0, 0, T0, "A", live(A));
     expect(store.compact(T0)).toBe(1);
     expect(store.totals("999")).toHaveLength(0);
+    // A device seen within the window keeps its record, and the months with it.
+    expect(store.totals("998")).toHaveLength(1);
     expect(store.totals(String(A))).toHaveLength(1);
   });
 
@@ -340,6 +365,80 @@ describe("ClientTotalsStore seed / reset / remove / compact / persistence", () =
     expect(reopened.totals(String(A))[0].rxBytes).toBe(200);
   });
 
+  it("files each month as it rolls, keeping the last six", () => {
+    const store = tempStore();
+    // Ten months, each moving 1000 more bytes than the last.
+    for (let month = 0; month < 10; month++) {
+      const at = new Date(2026, month, 10, 12).getTime();
+      store.observe(A, MAC, 0, 0, at, "A", live(A));
+      store.observe(A, MAC, (month + 1) * 1_000, 0, at + 1_000, "A", live(A));
+    }
+    const [total] = store.totals(String(A));
+    expect(total.months).toHaveLength(6);
+    // Oldest first, and the earliest four have aged out.
+    expect(total.months!.map((m) => m.rxBytes)).toEqual([4_000, 5_000, 6_000, 7_000, 8_000, 9_000]);
+    expect(total.rxBytes).toBe(10_000); // the month still running
+  });
+
+  it("does not file a month a device passed no traffic in", () => {
+    const store = tempStore();
+    const july = new Date(2026, 6, 10, 12).getTime();
+    store.observe(A, MAC, 0, 0, july, "A", live(A));
+    store.observe(A, MAC, 500, 0, july + 1_000, "A", live(A));
+    // Away for August and September, back in October: only July is on record.
+    const october = new Date(2026, 9, 10, 12).getTime();
+    store.observe(A, MAC, 500, 0, october, "A", live(A));
+    const [total] = store.totals(String(A));
+    expect(total.months).toEqual([{ periodMonth: 2026 * 12 + 6, rxBytes: 500, txBytes: 0 }]);
+  });
+
+  it("adds the months of two identities merged into one device", () => {
+    const store = tempStore();
+    const july = new Date(2026, 6, 10, 12).getTime();
+    const august = new Date(2026, 7, 10, 12).getTime();
+    for (const id of [1, 2]) {
+      store.observe(id, `m${id}:mac`, 0, 0, july, "same", live(1, 2));
+      store.observe(id, `m${id}:mac`, id * 1_000, 0, july + 1_000, "same", live(1, 2));
+      store.observe(id, `m${id}:mac`, id * 1_000, 0, august, "same", live(1, 2));
+    }
+    expect(store.merge("1", "2")).toBe(true);
+    const [total] = store.totals("2");
+    expect(total.months).toEqual([{ periodMonth: 2026 * 12 + 6, rxBytes: 3_000, txBytes: 0 }]);
+  });
+
+  it("keeps the figure a snapshot from before the lifetime counter was showing", () => {
+    const path = tempPath();
+    writeFileSync(
+      path,
+      JSON.stringify({
+        version: 3,
+        totals: [
+          {
+            clientId: A,
+            macAddress: MAC,
+            name: "A",
+            rxBytes: 4_000,
+            txBytes: 900,
+            sinceMs: T0,
+            lastSeenMs: T0,
+            periodMonth: 2026 * 12 + 6,
+            prevRx: 10_000,
+            prevTx: 2_000,
+            lastPollMs: T0,
+          },
+        ],
+        sharedMacs: [],
+      }),
+    );
+    const store = new ClientTotalsStore(path);
+    const [total] = store.totals(String(A));
+    expect(total.rxBytes).toBe(4_000);
+    expect(total.txBytes).toBe(900);
+    // And the restored counters still delta against the next live reading.
+    store.observe(A, MAC, 10_500, 2_050, T0 + 1_000, "A", live(A));
+    expect(store.totals(String(A))[0].rxBytes).toBe(4_500);
+  });
+
   it("starts fresh on a snapshot whose version it does not recognise", () => {
     const path = tempPath();
     writeFileSync(
@@ -363,8 +462,8 @@ describe("ClientTotalsStore.merge", () => {
 
   /** Two buckets for one device, the way a private-MAC rotation leaves them:
    *  an idle bucket on the abandoned identity and a live one on the new. */
-  function forked(): ClientTotalsStore {
-    const store = tempStore();
+  function forked(path = tempPath()): ClientTotalsStore {
+    const store = new ClientTotalsStore(path);
     const idle = T0 - 36 * 3_600_000; // seen a day and a half ago
     store.observe(OLD, OLD_MAC, 0, 0, idle, "MacBook Pro M1", live(OLD));
     store.observe(OLD, OLD_MAC, 542_000, 44_000, idle + 1_000, "MacBook Pro M1", live(OLD));
@@ -382,6 +481,38 @@ describe("ClientTotalsStore.merge", () => {
     expect(total.txBytes).toBe(44_000 + 3_000);
     expect(total.clientId).toBe(NEW);
     expect(total.macAddress).toBe(NEW_MAC);
+  });
+
+  it("folds a bucket left standing on an already-merged identity", () => {
+    // Written the way a build that let the retired key mint a fresh bucket left
+    // it: the survivor, the alias onto it, and an orphan back on the merged-away
+    // key. Nothing reaches that state now, but a snapshot from before still holds
+    // it, and the offer to merge keeps coming back until this folds.
+    const path = tempPath();
+    const store = forked(path);
+    store.snapshot();
+    const orphan = JSON.parse(readFileSync(path, "utf8")).totals.find(
+      (total: { clientId: number }) => total.clientId === OLD,
+    );
+    store.merge(String(OLD), String(NEW));
+    store.snapshot();
+    const stranded = JSON.parse(readFileSync(path, "utf8"));
+    stranded.totals.push(orphan);
+    writeFileSync(path, JSON.stringify(stranded));
+
+    const reloaded = new ClientTotalsStore(path);
+    expect(reloaded.totals(String(OLD))).toHaveLength(1);
+    expect(reloaded.merge(String(OLD), String(NEW))).toBe(true);
+    expect(reloaded.totals(String(OLD))).toHaveLength(0);
+    expect(reloaded.mergeCandidates(T0 + 4_000)).toEqual([]);
+  });
+
+  it("keeps a merged-away identity merged when the device reappears under it", () => {
+    const store = forked();
+    store.merge(String(OLD), String(NEW));
+    store.observe(OLD, OLD_MAC, 600_000, 50_000, T0 + 2_000, "MacBook Pro M1", live(OLD));
+    expect(store.totals(String(OLD))).toHaveLength(0);
+    expect(store.mergeCandidates(T0 + 3_000)).toEqual([]);
   });
 
   it("re-baselines, so the reading after a merge adds nothing", () => {

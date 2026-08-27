@@ -33,6 +33,10 @@ export interface AlertSpec {
   severity: AlertSeverity;
   /** Worth interrupting someone with a desktop notification. */
   notify?: boolean;
+  /** Whether the clearing is worth announcing too. Defaults to yes: most alerts
+   *  here clear because a fault ended, which is news. False for one that retires
+   *  on a timer, where nothing has changed to report. */
+  notifyClear?: boolean;
 }
 
 /** Alerts on the dish's get_status. Order is roughly by how much it matters. */
@@ -164,8 +168,8 @@ export const DISH_ALERTS: AlertSpec[] = [
   },
   {
     key: "installPending",
-    ok: "Install complete",
-    firing: "Install is still pending",
+    ok: "Starlink software update install completed",
+    firing: "Starlink software update install pending",
     severity: "advisory",
   },
 ];
@@ -280,8 +284,8 @@ export const ROUTER_ALERTS: AlertSpec[] = [
   },
   {
     key: "installPending",
-    ok: "Install complete",
-    firing: "Router software install is pending",
+    ok: "Router software update install completed",
+    firing: "Router software update install pending",
     severity: "advisory",
   },
   {

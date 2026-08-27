@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AlertEngine, type AlertObservation, type AlertTransition } from "./alertEngine";
+import type { RouterPresence } from "./routerPresence";
 
 const NOW = 1_700_000_000_000;
 
@@ -10,6 +11,14 @@ function bothAnswered(
   atMs = NOW,
 ): AlertObservation {
   return { dish: { alerts: dishAlerts, atMs }, router: { alerts: routerAlerts, atMs } };
+}
+
+/** A cycle where the router said nothing and the dish explained why. */
+function routerSilent(routerPresence: RouterPresence | undefined, atMs = NOW): AlertObservation {
+  return {
+    dish: { alerts: {}, routerPresence, atMs },
+    router: { alerts: null, atMs },
+  };
 }
 
 function keysOf(transitions: AlertTransition[]): string[] {
@@ -139,5 +148,75 @@ describe("AlertEngine", () => {
     engine.update(bothAnswered({ isHeating: true }));
     engine.update({ dish: { alerts: null, atMs: NOW + 5_000 } });
     expect(engine.statusList().find((check) => check.key === "isHeating")?.active).toBe(true);
+  });
+});
+
+describe("AlertEngine and a router that is silent on purpose", () => {
+  it("raises the unreachability when a router that should answer does not", () => {
+    const engine = new AlertEngine();
+    expect(keysOf(engine.update(routerSilent("present")))).toEqual([
+      "fired:system:routerUnreachable",
+    ]);
+  });
+
+  it("stays quiet when the dish reports the router bypassed", () => {
+    // The user switched it off from this very app. Announcing it as a fault is
+    // the app complaining about what it was told to do.
+    const engine = new AlertEngine();
+    expect(engine.update(routerSilent("bypassed"))).toEqual([]);
+  });
+
+  it("stays quiet when the kit has no router at all", () => {
+    const engine = new AlertEngine();
+    expect(engine.update(routerSilent("absent"))).toEqual([]);
+  });
+
+  it("closes an episode already open when bypass is switched on", () => {
+    // The key stays in scope, so the pass that stops desiring it also ends it.
+    const engine = new AlertEngine();
+    engine.update(routerSilent("present"));
+    expect(keysOf(engine.update(routerSilent("bypassed", NOW + 5_000)))).toEqual([
+      "cleared:system:routerUnreachable",
+    ]);
+  });
+
+  it("raises it again when the router is un-bypassed and still does not answer", () => {
+    const engine = new AlertEngine();
+    engine.update(routerSilent("bypassed"));
+    expect(keysOf(engine.update(routerSilent("present", NOW + 5_000)))).toEqual([
+      "fired:system:routerUnreachable",
+    ]);
+  });
+
+  it("raises it when the dish has said nothing about routers at all", () => {
+    // No evidence is not evidence of bypass.
+    const engine = new AlertEngine();
+    expect(keysOf(engine.update(routerSilent(undefined)))).toEqual([
+      "fired:system:routerUnreachable",
+    ]);
+  });
+
+  it("holds the last known presence across a silent dish poll", () => {
+    // A dish that stops replying has no new opinion. Dropping to "unknown" would
+    // resurrect the alert on the first dish timeout of a bypassed kit.
+    const engine = new AlertEngine();
+    engine.update(routerSilent("bypassed"));
+    const dishAlsoSilent: AlertObservation = {
+      dish: { alerts: null, atMs: NOW + 5_000 },
+      router: { alerts: null, atMs: NOW + 5_000 },
+    };
+    expect(keysOf(engine.update(dishAlsoSilent))).toEqual(["fired:system:dishUnreachable"]);
+  });
+
+  it("still holds the router's own alerts while its silence is excused", () => {
+    // Suppressing the unreachability must not also clear what the router last
+    // reported: that would record a recovery nobody observed.
+    const engine = new AlertEngine();
+    engine.update({
+      dish: { alerts: {}, routerPresence: "present", atMs: NOW },
+      router: { alerts: { poeRouterOvercurrent: true }, atMs: NOW },
+    });
+    expect(engine.update(routerSilent("bypassed", NOW + 5_000))).toEqual([]);
+    expect(engine.activeAlerts().map((a) => a.key)).toContain("poeRouterOvercurrent");
   });
 });

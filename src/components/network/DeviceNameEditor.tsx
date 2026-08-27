@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { WifiClientJson } from "@core/dishClient";
 import { Input } from "@/components/ui/input";
 import { actionButton } from "../ui/action-button";
+import { SpinLoader } from "../loaders/SpinLoader";
 import { PencilIcon } from "../../assets/icons/PencilIcon";
 import { displayName } from "./networkFormat";
 import { AccountRequiredError } from "../../lib/routerClientUpdate";
@@ -77,11 +78,13 @@ export function DeviceNameEditor({
           }}
         />
         <button
-          className={actionButton()}
+          className={`${actionButton()} inline-flex min-w-[4.5rem] items-center justify-center ${
+            busy ? "disabled:opacity-100" : ""
+          }`}
           disabled={busy || !canSave}
           onClick={() => void commit()}
         >
-          {busy ? "Saving…" : "Save"}
+          {busy ? <SpinLoader variant='segment' size={16} label='Saving' /> : "Save"}
         </button>
         <button className={actionButton("subtle")} disabled={busy} onClick={onDone}>
           Cancel

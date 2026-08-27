@@ -9,8 +9,9 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import type { DishStatusJson, WifiNetworkConfigJson } from "@core/dishClient";
+import type { DishStatusJson, WifiClientJson, WifiNetworkConfigJson } from "@core/dishClient";
 import type { RouterUnreachable } from "../../lib/routerDiagnosis";
+import type { SettingsTab } from "../../hooks/usePanelRouting";
 import { useDishSettings, loadDishClient } from "../../hooks/useDishSettings";
 import { specForHardware } from "../../lib/dishMesh";
 import { RouterSettingsTab } from "./RouterSettingsTab";
@@ -22,8 +23,15 @@ interface SettingsModalProps {
   status: DishStatusJson | null;
   hardwareVersion?: string;
   wifiConfig: WifiNetworkConfigJson | null;
+  clients: WifiClientJson[];
   routerReachable: boolean | null;
+  /** Whether the router's config was read through the account rather than the LAN. */
+  routerViaAccount: boolean;
   routerUnreachable: RouterUnreachable | null;
+  /** Ask the poller to re-read the router config after a write changed it. */
+  onRouterConfigChanged: () => void;
+  /** Which section to open on, for a control elsewhere that named a setting. */
+  initialTab?: SettingsTab;
 }
 
 export function SettingsModal({
@@ -31,10 +39,14 @@ export function SettingsModal({
   status,
   hardwareVersion,
   wifiConfig,
+  clients,
   routerReachable,
+  routerViaAccount,
   routerUnreachable,
+  onRouterConfigChanged,
+  initialTab = "starlink",
 }: SettingsModalProps) {
-  const [tab, setTab] = useState<"starlink" | "router" | "app">("starlink");
+  const [tab, setTab] = useState<SettingsTab>(initialTab);
   const settings = useDishSettings();
 
   // Animate the body height: measure the active panel and cap at 68vh (inner
@@ -114,7 +126,7 @@ export function SettingsModal({
           className='overflow-hidden transition-[height] duration-[240ms] ease-[cubic-bezier(0.4,0,0.2,1)]'
           style={{ height: bodyHeight }}
         >
-          <div className='thin-scroll max-h-[68vh] overflow-y-auto px-5 pt-1 pb-5' ref={panelRef}>
+          <div className='thin-scroll max-h-[68vh] overflow-y-auto px-5 pt-1 pb-7' ref={panelRef}>
             {tab === "starlink" && (
               <StarlinkSettingsTab
                 settings={settings}
@@ -127,11 +139,14 @@ export function SettingsModal({
             {tab === "router" && (
               <RouterSettingsTab
                 wifiConfig={wifiConfig}
+                dishStatus={status}
                 routerReachable={routerReachable}
+                viaAccount={routerViaAccount}
                 unreachable={routerUnreachable}
+                onConfigChanged={onRouterConfigChanged}
               />
             )}
-            {tab === "app" && <AppSettingsTab />}
+            {tab === "app" && <AppSettingsTab clients={clients} />}
           </div>
         </div>
       </DialogContent>

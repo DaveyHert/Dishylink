@@ -104,8 +104,8 @@ describe("DeviceMergePrompt", () => {
     expect(text()).toContain("Private");
     expect(text()).toContain("Router ID: 13011248");
     expect(text()).toContain("Router ID: 2806438232");
-    expect(text()).toContain("586.00 GB");
-    expect(text()).toContain("51.00 GB");
+    expect(text()).toContain("586 GB");
+    expect(text()).toContain("51 GB");
     expect(text()).toContain("2 days ago");
     expect(text()).toContain("Active now");
   });
@@ -142,7 +142,7 @@ describe("DeviceMergePrompt", () => {
       />,
     );
     await waitForText("Combining keeps one device with");
-    expect(text()).toContain("1.00 GB");
+    expect(text()).toContain("with 1 GB this month");
     expect(text()).not.toContain("637");
   });
 

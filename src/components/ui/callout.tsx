@@ -14,6 +14,7 @@
 import type { ReactNode } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
+import { SeverityIcon, type Severity } from "./severity-icon";
 
 const callout = cva(
   "flex items-start gap-2.5 rounded-lg px-[13px] py-[11px] text-[12.5px] leading-normal",
@@ -29,18 +30,37 @@ const callout = cva(
   },
 );
 
-const ICON: Record<NonNullable<VariantProps<typeof callout>["tone"]>, string> = {
-  info: "ⓘ",
-  error: "⚠",
-};
+const GLYPH = {
+  note: "ⓘ",
+  warning: "⚠",
+} as const;
 
 interface CalloutProps extends VariantProps<typeof callout> {
   children: ReactNode;
+  /** How hard the icon presses, independent of the box it sits in. */
+  iconSeverity?: Severity;
+  /** The glyph, for a warning that is not a failure: the triangle without the
+   *  red box behind it. Defaults to the one the tone implies. */
+  icon?: keyof typeof GLYPH;
+  /** Given only where the reader can be done with this for good. A message they
+   *  still need is not dismissible. */
+  onDismiss?: () => void;
+  dismissLabel?: string;
   className?: string;
 }
 
-export function Callout({ children, tone, className }: CalloutProps) {
+export function Callout({
+  children,
+  tone,
+  iconSeverity,
+  icon,
+  onDismiss,
+  dismissLabel = "Dismiss",
+  className,
+}: CalloutProps) {
   const resolvedTone = tone ?? "info";
+  // A broken thing is never quieter than its box, so the error tone settles this.
+  const severity = resolvedTone === "error" ? "danger" : (iconSeverity ?? "normal");
   return (
     <div
       data-slot='callout'
@@ -49,13 +69,20 @@ export function Callout({ children, tone, className }: CalloutProps) {
       role={resolvedTone === "error" ? "alert" : undefined}
       className={cn(callout({ tone }), className)}
     >
-      <span
-        aria-hidden='true'
-        className={resolvedTone === "error" ? "text-status-critical" : undefined}
-      >
-        {ICON[resolvedTone]}
-      </span>
+      <SeverityIcon severity={severity}>
+        {GLYPH[icon ?? (resolvedTone === "error" ? "warning" : "note")]}
+      </SeverityIcon>
       <span>{children}</span>
+      {onDismiss && (
+        <button
+          type='button'
+          aria-label={dismissLabel}
+          onClick={onDismiss}
+          className='-my-0.5 -mr-1 ml-auto inline-flex h-[22px] w-[22px] flex-none cursor-pointer items-center justify-center rounded-[999px] border-0 bg-transparent text-[11px] text-ink-secondary/70 hover:bg-[color-mix(in_srgb,var(--ink)_7%,transparent)] hover:text-ink'
+        >
+          ✕
+        </button>
+      )}
     </div>
   );
 }

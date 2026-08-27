@@ -3,7 +3,10 @@ import type { DishStatusJson, DishObstructionMapJson } from "@core/dishClient";
 import { readRouterLatencyMs, type OutageEvent, type TelemetrySample } from "@core/telemetry";
 import type { DishConnectionState } from "../../hooks/useDishTelemetry";
 import type { LiveSparklines } from "../../hooks/useLiveReadings";
+import { gradeColorVar } from "@core/latencySummary";
 import { StatTile, type StatTileProps as StatTileConfig } from "./StatTile";
+import { LatencyDetailPanel } from "./LatencyDetailPanel";
+import { useLatencyHistory } from "../../hooks/useLatencyHistory";
 import { TelemetryChart } from "../shared/TelemetryChart";
 import { ObstructionCard } from "../obstruction/ObstructionCard";
 import { OutageLog } from "../alerts/OutageLog";
@@ -87,6 +90,7 @@ export function DashboardView({
   onExpandTerminal,
 }: DashboardViewProps) {
   const [openDetailId, setOpenDetailId] = useState<string | null>(null);
+  const latencyQuality = useLatencyHistory("1h", true);
   const statDetails = useMemo(
     () =>
       buildStatDetails({
@@ -105,7 +109,11 @@ export function DashboardView({
       title={openDetail.modalTitle ?? openDetail.label}
       onClose={() => setOpenDetailId(null)}
     >
-      <StatDetailPanel detail={openDetail} samples={samples} />
+      {openDetailId === "latency" ? (
+        <LatencyDetailPanel detail={openDetail} samples={samples} />
+      ) : (
+        <StatDetailPanel detail={openDetail} samples={samples} />
+      )}
     </DetailsModal>
   );
 
@@ -146,7 +154,32 @@ export function DashboardView({
       label: "Latency",
       value: (liveLatencyMs ?? 0).toFixed(0),
       unit: "ms",
-      caption: "pop ping, live",
+      caption:
+        !latencyQuality.unavailable && latencyQuality.data ? (
+          <span className='flex w-full items-center justify-between gap-2'>
+            <span>
+              Quality:{" "}
+              <span className='text-[13px] font-semibold text-foreground'>
+                {latencyQuality.data.score}
+              </span>
+              , grade{" "}
+              <span
+                className='text-[10px]'
+                style={{ color: `var(${gradeColorVar(latencyQuality.data.grade)})` }}
+              >
+                {latencyQuality.data.grade}
+              </span>
+            </span>
+            <span aria-hidden>·</span>
+            <span className='flex-none'>
+              {latencyQuality.data.dish.p95 !== null
+                ? `${latencyQuality.data.dish.p95.toFixed(0)} ms p95`
+                : "no data"}
+            </span>
+          </span>
+        ) : (
+          "pop ping, live"
+        ),
       sparkValues: sparklines.latency,
       onOpenDetail: () => setOpenDetailId("latency"),
     },
@@ -177,7 +210,7 @@ export function DashboardView({
   ];
 
   return (
-    <main className='mx-auto flex max-w-[1400px] flex-col gap-3.5 px-6 pt-3.5 pb-16 animate-[rise_400ms_ease_both]'>
+    <main className='mx-auto flex max-w-[1400px] flex-col gap-3.5 px-6 pt-3.5 pb-20 animate-[rise_400ms_ease_both]'>
       {/* Stat tiles */}
       <section className='grid grid-cols-6 gap-3.5 max-[1080px]:grid-cols-3'>
         {statTiles.map((tile) => (

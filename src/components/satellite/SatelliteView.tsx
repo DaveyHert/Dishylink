@@ -112,9 +112,22 @@ export function SatelliteView({
   const survey = useMemo(
     () =>
       viewingHistory
-        ? snapshotSurvey(snapshots[scrubIndex], obstructionMap?.maxThetaDeg ?? 80, status)
+        ? snapshotSurvey(
+            snapshots[scrubIndex],
+            obstructionMap?.maxThetaDeg ?? 80,
+            status,
+            obstructionMap?.mapReferenceFrame,
+          )
         : live,
-    [viewingHistory, scrubIndex, snapshots, obstructionMap?.maxThetaDeg, status, live],
+    [
+      viewingHistory,
+      scrubIndex,
+      snapshots,
+      obstructionMap?.maxThetaDeg,
+      obstructionMap?.mapReferenceFrame,
+      status,
+      live,
+    ],
   );
 
   useEffect(() => {

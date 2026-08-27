@@ -10,6 +10,7 @@ import { useCloudAccount } from "../../hooks/useCloudAccount";
 import { disconnectCloud } from "../../lib/starlinkCloud";
 import { Loading } from "../ui/loading";
 import { Callout } from "../ui/callout";
+import { inlineLinkButton } from "../ui/action-button";
 import { Badge } from "../ui/badge";
 import { ConnectAccount } from "../shared/ConnectAccount";
 import { Card, Field } from "./accountChrome";
@@ -28,7 +29,10 @@ export function AccountPanel({ lanOnline }: { lanOnline: ReadonlySet<string> }) 
   if (status === "error") {
     return (
       <Callout tone='error' className='mt-2.5'>
-        Couldn’t reach your Starlink account. Check your internet and try again.
+        Couldn’t reach your Starlink account.{" "}
+        <button type='button' className={inlineLinkButton} onClick={reload}>
+          Try again
+        </button>
       </Callout>
     );
   }

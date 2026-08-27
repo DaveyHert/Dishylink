@@ -66,6 +66,16 @@ export function formatClockTimeShort(timestampMs: number): string {
   return new Date(timestampMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
+export function formatDateTime(timestampMs: number): string {
+  const date = new Date(timestampMs);
+  const datePart = date.toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  return `${datePart} · ${formatClockTimeShort(timestampMs)}`;
+}
+
 /** The dish's `hasActuators` enum ("HAS_ACTUATORS_YES"/"_NO") → plain Yes/No.
  *  Anything else — the "_UNKNOWN" default or an absent field — reads as Unknown
  *  rather than a blank, so the row still says something. */
@@ -75,12 +85,40 @@ export function formatHasActuators(hasActuators: string | undefined): string {
   return "Unknown";
 }
 
-/** Byte counters → human size. Used for per-device data totals. */
+function withoutTrailingZeros(value: number, decimals: number): string {
+  return String(Number(value.toFixed(decimals)));
+}
+
+/** A gigabyte figure split from the unit it reads best in, for a surface that
+ *  renders the number and its unit separately. Rolls to TB past a terabyte, as
+ *  the Starlink portal's own usage card does. */
+export function formatGigabytes(gigabytes: number): { value: string; unit: "GB" | "TB" } {
+  const value =
+    gigabytes >= 100
+      ? gigabytes.toFixed(0)
+      : gigabytes >= 1
+        ? withoutTrailingZeros(gigabytes, 1)
+        : withoutTrailingZeros(gigabytes, 2);
+  if (Number(value) < 1000) return { value, unit: "GB" };
+  return { value: withoutTrailingZeros(gigabytes / 1000, 2), unit: "TB" };
+}
+
+const BYTE_SCALES = [
+  { scale: 1e3, unit: "kB", decimals: 0 },
+  { scale: 1e6, unit: "MB", decimals: 1 },
+  { scale: 1e9, unit: "GB", decimals: 2 },
+] as const;
+
+/** Byte counters → human size. Used for per-device data totals. A figure that
+ *  rounds up to a thousand of its unit reads in the next one up, so the largest
+ *  each unit ever shows is 999: 999 kB, then 1 MB. */
 export function formatBytes(bytes: number): string {
-  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(2)} GB`;
-  if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(1)} MB`;
-  if (bytes >= 1e3) return `${Math.round(bytes / 1e3)} kB`;
-  return `${Math.round(bytes)} B`;
+  if (bytes < 1e3) return `${Math.round(bytes)} B`;
+  for (const { scale, unit, decimals } of BYTE_SCALES) {
+    const rounded = Number((bytes / scale).toFixed(decimals));
+    if (rounded < 1000) return `${rounded} ${unit}`;
+  }
+  return `${withoutTrailingZeros(bytes / 1e12, 2)} TB`;
 }
 
 /** Coarse "how long ago" for a past timestamp: "just now", "5 min ago",

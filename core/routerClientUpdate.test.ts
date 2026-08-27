@@ -1,9 +1,10 @@
 import { describe, expect, test } from "vitest";
-import type { DishClient } from "./dishClient";
+import type { WifiClientJson } from "./dishClient";
 import {
   buildRouterPauseRequest,
   buildRouterRenameRequest,
   prepareRouterClientUpdate,
+  readRouterClients,
 } from "./routerClientUpdate";
 
 const TARGET = "Router-010000000000000001B31340";
@@ -20,6 +21,47 @@ const config = {
     { clientId: 8, macAddress: "dd:ee:ff:XX:XX:XX", groupId: "family" },
   ],
 };
+
+/**
+ * A router reachable only the way the real one is: through a gateway.
+ *
+ * `encodeRequest` tags each read with a byte, the gateway echoes it, and
+ * `decodeResponse` answers with the config or the roster accordingly — so a
+ * preparation that skips a read cannot accidentally be served one. The write it
+ * finally encodes is captured rather than sent.
+ */
+function gatewayRouter({
+  clients = [],
+}: {
+  /** A function throws where the roster must never be asked for. */
+  clients?: WifiClientJson[] | (() => never);
+} = {}) {
+  const encoded = new Uint8Array([1, 2, 3]);
+  const captured: { request?: object } = {};
+  const codec = {
+    encodeRequest: (value: object) => {
+      const json = value as Record<string, unknown>;
+      if ("wifiGetConfig" in json) return new Uint8Array([1]);
+      if ("wifiGetClients" in json) return new Uint8Array([2]);
+      captured.request = json;
+      return encoded;
+    },
+    decodeResponse: (responseBytes: Uint8Array) =>
+      responseBytes[0] === 1
+        ? { wifiGetConfig: { wifiConfig: config } }
+        : {
+            wifiGetClients: {
+              clients: typeof clients === "function" ? clients() : clients,
+            },
+          },
+  };
+  return {
+    codec,
+    callGateway: async (requestBytes: Uint8Array) => requestBytes,
+    captured,
+    encoded,
+  };
+}
 
 describe("buildRouterPauseRequest", () => {
   test("given: a client with another schedule, should: add permanent pause without losing data", () => {
@@ -81,25 +123,20 @@ describe("buildRouterPauseRequest", () => {
     expect(() => buildRouterPauseRequest("ut-dish", config, 7, true)).toThrow(/router target/);
   });
 
-  test("given: a trusted host, should: source and encode the request from router reads", async () => {
-    const encoded = new Uint8Array([1, 2, 3]);
-    let request: object | undefined;
-    const router = {
-      getWifiConfig: async () => config,
-      getRouterStatus: async () => ({ deviceInfo: { id: TARGET } }),
-      getWifiClients: async () => [
-        { clientId: 7, macAddress: "aa:bb:cc:XX:XX:XX", givenName: "Tablet" },
-      ],
-      encodeRequest: (value: object) => {
-        request = value;
-        return encoded;
-      },
-    } as unknown as DishClient;
+  test("given: a trusted host, should: source and encode the request from gateway reads", async () => {
+    const router = gatewayRouter({
+      clients: [{ clientId: 7, macAddress: "aa:bb:cc:XX:XX:XX", givenName: "Tablet" }],
+    });
 
     await expect(
-      prepareRouterClientUpdate(router, { kind: "pause", clientId: 7, paused: true }),
-    ).resolves.toBe(encoded);
-    expect(request).toMatchObject({
+      prepareRouterClientUpdate(
+        router.codec,
+        { kind: "pause", clientId: 7, paused: true },
+        TARGET,
+        router.callGateway,
+      ),
+    ).resolves.toBe(router.encoded);
+    expect(router.captured.request).toMatchObject({
       targetId: TARGET,
       wifiSetConfig: {
         wifiConfig: {
@@ -120,37 +157,114 @@ describe("buildRouterPauseRequest", () => {
   });
 
   test("given: the target is the host itself, should: refuse to pause but allow unpause", async () => {
-    const router = {
-      getWifiConfig: async () => config,
-      getRouterStatus: async () => ({ deviceInfo: { id: TARGET } }),
-      getWifiClients: async () => [
-        { clientId: 7, macAddress: "AA:BB:CC:XX:XX:XX", ipAddress: "192.168.1.5" },
-      ],
-      encodeRequest: () => new Uint8Array([9]),
-    } as unknown as DishClient;
+    const router = gatewayRouter({
+      clients: [{ clientId: 7, macAddress: "AA:BB:CC:XX:XX:XX", ipAddress: "192.168.1.5" }],
+    });
     const host = { macAddresses: ["aa:bb:cc:XX:XX:XX"], ipAddresses: [] };
 
     await expect(
-      prepareRouterClientUpdate(router, { kind: "pause", clientId: 7, paused: true }, host),
+      prepareRouterClientUpdate(
+        router.codec,
+        { kind: "pause", clientId: 7, paused: true },
+        TARGET,
+        router.callGateway,
+        host,
+      ),
     ).rejects.toThrow(/Refusing/);
     await expect(
-      prepareRouterClientUpdate(router, { kind: "pause", clientId: 7, paused: false }, host),
+      prepareRouterClientUpdate(
+        router.codec,
+        { kind: "pause", clientId: 7, paused: false },
+        TARGET,
+        router.callGateway,
+        host,
+      ),
     ).resolves.toBeInstanceOf(Uint8Array);
   });
 
   test("given: the host matches only by address, should: still refuse the pause", async () => {
-    const router = {
-      getWifiConfig: async () => config,
-      getRouterStatus: async () => ({ deviceInfo: { id: TARGET } }),
-      getWifiClients: async () => [
-        { clientId: 7, macAddress: "aa:bb:cc:XX:XX:XX", ipAddress: "192.168.1.5" },
-      ],
-      encodeRequest: () => new Uint8Array([9]),
-    } as unknown as DishClient;
+    const router = gatewayRouter({
+      clients: [{ clientId: 7, macAddress: "aa:bb:cc:XX:XX:XX", ipAddress: "192.168.1.5" }],
+    });
     const host = { macAddresses: [], ipAddresses: ["192.168.1.5"] };
 
     await expect(
-      prepareRouterClientUpdate(router, { kind: "pause", clientId: 7, paused: true }, host),
+      prepareRouterClientUpdate(
+        router.codec,
+        { kind: "pause", clientId: 7, paused: true },
+        TARGET,
+        router.callGateway,
+        host,
+      ),
+    ).rejects.toThrow(/Refusing/);
+  });
+
+  test("given: a viewer off the router's network, should: leave the address guard silent", async () => {
+    // Nothing on the roster can match a host that is somewhere else entirely, so
+    // an identity carrying only addresses has nothing to say there.
+    const router = gatewayRouter({
+      clients: [{ clientId: 7, macAddress: "aa:bb:cc:XX:XX:XX", ipAddress: "192.168.1.5" }],
+    });
+    const elsewhere = { macAddresses: ["de:ad:be:ef:00:01"], ipAddresses: ["10.20.30.40"] };
+
+    await expect(
+      prepareRouterClientUpdate(
+        router.codec,
+        { kind: "pause", clientId: 7, paused: true },
+        TARGET,
+        router.callGateway,
+        elsewhere,
+      ),
+    ).resolves.toBe(router.encoded);
+  });
+
+  test("given: a remembered clientId, should: refuse a self-pause from off the network", async () => {
+    const router = gatewayRouter({
+      clients: [
+        { clientId: 7, macAddress: "aa:bb:cc:XX:XX:XX", ipAddress: "192.168.1.5" },
+        { clientId: 8, macAddress: "dd:ee:ff:XX:XX:XX", ipAddress: "192.168.1.6" },
+      ],
+    });
+    const elsewhere = {
+      macAddresses: ["de:ad:be:ef:00:01"],
+      ipAddresses: ["10.20.30.40"],
+      clientId: 7,
+    };
+
+    await expect(
+      prepareRouterClientUpdate(
+        router.codec,
+        { kind: "pause", clientId: 7, paused: true },
+        TARGET,
+        router.callGateway,
+        elsewhere,
+      ),
+    ).rejects.toThrow(/Refusing/);
+    await expect(
+      prepareRouterClientUpdate(
+        router.codec,
+        { kind: "pause", clientId: 8, paused: true },
+        TARGET,
+        router.callGateway,
+        elsewhere,
+      ),
+    ).resolves.toBe(router.encoded);
+  });
+
+  test("given: a remembered id the router has since renumbered, should: still refuse by address", async () => {
+    const router = gatewayRouter({
+      clients: [{ clientId: 9, macAddress: "aa:bb:cc:XX:XX:XX", ipAddress: "192.168.1.5" }],
+    });
+    const host = { macAddresses: ["aa:bb:cc:XX:XX:XX"], ipAddresses: ["192.168.1.5"], clientId: 7 };
+
+    await expect(
+      prepareRouterClientUpdate(
+        router.codec,
+        { kind: "pause", clientId: 9, paused: true },
+        TARGET,
+        router.callGateway,
+        host,
+      ),
     ).rejects.toThrow(/Refusing/);
   });
 });
@@ -204,29 +318,54 @@ describe("buildRouterRenameRequest", () => {
   });
 
   test("given: an offline device, should: prepare without needing the live roster", async () => {
-    let request: object | undefined;
-    const router = {
-      getWifiConfig: async () => config,
-      getRouterStatus: async () => ({ deviceInfo: { id: TARGET } }),
-      getWifiClients: async () => {
+    const router = gatewayRouter({
+      clients: () => {
         throw new Error("the roster must not be needed to rename a saved device");
       },
-      encodeRequest: (value: object) => {
-        request = value;
-        return new Uint8Array([4]);
-      },
-    } as unknown as DishClient;
+    });
 
     await expect(
-      prepareRouterClientUpdate(router, {
-        kind: "rename",
-        clientId: 7,
-        givenName: "Studio Tablet",
-      }),
-    ).resolves.toEqual(new Uint8Array([4]));
-    expect(request).toMatchObject({
+      prepareRouterClientUpdate(
+        router.codec,
+        { kind: "rename", clientId: 7, givenName: "Studio Tablet" },
+        TARGET,
+        router.callGateway,
+      ),
+    ).resolves.toBe(router.encoded);
+    expect(router.captured.request).toMatchObject({
       targetId: TARGET,
       wifiSetConfig: { wifiConfig: { applyClientConfigs: true } },
     });
+  });
+});
+
+describe("readRouterClients", () => {
+  test("given: a gateway reply, should: name the target and serve the roster it carries", async () => {
+    let request: object | undefined;
+    const codec = {
+      encodeRequest: (value: object) => {
+        request = value;
+        return new Uint8Array([9]);
+      },
+      decodeResponse: () => ({
+        wifiGetClients: { clients: [{ clientId: 7, macAddress: "aa:bb:cc:XX:XX:XX" }] },
+      }),
+    };
+
+    await expect(readRouterClients(codec, TARGET, async () => new Uint8Array())).resolves.toEqual([
+      { clientId: 7, macAddress: "aa:bb:cc:XX:XX:XX" },
+    ]);
+    expect(request).toEqual({ targetId: TARGET, wifiGetClients: {} });
+  });
+
+  test("given: a router reporting nobody, should: answer with an empty roster", async () => {
+    const codec = {
+      encodeRequest: () => new Uint8Array([9]),
+      decodeResponse: () => ({}),
+    };
+
+    await expect(readRouterClients(codec, TARGET, async () => new Uint8Array())).resolves.toEqual(
+      [],
+    );
   });
 });

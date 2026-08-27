@@ -31,7 +31,10 @@ import { join, resolve } from "node:path";
 import { createFileRegistry, fromBinary, toJson, type DescMessage } from "@bufbuild/protobuf";
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { grpcWebUnaryCall } from "../core/grpcWeb.ts";
+import { routerPresence, type RouterPresence } from "../core/routerPresence.ts";
+import type { DishStatusJson } from "../core/dishClient.ts";
 import { createRouterOrigins } from "../core/routerEndpoint.ts";
+import { readDevRouterAddress } from "./devRouterAddress.mts";
 import {
   decodeHistoryWindow,
   decodeOutageEvents,
@@ -45,12 +48,36 @@ import {
 } from "../core/telemetry.ts";
 import { EnergyStore, foldSamplesToMinutes, type MinuteBucket } from "./energyStore.mts";
 import { energyRangeBounds, RANGES, summarizeEnergy, type Range } from "../core/energySummary.ts";
+import { LatencyStore, type LatencyMinuteBucket } from "./latencyStore.mts";
+import { foldSamplesToLatencyMinutes } from "../core/latencyBuckets.ts";
+import { summarizeLatency } from "../core/latencySummary.ts";
 import { ThermalStore } from "./thermalStore.mts";
 import { EventStore } from "./eventStore.mts";
 import { ClientStore, type ClientReading } from "./clientStore.mts";
 import { ClientWindow } from "./clientWindow.mts";
 import { resolveRows, foldMinuteCollisions } from "../core/clientHistory.ts";
 import { ClientTotalsStore } from "./clientTotals.mts";
+import { MeterStore } from "./meterStore.mts";
+import { DeviceGroupStore } from "./groupStore.mts";
+import { CollectorBusyError } from "./collectorLock.mts";
+import {
+  announcementSubject,
+  announcesAsGroup,
+  chargedBytes,
+  collapseGroupAnnouncements,
+  cycleFromParams,
+  MAX_COUNTDOWN_MS,
+  ruleHoldsDevice,
+  ruleSpent,
+  sharedUsageByGroup,
+  usageBytes,
+} from "../core/dataMeter.ts";
+import type { MeterRule, MeterTransition } from "../core/dataMeter.ts";
+import { blocksLanded, pausesOwed, releasedByHand, releasesOwed } from "../core/devicePause.ts";
+import type { PauseState } from "../core/devicePause.ts";
+import type { DeviceGroup, GroupAllowanceMode } from "../core/deviceGroup.ts";
+import { parseScheduleParam } from "../core/schedule.ts";
+import { CONNECT_ACCOUNT_ADVICE, dataLimitAlertSpec } from "../core/dataMeterAlert.ts";
 import { ThroughputTracker } from "../core/throughputTracker.ts";
 import { usageKey } from "../core/clientUsage.ts";
 import { AlertStore } from "./alertStore.mts";
@@ -59,17 +86,38 @@ import { ObstructionStore, packCells } from "./obstructionStore.mts";
 
 const DISH_URL =
   process.env.DISH_URL ?? "http://192.168.100.1:9201/SpaceX.API.Device.Device/Handle";
+
+/**
+ * Where the router is, when 192.168.1.1 is wrong for this kit. A host with a
+ * user-facing setting installs a reader here, consulted per call: this process
+ * runs for weeks, so a value read once at import would take effect at the next
+ * restart, which is to say never.
+ *
+ * Standing alone, nothing installs one, so the default is the dev file the dev
+ * server dials through — a recording made beside a dev window then covers the
+ * same router that window shows.
+ */
+let readConfiguredRouterAddress: () => string | null = process.env.HISTORIAN_EMBED
+  ? () => null
+  : readDevRouterAddress;
+
+export function setRouterAddressReader(reader: () => string | null): void {
+  readConfiguredRouterAddress = reader;
+}
 // Where the collector reads and writes. Defaults to the repo's collector/data for
 // the dev process; a host (the Electron app) points it at its own per-user data dir.
 const DATA_DIR = process.env.HISTORIAN_DATA_DIR ?? resolve("collector/data");
 const PROTOSET_PATH = process.env.HISTORIAN_PROTOSET ?? resolve("public/dish.protoset");
 const DATA_FILE = join(DATA_DIR, "energy.ndjson");
+const LATENCY_FILE = join(DATA_DIR, "latency.ndjson");
 const SAMPLES_SNAPSHOT_FILE = join(DATA_DIR, "samples.json");
 const THERMAL_FILE = join(DATA_DIR, "thermal.ndjson");
 const EVENTS_FILE = join(DATA_DIR, "events.ndjson");
 const CLIENTS_FILE = join(DATA_DIR, "clients.ndjson");
 const CLIENT_SAMPLES_FILE = join(DATA_DIR, "client-samples.json");
 const CLIENT_TOTALS_FILE = join(DATA_DIR, "client-totals.json");
+const METERS_FILE = join(DATA_DIR, "meters.json");
+const DEVICE_GROUPS_FILE = join(DATA_DIR, "device-groups.json");
 const ALERTS_FILE = join(DATA_DIR, "alerts.ndjson");
 const OBSTRUCTION_FILE = join(DATA_DIR, "obstruction.ndjson");
 const LOCK_FILE = join(DATA_DIR, "historian.lock");
@@ -113,13 +161,16 @@ const ROUTER_PATH = "/SpaceX.API.Device.Device/Handle";
  *  process at a stand-in, and for the probe scripts under scripts/. */
 const ROUTER_URL_OVERRIDE = process.env.ROUTER_URL ?? null;
 
-const routerOrigins = createRouterOrigins(() => [
-  ...(identityFromEnv()?.ipAddresses ?? []),
-  ...Object.values(networkInterfaces())
-    .flat()
-    .filter((entry) => entry && entry.family === "IPv6" && !entry.internal)
-    .map((entry) => entry!.address),
-]);
+const routerOrigins = createRouterOrigins(
+  () => [
+    ...(identityFromEnv()?.ipAddresses ?? []),
+    ...Object.values(networkInterfaces())
+      .flat()
+      .filter((entry) => entry && entry.family === "IPv6" && !entry.internal)
+      .map((entry) => entry!.address),
+  ],
+  () => readConfiguredRouterAddress(),
+);
 
 /**
  * Thermal flags on get_status → alerts. The dish has no temperature reading to
@@ -254,15 +305,18 @@ async function getWifiHistory(): Promise<{ eventLog?: { events?: unknown[] } }> 
 async function getStatusAlerts(): Promise<{
   alerts: Record<string, boolean>;
   ethSpeedMbps?: number;
+  routerPresence: RouterPresence;
 }> {
   const json = (await deviceCall(DISH_URL, GET_STATUS_FIELD)) as {
-    dishGetStatus?: { alerts?: Record<string, boolean>; ethSpeedMbps?: number };
+    dishGetStatus?: DishStatusJson;
   };
+  const status = json.dishGetStatus ?? null;
   return {
-    alerts: json.dishGetStatus?.alerts ?? {},
+    alerts: status?.alerts ?? {},
     // Carried alongside the flags because one of them contradicts it: the engine
     // needs the negotiated speed to tell a real dead link from a latched flag.
-    ethSpeedMbps: json.dishGetStatus?.ethSpeedMbps,
+    ethSpeedMbps: status?.ethSpeedMbps,
+    routerPresence: routerPresence(status),
   };
 }
 
@@ -358,6 +412,310 @@ const clientThroughput = new ThroughputTracker();
  *  reset-aware, so a total survives the reconnects that zero the router's own. */
 const clientTotals = new ClientTotalsStore(CLIENT_TOTALS_FILE);
 
+/** Per-device data allowances, checked on the poll that folds the counters they
+ *  measure, so a limit is reached in the reading that carries the traffic. */
+const meters = new MeterStore(METERS_FILE);
+
+/** Allowances set across several devices at once. Projected into the rules above
+ *  on every poll, so nothing downstream of that has to know a group exists. */
+const deviceGroups = new DeviceGroupStore(DEVICE_GROUPS_FILE);
+
+/**
+ * Pauses a device, when the host has a way to. The write goes to the Starlink
+ * account rather than the LAN, which current firmware refuses, so only a host
+ * holding an account session can install one. Standing alone this recorder has
+ * none: it still measures and announces a limit being reached, and reports the
+ * pause as failed rather than as one that happened.
+ */
+let sendDevicePause: ((clientId: number, paused: boolean) => Promise<void>) | null = null;
+
+export function setDevicePauser(
+  pauser: ((clientId: number, paused: boolean) => Promise<void>) | null,
+): void {
+  sendDevicePause = pauser;
+}
+
+/**
+ * Whether a pause sent right now would be accepted. The transport is wired once
+ * at startup, but the account session behind it is signed in and out while the
+ * app runs, so this is asked at read time rather than latched.
+ */
+let readAccountSignedIn: (() => boolean) | null = null;
+
+export function setAccountSessionReader(reader: (() => boolean) | null): void {
+  readAccountSignedIn = reader;
+}
+
+/** Whether the router says each device is blocked, as of the last client poll.
+ *  A key it did not carry is absent, which reads as "not asked". */
+let blockedByClientKey: ReadonlyMap<string, boolean> = new Map();
+
+/** Falls back to the key so a message never reads blank. */
+function meterDeviceName(clientKey: string): string {
+  return clientTotals.totals(clientKey)[0]?.name?.trim() || `device ${clientKey}`;
+}
+
+/**
+ * A rule as a surface draws it: the rule plus what it has counted, and the group
+ * it came from, so a card can name what set it rather than offer to edit it.
+ *
+ * `usageBytes` is what the rule is judged against, not what the one device spent:
+ * a member of a shared allowance is over when the group is, and a card drawing
+ * its own figure against the group's allowance would call it under.
+ */
+function withUsage(
+  rule: MeterRule,
+  sharedUsage: ReadonlyMap<string, number> = sharedUsageByGroup(meters.all()),
+): MeterRule & {
+  usageBytes: number;
+  ownUsageBytes: number;
+  deviceName: string;
+  reached: boolean;
+  pauseState: PauseState;
+  holding: boolean;
+  pauseError?: string;
+  groupName?: string;
+} {
+  const group = rule.groupId === undefined ? undefined : deviceGroups.find(rule.groupId);
+  const nowMs = Date.now();
+  const pause = meters.pauses().get(rule.clientKey);
+  return {
+    ...rule,
+    usageBytes: chargedBytes(rule, sharedUsage),
+    // What this device itself put through, which on a pooled member is not what
+    // the rule charges it. A card listing the members reads this.
+    ownUsageBytes: usageBytes(rule),
+    // Decided here, where the group's sum and the countdown's clock both are. A
+    // surface re-deriving it from the two figures below gets a timer wrong.
+    reached: ruleSpent(rule, nowMs, sharedUsage),
+    // The device's block, carried on each of its rules: a card has a rule in hand
+    // and needs to say whether the device is actually off the network, and
+    // whether this rule is one of the reasons.
+    pauseState: pause?.state ?? "none",
+    holding: ruleHoldsDevice(rule),
+    ...(pause?.error === undefined ? {} : { pauseError: pause.error }),
+    deviceName: meterDeviceName(rule.clientKey),
+    // A group down to one device covers nothing but that device, so the card has
+    // nothing to say about others.
+    ...(group && group.memberKeys.length > 1 ? { groupName: group.name } : {}),
+  };
+}
+
+/** A countdown in milliseconds, or null when the write names none. Anything past
+ *  a day, or not a number, is refused rather than quietly clamped. */
+function countdownFromParams(params: URLSearchParams): number | null {
+  const raw = params.get("countdown");
+  if (raw === null || raw.trim() === "") return null;
+  const countdownMs = Number(raw);
+  if (!Number.isFinite(countdownMs) || countdownMs <= 0) return null;
+  return Math.min(MAX_COUNTDOWN_MS, countdownMs);
+}
+
+function upsertMeterFrom(clientKey: string, params: URLSearchParams): MeterRule | null {
+  const cycle = cycleFromParams(params, Date.now());
+  const allocationBytes = Number(params.get("allocation"));
+  const countdownMs = countdownFromParams(params);
+  const schedule = parseScheduleParam(params.get("schedule"));
+  if (!cycle) return null;
+  // A countdown measures the clock and a timetable measures it too, so neither
+  // needs an allowance behind it.
+  if (
+    countdownMs === null &&
+    schedule === null &&
+    (!Number.isFinite(allocationBytes) || allocationBytes <= 0)
+  )
+    return null;
+  const counters = clientTotals.lifetimes().find((entry) => entry.clientKey === clientKey);
+  return meters.upsert({
+    clientKey,
+    allocationBytes: Number.isFinite(allocationBytes) ? Math.max(0, allocationBytes) : 0,
+    autoPause: params.get("autoPause") !== "0",
+    cycle,
+    lifetimeRx: counters?.lifetimeRx ?? 0,
+    lifetimeTx: counters?.lifetimeTx ?? 0,
+    nowMs: Date.now(),
+    ...(countdownMs === null ? {} : { countdownMs }),
+    ...(schedule === null ? {} : { schedule }),
+  });
+}
+
+function upsertGroupFrom(params: URLSearchParams): DeviceGroup | null {
+  const cycle = cycleFromParams(params, Date.now());
+  const allocationBytes = Number(params.get("allocation"));
+  const name = params.get("name")?.trim();
+  const memberKeys = (params.get("members") ?? "")
+    .split(",")
+    .map((key) => key.trim())
+    .filter((key) => key !== "");
+  // Matches the form's own default, so a write naming no mode never means one
+  // thing here and another on the card that sent it.
+  const mode: GroupAllowanceMode = params.get("mode") === "pooled" ? "pooled" : "perMember";
+  const countdownMs = countdownFromParams(params);
+  const schedule = parseScheduleParam(params.get("schedule"));
+  if (!cycle || !name || memberKeys.length === 0) return null;
+  if (
+    countdownMs === null &&
+    schedule === null &&
+    (!Number.isFinite(allocationBytes) || allocationBytes <= 0)
+  )
+    return null;
+  return deviceGroups.upsert({
+    groupId: params.get("group") ?? undefined,
+    name,
+    memberKeys,
+    allocationBytes: Number.isFinite(allocationBytes) ? Math.max(0, allocationBytes) : 0,
+    autoPause: params.get("autoPause") !== "0",
+    cycle,
+    mode,
+    nowMs: Date.now(),
+    ...(countdownMs === null ? {} : { countdownMs }),
+    ...(schedule === null ? {} : { schedule }),
+  });
+}
+
+/**
+ * Retire the announcements a projection took away.
+ *
+ * A rule being dropped, or having its announcement move to its group, takes its
+ * stamp with it, and nothing filed under the new key can close an episode opened
+ * under the old one. The device's block is not settled here and does not need to
+ * be: it is held on the device, and the next poll releases it if the rules that
+ * are left have all let go.
+ */
+function retireProjectedOut(
+  went: { dropped: MeterRule[]; reannounced: MeterRule[] },
+  groups: readonly DeviceGroup[],
+): void {
+  const nowMs = Date.now();
+  // `groups` is the set as it stood before reconciliation, which is the only
+  // place a group whose last member has just left the roster can still be named.
+  const heldBy = (rule: MeterRule) => groups.find((group) => group.groupId === rule.groupId);
+  for (const rule of [...went.reannounced, ...went.dropped])
+    retireMeterAlert(rule, nowMs, heldBy(rule));
+}
+
+/** A group's members are unmetered the moment it is gone. Any block they were
+ *  under is lifted by the poll, which finds the devices with no rule holding
+ *  them. */
+function standDownGroup(groupId: string): void {
+  const nowMs = Date.now();
+  const going = deviceGroups.find(groupId);
+  const members = meters.all().filter((rule) => rule.groupId === groupId);
+  const announced = members.filter((rule) => rule.reachedAtMs !== undefined);
+  const shared = members.some(announcesAsGroup);
+  // Rules first, so the retire below sees no member still announcing; the group
+  // last, so the announcement it is keyed to can still be named.
+  meters.removeGroup(groupId);
+  for (const rule of shared ? announced.slice(0, 1) : announced)
+    retireMeterAlert(rule, nowMs, going);
+  deviceGroups.remove(groupId);
+}
+
+function standDownAllMeterRules(): void {
+  const nowMs = Date.now();
+  const announced = meters.all().filter((rule) => rule.reachedAtMs !== undefined);
+  const groups = deviceGroups.all();
+  // Rules first, so the retire below sees no member still announcing; the groups
+  // last, so each announcement can still be named by the group it is keyed to.
+  meters.clear();
+  const retired = new Set<string>();
+  for (const rule of announced) {
+    // Every member of one shared allowance retires the single announcement it
+    // raised, not one apiece.
+    const subject = announcementSubject(rule);
+    if (retired.has(subject)) continue;
+    retired.add(subject);
+    retireMeterAlert(
+      rule,
+      nowMs,
+      groups.find((group) => group.groupId === rule.groupId),
+    );
+  }
+  deviceGroups.clear();
+}
+
+/** Recorded before the pause is attempted, so an unreachable account does not
+ *  cost the record of the limit being reached. */
+/**
+ * `heldBy` is the group the rule belonged to, for the callers that have already
+ * taken it out of the store. The announcement is keyed to the group, so resolving
+ * it by lookup after the group is gone would file the clearing under the device
+ * and leave the group's episode open for ever.
+ */
+function meterAlertTransition(
+  rule: MeterRule,
+  reached: boolean,
+  atMs: number,
+  heldBy?: DeviceGroup,
+): AlertTransition {
+  const enforceable = sendDevicePause !== null && readAccountSignedIn?.() === true;
+  const group = announcesAsGroup(rule) ? (heldBy ?? deviceGroups.find(rule.groupId!)) : undefined;
+  const spec = dataLimitAlertSpec(rule, meterDeviceName(rule.clientKey), {
+    advice: rule.autoPause && !enforceable ? CONNECT_ACCOUNT_ADVICE : undefined,
+    // A group down to this one device is just this device, and reads as it. The
+    // same test as the extension's: one announcement worded two ways reads back
+    // from history as two different events.
+    groupName: group && group.memberKeys.length > 1 ? group.name : undefined,
+  });
+  return { kind: reached ? "fired" : "cleared", source: "system", key: spec.key, atMs, spec };
+}
+
+function recordMeterAnnouncement(transition: MeterTransition): void {
+  recordAlertTransitions([
+    meterAlertTransition(transition.rule, transition.kind === "reached", transition.atMs),
+  ]);
+}
+
+/**
+ * Retire a going rule's announcement. Every other one retires off its own stamp
+ * on a later tick; a rule being removed takes its stamp with it.
+ *
+ * One member leaving a shared allowance retires nothing, because the group's
+ * announcement stands on the members still in it.
+ */
+function retireMeterAlert(rule: MeterRule | undefined, atMs: number, heldBy?: DeviceGroup): void {
+  if (rule?.reachedAtMs === undefined) return;
+  if (announcesAsGroup(rule)) {
+    const stillAnnouncing = meters
+      .all()
+      .some(
+        (other) =>
+          other.groupId === rule.groupId &&
+          other.clientKey !== rule.clientKey &&
+          other.reachedAtMs !== undefined,
+      );
+    if (stillAnnouncing) return;
+  }
+  recordAlertTransitions([meterAlertTransition(rule, false, atMs, heldBy)]);
+}
+
+async function sendMeterPause(clientKey: string, blocking: boolean, atMs: number): Promise<void> {
+  const clientId = Number(clientKey);
+  if (!sendDevicePause || !Number.isInteger(clientId)) {
+    const reason = sendDevicePause
+      ? "this device has no router id to pause by"
+      : "this host cannot pause a device";
+    if (blocking) meters.notePauseState(clientKey, "failed", atMs, reason);
+    return;
+  }
+  const name = meterDeviceName(clientKey);
+  // Stamped before the write, not after it: this is re-scanned every 200 ms, and
+  // a device still reporting its old state would be asked for the same write
+  // again on every tick until the first one came back.
+  meters.noteAttempt(clientKey, blocking ? "pause" : "release", Date.now());
+  try {
+    await sendDevicePause(clientId, blocking);
+    meters.notePauseState(clientKey, blocking ? "applied" : "none", Date.now());
+    console.log(`[historian] ${blocking ? "paused" : "released"} ${name}`);
+  } catch (error) {
+    const reason = (error as Error).message;
+    console.warn(`[historian] meter pause for ${name}: ${reason}`);
+    // Still "applied" on a failed release: the device is blocked, and this record
+    // is the only thing that knows it.
+    meters.notePauseState(clientKey, blocking ? "failed" : "applied", Date.now(), reason);
+  }
+}
+
 function finiteMbps(value: number | "NaN" | undefined): number | null {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
@@ -376,6 +734,8 @@ interface WireClient {
    *  odometer uses it to recognise a device whose clientId was reissued. */
   captiveClientId?: string;
   ipAddress?: string;
+  /** True while the router is blocking this device's internet, whoever set it. */
+  blocked?: boolean;
   rxStats?: WireStats;
   txStats?: WireStats;
 }
@@ -407,6 +767,12 @@ async function getClientReadings(): Promise<ClientReading[]> {
   );
   const totalsLiveKeys = clientTotals.notePoll(
     clients.map((client) => ({ clientId: client.clientId, macAddress: client.macAddress })),
+  );
+  blockedByClientKey = new Map(
+    clients.map((client) => [
+      clientTotals.resolveKey(usageKey(client.clientId, client.macAddress)),
+      client.blocked === true,
+    ]),
   );
   for (const client of clients) {
     const entryId = entryIdOf(client);
@@ -466,6 +832,7 @@ async function getClientReadings(): Promise<ClientReading[]> {
 }
 
 const store = new EnergyStore(DATA_FILE);
+const latencyStore = new LatencyStore(LATENCY_FILE);
 // Compaction also runs on construction; repeat daily for a historian that stays
 // up for months at a stretch.
 const COMPACT_EVERY_MS = 24 * 3_600_000;
@@ -579,8 +946,9 @@ export function setLiveThroughputEnabled(enabled: boolean): void {
 function recordAlertTransitions(transitions: AlertTransition[]): void {
   if (transitions.length === 0) return;
   for (const transition of transitions) {
-    const { source, key, atMs, kind } = transition;
-    if (kind === "fired") alertStore.open(source, key, atMs);
+    const { source, key, atMs, kind, spec } = transition;
+    if (kind === "fired")
+      alertStore.open(source, key, atMs, { label: spec.firing, severity: spec.severity });
     else alertStore.close(source, key, atMs);
     // The service's diary. It runs unattended under launchd with no window and
     // no operator, so "did it see the outage?" is answerable only from what it
@@ -606,6 +974,12 @@ let latestRadio: { readings: RadioStatReading[]; atMs: number } | null = null;
 // ring on the very next poll, so a restart loses nothing — the durable energy
 // log holds only minutes already finalized, gated by lastWrittenMinute.
 const openMinuteBuckets = new Map<number, MinuteBucket>();
+
+// The minutes seen but not yet finalized for the latency histogram store: the
+// in-progress minute at the head of the ring, replaced every poll with the
+// authoritative recompute from the buffer. RAM-only on purpose, parallel to
+// openMinuteBuckets above; the durable latency log holds only finalized minutes.
+const openLatencyBuckets = new Map<number, LatencyMinuteBucket>();
 
 // Rolling full-resolution window served to the frontend so page reloads (and
 // historian restarts, via the snapshot file) never reset the charts.
@@ -753,6 +1127,7 @@ async function pollAlerts(): Promise<void> {
     observation.dish = {
       alerts: dishStatus.alerts,
       ethSpeedMbps: dishStatus.ethSpeedMbps,
+      routerPresence: dishStatus.routerPresence,
       atMs: Date.now(),
     };
   } catch {
@@ -770,7 +1145,8 @@ async function pollAlerts(): Promise<void> {
     latestRouterPingSuccessPercent = readRouterPingSuccessPercent(routerStatus.popPingDropRate5m);
     observation.router = { alerts: routerStatus.alerts ?? {}, atMs: Date.now() };
   } catch {
-    // router unreachable (or bypass mode) — leave its open episodes open
+    // router unreachable — leave its open episodes open. Whether the silence is
+    // a fault or a bypassed kit is the engine's call, off the dish reading above.
     latestRouterLatencyMs = null;
     latestRouterPingSuccessPercent = null;
     observation.router = { alerts: null, atMs: Date.now() };
@@ -845,6 +1221,84 @@ async function pollClients(): Promise<void> {
   } catch {
     // router unreachable (or bypass mode) — keep what we have
   }
+  runMeters();
+}
+
+/**
+ * Check every rule against the counters this poll folded.
+ *
+ * Runs whether or not the router answered: a cycle rolls on the clock, so a rule
+ * whose device is away still lets go of it when the cycle turns over.
+ */
+function runMeters(): void {
+  const lifetimes = clientTotals.lifetimes();
+  const roster = {
+    keys: lifetimes.map((entry) => entry.clientKey),
+    resolveKey: (key: string) => clientTotals.resolveKey(key),
+  };
+  meters.resolve(roster);
+  const groupsBefore = deviceGroups.all();
+  deviceGroups.resolve(roster);
+  retireProjectedOut(meters.project(deviceGroups.all(), lifetimes, Date.now()), groupsBefore);
+  // First, because until a block is known to have landed the reading below cannot
+  // be read at all: a roster that has not caught up with the write yet and one
+  // that has caught up with a person's release look exactly alike.
+  for (const clientKey of blocksLanded(meters.pauses(), blockedByClientKey))
+    meters.noteBlockLanded(clientKey, Date.now());
+  // Ahead of the scan below, which would otherwise send a write for a device that
+  // is already free. Recorded as overruled rather than merely unblocked: the
+  // rules go on holding it, and the next poll would pause it straight back.
+  for (const clientKey of releasedByHand(meters.pauses(), blockedByClientKey))
+    meters.noteReleasedByHand(clientKey, Date.now());
+  const transitions = meters.observe(lifetimes, Date.now());
+  // Every member of a shared allowance is held, and the group announces once.
+  for (const transition of collapseGroupAnnouncements(transitions))
+    recordMeterAnnouncement(transition);
+  settleDeviceBlocks();
+}
+
+const PAUSE_RETRY_MS = 60_000;
+
+/**
+ * Bring the router's view of every device in line with the rules.
+ *
+ * The whole enforcement path, and it asks the rules rather than remembering an
+ * edge: a device some rule holds is blocked, one no rule holds is free. That is
+ * what makes every way a rule can end — rolled, edited, deleted, its group
+ * emptied, its member moved elsewhere — settle here without each of those paths
+ * having to send a write of its own.
+ */
+function settleDeviceBlocks(): void {
+  const nowMs = Date.now();
+  const rules = meters.all();
+  // An override outlives nothing: once the rules behind it have let go, the next
+  // limit this device reaches is enforced as normal.
+  meters.settleOverrides();
+  // Cheap scan before asking the host anything: this runs on the 200 ms client
+  // poll, and reading the account session decrypts a file off the keychain.
+  const owedPause = pausesOwed(rules, meters.pauses(), nowMs, PAUSE_RETRY_MS);
+  const owedRelease = releasesOwed(rules, meters.pauses(), nowMs, PAUSE_RETRY_MS);
+  if (owedPause.length === 0 && owedRelease.length === 0) return;
+  // An unreachable account is a write that failed, not one that never happened:
+  // the card says so, and a device left blocked is recorded as still held, since
+  // this is the only thing that knows to free it.
+  if (readAccountSignedIn?.() !== true) {
+    const reason = "No Starlink account connected";
+    for (const clientKey of owedPause) {
+      meters.noteAttempt(clientKey, "pause", nowMs);
+      meters.notePauseState(clientKey, "failed", nowMs, reason);
+    }
+    for (const clientKey of owedRelease) {
+      meters.noteAttempt(clientKey, "release", nowMs);
+      meters.notePauseState(clientKey, "applied", nowMs, reason);
+    }
+    return;
+  }
+  for (const clientKey of owedPause) {
+    meters.notePauseState(clientKey, "pending", nowMs);
+    void sendMeterPause(clientKey, true, nowMs);
+  }
+  for (const clientKey of owedRelease) void sendMeterPause(clientKey, false, nowMs);
 }
 
 /**
@@ -968,10 +1422,16 @@ async function poll(): Promise<void> {
     window,
   );
   const perMinute = foldSamplesToMinutes(window.samples);
+  // Fold the same window's latency into per-minute histogram buckets so day/week
+  // quality can be summarised without the 6h raw-sample window.
+  const perLatencyMinute = foldSamplesToLatencyMinutes(window.samples);
 
   // Replace (not accumulate) so re-seeing a minute across overlapping polls is idempotent.
   for (const [minute, bucket] of perMinute) {
     if (minute > store.lastWrittenMinute) openMinuteBuckets.set(minute, bucket);
+  }
+  for (const [minute, bucket] of perLatencyMinute) {
+    if (minute > latencyStore.lastWrittenMinute) openLatencyBuckets.set(minute, bucket);
   }
 
   const currentMinute = Math.floor(now / 60_000) * 60;
@@ -981,6 +1441,13 @@ async function poll(): Promise<void> {
   for (const minute of completed) {
     store.append(openMinuteBuckets.get(minute)!);
     openMinuteBuckets.delete(minute);
+  }
+  const latencyCompleted = [...openLatencyBuckets.keys()]
+    .filter((minute) => minute < currentMinute)
+    .sort((a, b) => a - b);
+  for (const minute of latencyCompleted) {
+    latencyStore.append(openLatencyBuckets.get(minute)!);
+    openLatencyBuckets.delete(minute);
   }
   if (completed.length > 0) {
     const newest = new Date(store.lastWrittenMinute * 1000).toLocaleTimeString();
@@ -1002,6 +1469,19 @@ function bucketsInRange(startSec: number, endSec: number): MinuteBucket[] {
 function summarize(range: Range, now: Date) {
   const { startSec, endSec } = energyRangeBounds(range, now);
   return summarizeEnergy(bucketsInRange(startSec, endSec), range, now);
+}
+
+function latencyBucketsInRange(startSec: number, endSec: number): LatencyMinuteBucket[] {
+  const merged = latencyStore.readRange(startSec, endSec);
+  for (const bucket of openLatencyBuckets.values()) {
+    if (bucket.minute >= startSec && bucket.minute < endSec) merged.push(bucket);
+  }
+  return merged;
+}
+
+function summarizeLatencyRange(range: Range, now: Date) {
+  const { startSec, endSec } = energyRangeBounds(range, now);
+  return summarizeLatency(latencyBucketsInRange(startSec, endSec), range, now);
 }
 
 /**
@@ -1071,6 +1551,16 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
     response.end(JSON.stringify(summarize(range, new Date())));
     return;
   }
+  // Latency-quality summaries over the persisted per-minute histogram store:
+  // p95/p99/jitter/packet-loss and a 0–100 score, for the day/week ranges the
+  // 6h raw-sample window cannot reach.
+  if (url.pathname === "/api/latency") {
+    const rangeParam = url.searchParams.get("range") as Range | null;
+    const range: Range = rangeParam && RANGES.includes(rangeParam) ? rangeParam : "today";
+    response.setHeader("Content-Type", "application/json");
+    response.end(JSON.stringify(summarizeLatencyRange(range, new Date())));
+    return;
+  }
   // Full-resolution sample window for chart backfill after a page reload.
   if (url.pathname === "/api/samples") {
     const minutes = Math.min(360, Math.max(1, Number(url.searchParams.get("minutes") ?? 360)));
@@ -1105,6 +1595,9 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
     const client = url.searchParams.get("client");
     const reset = client ? clientTotals.reset(client, Date.now()) : false;
     if (reset) clientTotals.snapshot();
+    // Every rule reads this counter, so emptying it leaves all of them anchored
+    // above a counter that has gone back to nothing.
+    if (reset && client) meters.restartForCounterReset(client, Date.now());
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify({ reset }));
     return;
@@ -1135,13 +1628,20 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
     response.setHeader("Content-Type", "application/json");
     if (request.method === "DELETE") {
       const client = url.searchParams.get("client");
+      // A delete takes the rule too: one on a record that no longer exists can
+      // never be reached, and would meter again unannounced if the device came back.
       if (client) {
         const removed = clientTotals.remove(client);
         clientTotals.snapshot();
+        const going = meters.forDevice(client);
+        deviceGroups.removeMember(client);
+        meters.remove(client);
+        for (const rule of going) retireMeterAlert(rule, Date.now());
         response.end(JSON.stringify({ removed }));
       } else {
         clientTotals.clear();
         clientTotals.snapshot();
+        standDownAllMeterRules();
         response.end(JSON.stringify({ cleared: true }));
       }
       return;
@@ -1175,6 +1675,101 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
     return legacyByMac.get(row.macAddress);
   };
 
+  // The rules, each with what it has counted, so a card needs one request.
+  if (url.pathname === "/api/clients/meters") {
+    response.setHeader("Content-Type", "application/json");
+    const client = url.searchParams.get("client");
+    if (request.method === "DELETE") {
+      // `own` drops only the rule the device carries itself, for a surface deleting
+      // one rule of the several a device can answer to. Without it the device is
+      // unmetered outright, which is what a card offering to stop metering it means.
+      const ownOnly = url.searchParams.get("scope") === "own";
+      const all = client ? meters.forDevice(client) : [];
+      const going = ownOnly ? all.filter((rule) => rule.groupId === undefined) : all;
+      // A member's rule is the group's, and the projection would write it straight
+      // back on the next poll. Unmetering the device means leaving every group
+      // that names it, not only the one whose rule is being deleted here.
+      if (client && !ownOnly && going.some((rule) => rule.groupId !== undefined))
+        deviceGroups.removeMember(client);
+      const removed = client ? (ownOnly ? meters.removeOwn(client) : meters.remove(client)) : false;
+      if (removed) for (const rule of going) retireMeterAlert(rule, Date.now());
+      response.end(JSON.stringify({ removed }));
+      return;
+    }
+    if (request.method === "POST") {
+      const rule = client ? upsertMeterFrom(client, url.searchParams) : null;
+      response.statusCode = rule ? 200 : 400;
+      response.end(JSON.stringify(rule ? { rule: withUsage(rule) } : { error: "bad_request" }));
+      return;
+    }
+    const rules = client ? meters.all().filter((rule) => rule.clientKey === client) : meters.all();
+    // One sum for the whole answer: a shared allowance is read off every member,
+    // and asking a single-device request for it costs nothing.
+    const sharedUsage = sharedUsageByGroup(meters.all());
+    response.end(
+      JSON.stringify({
+        rules: rules.map((rule) => withUsage(rule, sharedUsage)),
+        // The pause write needs an account, so a surface can say up front whether
+        // a rule will be enforced rather than only after one is not.
+        pauseEnforceable: sendDevicePause !== null && readAccountSignedIn?.() === true,
+      }),
+    );
+    return;
+  }
+  // Allowances set across several devices. Members are projected into the rules
+  // above on the next poll, so nothing is written to them here.
+  if (url.pathname === "/api/clients/groups") {
+    response.setHeader("Content-Type", "application/json");
+    if (request.method === "DELETE") {
+      const groupId = url.searchParams.get("group");
+      const removed = groupId !== null && deviceGroups.find(groupId) !== undefined;
+      if (groupId !== null && removed) standDownGroup(groupId);
+      response.end(JSON.stringify({ removed }));
+      return;
+    }
+    if (request.method === "POST") {
+      const group = upsertGroupFrom(url.searchParams);
+      // On the write, not the next poll: until the members carry their rules a
+      // card reading them back sees devices the group covers as unmetered.
+      if (group) {
+        const groups = deviceGroups.all();
+        retireProjectedOut(meters.project(groups, clientTotals.lifetimes(), Date.now()), groups);
+      }
+      response.statusCode = group ? 200 : 400;
+      response.end(JSON.stringify(group ? { group } : { error: "bad_request" }));
+      return;
+    }
+    response.end(
+      JSON.stringify({
+        groups: deviceGroups.all(),
+        pauseEnforceable: sendDevicePause !== null && readAccountSignedIn?.() === true,
+      }),
+    );
+    return;
+  }
+  // Start a device's rules over, leaving its own usage standing.
+  if (url.pathname === "/api/clients/meters/reset" && request.method === "POST") {
+    const client = url.searchParams.get("client");
+    // One rule, named the way a rule is: its group, or the device carrying its
+    // own. A device can answer to several, and resetting by device alone would
+    // start over every rule that names it — including other devices' months.
+    const group = url.searchParams.get("group");
+    const restarted =
+      group !== null
+        ? meters.restart({ groupId: group }, Date.now())
+        : client
+          ? meters.restart({ clientKey: client }, Date.now())
+          : [];
+    response.setHeader("Content-Type", "application/json");
+    response.end(
+      JSON.stringify({
+        rules: restarted
+          .filter((rule) => client === null || rule.clientKey === client)
+          .map((rule) => withUsage(rule)),
+      }),
+    );
+    return;
+  }
   if (url.pathname === "/api/clients") {
     const hours = Math.min(6, Math.max(1, Number(url.searchParams.get("hours") ?? 6)));
     // One key across history, samples and the odometer: the clientId. The old
@@ -1282,22 +1877,34 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
 // dir, not the HTTP port — the embedded host never opens a port, so the port never
 // guarded it. The pidfile is reclaimed when its recorded owner is gone, so a crash
 // (which cannot run the release) does not wedge the next start.
+//
+// globalThis, not module-scope state or a PID compare: Vite's SSR restart can
+// re-evaluate this module within one process, and this must survive that.
+const CLAIM_SENTINEL = Symbol.for("dishylink.historian.dataDirClaim");
+
 function claimDataDir(): void {
   mkdirSync(DATA_DIR, { recursive: true });
+  if ((globalThis as Record<symbol, unknown>)[CLAIM_SENTINEL] === DATA_DIR) {
+    refuseToStart(
+      `this process already owns ${DATA_DIR} — refusing to start a second writer in the same process`,
+      true,
+    );
+  }
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
       const fd = openSync(LOCK_FILE, "wx");
       writeSync(fd, String(process.pid));
       closeSync(fd);
+      (globalThis as Record<symbol, unknown>)[CLAIM_SENTINEL] = DATA_DIR;
       return;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       const owner = Number(readFileSync(LOCK_FILE, "utf8").trim());
       if (owner && owner !== process.pid && processAlive(owner)) {
-        console.error(
-          `[historian] another collector (pid ${owner}) already owns ${DATA_DIR} — refusing to start a second writer`,
+        refuseToStart(
+          `another collector (pid ${owner}) already owns ${DATA_DIR} — refusing to start a second writer`,
+          true,
         );
-        process.exit(1);
       }
       // The recorded owner is gone; drop its stale lock and race for it again.
       try {
@@ -1307,7 +1914,15 @@ function claimDataDir(): void {
       }
     }
   }
-  console.error(`[historian] could not claim ${DATA_DIR} — refusing to start`);
+  refuseToStart(`could not claim ${DATA_DIR} — refusing to start`);
+}
+
+/** An embedded recorder shares its host's process, so it raises rather than exits
+ *  and leaves the host to decide whether it can carry on without a recorder. */
+function refuseToStart(reason: string, busy = false): never {
+  console.error(`[historian] ${reason}`);
+  if (process.env.HISTORIAN_EMBED === "1")
+    throw busy ? new CollectorBusyError(reason) : new Error(reason);
   process.exit(1);
 }
 
@@ -1364,42 +1979,60 @@ const pollCycle = nonOverlapping(poll);
 const pollClientsCycle = nonOverlapping(pollClients);
 const pollObstructionCycle = nonOverlapping(pollObstruction);
 
-void pollCycle();
-setInterval(() => void pollCycle(), POLL_MS);
-setInterval(writeSampleSnapshot, SNAPSHOT_EVERY_MS);
-setInterval(() => {
-  rotateLogIfLarge(OUT_LOG_FILE);
-  rotateLogIfLarge(ERR_LOG_FILE);
-}, SNAPSHOT_EVERY_MS);
-// Clients run on their own timers: the router keeps no history, so nothing is
-// recoverable after the fact. Polling is fast enough to catch each counter step
-// as it happens; recording runs at 1 Hz and is what sets chart resolution. One
-// call covers every client.
-void pollClientsCycle();
-setInterval(() => void pollClientsCycle(), CLIENTS_POLL_MS);
-// Checked every 5 minutes; the store's isDue() keeps the actual dish call hourly.
-void pollObstructionCycle();
-setInterval(() => void pollObstructionCycle(), 300_000);
-setInterval(recordClients, CLIENTS_RECORD_MS);
-setInterval(() => clientWindow.snapshot(), SNAPSHOT_EVERY_MS);
-setInterval(() => clientTotals.snapshot(), SNAPSHOT_EVERY_MS);
-setInterval(() => {
-  const folded = store.compact();
-  if (folded > 0)
-    console.log(`[historian] folded ${folded} minute(s) from past years into monthly summaries`);
-}, COMPACT_EVERY_MS);
-// The per-device log keeps only six hours, so it cannot wait for the daily sweep.
-setInterval(() => {
-  const dropped = clientStore.compact();
-  if (dropped > 0) console.log(`[historian] compacted client log, dropped ${dropped} old row(s)`);
-  // Drop usage records for devices unseen since before last month, on the same
-  // hourly sweep, then persist so the trim survives a restart.
-  const totalsDropped = clientTotals.compact(Date.now());
-  if (totalsDropped > 0) {
-    clientTotals.snapshot();
-    console.log(`[historian] dropped ${totalsDropped} stale device total(s)`);
-  }
-}, 3_600_000);
+/**
+ * Begin polling.
+ *
+ * Held back from module evaluation so an embedded host can wire its device
+ * pauser and account reader before the first allowance is enforced: started at
+ * import, the first poll can reach a rule with nothing behind it to pause with.
+ */
+export function start(): void {
+  void pollCycle();
+  setInterval(() => void pollCycle(), POLL_MS);
+  setInterval(writeSampleSnapshot, SNAPSHOT_EVERY_MS);
+  setInterval(() => {
+    rotateLogIfLarge(OUT_LOG_FILE);
+    rotateLogIfLarge(ERR_LOG_FILE);
+  }, SNAPSHOT_EVERY_MS);
+  // Clients run on their own timers: the router keeps no history, so nothing is
+  // recoverable after the fact. Polling is fast enough to catch each counter step
+  // as it happens; recording runs at 1 Hz and is what sets chart resolution. One
+  // call covers every client.
+  void pollClientsCycle();
+  setInterval(() => void pollClientsCycle(), CLIENTS_POLL_MS);
+  // Checked every 5 minutes; the store's isDue() keeps the actual dish call hourly.
+  void pollObstructionCycle();
+  setInterval(() => void pollObstructionCycle(), 300_000);
+  setInterval(recordClients, CLIENTS_RECORD_MS);
+  setInterval(() => clientWindow.snapshot(), SNAPSHOT_EVERY_MS);
+  setInterval(() => clientTotals.snapshot(), SNAPSHOT_EVERY_MS);
+  setInterval(() => {
+    const folded = store.compact();
+    if (folded > 0)
+      console.log(`[historian] folded ${folded} minute(s) from past years into monthly summaries`);
+    const latencyFolded = latencyStore.compact();
+    if (latencyFolded > 0)
+      console.log(
+        `[historian] folded ${latencyFolded} latency minute(s) from past years into monthly summaries`,
+      );
+  }, COMPACT_EVERY_MS);
+  // The per-device log keeps only six hours, so it cannot wait for the daily sweep.
+  setInterval(() => {
+    const dropped = clientStore.compact();
+    if (dropped > 0) console.log(`[historian] compacted client log, dropped ${dropped} old row(s)`);
+    // Drop usage records for devices unseen since before last month, on the same
+    // hourly sweep, then persist so the trim survives a restart.
+    const totalsDropped = clientTotals.compact(Date.now());
+    if (totalsDropped > 0) {
+      clientTotals.snapshot();
+      console.log(`[historian] dropped ${totalsDropped} stale device total(s)`);
+    }
+  }, 3_600_000);
+}
+
+// A standalone recorder has no host to wait for. An embedded one calls start()
+// itself, once its pauser and account reader are in place.
+if (process.env.HISTORIAN_EMBED !== "1") start();
 process.on("SIGTERM", () => {
   writeSampleSnapshot();
   clientWindow.snapshot();

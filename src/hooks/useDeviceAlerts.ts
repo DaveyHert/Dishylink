@@ -28,11 +28,15 @@ import {
   firingSystemAlert,
   resolveAlerts,
   sortBySeverity,
+  type AlertSeverity,
   type AlertSource,
   type AlertState,
 } from "@core/alertDefinitions";
 import { announceAlert } from "../lib/notifications";
+import { routerPresence, routerSilenceExpected } from "@core/routerPresence";
 import { apiRequest, recorderRunsInHostProcess } from "../lib/apiHost";
+import { useMetersEnforceable, useTrippedMeters, type MeterRuleView } from "./useDataMeter";
+import { CONNECT_ACCOUNT_ADVICE, dataLimitAlertSpec } from "@core/dataMeterAlert";
 
 const HISTORY_POLL_MS = 30_000;
 
@@ -42,6 +46,9 @@ interface AlertEpisodeJson {
   key: string;
   startMs: number;
   endMs: number | null;
+  /** What was announced. Absent where the wording is a constant looked up below. */
+  label?: string;
+  severity?: AlertSeverity;
 }
 
 export interface AlertHistoryEntry {
@@ -123,6 +130,17 @@ function createFirstSeenLog() {
   };
 }
 
+function dataLimitAlert(rule: MeterRuleView, enforceable: boolean): AlertState {
+  return {
+    ...dataLimitAlertSpec(rule, rule.deviceName, {
+      advice: rule.autoPause && !enforceable ? CONNECT_ACCOUNT_ADVICE : undefined,
+      groupName: rule.groupName,
+    }),
+    source: "system",
+    active: true,
+  };
+}
+
 /** "dishWaterDetected" -> "dish water detected", for a key the definitions do not cover. */
 function humanizeKey(key: string): string {
   return key
@@ -142,6 +160,11 @@ export function useDeviceAlerts(
   // would mean the two disagree about the same fact for seconds at a time.
   // Flapping is a bug in whatever makes polls fail, not something to smooth over.
   const dishReachable = dishConnection !== "unreachable";
+  // Collapsed to a string before the memo below: the status object is new every
+  // poll, and reading it there would rebuild the alert list once a second.
+  const presence = dishReachable ? routerPresence(dishStatus) : null;
+  const trippedMeters = useTrippedMeters();
+  const metersEnforceable = useMetersEnforceable();
   const [routerAlerts, setRouterAlerts] = useState<Record<string, boolean> | null>(null);
   const [routerReachable, setRouterReachable] = useState<boolean | null>(null);
   const [episodes, setEpisodes] = useState<AlertEpisodeJson[]>([]);
@@ -230,16 +253,26 @@ export function useDeviceAlerts(
     // above uses. The connection status indicator and this panel therefore never
     // disagree: anything that turns the indicator red is an active alert in the
     // same render.
+    const routerSilenceIsExpected = routerSilenceExpected(presence);
     const system = [
       ...(dishReachable ? [] : [DISH_UNREACHABLE]),
-      ...(routerReachable === false ? [ROUTER_UNREACHABLE] : []),
+      ...(routerReachable === false && !routerSilenceIsExpected ? [ROUTER_UNREACHABLE] : []),
       // Never on a host that runs the recorder in its own process: there the
       // thing that would be down is the thing asking, so the alert can only ever
       // be a false alarm about a request that was slow.
       ...(historianUp === false && !recorderRunsInHostProcess() ? [HISTORIAN_DOWN] : []),
+      ...trippedMeters.map((rule) => dataLimitAlert(rule, metersEnforceable)),
     ];
     return sortBySeverity([...firing, ...system]);
-  }, [statusList, dishReachable, routerReachable, historianUp]);
+  }, [
+    statusList,
+    dishReachable,
+    routerReachable,
+    presence,
+    historianUp,
+    trippedMeters,
+    metersEnforceable,
+  ]);
 
   // Announce an alert opening or clearing. Seeded lazily so an alert already
   // firing when the app opens still gets announced once.
@@ -268,7 +301,7 @@ export function useDeviceAlerts(
         }
       }
       for (const [id, alert] of previous) {
-        if (alert.notify && !current.has(id)) {
+        if (alert.notify && alert.notifyClear !== false && !current.has(id)) {
           // Distinct key so the clear is not swallowed by the onset's throttle.
           announceAlert(
             alert.severity,
@@ -295,8 +328,8 @@ export function useDeviceAlerts(
         endMs: episode.endMs,
         // The alert's own message, verbatim — the same event reads the same way
         // live and in history. Advice is a separate field and stays out of here.
-        label: spec ? spec.firing : humanizeKey(episode.key),
-        severity: spec ? spec.severity : "advisory",
+        label: episode.label ?? (spec ? spec.firing : humanizeKey(episode.key)),
+        severity: episode.severity ?? spec?.severity ?? "advisory",
       };
     });
   }, [episodes]);

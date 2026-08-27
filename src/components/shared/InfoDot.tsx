@@ -11,28 +11,26 @@
 
 import { Tooltip as TooltipPrimitive } from "radix-ui";
 import { cn } from "@/lib/utils";
+import { SeverityDot, type Severity } from "../ui/severity-icon";
 
-const infoDot =
-  "relative inline-flex size-[13px] cursor-help items-center justify-center rounded-full border border-input font-mono text-[9px] italic leading-none text-muted-foreground outline-none [transition:border-color_120ms_ease,color_120ms_ease] hover:border-(--accent) hover:text-(--accent) focus-visible:border-(--accent) focus-visible:text-(--accent)";
 // Portalled by Radix, so this is presentation only — the resets (not-italic,
 // normal-case, tracking-normal) guard against whatever context it lands in.
 const infoTip =
-  "z-[60] w-max max-w-[240px] rounded-sm border border-hairline bg-secondary px-2.5 py-2 text-left text-[11.5px] not-italic normal-case leading-[1.45] tracking-normal text-ink-secondary shadow-[0_6px_24px_rgba(0,0,0,0.28)]";
+  "z-[60] w-max max-w-[360px] rounded-lg border border-hairline bg-secondary px-[13px] py-[11px] text-left text-[12.5px] not-italic normal-case leading-normal tracking-normal text-ink-secondary shadow-[0_6px_24px_rgba(0,0,0,0.28)]";
 
 /** Standalone ⓘ dot. Pair with any heading. */
-export function InfoDot({ tip }: { tip: string }) {
+export function InfoDot({ tip, severity = "normal" }: { tip: string; severity?: Severity }) {
   return (
     <TooltipPrimitive.Provider delayDuration={120}>
       <TooltipPrimitive.Root>
         <TooltipPrimitive.Trigger asChild>
-          <span className={infoDot} tabIndex={0} role='note' aria-label={tip}>
-            i
-          </span>
+          <SeverityDot severity={severity} tabIndex={0} role='note' aria-label={tip} />
         </TooltipPrimitive.Trigger>
         <TooltipPrimitive.Portal>
           <TooltipPrimitive.Content
             className={infoTip}
             side='top'
+            align='start'
             sideOffset={8}
             collisionPadding={12}
           >

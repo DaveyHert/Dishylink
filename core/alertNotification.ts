@@ -105,6 +105,7 @@ function deviceName(source: AlertTransition["source"]): string {
 export function describeTransition(transition: AlertTransition): AlertNotification | null {
   if (!transition.spec.notify) return null;
   const cleared = transition.kind === "cleared";
+  if (cleared && transition.spec.notifyClear === false) return null;
   const device = deviceName(transition.source);
   return {
     key: `alert-${transition.source}:${transition.key}${cleared ? "-cleared" : ""}`,

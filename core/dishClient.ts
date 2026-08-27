@@ -56,6 +56,7 @@ export const DISH_LAN_HANDLE_URL = `http://${DISH_LAN_ADDRESS}:9201/SpaceX.API.D
 // Oneof field numbers inside SpaceX.API.Device.Request (from the dish schema).
 const REQUEST_FIELD = {
   reboot: 1001,
+  factoryReset: 1011,
   getStatus: 1004,
   getHistory: 1007,
   getDeviceInfo: 1008,
@@ -207,11 +208,17 @@ export interface DishLocationJson {
   source?: string;
 }
 
+/** How the obstruction grid is oriented. FRAME_EARTH is north-up; FRAME_UT
+ *  is dish-relative (bottom-center is the boresight azimuth). Mini kits on
+ *  roam typically report FRAME_UT; a Standard on a fixed site reports FRAME_EARTH. */
+export type ObstructionMapReferenceFrame = "FRAME_UNKNOWN" | "FRAME_EARTH" | "FRAME_UT";
+
 export interface DishObstructionMapJson {
   numRows?: number;
   numCols?: number;
   snr?: number[];
   maxThetaDeg?: number;
+  mapReferenceFrame?: ObstructionMapReferenceFrame;
 }
 
 // ---------- config / diagnostics shapes ----------
@@ -281,6 +288,11 @@ export interface WifiMeshNodeJson {
 
 export interface WifiNetworkConfigJson {
   countryCode?: string;
+  /** The DNS servers the router forwards to. Absent means Starlink's own — proto3
+   *  omits an empty repeated field, so absent and empty are the same answer. */
+  nameservers?: string[];
+  /** True when this kit is not permitted to set custom DNS at all. */
+  customDnsDisabled?: boolean;
   networks?: WifiLanNetworkJson[];
   meshConfigs?: Record<string, WifiMeshNodeJson>;
   clientConfigs?: WifiClientConfigJson[];
@@ -575,6 +587,13 @@ export class DishClient {
     await this.call(REQUEST_FIELD.reboot, abortSignal);
   }
 
+  /** Wipe the device back to its shipped state. On a router that includes the
+   *  WiFi name and passphrase, and bypass mode with them: it is the only exit
+   *  the official app leaves once bypass is on. FactoryResetRequest is empty. */
+  async factoryReset(abortSignal?: AbortSignal): Promise<void> {
+    await this.call(REQUEST_FIELD.factoryReset, abortSignal);
+  }
+
   /** Stow (fold flat) or unstow the dish. Motorized (mast) models only. */
   async stow(unstow: boolean, abortSignal?: AbortSignal): Promise<void> {
     // DishStowRequest { bool unstow = 1 } — field 1, varint wire type
@@ -591,6 +610,14 @@ export class DishClient {
       this.requestSchema,
       fromJson(this.requestSchema, requestJson as JsonValue, { registry: this.registry }),
     );
+  }
+
+  /** Decode a Device.Response the host fetched through the cloud gateway. Pairs
+   *  with `encodeRequest` for the reads that have no LAN path. */
+  decodeResponse(responseBytes: Uint8Array): DishResponseJson {
+    return toJson(this.responseSchema, fromBinary(this.responseSchema, responseBytes), {
+      registry: this.registry,
+    }) as DishResponseJson;
   }
 
   /** Current dish configuration (sleep schedule, snow melt, update window …). */

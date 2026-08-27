@@ -78,6 +78,10 @@ export default defineConfig(({ command }) => ({
           // Extension store tests that need real IndexedDB run in the browser
           // project below, not this Node one.
           exclude: [...configDefaults.exclude, "extension/**/*.browser.test.ts"],
+          // Own group: this project's maxWorkers differs from the browser
+          // project's, and Vitest requires distinct groupOrder whenever that's
+          // the case.
+          sequence: { groupOrder: 0 },
         },
       },
       // Component tests in real Chromium, not jsdom: they render canvas and WebGL
@@ -89,6 +93,12 @@ export default defineConfig(({ command }) => ({
           name: "browser",
           include: ["src/**/*.test.tsx", "extension/**/*.browser.test.ts"],
           setupFiles: ["./src/test-setup.ts"],
+          // Each worker holds its own real Chromium context; too many
+          // rendering canvas/WebGL at once starve each other and fail at
+          // random. Capped below the default worker count for a
+          // deterministic run, at the cost of wall-clock time.
+          maxWorkers: 3,
+          sequence: { groupOrder: 1 },
           browser: {
             enabled: true,
             provider: playwright(),
@@ -127,16 +137,6 @@ export default defineConfig(({ command }) => ({
         target: "https://celestrak.org",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/celestrak/, ""),
-      },
-      // Long-term energy totals from the local historian service (collector/).
-      // xfwd adds x-forwarded-for so /api/whoami sees the browser's LAN IP, not
-      // this proxy's loopback address.
-      // 127.0.0.1, not localhost: the historian binds v4 loopback, and Node
-      // resolves localhost verbatim — often to ::1 first, which nothing answers.
-      "/api": {
-        target: "http://127.0.0.1:8088",
-        changeOrigin: true,
-        xfwd: true,
       },
       // Cloudflare speed endpoints for the browser-measured speed test
       // (the dish's own speedtest RPCs are unimplemented on current firmware).

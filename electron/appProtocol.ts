@@ -11,6 +11,10 @@ import { readFile } from "node:fs/promises";
 import { networkInterfaces } from "node:os";
 import { join, extname, normalize, sep } from "node:path";
 import { createRouterOrigins } from "../core/routerEndpoint";
+import { DISH_LAN_ADDRESS } from "../core/dishClient";
+import { preferences } from "./preferences";
+
+const DISH_PORT = 9201;
 
 const SCHEME = "app";
 const HOST = "bundle";
@@ -18,8 +22,9 @@ const HOST = "bundle";
 // The dish and the Starlink router speak grpc-web on their LAN IPs; CelesTrak
 // publishes the Starlink ephemerides but sends no CORS headers, so it too must be
 // fetched from here rather than the renderer.
-const DISH_ORIGIN = process.env.DISH_ORIGIN ?? "http://192.168.100.1:9201";
 const CELESTRAK_ORIGIN = "https://celestrak.org";
+
+const DISH_ORIGIN = process.env.DISH_ORIGIN ?? `http://${DISH_LAN_ADDRESS}:${DISH_PORT}`;
 
 /** Pins the router to one origin and turns the fallback off — for pointing a
  *  build at a stand-in. Unset, the router is found by core/routerEndpoint. */
@@ -28,11 +33,13 @@ const ROUTER_ORIGIN_OVERRIDE = process.env.ROUTER_ORIGIN ?? null;
 /** This host's own IPv6 addresses, which is where the router's are derived from.
  *  Read per call rather than once: a laptop that joins a different network gets
  *  a different prefix, and a value cached at startup would outlive its network. */
-const routerOrigins = createRouterOrigins(() =>
-  Object.values(networkInterfaces())
-    .flat()
-    .filter((entry) => entry && entry.family === "IPv6" && !entry.internal)
-    .map((entry) => entry!.address),
+const routerOrigins = createRouterOrigins(
+  () =>
+    Object.values(networkInterfaces())
+      .flat()
+      .filter((entry) => entry && entry.family === "IPv6" && !entry.internal)
+      .map((entry) => entry!.address),
+  () => preferences().routerAddress,
 );
 
 const CONTENT_TYPES: Record<string, string> = {

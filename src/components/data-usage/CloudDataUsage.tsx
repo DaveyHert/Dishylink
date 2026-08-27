@@ -6,6 +6,7 @@
 import { useMemo, useState } from "react";
 import { useCloudUsage } from "../../hooks/useCloudAccount";
 import { isUnlimited, formatAllowance, type UsageCycle } from "../../lib/starlinkCloud";
+import { formatGigabytes } from "../../lib/format";
 import { RangeBars, type RangeBarColumn } from "../shared/RangeBarChart";
 import { SegmentedControl } from "../ui/segmented-control";
 import { Callout } from "../ui/callout";
@@ -15,10 +16,8 @@ import { Explainer } from "../ui/explainer";
 import { ConnectAccount } from "../shared/ConnectAccount";
 
 function formatGB(gb: number): string {
-  if (gb >= 1000) return `${(gb / 1000).toFixed(2)} TB`;
-  if (gb >= 100) return `${gb.toFixed(0)} GB`;
-  if (gb >= 1) return `${gb.toFixed(1)} GB`;
-  return `${gb.toFixed(2)} GB`;
+  const { value, unit } = formatGigabytes(gb);
+  return `${value} ${unit}`;
 }
 
 function cycleMonthLabel(cycle: UsageCycle): string {
@@ -116,7 +115,7 @@ export function CloudDataUsage({ active }: { active: boolean }) {
   return (
     <div>
       <div className='mt-3 mb-3.5'>
-        <div className='text-[36px] leading-[1.05] font-bold tracking-[-0.01em]'>
+        <div className='text-[34px] leading-[1.05] font-bold tracking-[-0.01em]'>
           {formatGB(cycle.totalAmountGB)}
           <span className='ml-[6px] align-baseline text-[13px] font-medium'>
             {data?.content?.dataBuckets?.[0]?.name ?? "Data"}

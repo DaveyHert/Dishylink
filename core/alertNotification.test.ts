@@ -6,6 +6,7 @@ import {
   notificationsProblem,
   notificationsRequested,
 } from "./alertNotification";
+import { dataLimitAlertSpec } from "./dataMeterAlert";
 
 const NOW = 1_700_000_000_000;
 
@@ -34,6 +35,33 @@ describe("describeTransition", () => {
       title: "Dish alert cleared",
       body: "No water inside the dish",
     });
+  });
+
+  it("stays silent on a clear the alert asked not to announce", () => {
+    const spec = dataLimitAlertSpec(
+      {
+        clientKey: "42",
+        allocationBytes: 10_000_000_000,
+        autoPause: true,
+        cycle: { kind: "monthly", day: 1 },
+        anchorRx: 0,
+        anchorTx: 0,
+        observedRx: 0,
+        observedTx: 0,
+        periodStartMs: NOW,
+        periodEndMs: NOW + 86_400_000,
+        actedThisCycle: false,
+        createdMs: NOW,
+      },
+      "iPhone",
+    );
+    const cleared = { kind: "cleared", source: "system", key: spec.key, atMs: NOW, spec } as const;
+
+    // The onset is worth interrupting someone with; its retirement a minute later
+    // reports nothing new, and would claim a still-capped device is within its
+    // allowance.
+    expect(describeTransition({ ...cleared, kind: "fired" })).not.toBeNull();
+    expect(describeTransition(cleared)).toBeNull();
   });
 
   it("gives the onset and the clear different throttle keys", () => {

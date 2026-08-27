@@ -8,13 +8,18 @@ import { resolveSelfIdentity, type SelfIdentity } from "../lib/selfIdentity";
 
 const EMPTY: SelfIdentity = { ips: [], macs: [], describesHost: false };
 
-export function useSelfIdentity(): SelfIdentity {
-  const [identity, setIdentity] = useState<SelfIdentity>(EMPTY);
+/** `resolved` separates "no identity" from "not asked yet", which a surface that
+ *  reacts to an unknown viewer must not show for the first frame. */
+export function useSelfIdentity(): { self: SelfIdentity; resolved: boolean } {
+  const [identity, setIdentity] = useState<{ self: SelfIdentity; resolved: boolean }>({
+    self: EMPTY,
+    resolved: false,
+  });
 
   useEffect(() => {
     const controller = new AbortController();
-    void resolveSelfIdentity(controller.signal).then((resolved) => {
-      if (!controller.signal.aborted) setIdentity(resolved);
+    void resolveSelfIdentity(controller.signal).then((self) => {
+      if (!controller.signal.aborted) setIdentity({ self, resolved: true });
     });
     return () => controller.abort();
   }, []);

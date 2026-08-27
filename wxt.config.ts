@@ -42,7 +42,7 @@ export default defineConfig({
     // app's and a stale dist/ build — and the scan errors on their web-only imports.
     optimizeDeps: { entries: ["extension/entrypoints/**/*.html"] },
   }),
-  manifest: {
+  manifest: ({ manifestVersion }) => ({
     name: "Dishylink",
     description:
       "Monitor your Starlink's performance and health. Live telemetry, speed test, obstruction map, alignment, alerts, per-device usage.",
@@ -77,6 +77,18 @@ export default defineConfig({
       "https://*.starlink.com/*",
       "https://celestrak.org/*",
     ],
+    // A kit moved off its default subnet, or in bypass mode, sits at an address no
+    // static manifest can name, and MV3 host permissions are fixed at build time —
+    // so an arbitrary address is reachable only as an optional permission. This is
+    // the ceiling on what may be asked for, not a grant: the request names the one
+    // address being saved (lib/endpoints.ts). It cannot be narrowed to the private
+    // ranges — a match pattern's host is "*", or "*." plus a literal suffix, or a
+    // literal host, with no CIDR and no wildcard inside a host. http only: the
+    // boxes speak plain grpc-web on the LAN.
+    // MV2 spells this optional_permissions, and WXT does not translate between them.
+    ...(manifestVersion === 3
+      ? { optional_host_permissions: ["http://*/*"] }
+      : { optional_permissions: ["http://*/*"] }),
     // 'wasm-unsafe-eval' for satellite.js. No declarativeNetRequest: an extension
     // never sends the Referer the dish's guard rejects, so no ruleset is needed.
     content_security_policy: {
@@ -101,9 +113,11 @@ export default defineConfig({
         data_collection_permissions: { required: ["none"] },
       },
     },
-  },
+  }),
   zip: {
+    // Built from the working tree, not a git checkout, so gitignored notes need naming.
     excludeSources: [
+      "**/*.local.md",
       "release/**",
       "dist/**",
       "dist-electron/**",

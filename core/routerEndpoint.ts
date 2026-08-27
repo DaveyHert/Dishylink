@@ -24,6 +24,9 @@
 // from this codebase at all, so offering it would only produce failures.
 
 import { ROUTER_LAN_ADDRESS } from "./dishClient";
+import { expandIpv6, normalizeIpAddress, originFor } from "./ipAddress";
+
+export { expandIpv6 };
 
 export const ROUTER_PORT = 9001;
 
@@ -31,25 +34,6 @@ export const ROUTER_PORT = 9001;
  *  tried first, so a working setup behaves exactly as it did before any of this
  *  existed: one attempt, one origin, no extra traffic. */
 export const ROUTER_IPV4_ORIGIN = `http://${ROUTER_LAN_ADDRESS}:${ROUTER_PORT}`;
-
-/** The eight hextets of `address`, or null when it is not an IPv6 address this
- *  can reason about. Handles "::" in any position; rejects the IPv4-embedded
- *  forms, which carry dots and are not what a Starlink prefix looks like. */
-export function expandIpv6(address: string): string[] | null {
-  const bare = address.split("%")[0].trim().toLowerCase(); // drop any zone
-  if (bare === "" || bare.includes(".")) return null;
-  const halves = bare.split("::");
-  if (halves.length > 2) return null;
-  const groupsOf = (part: string): string[] => (part === "" ? [] : part.split(":"));
-  const left = groupsOf(halves[0]);
-  const right = halves.length === 2 ? groupsOf(halves[1]) : [];
-  const full =
-    halves.length === 2
-      ? [...left, ...Array(8 - left.length - right.length).fill("0"), ...right]
-      : left;
-  if (full.length !== 8 || full.some((group) => !/^[0-9a-f]{1,4}$/.test(group))) return null;
-  return full;
-}
 
 /** Whether an address is one the router's prefix can be derived from: a global
  *  or unique-local address on a real network. Link-local is excluded because it
@@ -91,8 +75,19 @@ export function routerAddressesFrom(ownIps: readonly string[]): string[] {
  * The order is the guarantee against regression: on a setup where the router's
  * IPv4 address is its own, the first entry answers and nothing else is ever
  * dialled.
+ *
+ * A configured address replaces the list rather than joining it. Someone who set
+ * one has told us the default is wrong for their network, and on the setups that
+ * need this the default is not merely silent — it is another vendor's router,
+ * sitting on the address ours would otherwise have. Trying it anyway would aim
+ * this app's traffic at a stranger's box.
  */
-export function routerOriginsFrom(ownIps: readonly string[]): string[] {
+export function routerOriginsFrom(
+  ownIps: readonly string[],
+  configuredAddress?: string | null,
+): string[] {
+  const configured = configuredAddress ? normalizeIpAddress(configuredAddress) : null;
+  if (configured) return [originFor(configured, ROUTER_PORT)];
   return [
     ROUTER_IPV4_ORIGIN,
     ...routerAddressesFrom(ownIps).map((address) => `http://[${address}]:${ROUTER_PORT}`),
@@ -111,8 +106,15 @@ export function routerOriginsFrom(ownIps: readonly string[]): string[] {
  * The remembered origin is dropped as soon as it fails, so a kit that moves
  * between networks re-derives rather than staying pinned to an address that has
  * stopped meaning anything.
+ *
+ * `readConfiguredAddress` is read per call for the same reason the addresses are:
+ * a setting changed while this process runs has to take effect on the next
+ * request, and the historian can run for weeks between restarts.
  */
-export function createRouterOrigins(listOwnIps: () => readonly string[]) {
+export function createRouterOrigins(
+  listOwnIps: () => readonly string[],
+  readConfiguredAddress: () => string | null = () => null,
+) {
   let preferred: string | null = null;
 
   return {
@@ -126,7 +128,7 @@ export function createRouterOrigins(listOwnIps: () => readonly string[]) {
      * synthetic one hiding what actually went wrong.
      */
     async run<T>(run: (origin: string) => Promise<T>): Promise<T> {
-      const candidates = routerOriginsFrom(listOwnIps());
+      const candidates = routerOriginsFrom(listOwnIps(), readConfiguredAddress());
       // The remembered origin goes first; the rest stay in their usual order so
       // a stale preference costs one attempt, not a reshuffled search.
       const ordered =

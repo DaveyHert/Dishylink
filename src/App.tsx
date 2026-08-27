@@ -35,11 +35,19 @@ import { useLiveReadings } from "./hooks/useLiveReadings";
 import { formatThroughput } from "./lib/format";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { useTheme } from "./hooks/useTheme";
+import { dishModelFor } from "./lib/dishMesh";
 
 export default function App() {
   const { theme, cycleTheme } = useTheme();
-  const { openPanel, setOpenPanel, skyViewOpen, setSkyViewOpen, openNav, openSkyView } =
-    usePanelRouting();
+  const {
+    openPanel,
+    setOpenPanel,
+    settingsTab,
+    skyViewOpen,
+    setSkyViewOpen,
+    openNav,
+    openSkyView,
+  } = usePanelRouting();
   const [windowMinutes, setWindowMinutes] = useState(15);
   const notificationsOn = useSyncExternalStore(subscribeToNotifications, readNotificationsOn);
   const notificationsBlockedReason = useSyncExternalStore(
@@ -51,7 +59,12 @@ export default function App() {
     telemetry.dishLocation?.lla,
   );
   const lanOnline = useLanPresence(telemetry.status, telemetry.connectionState);
-  const satellites = useSatellites(observerLocation, telemetry.obstructionMap);
+  const satellites = useSatellites(
+    observerLocation,
+    telemetry.obstructionMap,
+    dishModelFor(telemetry.status),
+    telemetry.status?.boresightAzimuthDeg ?? 0,
+  );
   useOutageNotifications(telemetry);
   const deviceAlerts = useDeviceAlerts(telemetry.status, telemetry.connectionState);
   const thermalEvents = useThermalEvents();
@@ -198,8 +211,12 @@ export default function App() {
             telemetry.deviceInfo?.hardwareVersion ?? status?.deviceInfo?.hardwareVersion
           }
           wifiConfig={routerNetwork.wifiConfig}
+          clients={routerNetwork.clients}
+          initialTab={settingsTab}
           routerReachable={routerNetwork.routerReachable}
+          routerViaAccount={routerNetwork.wifiConfigViaAccount}
           routerUnreachable={routerUnreachable}
+          onRouterConfigChanged={routerNetwork.refreshConfig}
         />
       )}
       {/* Sky view (full-viewport) */}

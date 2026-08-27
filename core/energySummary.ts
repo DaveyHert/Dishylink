@@ -12,16 +12,6 @@ export type Range = "1h" | "6h" | "12h" | "today" | "day" | "week" | "month";
 
 export const RANGES: Range[] = ["1h", "6h", "12h", "today", "day", "week", "month"];
 
-/** How a range's minute buckets are grouped into bars. */
-type GroupUnit = "fixed" | "calendarDay" | "calendarWeek" | "calendarMonth";
-
-interface RangeSpec {
-  startSec: (now: Date) => number;
-  group: GroupUnit;
-  /** Bar width in seconds, only for `group: "fixed"`. */
-  fixedSec?: number;
-}
-
 function hoursBackSec(now: Date, hours: number): number {
   return Math.floor(now.getTime() / 1000) - hours * 3_600;
 }
@@ -51,7 +41,18 @@ function startOfYearSec(now: Date): number {
   return Math.floor(date.getTime() / 1000);
 }
 
-const RANGE_SPECS: Record<Range, RangeSpec> = {
+/** How a range's minute buckets are grouped into bars. Shared with the
+ *  latency summary, which groups the same minute buckets into bars. */
+export type GroupUnit = "fixed" | "calendarDay" | "calendarWeek" | "calendarMonth";
+
+export interface RangeSpec {
+  startSec: (now: Date) => number;
+  group: GroupUnit;
+  /** Bar width in seconds, only for `group: "fixed"`. */
+  fixedSec?: number;
+}
+
+export const RANGE_SPECS: Record<Range, RangeSpec> = {
   "1h": { startSec: (now) => hoursBackSec(now, 1), group: "fixed", fixedSec: 300 }, // 5-min bars
   "6h": { startSec: (now) => hoursBackSec(now, 6), group: "fixed", fixedSec: 1_800 }, // 30-min bars
   "12h": { startSec: (now) => hoursBackSec(now, 12), group: "fixed", fixedSec: 3_600 }, // hourly bars
@@ -65,7 +66,7 @@ const RANGE_SPECS: Record<Range, RangeSpec> = {
 };
 
 /** Bar this minute belongs to: a fixed slice, or the local calendar day/week/month start. */
-function groupKeyOf(minuteSec: number, spec: RangeSpec): number {
+export function groupKeyOf(minuteSec: number, spec: RangeSpec): number {
   if (spec.group === "fixed") return Math.floor(minuteSec / spec.fixedSec!) * spec.fixedSec!;
   const date = new Date(minuteSec * 1000);
   date.setHours(0, 0, 0, 0);
@@ -80,7 +81,7 @@ function groupKeyOf(minuteSec: number, spec: RangeSpec): number {
  * hour the historian missed vanishes and the bars either side sit shoulder to
  * shoulder as though no time passed between them.
  */
-function groupKeysInRange(startSec: number, endSec: number, spec: RangeSpec): number[] {
+export function groupKeysInRange(startSec: number, endSec: number, spec: RangeSpec): number[] {
   const keys: number[] = [];
   if (spec.group === "fixed") {
     const first = Math.floor(startSec / spec.fixedSec!) * spec.fixedSec!;
@@ -101,7 +102,7 @@ function groupKeysInRange(startSec: number, endSec: number, spec: RangeSpec): nu
 }
 
 /** Where the slot after this one starts — the end of this slot's span. */
-function nextGroupKey(key: number, spec: RangeSpec): number {
+export function nextGroupKey(key: number, spec: RangeSpec): number {
   if (spec.group === "fixed") return key + spec.fixedSec!;
   const cursor = new Date(key * 1000);
   if (spec.group === "calendarDay") cursor.setDate(cursor.getDate() + 1);

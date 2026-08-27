@@ -16,18 +16,44 @@ vi.mock("../../cloud/starlinkCloudHandler", () => ({
   }),
 }));
 
+const loadSelfDeviceClientId = vi.fn<() => Promise<number | null>>();
+vi.mock("./selfDevice", () => ({ loadSelfDeviceClientId: () => loadSelfDeviceClientId() }));
+
 const { handleCloudRequest } = await import("./cloudHandler");
 
-describe("handleCloudRequest /cloud/device", () => {
-  it("refuses a pause without reaching the cloud handler", async () => {
-    const reply = await handleCloudRequest({
-      path: "/cloud/device",
-      method: "POST",
-      body: { kind: "pause", clientId: 42, paused: true },
-    });
+const pause = (clientId: number) => ({
+  path: "/cloud/device",
+  method: "POST",
+  body: { kind: "pause", clientId, paused: true },
+});
 
-    expect(reply).toEqual({ status: 501, body: { error: "unsupported_on_extension" } });
+describe("handleCloudRequest /cloud/device", () => {
+  it("refuses a pause while no device has been named as this one", async () => {
+    loadSelfDeviceClientId.mockResolvedValueOnce(null);
+
+    const reply = await handleCloudRequest(pause(42));
+
+    expect(reply).toMatchObject({ status: 409, body: { error: "self_device_unknown" } });
     expect(updateClient).not.toHaveBeenCalled();
+  });
+
+  it("refuses a pause aimed at the named device, whatever the control shows", async () => {
+    loadSelfDeviceClientId.mockResolvedValueOnce(42);
+
+    const reply = await handleCloudRequest(pause(42));
+
+    expect(reply).toMatchObject({ status: 409, body: { error: "self_pause_refused" } });
+    expect(updateClient).not.toHaveBeenCalled();
+  });
+
+  it("forwards a pause aimed at another device", async () => {
+    loadSelfDeviceClientId.mockResolvedValueOnce(42);
+    updateClient.mockResolvedValueOnce({ status: 200, body: { ok: true } });
+
+    const reply = await handleCloudRequest(pause(7));
+
+    expect(updateClient).toHaveBeenCalledWith({ kind: "pause", clientId: 7, paused: true });
+    expect(reply).toEqual({ status: 200, body: { ok: true } });
   });
 
   it("forwards a rename to the cloud handler and returns its reply", async () => {

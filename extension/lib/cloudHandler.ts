@@ -23,9 +23,21 @@ import { browser } from "wxt/browser";
 import { createCloudHandler } from "../../cloud/starlinkCloudHandler";
 import { DishClient, type DishConfigJson } from "@core/dishClient";
 import { prepareDishConfigUpdate } from "@core/dishConfigUpdate";
-import { prepareRouterClientUpdate, type RouterClientUpdate } from "@core/routerClientUpdate";
+import {
+  buildRouterConfigRequest,
+  readCurrentNetworks,
+  readCurrentSubnet,
+  readRouterWifiConfig,
+  type RouterConfigUpdate,
+} from "@core/routerConfigUpdate";
+import {
+  prepareRouterClientUpdate,
+  readRouterClients,
+  type RouterClientUpdate,
+} from "@core/routerClientUpdate";
 import type { CloudReply, CloudRequest } from "@/lib/cloudHost";
-import { DISH_HANDLE_URL, ROUTER_HANDLE_URL } from "./endpoints";
+import { dishHandleUrl, routerHandleUrl } from "./endpoints";
+import { loadSelfDeviceClientId } from "./selfDevice";
 
 const SESSION_KEY = "cloudSession";
 
@@ -34,6 +46,21 @@ const SESSION_KEY = "cloudSession";
 let ourCookie: string | null = null;
 let routerPromise: Promise<DishClient> | null = null;
 let dishPromise: Promise<DishClient> | null = null;
+// A client holds the URL it was loaded with, so one cached across an address
+// change would keep dialling the box the user just told us they had moved.
+let cachedRouterUrl = "";
+let cachedDishUrl = "";
+
+/** The router client every router callback needs, reloaded whenever the address
+ *  changes. The gateway callbacks need it only as a codec — loading dials nothing. */
+function loadRouter(): Promise<DishClient> {
+  const routerUrl = routerHandleUrl();
+  if (routerUrl !== cachedRouterUrl) {
+    cachedRouterUrl = routerUrl;
+    routerPromise = null;
+  }
+  return (routerPromise ??= DishClient.load("router", { handleUrl: routerUrl }));
+}
 
 const cloudHandler = createCloudHandler({
   fetch: ((input: RequestInfo | URL, init?: RequestInit) =>
@@ -47,12 +74,26 @@ const cloudHandler = createCloudHandler({
     ourCookie = null;
     void browser.storage.local.remove(SESSION_KEY);
   },
-  prepareDeviceUpdate: async (update) => {
-    routerPromise ??= DishClient.load("router", { handleUrl: ROUTER_HANDLE_URL });
-    return prepareRouterClientUpdate(await routerPromise, update);
+  prepareDeviceUpdate: async (update, targetId, callGateway) =>
+    prepareRouterClientUpdate(await loadRouter(), update, targetId, callGateway),
+  prepareRouterConfigUpdate: async (update, targetId, callGateway) => {
+    const client = await loadRouter();
+    const networks = await readCurrentNetworks(update, client, targetId, callGateway);
+    return client.encodeRequest(buildRouterConfigRequest(targetId, update, networks));
   },
+  readRouterSubnet: async (targetId, callGateway) =>
+    readCurrentSubnet(await loadRouter(), targetId, callGateway),
+  readRouterClients: async (targetId, callGateway) =>
+    readRouterClients(await loadRouter(), targetId, callGateway),
+  readRouterConfig: async (targetId, callGateway) =>
+    readRouterWifiConfig(await loadRouter(), targetId, callGateway),
   prepareDishConfigUpdate: async (changes) => {
-    dishPromise ??= DishClient.load("dish", { handleUrl: DISH_HANDLE_URL });
+    const dishUrl = dishHandleUrl();
+    if (dishUrl !== cachedDishUrl) {
+      cachedDishUrl = dishUrl;
+      dishPromise = null;
+    }
+    dishPromise ??= DishClient.load("dish", { handleUrl: dishUrl });
     return prepareDishConfigUpdate(await dishPromise, changes);
   },
 });
@@ -108,18 +149,41 @@ async function setCookieRule(cookie: string | null): Promise<void> {
   });
 }
 
+/** Whether a session is held, so a surface can say up front whether a data limit
+ *  will actually be enforced rather than only after one is not. */
+export function accountSignedIn(): boolean {
+  return ourCookie !== null;
+}
+
 /** Answer one /cloud/* request from the dashboard. */
 export async function handleCloudRequest(request: CloudRequest): Promise<CloudReply> {
   const route = new URL(request.path, "http://extension.invalid").pathname;
 
-  // Renaming is safe from anywhere, but pausing is not: a desktop extension cannot
-  // read its host's LAN address or MAC, so it cannot tell whether the client it is
-  // about to cut off is the one it is running on. Refused here rather than left to
-  // the hidden control, so nothing that reaches this route can self-pause.
+  // A pause aimed at the device running this extension would cut off the session
+  // needed to undo it, and the only thing that knows which device that is, is the
+  // one the user named. Enforced here as well as in the control that renders it.
   if (route === "/cloud/device" && request.method === "POST") {
     const update = request.body as RouterClientUpdate;
-    if (update?.kind !== "rename")
+    if (update?.kind === "rename") return cloudHandler.updateClient(update);
+    if (update?.kind !== "pause")
       return { status: 501, body: { error: "unsupported_on_extension" } };
+    const selfClientId = await loadSelfDeviceClientId();
+    if (selfClientId === null)
+      return {
+        status: 409,
+        body: {
+          error: "self_device_unknown",
+          message: "Choose this device under Settings → App before pausing others.",
+        },
+      };
+    if (update.clientId === selfClientId)
+      return {
+        status: 409,
+        body: {
+          error: "self_pause_refused",
+          message: "This is the device you are using, so it cannot be paused from here.",
+        },
+      };
     return cloudHandler.updateClient(update);
   }
 
@@ -128,6 +192,12 @@ export async function handleCloudRequest(request: CloudRequest): Promise<CloudRe
   // whole, not to whichever device happens to be running the extension.
   if (route === "/cloud/dish-config" && request.method === "POST") {
     return cloudHandler.updateDishConfig(request.body as DishConfigJson);
+  }
+
+  // Custom DNS is router-wide, not per-client, so it carries none of the
+  // self-target hazard that makes pausing unsafe on this host.
+  if (route === "/cloud/router-config" && request.method === "POST") {
+    return cloudHandler.updateRouterConfig(request.body as RouterConfigUpdate);
   }
 
   // /cloud/session is connect (capture our copy) and disconnect (drop our copy).

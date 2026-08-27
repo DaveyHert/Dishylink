@@ -23,7 +23,9 @@
   --color-popover-foreground: var(--ink);
   --color-primary: var(--ink);
   --color-primary-foreground: var(--page);
-  --color-secondary: var(--surface-raised);
+  --color-fill-raised: color-mix(in srgb, var(--ink) 8%, var(--surface));
+  --color-fill-hover: color-mix(in srgb, var(--ink) 4%, transparent);
+  --color-secondary: var(--color-fill-raised);
   --color-secondary-foreground: var(--ink);
   --color-muted: var(--grid-dot);
   --color-muted-foreground: var(--ink-muted);
@@ -201,6 +203,19 @@ body {
   }
 }
 
+/* The PAUSED glyph + wifi mark breathing on the meter ring: a soft dim and back,
+   not Tailwind's animate-pulse fade-to-half — a device that is paused, not
+   loading. */
+@keyframes paused-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
 /* ---------- layout ----------
    The dashboard shell and its two grids (tiles / charts) are Tailwind utilities
    in App.tsx now; only the entrance keyframe they reference lives here. */
@@ -213,6 +228,20 @@ body {
   to {
     opacity: 1;
     transform: none;
+  }
+}
+
+/* The travel dots on a slide-to-confirm track: a drag is the only affordance
+   that control has, so something has to say it is draggable before it is
+   touched. Staggered per dot, and reversed when the track runs leftward. */
+
+@keyframes slide-hint {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.85;
   }
 }
 
@@ -287,6 +316,29 @@ body {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* ---------- glass panel ----------
+   The treatment every floating surface shares — the toolbar at rest, the support
+   menu, select dropdowns and confirms: translucent ground, ink-tinted border,
+   backdrop blur. A flat opaque panel reads as a different surface family from
+   the rest of the UI, which is what a full-strength border makes worse. */
+
+.glass-panel {
+  border-color: color-mix(in srgb, var(--hairline) 50%, transparent);
+  background: color-mix(in srgb, var(--surface-raised) 80%, transparent);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(24px) saturate(150%);
+}
+
+[data-theme="dark"] .glass-panel,
+.glass-panel:where([data-theme="dark"] *) {
+  background: color-mix(in srgb, #0e0e0e 80%, transparent);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 /* ---------- desktop (Electron) title bar ---------- */

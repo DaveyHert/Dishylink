@@ -7,6 +7,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { NotificationState } from "../core/alertNotification";
 import type { HostNetworkIdentity } from "../core/hostNetworkIdentity";
+import type { RouterAddress } from "../core/ipAddress";
 import {
   NOTIFICATION_STATE_CHANNEL,
   MENUBAR_THROUGHPUT_CHANNEL,
@@ -27,7 +28,16 @@ contextBridge.exposeInMainWorld("dishlink", {
     ipcRenderer.send("open-external", url);
   },
   selfIdentity: (): Promise<HostNetworkIdentity> => ipcRenderer.invoke("get-self-identity"),
+  // The roster entry this machine matched over the LAN, kept by main so the
+  // self-pause refusal there still knows this device off that network.
+  rememberSelfDevice: (clientId: number): Promise<void> =>
+    ipcRenderer.invoke("remember-self-device", clientId),
   recorderInProcess: (): Promise<boolean> => ipcRenderer.invoke("get-recorder-in-process"),
+  // Where this process dials the router. Main owns it because the recorder there
+  // dials with no window open.
+  routerAddress: (): Promise<RouterAddress> => ipcRenderer.invoke("get-router-address"),
+  setRouterAddress: (address: string | null): Promise<RouterAddress | null> =>
+    ipcRenderer.invoke("set-router-address", address),
   // Opens the Starlink login window in the main process; resolves once the account
   // is connected, or with ok:false if the user closes it.
   signIn: (): Promise<{ ok: boolean; message?: string }> => ipcRenderer.invoke("starlink-signin"),

@@ -47,11 +47,18 @@ export function DetailsModal({ title, onClose, children, size, onBack }: Details
   return (
     <DialogPrimitive.Root open onOpenChange={(open) => !open && onClose()}>
       <DialogPrimitive.Portal>
+        {/* The scrim, kept outside the scrolling Overlay: backdrop-filter is
+            re-resolved every frame its subtree scrolls, and Chromium presents the
+            frames where that has not finished. */}
+        <div
+          aria-hidden
+          className='pointer-events-none fixed inset-0 z-40 bg-[rgba(0,0,0,0.55)] backdrop-blur-[5px]'
+        />
         {/* Content nests inside Overlay (not Radix's usual sibling layout) so the
             backdrop stays the scroll container. */}
         <DialogPrimitive.Overlay
           data-slot='details-modal-overlay'
-          className='thin-scroll fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[rgba(0,0,0,0.55)] pt-[6vh] pr-5 pb-10 pl-5 backdrop-blur-[5px]'
+          className='thin-scroll fixed inset-0 z-50 flex items-start justify-center overflow-y-auto pt-[6vh] pr-5 pb-10 pl-5'
         >
           <DialogPrimitive.Content
             data-slot='details-modal'

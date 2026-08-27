@@ -13,9 +13,14 @@ collector/data
 
 # Local Starlink account session for the dev cloud proxy (never commit).
 .starlink-cookie
+.router-address
 
-# Claude Code's local settings/session state — machine-specific, not shared config.
+# Machine-specific agent state.
 .claude/
+
+# Working notes and throwaway probe scripts. Local to whoever is mid-task.
+HANDOFF.md
+*.tmp.mts
 
 # Local working notes. Open security TODOs live here rather than in a public file.
 *.local.md

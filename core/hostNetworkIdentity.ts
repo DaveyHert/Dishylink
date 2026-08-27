@@ -5,6 +5,9 @@ import { networkInterfaces } from "node:os";
 export interface HostNetworkIdentity {
   macAddresses: string[];
   ipAddresses: string[];
+  /** The router's id for this machine, learned from the roster on the router's
+   *  own network. Unlike the addresses, it identifies this host from anywhere. */
+  clientId?: number;
 }
 
 export function localNetworkIdentity(): HostNetworkIdentity {

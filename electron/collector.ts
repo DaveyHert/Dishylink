@@ -9,6 +9,8 @@ import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { AlertTransition } from "../core/alertEngine";
+import { preferences } from "./preferences";
+import { accountSignedIn, pauseDevice } from "./cloud";
 import type { ThroughputSample } from "../collector/historian.mts";
 
 export type { ThroughputSample };
@@ -33,10 +35,20 @@ export async function startCollector(rendererRoot: string): Promise<void> {
   // rather than its dev-tree default under public/.
   process.env.HISTORIAN_PROTOSET = join(rendererRoot, "dish.protoset");
   const historian = await import("../collector/historian.mts");
+  // The recorder dials the router with no window open, so it reads the same
+  // preference the window edits rather than the default it was built with.
+  historian.setRouterAddressReader(() => preferences().routerAddress);
+  // A device that spends its data allowance is paused from here, through the
+  // account session this process holds. The recorder decides; only main can send.
+  historian.setDevicePauser((clientId, paused) => pauseDevice(clientId, paused));
+  historian.setAccountSessionReader(() => accountSignedIn());
   handleRequest = historian.handleRequest;
   subscribeToAlerts = historian.onAlertTransitions;
   subscribeToThroughput = historian.onThroughput;
   enableLiveThroughput = historian.setLiveThroughputEnabled;
+  // Last: the first poll can reach a rule that owes a pause, and the pauser above
+  // is what sends it.
+  historian.start();
 }
 
 /**

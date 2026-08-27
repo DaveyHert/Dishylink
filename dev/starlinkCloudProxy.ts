@@ -12,10 +12,19 @@ import { resolve } from "node:path";
 import type { Plugin } from "vite";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createCloudHandler } from "../cloud/starlinkCloudHandler.ts";
+import { resilientFetch } from "../cloud/resilientFetch.ts";
+import { CollectorBusyError } from "../collector/collectorLock.mts";
 import { DishClient, DISH_LAN_HANDLE_URL, ROUTER_LAN_HANDLE_URL } from "../core/dishClient.ts";
 import type { DishConfigJson } from "../core/dishClient.ts";
 import { prepareDishConfigUpdate } from "../core/dishConfigUpdate.ts";
-import { prepareRouterClientUpdate } from "../core/routerClientUpdate.ts";
+import {
+  buildRouterConfigRequest,
+  readCurrentNetworks,
+  readCurrentSubnet,
+  readRouterWifiConfig,
+  type RouterConfigUpdate,
+} from "../core/routerConfigUpdate.ts";
+import { prepareRouterClientUpdate, readRouterClients } from "../core/routerClientUpdate.ts";
 import type { RouterClientUpdate } from "../core/routerClientUpdate.ts";
 import { localNetworkIdentity, type HostNetworkIdentity } from "../core/hostNetworkIdentity.ts";
 
@@ -25,11 +34,12 @@ export interface FileCloudHandlerOptions {
   protosetPath?: string;
 }
 
+/** null, never "", so every reader agrees on what "no session" looks like. */
 function cookieStore(cookieFile: string) {
   return {
     readCookie(): string | null {
       try {
-        return readFileSync(cookieFile, "utf8").trim();
+        return readFileSync(cookieFile, "utf8").trim() || null;
       } catch {
         return null;
       }
@@ -90,15 +100,18 @@ export function createFileCloudHandler(options: FileCloudHandlerOptions = {}) {
   let routerPromise: Promise<DishClient> | null = null;
   let dishPromise: Promise<DishClient> | null = null;
   const protosetBytes = () => new Uint8Array(readFileSync(protosetPath));
+  // Every router callback needs the same client, and the gateway ones need it
+  // only as a codec — loading it dials nothing.
+  const loadRouter = () =>
+    (routerPromise ??= DishClient.load("router", {
+      handleUrl: ROUTER_LAN_HANDLE_URL,
+      protosetBytes: protosetBytes(),
+    }));
   return createCloudHandler({
+    fetch: resilientFetch,
     ...store,
-    prepareDeviceUpdate: async (update) => {
-      routerPromise ??= DishClient.load("router", {
-        handleUrl: ROUTER_LAN_HANDLE_URL,
-        protosetBytes: protosetBytes(),
-      });
-      return prepareRouterClientUpdate(await routerPromise, update, identity());
-    },
+    prepareDeviceUpdate: async (update, targetId, callGateway) =>
+      prepareRouterClientUpdate(await loadRouter(), update, targetId, callGateway, identity()),
     prepareDishConfigUpdate: async (changes) => {
       dishPromise ??= DishClient.load("dish", {
         handleUrl: DISH_LAN_HANDLE_URL,
@@ -106,6 +119,19 @@ export function createFileCloudHandler(options: FileCloudHandlerOptions = {}) {
       });
       return prepareDishConfigUpdate(await dishPromise, changes);
     },
+    // Encoding only — the client is never dialled here, so this works on a
+    // kit whose router answers nothing on the LAN.
+    prepareRouterConfigUpdate: async (update, targetId, callGateway) => {
+      const client = await loadRouter();
+      const networks = await readCurrentNetworks(update, client, targetId, callGateway);
+      return client.encodeRequest(buildRouterConfigRequest(targetId, update, networks));
+    },
+    readRouterSubnet: async (targetId, callGateway) =>
+      readCurrentSubnet(await loadRouter(), targetId, callGateway),
+    readRouterClients: async (targetId, callGateway) =>
+      readRouterClients(await loadRouter(), targetId, callGateway),
+    readRouterConfig: async (targetId, callGateway) =>
+      readRouterWifiConfig(await loadRouter(), targetId, callGateway),
   });
 }
 
@@ -158,6 +184,16 @@ export async function dispatchCloudRequest(
     }
   }
 
+  if (route === "/cloud/router-config" && req.method === "POST") {
+    try {
+      const update = JSON.parse((await readBody(req)) || "{}") as RouterConfigUpdate;
+      const result = await handler.updateRouterConfig(update);
+      return sendJson(res, result.status, result.body);
+    } catch (error) {
+      return sendJson(res, 400, { error: "bad_request", message: (error as Error).message });
+    }
+  }
+
   const { status, body } = await handler.handle(route);
   sendJson(res, status, body);
 }
@@ -165,10 +201,48 @@ export async function dispatchCloudRequest(
 /** Vite plugin: serves /cloud/* from the user's own starlink.com session, held in
  *  a local .starlink-cookie file. */
 export function starlinkCloudProxy(): Plugin {
-  const handler = createFileCloudHandler();
+  const cookieFile = resolve(
+    process.env.STARLINK_COOKIE_FILE ?? resolve(process.cwd(), ".starlink-cookie"),
+  );
+  const { readCookie } = cookieStore(cookieFile);
+  const handler = createFileCloudHandler({ cookieFile });
   return {
     name: "starlink-cloud-proxy",
-    configureServer(server) {
+    async configureServer(server) {
+      // Vitest stands up its own dev server, which must not claim the data directory.
+      if (!process.env.VITEST) {
+        process.env.HISTORIAN_EMBED = "1";
+        try {
+          const historian = await import("../collector/historian.mts");
+          historian.setAccountSessionReader(() => readCookie() !== null);
+          historian.setDevicePauser(async (clientId, paused) => {
+            const { status, body } = await handler.updateClient({
+              kind: "pause",
+              clientId,
+              paused,
+            });
+            if (status === 200) return;
+            const message = (body as { message?: string })?.message ?? `HTTP ${status}`;
+            throw new Error(status === 428 ? "No Starlink account connected" : message);
+          });
+          server.middlewares.use((req: IncomingMessage, res: ServerResponse, next) => {
+            if (!req.url?.startsWith("/api/")) return next();
+            historian.handleRequest(req, res);
+          });
+          // Last: the first poll can reach a rule that owes a pause, and the
+          // pauser above is what sends it.
+          historian.start();
+        } catch (error) {
+          // A second dev server would serve a window that records nothing, so the
+          // one collector already running is worth stopping this one over. The
+          // port is not: Vite moves to the next, and the recorder moves with it.
+          if (error instanceof CollectorBusyError) throw error;
+          console.warn(
+            `[dev] recorder not started: ${(error as Error).message}. /api is unanswered here.`,
+          );
+        }
+      }
+
       server.middlewares.use(async (req: IncomingMessage, res: ServerResponse, next) => {
         if (!(req.url ?? "").startsWith("/cloud/")) return next();
         await dispatchCloudRequest(req, res, handler);

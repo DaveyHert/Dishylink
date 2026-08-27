@@ -45,23 +45,11 @@ const sameOriginTransport: CloudTransport = async ({ path, method = "GET", body,
 
 let transport: CloudTransport = sameOriginTransport;
 let hostSignIn: CloudSignIn | undefined;
-let hostSupportsRouterClientPause = true;
 
 /** Called once by a host entry point, before the UI renders. */
-export function setCloudHost(binding: {
-  transport?: CloudTransport;
-  signIn?: CloudSignIn;
-  /** False when the host cannot reliably identify and protect its own client. */
-  supportsRouterClientPause?: boolean;
-}): void {
+export function setCloudHost(binding: { transport?: CloudTransport; signIn?: CloudSignIn }): void {
   if (binding.transport) transport = binding.transport;
   if (binding.signIn) hostSignIn = binding.signIn;
-  if (binding.supportsRouterClientPause !== undefined)
-    hostSupportsRouterClientPause = binding.supportsRouterClientPause;
-}
-
-export function supportsRouterClientPause(): boolean {
-  return hostSupportsRouterClientPause;
 }
 
 export function cloudRequest(request: CloudRequest): Promise<CloudReply> {

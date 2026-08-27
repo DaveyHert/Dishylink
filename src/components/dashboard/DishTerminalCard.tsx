@@ -1,25 +1,13 @@
 // Hardware, alignment, GPS, and network facts from the live status message.
 
 import type { DishStatusJson, DishReadyStatesJson } from "@core/dishClient";
+import { routerPresence } from "@core/routerPresence";
 import { dishModelFor, specForModel } from "../../lib/dishMesh";
 import { formatAttitudeState, formatRelativeTime, formatUptime } from "../../lib/format";
 import { FactGrid, FactRow } from "../ui/fact-row";
 import { DishIcon } from "../../assets/icons/DishIcon";
 import { ExpandIcon } from "../../assets/icons/ExpandIcon";
-
-/** Plan tier. The API's CONSUMER is what the Starlink app labels "Residential". */
-function formatServiceClass(classOfService?: string): string {
-  switch (classOfService) {
-    case "CONSUMER":
-      return "residential";
-    case "BUSINESS":
-      return "business";
-    case "BUSINESS_PLUS":
-      return "business plus";
-    default:
-      return (classOfService ?? "—").replaceAll("_", " ").toLowerCase();
-  }
-}
+import { formatServiceClass } from "./serviceClass";
 
 /** Why downlink is capped, if it is. NO_LIMIT / NO_RESTRICTION read as "none". */
 function formatBandwidthLimit(reason?: string): string {
@@ -107,7 +95,10 @@ export function DishTerminalCard({
     { label: "Country", value: status.deviceInfo?.countryCode ?? "—" },
     { label: "Uptime", value: formatUptime(Number(status.deviceState?.uptimeS ?? 0)) },
     { label: "Boot count", value: String(status.deviceInfo?.bootcount ?? "—") },
-    { label: "Service class", value: formatServiceClass(status.classOfService) },
+    {
+      label: "Service class",
+      value: formatServiceClass(status.classOfService, status.mobilityClass),
+    },
     {
       label: "Satellites in View (GPS)",
       value: status.gpsStats?.gpsValid ? `${status.gpsStats.gpsSats ?? 0} satellites` : "no fix",
@@ -138,10 +129,12 @@ export function DishTerminalCard({
     },
     {
       // The dish sends router identities, not a count — keep both: the count
-      // reads at a glance, the ids say which routers.
-      label: "Mesh routers",
+      // reads at a glance, the ids say which routers. The controller counts here
+      // too, so this is every router the dish is talking to, mesh or not.
+      label: "Downstream routers",
       value: status.connectedRouters?.length
-        ? `${status.connectedRouters.length} · ${status.connectedRouters.join(", ")}`
+        ? `${status.connectedRouters.length} · ${status.connectedRouters.join(", ")}` +
+          (routerPresence(status) === "bypassed" ? " · bypassed" : "")
         : "0",
     },
     { label: "Bandwidth limit", value: formatBandwidthLimit(status.dlBandwidthRestrictedReason) },

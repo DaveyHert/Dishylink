@@ -13,6 +13,7 @@
 import { app } from "electron";
 import { join } from "node:path";
 import { readFileSync, writeFileSync } from "node:fs";
+import { normalizeIpAddress } from "../core/ipAddress";
 
 export interface WindowBounds {
   x: number;
@@ -37,8 +38,8 @@ export interface Preferences {
    * Whether the live ↓/↑ throughput readout is shown — in the macOS menu bar
    * beside the tray icon, or on the Windows taskbar. One preference, whichever
    * surface the host has. A desktop-only display choice with no history anywhere
-   * else, so unlike `notifications` it is a plain boolean: off is a real default,
-   * not an unanswered question, and there is no older store to migrate a value
+   * else, so unlike `notifications` it is a plain boolean: nothing turns on telling
+   * a default apart from a choice, and there is no older store to migrate a value
    * from. (The stored key keeps this name even though the readout isn't menu-bar
    * only — renaming it would orphan the value in existing settings files.)
    */
@@ -49,9 +50,40 @@ export interface Preferences {
    * where it was left. null until the window has moved or resized at least once.
    */
   windowBounds: WindowBounds | null;
+
+  /**
+   * Where to reach the router. null means 192.168.1.1, which is right for almost
+   * every kit; a value is for the setups it cannot serve — a router whose subnet
+   * was moved in the official app, or a kit in bypass mode behind a third-party
+   * router. The dish has no equivalent: its 192.168.100.1 is fixed in firmware.
+   *
+   * Owned by main for the same reason `notifications` is: the recorder in this
+   * process dials the router with no window open.
+   */
+  routerAddress: string | null;
+
+  /**
+   * The router's clientId for this machine, or null until the window has seen
+   * itself on the roster. What the self-pause refusal matches on when the write
+   * is made from off the router's network, where an address match means nothing.
+   */
+  selfClientId: number | null;
 }
 
-const DEFAULTS: Preferences = { notifications: null, menuBarThroughput: false, windowBounds: null };
+const DEFAULTS: Preferences = {
+  notifications: null,
+  menuBarThroughput: process.platform === "darwin",
+  windowBounds: null,
+  routerAddress: null,
+  selfClientId: null,
+};
+
+/** A clientId is a uint32 the router issued, so anything else on disk is not one. */
+function storedClientId(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 0xffff_ffff
+    ? value
+    : null;
+}
 
 function isWindowBounds(value: unknown): value is WindowBounds {
   if (typeof value !== "object" || value === null) return false;
@@ -62,6 +94,12 @@ function isWindowBounds(value: unknown): value is WindowBounds {
     typeof bounds.width === "number" &&
     typeof bounds.height === "number"
   );
+}
+
+/** A hand-edited settings file must not send this process dialling something that
+ *  is not an address at all, so what comes off disk is validated like typed input. */
+function storedAddress(value: unknown): string | null {
+  return typeof value === "string" ? normalizeIpAddress(value) : null;
 }
 
 let cached: Preferences | null = null;
@@ -81,8 +119,12 @@ export function preferences(): Preferences {
       ...DEFAULTS,
       notifications: typeof parsed.notifications === "boolean" ? parsed.notifications : null,
       menuBarThroughput:
-        typeof parsed.menuBarThroughput === "boolean" ? parsed.menuBarThroughput : false,
+        typeof parsed.menuBarThroughput === "boolean"
+          ? parsed.menuBarThroughput
+          : DEFAULTS.menuBarThroughput,
       windowBounds: isWindowBounds(parsed.windowBounds) ? parsed.windowBounds : null,
+      routerAddress: storedAddress(parsed.routerAddress),
+      selfClientId: storedClientId(parsed.selfClientId),
     };
   } catch {
     // No file yet, or unreadable. Either way the defaults are the answer.

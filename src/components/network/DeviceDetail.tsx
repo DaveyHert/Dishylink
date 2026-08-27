@@ -13,11 +13,18 @@ import { Badge } from "../ui/badge";
 import { DeviceFactsList } from "./DeviceFactsList";
 import { DeviceNameEditor, RenameButton } from "./DeviceNameEditor";
 import { DeviceSignalIcon } from "../../assets/icons/DeviceSignalIcon";
+import { MeterIcon } from "../../assets/icons/MeterIcon";
+import { METER_INDICATOR_COLOR, meterIndicatorForRule } from "./rules/meterIndicator";
 import { DeviceThroughput } from "./DeviceThroughput";
+import { DataMeterDialog } from "./rules/DataMeterDialog";
+import type { MemberCandidate } from "./rules/allowanceTerms";
+import { useDataMeter } from "../../hooks/useDataMeter";
 import { buildDeviceFacts } from "./deviceFacts";
 import { deviceRowSubtitle } from "./deviceRowSubtitle";
-import { displayName, signalQuality } from "./networkFormat";
+import { displayName, pauseSettleTimeoutMs, signalQuality } from "./networkFormat";
 import { Button } from "../ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { SpinLoader } from "../loaders/SpinLoader";
 import {
   AccountRequiredError,
   clientPauseControlAvailable,
@@ -25,7 +32,6 @@ import {
 } from "../../lib/routerClientUpdate";
 import { AccountRequiredNotice } from "../shared/AccountRequiredNotice";
 import { useCloudAccount } from "../../hooks/useCloudAccount";
-import { supportsRouterClientPause } from "../../lib/cloudHost";
 import {
   Dialog,
   DialogContent,
@@ -35,25 +41,37 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 
-// The router's client roster is what says whether a pause landed, and it is polled
-// on its own 5s cadence. Holding the control pending until that roster agrees is
-// what keeps the label from flicking back through its old value in between. The
-// timeout is the backstop for a write the gateway accepts but never applies.
-const PAUSE_SETTLE_TIMEOUT_MS = 20_000;
-
 export function DeviceDetail({
   client,
   history,
   rates,
+  liveRatesAvailable,
+  historianAnswering,
+  routerReachable,
+  rosterRefreshMs,
   total,
   upstreamName,
   isThisDevice,
   viewerIdentified,
+  meterCandidates,
   onRename,
 }: {
   client: WifiClientJson;
+  /** Every device a limit set here could be extended to cover. */
+  meterCandidates: MemberCandidate[];
   /** Live per-MAC rates from the hook's byte-delta tracker. */
   rates: Map<string, ThroughputRates>;
+  /** Whether that tracker is still being fed. It runs on the LAN, so a roster
+   *  sourced from the account has no current entry in it — only whatever it held
+   *  when the router last answered, which would be shown as if it were live. */
+  liveRatesAvailable: boolean;
+  /** The historian feeds the charts and the router feeds the roster, so an empty
+   *  chart has to name whichever of the two is silent. */
+  historianAnswering: boolean | null;
+  routerReachable: boolean | null;
+  /** How often the roster on screen is re-read, which is how long a pause can
+   *  take to be confirmed. */
+  rosterRefreshMs: number;
   history: TelemetrySample[];
   /** This device's monthly usage from the historian's odometer, if it has one. */
   total?: ClientUsageTotal;
@@ -67,6 +85,7 @@ export function DeviceDetail({
   onRename: (clientId: number, givenName: string) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
+  const [editingMeter, setEditingMeter] = useState(false);
   const [pendingPaused, setPendingPaused] = useState<boolean | null>(null);
   const [confirmingPause, setConfirmingPause] = useState(false);
   const [pauseError, setPauseError] = useState<Error | null>(null);
@@ -77,12 +96,25 @@ export function DeviceDetail({
   if (pendingPaused !== null && paused === pendingPaused) setPendingPaused(null);
   const pauseBusy = pendingPaused !== null && paused !== pendingPaused;
   const { status: cloudStatus } = useCloudAccount(true);
+  const meter = useDataMeter(
+    client.macAddress ? usageKey(client.clientId, client.macAddress) : null,
+  );
+  // A pause a rule is holding, as against one someone set by hand: the row in the
+  // list already tells the two apart, and the detail behind it has to agree.
+  const heldByRule = meter.rules.some((rule) => rule.holding);
   const showPauseControl = clientPauseControlAvailable({
     clientId: client.clientId,
     isThisDevice,
     viewerIdentified,
     cloudConnected: cloudStatus === "ready",
-    hostSupportsPause: supportsRouterClientPause(),
+  });
+  // The recorder counts a limit with or without an account, so only the pause
+  // write needs one.
+  const showMeterControl = clientPauseControlAvailable({
+    clientId: client.clientId,
+    isThisDevice,
+    viewerIdentified,
+    cloudConnected: true,
   });
 
   useEffect(() => {
@@ -92,11 +124,11 @@ export function DeviceDetail({
       setPauseError(
         new Error("The router has not applied this yet. Give it a moment, then try again."),
       );
-    }, PAUSE_SETTLE_TIMEOUT_MS);
+    }, pauseSettleTimeoutMs(rosterRefreshMs));
     return () => {
       window.clearTimeout(timer);
     };
-  }, [pendingPaused]);
+  }, [pendingPaused, rosterRefreshMs]);
 
   const applyPaused = async (next: boolean) => {
     if (client.clientId === undefined || pauseBusy || !showPauseControl) return;
@@ -114,11 +146,14 @@ export function DeviceDetail({
   const name = displayName(client);
   // Byte-delta rate, so the headline number matches a speed test instead of the
   // router's 60-second average of it. Falls back until the second reading lands.
-  const liveRate = client.macAddress
-    ? rates.get(usageKey(client.clientId, client.macAddress))
-    : undefined;
-  const downMbps = liveRate?.downMbps ?? throughputMbps(client.rxStats);
-  const upMbps = liveRate?.upMbps ?? throughputMbps(client.txStats);
+  const liveRate =
+    liveRatesAvailable && client.macAddress
+      ? rates.get(usageKey(client.clientId, client.macAddress))
+      : undefined;
+  const downMbps = liveRatesAvailable
+    ? (liveRate?.downMbps ?? throughputMbps(client.rxStats))
+    : null;
+  const upMbps = liveRatesAvailable ? (liveRate?.upMbps ?? throughputMbps(client.txStats)) : null;
 
   const facts = buildDeviceFacts({
     client,
@@ -164,27 +199,50 @@ export function DeviceDetail({
               {client.clientId}
             </span>
           )}
-          {paused && <Badge className='mt-1'>Paused</Badge>}
+          {paused && <Badge className='mt-1'>{heldByRule ? "Paused · limit" : "Paused"}</Badge>}
         </div>
-        <div className='flex justify-end'>
+        <div className='flex items-center justify-end gap-1.5'>
+          {showMeterControl && client.macAddress && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  aria-label='Data limit'
+                  className='cursor-pointer px-2'
+                  onClick={() => setEditingMeter(true)}
+                >
+                  <MeterIcon
+                    className={`size-[21px] ${meter.rule ? METER_INDICATOR_COLOR[meterIndicatorForRule(meter.rule)] : ""}`}
+                    active={meter.rule !== null}
+                  />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side='top'>Data limit</TooltipContent>
+            </Tooltip>
+          )}
           {showPauseControl && (
             <Button
               variant={paused ? "outline" : "secondary"}
               size='sm'
-              className='cursor-pointer disabled:cursor-not-allowed'
+              className='min-w-[5.5rem] cursor-pointer disabled:cursor-not-allowed disabled:opacity-100'
               disabled={pauseBusy}
               onClick={() => {
                 if (paused) void applyPaused(false);
                 else setConfirmingPause(true);
               }}
             >
-              {pauseBusy
-                ? pendingPaused
-                  ? "Pausing…"
-                  : "Unpausing…"
-                : paused
-                  ? "Unpause"
-                  : "Pause"}
+              {pauseBusy ? (
+                <SpinLoader
+                  variant='segment'
+                  size={16}
+                  label={pendingPaused ? "Pausing" : "Unpausing"}
+                />
+              ) : paused ? (
+                "Unpause"
+              ) : (
+                "Pause"
+              )}
             </Button>
           )}
         </div>
@@ -195,7 +253,7 @@ export function DeviceDetail({
       <Dialog open={confirmingPause} onOpenChange={setConfirmingPause}>
         <DialogContent
           showCloseButton={false}
-          className='gap-3 border-border/50 sm:max-w-md'
+          className='glass-panel gap-3 sm:max-w-md'
           overlayClassName='bg-black/30 backdrop-blur-[2px]'
         >
           <DialogHeader>
@@ -236,6 +294,18 @@ export function DeviceDetail({
         </div>
       )}
 
+      {client.macAddress && (
+        <DataMeterDialog
+          meter={meter}
+          clientKey={usageKey(client.clientId, client.macAddress)}
+          deviceName={name}
+          macAddress={client.macAddress}
+          candidates={meterCandidates}
+          open={editingMeter}
+          onOpenChange={setEditingMeter}
+        />
+      )}
+
       {editing && (
         <DeviceNameEditor
           // Remount on a different device so the draft never carries over.
@@ -248,7 +318,13 @@ export function DeviceDetail({
 
       <DeviceFactsList facts={facts} />
 
-      <DeviceThroughput history={history} downMbps={downMbps} upMbps={upMbps} />
+      <DeviceThroughput
+        history={history}
+        downMbps={downMbps}
+        upMbps={upMbps}
+        historianAnswering={historianAnswering}
+        routerReachable={routerReachable}
+      />
     </div>
   );
 }

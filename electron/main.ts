@@ -6,6 +6,7 @@
 import {
   app,
   BrowserWindow,
+  dialog,
   Tray,
   Menu,
   nativeImage,
@@ -16,8 +17,8 @@ import {
   type MenuItem,
 } from "electron";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
-import { existsSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { registerAppProtocolScheme, handleAppProtocol, APP_ENTRY_URL } from "./appProtocol";
 import {
   startCollector,
@@ -28,7 +29,9 @@ import {
   type ThroughputSample,
 } from "./collector";
 import { startCloud, handleCloudRequest, signIn } from "./cloud";
-import { localNetworkIdentity } from "../core/hostNetworkIdentity";
+import { hostIdentity, rememberSelfDevice } from "./selfDevice";
+import { normalizeIpAddress, type RouterAddress } from "../core/ipAddress";
+import { ROUTER_LAN_ADDRESS } from "../core/dishClient";
 import { preferences, setPreference, onPreferencesChanged, type WindowBounds } from "./preferences";
 import {
   describeTransition,
@@ -61,6 +64,79 @@ app.setName("Dishylink");
 
 // Must run before the app is ready, so it's at module load rather than in whenReady.
 registerAppProtocolScheme();
+
+// This process keeps a recorder and a cloud session reaching the network with no
+// window open, so a route that goes away under a request in flight — sleep, a
+// VPN, switching the router into bypass — arrives here as a modal "A JavaScript
+// error occurred" box the user can neither act on nor prevent. Only that class
+// is absorbed; anything else is re-thrown and stays as fatal as it was, because
+// a guard that hid real faults would trade a visible crash for a silent one.
+const NETWORK_FAILURES = new Set([
+  "ECONNABORTED",
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "EAI_AGAIN",
+  "EHOSTUNREACH",
+  "ENETDOWN",
+  "ENETUNREACH",
+  "ENOTFOUND",
+  "EPIPE",
+  "ETIMEDOUT",
+]);
+
+function networkFailure(value: unknown): boolean {
+  const code = (value as NodeJS.ErrnoException | null)?.code;
+  return typeof code === "string" && NETWORK_FAILURES.has(code);
+}
+
+/** The last thing written, so a machine that stays offline repeating the same
+ *  failure every tick does not grow the file without bound. */
+let lastFailureLogged = "";
+
+function logFailure(kind: string, value: unknown): void {
+  // The code lives on the object rather than in the message, and without it a
+  // network fault reads as an ordinary error.
+  const detail =
+    value instanceof Error
+      ? `${(value as NodeJS.ErrnoException).code ?? ""} ${value.stack ?? value.message}`.trim()
+      : String(value);
+  console.error(`[main] ${kind}: ${detail}`);
+  if (detail === lastFailureLogged) return;
+  lastFailureLogged = detail;
+  try {
+    const directory = app.getPath("logs");
+    mkdirSync(directory, { recursive: true });
+    appendFileSync(
+      join(directory, "main.log"),
+      `[${new Date().toISOString()}] ${kind}: ${detail}\n`,
+    );
+  } catch {
+    // Nowhere to write it is not itself worth bringing the app down for.
+  }
+}
+
+// Installing a handler replaces Electron's, which is what puts the box on
+// screen, so anything not absorbed has to raise it again: a real fault must stay
+// exactly as loud and as fatal as it is without this. Re-throwing from here does
+// not recurse — Node exits with the stack printed.
+function fatal(kind: string, value: unknown): never {
+  const detail = value instanceof Error ? (value.stack ?? value.message) : String(value);
+  try {
+    dialog.showErrorBox("A JavaScript error occurred in the main process", detail);
+  } catch {
+    // Before the app is ready there is no window server to ask; the throw stands.
+  }
+  throw value instanceof Error ? value : new Error(`${kind}: ${detail}`);
+}
+
+process.on("unhandledRejection", (reason) => {
+  logFailure("unhandled rejection", reason);
+  if (!networkFailure(reason)) fatal("unhandled rejection", reason);
+});
+process.on("uncaughtException", (error) => {
+  logFailure("uncaught exception", error);
+  if (!networkFailure(error)) fatal("uncaught exception", error);
+});
 
 // Set by vite-plugin-electron while serving; absent in a packaged build.
 const devServerUrl = process.env.VITE_DEV_SERVER_URL;
@@ -500,9 +576,29 @@ function startAlertNotifications(): void {
 /** Facts about this host that only main can answer. */
 function registerHostHandlers(): void {
   // get_clients answers everyone identically, so "this device" can only be settled
-  // from the host's own interfaces.
-  ipcMain.handle("get-self-identity", () => localNetworkIdentity());
+  // from the host's own interfaces, plus the roster entry a window on the router's
+  // network has since matched to them.
+  ipcMain.handle("get-self-identity", () => hostIdentity());
+  // Written whenever the window resolves this machine on a roster read over the LAN.
+  ipcMain.handle("remember-self-device", (_event, clientId: unknown) => {
+    if (typeof clientId === "number") rememberSelfDevice(clientId);
+  });
   ipcMain.handle("get-recorder-in-process", () => !devServerUrl);
+  ipcMain.handle("get-router-address", () => routerAddress());
+  // An address that does not parse is rejected here rather than stored and
+  // silently ignored later, so the window can tell the user it was refused.
+  ipcMain.handle("set-router-address", (_event, address: string | null): RouterAddress | null => {
+    const normalized = address === null ? null : normalizeIpAddress(address);
+    if (address !== null && normalized === null) return null;
+    setPreference("routerAddress", normalized);
+    return routerAddress();
+  });
+}
+
+/** The window shows the default as a placeholder, so it is told it rather than
+ *  keeping its own copy that could drift from what this process actually dials. */
+function routerAddress(): RouterAddress {
+  return { router: preferences().routerAddress, routerDefault: ROUTER_LAN_ADDRESS };
 }
 
 function registerExternalLinkHandler(): void {
@@ -562,10 +658,13 @@ void app.whenReady().then(async () => {
   }
   // The cloud account belongs to this host, not to packaging; bound before the window
   // loads so the renderer's first /cloud/* call has somewhere to land.
-  startCloud(rendererRoot);
+  // Against a dev server, the session is the one that server's cloud proxy holds:
+  // the recorder runs inside it, so a separate session here would leave a window
+  // signed in and its own limits unenforceable.
+  startCloud(rendererRoot, devServerUrl ? resolve(process.cwd(), ".starlink-cookie") : undefined);
   registerCloudHandlers();
-  // Only the packaged app serves itself; in dev Vite proxies /api to the dev historian,
-  // so a second collector here would double-poll the dish.
+  // A dev server runs its own recorder; a second collector here would double-poll
+  // the dish.
   if (!devServerUrl) {
     await startCollector(rendererRoot);
     handleAppProtocol(rendererRoot, handleApiRequest, handleCloudRequest);

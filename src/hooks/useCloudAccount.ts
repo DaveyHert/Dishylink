@@ -9,17 +9,21 @@
 // two fetches when two surfaces were open, and a satellite view still holding
 // "not connected" after the account panel had signed in.
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { subscribeCloudSession } from "../lib/cloudHost";
 import {
   fetchCloudAccount,
   fetchCloudUsage,
+  fetchCloudRouterSubnet,
   CloudNotConnectedError,
   type CloudAccount,
   type CloudUsage,
 } from "../lib/starlinkCloud";
 
 type Status = "loading" | "ready" | "not-connected" | "error";
+
+const RETRY_BASE_MS = 2_000;
+const RETRY_MAX_MS = 30_000;
 
 interface CloudStoreState<T> {
   data: T | null;
@@ -49,9 +53,29 @@ function createCloudStore<T>(fetcher: () => Promise<T>): CloudStore<T> {
   // cancel it for the others.
   let token = 0;
 
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let retryDelayMs = RETRY_BASE_MS;
+
   function set(next: CloudStoreState<T>) {
     snapshot = next;
     for (const listener of [...listeners]) listener();
+  }
+
+  function cancelRetry() {
+    if (retryTimer !== null) clearTimeout(retryTimer);
+    retryTimer = null;
+    retryDelayMs = RETRY_BASE_MS;
+  }
+
+  /** Backed off so a network that is down for minutes is not dialled every
+   *  second, and capped so it still recovers on its own once it returns. */
+  function scheduleRetry() {
+    if (retryTimer !== null || listeners.size === 0) return;
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      retryDelayMs = Math.min(retryDelayMs * 2, RETRY_MAX_MS);
+      if (listeners.size) load();
+    }, retryDelayMs);
   }
 
   function load() {
@@ -65,39 +89,56 @@ function createCloudStore<T>(fetcher: () => Promise<T>): CloudStore<T> {
         if (mine !== token) return;
         loaded = true;
         inFlight = false;
+        cancelRetry();
         set({ data, status: "ready" });
       })
       .catch((error: unknown) => {
         if (mine !== token) return;
-        loaded = true;
         inFlight = false;
-        set({
-          data: null,
-          status: error instanceof CloudNotConnectedError ? "not-connected" : "error",
-        });
+        const missing = error instanceof CloudNotConnectedError;
+        // A refused session is an answer and stays answered. A transport failure
+        // is not: the network changing under a request is exactly when this
+        // fails, and it is also when the controls behind it matter most — the
+        // bypass switch is unusable while this reads error, and turning bypass on
+        // is itself what breaks the request. Latching here strands the only
+        // control that undoes it.
+        loaded = missing;
+        // Same reason the status is not latched: a request that failed in
+        // transit learned nothing, so it cannot be what discards the last answer.
+        // Dropping it here swings every caption keyed on it once per retry, which
+        // the panel's height animation then chases.
+        set({ data: missing ? null : snapshot.data, status: missing ? "not-connected" : "error" });
+        if (!missing) scheduleRetry();
       });
   }
 
   return {
     subscribe(listener) {
       listeners.add(listener);
+      // A retry cannot be pending with nobody watching, so one arriving over a
+      // failed read is what starts it.
+      if (snapshot.status === "error" && !inFlight) scheduleRetry();
       return () => {
         listeners.delete(listener);
+        if (listeners.size === 0) cancelRetry();
       };
     },
     getSnapshot: () => snapshot,
     ensure() {
       if (loaded || inFlight) return;
+      cancelRetry();
       load();
     },
     reload() {
       loaded = false;
+      cancelRetry();
       load();
     },
     invalidate() {
       loaded = false;
       token++; // abandon anything in flight against the old session
       inFlight = false;
+      cancelRetry();
       if (listeners.size) load();
       else set({ data: null, status: "loading" });
     },
@@ -106,12 +147,14 @@ function createCloudStore<T>(fetcher: () => Promise<T>): CloudStore<T> {
 
 const cloudAccountStore = createCloudStore(() => fetchCloudAccount());
 const cloudUsageStore = createCloudStore(() => fetchCloudUsage());
+const cloudRouterSubnetStore = createCloudStore(() => fetchCloudRouterSubnet());
 
 // Connecting, disconnecting, or signing in through the host makes every cached
 // answer wrong at once — including a cached "not connected".
 subscribeCloudSession(() => {
   cloudAccountStore.invalidate();
   cloudUsageStore.invalidate();
+  cloudRouterSubnetStore.invalidate();
 });
 
 function useCloudStore<T>(
@@ -135,4 +178,32 @@ export function useCloudUsage(
   active: boolean,
 ): CloudStoreState<CloudUsage> & { reload: () => void } {
   return useCloudStore(cloudUsageStore, active);
+}
+
+/**
+ * Asked afresh whenever a surface needing it opens, not kept for the session the
+ * way the account is: the subnet is movable from the official app, so an answer
+ * from earlier in this page's life can describe a router that has since moved.
+ */
+export function useCloudRouterSubnet(
+  active: boolean,
+): CloudStoreState<string> & { reload: () => void } {
+  const snapshot = useSyncExternalStore(
+    cloudRouterSubnetStore.subscribe,
+    cloudRouterSubnetStore.getSnapshot,
+  );
+  // Once per mount, not once per change of `active`: a link flapping in and out
+  // of reach would otherwise turn one look at this panel into a stream of calls
+  // on someone else's API.
+  const requestedSinceMounted = useRef(false);
+  useEffect(() => {
+    if (!active || requestedSinceMounted.current) return;
+    requestedSinceMounted.current = true;
+    cloudRouterSubnetStore.reload();
+  }, [active]);
+  return {
+    data: snapshot.data,
+    status: snapshot.status,
+    reload: cloudRouterSubnetStore.reload,
+  };
 }
