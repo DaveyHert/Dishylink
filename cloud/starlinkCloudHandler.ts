@@ -558,7 +558,14 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
         },
       };
     }
-    writeCookie(trimmed);
+    try {
+      writeCookie(trimmed);
+    } catch (error) {
+      return {
+        status: 500,
+        body: { error: "cookie_store_failed", message: (error as Error).message },
+      };
+    }
     forgetSession();
     try {
       await withFreshCookie((c) => resolveIds(c));

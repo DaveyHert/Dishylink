@@ -27,3 +27,31 @@ export function localNetworkIdentity(): HostNetworkIdentity {
     ],
   };
 }
+
+function splitCsv(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Host identity injected from outside this process — used when the Node
+ * process's own NICs are not the machine on the Starlink LAN (Docker Desktop
+ * on a Mac runs in a VM). `HOST_LAN_IP` / `HOST_MAC` are comma-separated.
+ */
+export function identityFromEnv(
+  env: NodeJS.Dict<string> = process.env,
+): HostNetworkIdentity | null {
+  const ipAddresses = [
+    ...new Set(splitCsv(env.HOST_LAN_IP).map((ip) => ip.replace(/^::ffff:/i, "").toLowerCase())),
+  ];
+  const macAddresses = [...new Set(splitCsv(env.HOST_MAC).map((mac) => mac.toLowerCase()))];
+  if (ipAddresses.length === 0 && macAddresses.length === 0) return null;
+  return { ipAddresses, macAddresses };
+}
+
+/** Env identity if set, otherwise this process's own interfaces. */
+export function resolveHostIdentity(env: NodeJS.Dict<string> = process.env): HostNetworkIdentity {
+  return identityFromEnv(env) ?? localNetworkIdentity();
+}

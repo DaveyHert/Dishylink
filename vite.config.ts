@@ -71,6 +71,7 @@ export default defineConfig(({ command }) => ({
             "cloud/**/*.test.ts",
             "collector/**/*.test.mts",
             "dev/**/*.test.mts",
+            "docker/**/*.test.ts",
             "electron/**/*.test.ts",
             "extension/**/*.test.ts",
           ],
