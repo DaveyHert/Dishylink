@@ -36,15 +36,14 @@ export function NodeDetail({
   /** Drill from a node straight into one of its clients, as the app does.
    *  Receives the client row's `clientEntryKey`. */
   onSelect: (entryKey: string | null) => void;
-  /** Rename a mesh node. Absent leaves the name read-only. */
   onRename?: (deviceId: string, displayName: string) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
   const client = node.client;
   const meshConfig = node.key ? wifiConfig?.meshConfigs?.[node.key] : undefined;
   const isRouter = client?.role === "CONTROLLER";
-  // A mesh node is renamed by its `meshConfigs` key; the controller is not in
-  // that map, and a live node without a device id has no handle to write to.
+  // `node.key` is a `meshConfigs` id only when it starts `Router-`; it falls back
+  // to a MAC or a positional key otherwise, and the controller has no entry.
   const canRename = Boolean(onRename) && !isRouter && node.key.startsWith("Router-");
   // The rate the link negotiated, not throughput — the same number the app shows
   // as "Rx rate". The controller reports empty stats for itself, so this is

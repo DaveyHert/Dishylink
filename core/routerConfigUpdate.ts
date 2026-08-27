@@ -86,11 +86,7 @@ export type RouterConfigUpdate =
     }
   | {
       kind: "meshName";
-      /** The paired node's `meshConfigs` key, in the same `Router-<hex>`
-       *  namespace the client list reports. */
       deviceId: string;
-      /** The label to store. The firmware keeps it verbatim and imposes no
-       *  visible limit, so only an empty value is refused. */
       displayName: string;
     };
 
@@ -157,20 +153,10 @@ export function subnetRefusal(subnet: string, password: string): string | null {
   return null;
 }
 
-/** Why a mesh node rename cannot be sent, or null when it can. */
 export function meshNameRefusal(displayName: string): string | null {
   return displayName.trim() === "" ? "Name cannot be empty" : null;
 }
 
-/**
- * The `meshConfigs` map to send for a rename, built from what the router
- * currently reports.
- *
- * The map is rewritten whole, so every other node is carried back untouched.
- * `incarnation` is a router-assigned revision counter with no apply flag;
- * carried back it risks the firmware discarding the whole message, the way a
- * stale `bssid` does in the networks block, so it is dropped from every entry.
- */
 export function buildMeshConfigs(
   meshConfigs: Readonly<Record<string, Json>>,
   deviceId: string,
@@ -179,6 +165,8 @@ export function buildMeshConfigs(
   if (!(deviceId in meshConfigs)) throw new Error("router does not know this mesh node");
   const rebuilt: Record<string, Json> = {};
   for (const [id, node] of Object.entries(meshConfigs)) {
+    // incarnation is router-assigned; echoing it back can make the firmware
+    // discard the write, as a stale bssid does in the networks block.
     const { incarnation: _incarnation, ...kept } = node;
     rebuilt[id] = id === deviceId ? { ...kept, displayName } : kept;
   }
@@ -213,23 +201,11 @@ export async function readRouterWifiConfig(
   return (reply.wifiGetConfig?.wifiConfig as WifiNetworkConfigJson | undefined) ?? null;
 }
 
-/** The current router state a write has to be rebuilt from. Empty for the
- *  updates that name a single field and need no read first. */
 export interface RouterConfigContext {
-  /** Present for a subnet change: the `networks` block, carried back nearly
-   *  intact around the one changed field. */
   networks?: Json[];
-  /** Present for a mesh rename: the `meshConfigs` map, rewritten whole. */
   meshConfigs?: Record<string, Json>;
 }
 
-/**
- * The state a write must preserve, fetched through the caller's gateway.
- *
- * Only a subnet change and a mesh rename rewrite a shared block; every other
- * update skips the round trip and gets the empty context `buildRouterConfigRequest`
- * ignores.
- */
 export async function readRouterConfigContext(
   update: RouterConfigUpdate,
   codec: RouterCodec,
@@ -274,8 +250,6 @@ export async function readCurrentSubnet(
 export function buildRouterConfigRequest(
   targetId: string,
   update: RouterConfigUpdate,
-  /** Current router state, from `readRouterConfigContext`. Required for a subnet
-   *  change and a mesh rename; unused by every other update. */
   context: RouterConfigContext = {},
 ): RouterConfigRequestJson {
   if (!targetId.startsWith("Router-")) throw new Error("invalid router target id");

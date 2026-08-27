@@ -1,6 +1,5 @@
-// Inline rename: the pencil affordance beside a name, the edit row it opens, and
-// the failure message the router's write lock produces. Used for both a client
-// device and a mesh node — the two differ only in what a saved name is keyed by.
+// Inline rename for a device or mesh node. The write has no LAN path, so a
+// blocked one surfaces the account-required notice rather than a raw error.
 
 import { useState } from "react";
 import type { WifiClientJson } from "@core/dishClient";
@@ -38,14 +37,12 @@ function NameEditorForm({
   onSave,
   onDone,
 }: {
-  /** The name a save is compared against, so an unchanged value is a no-op. */
+  /** Save baseline: an entry equal to this is a no-op. Distinct from
+   *  `initialName` so a device known only by address can seed blank yet still
+   *  treat that address as unchanged. */
   currentName: string;
-  /** What the field starts with, when that is not the same string — a device
-   *  known only by address seeds blank but still counts address as unchanged. */
   initialName?: string;
   placeholder: string;
-  /** A further condition on saving beyond "non-empty and changed" — a client
-   *  with no id cannot be renamed, for one. */
   extraValid?: boolean;
   onSave: (name: string) => Promise<void>;
   onDone: () => void;
@@ -142,8 +139,8 @@ export function MeshNodeNameEditor({
   onDone,
 }: {
   deviceId: string;
-  /** The stored `meshConfigs` display name — the field this writes, not the
-   *  roster label, which can fall back to a hostname. */
+  /** The stored `meshConfigs` name — what the write targets, not the roster
+   *  label, which can fall back to a hostname. */
   currentName: string;
   onRename: (deviceId: string, displayName: string) => Promise<void>;
   onDone: () => void;

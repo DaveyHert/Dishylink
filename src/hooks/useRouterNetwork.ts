@@ -269,7 +269,6 @@ export interface RouterNetwork {
   historianAnswering: boolean | null;
   /** Rename a device on the router (persists across reconnects). */
   renameClient: (clientId: number, givenName: string) => Promise<void>;
-  /** Rename a paired mesh node, keyed by its `Router-<hex>` device id. */
   renameMeshNode: (deviceId: string, displayName: string) => Promise<void>;
   /** Rolling per-MAC throughput samples (down/up in bps) built from each poll. */
   throughputHistory: Map<string, TelemetrySample[]>;
@@ -597,9 +596,8 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
 
   const renameMeshNode = useCallback(async (deviceId: string, displayName: string) => {
     await setMeshNodeName(deviceId, displayName);
-    // The config read is not polled — it refreshes only when the LAN returns
-    // from silence — so this patch is what keeps the new name on screen until
-    // then, the same way `renameClient` leans on the client poll.
+    // wifiConfig is only re-read when the LAN returns from silence, so without
+    // this patch the new name would not show until the router next went quiet.
     setWifiConfig((current) =>
       current
         ? {

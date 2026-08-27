@@ -17,27 +17,15 @@ is on the Starlink network itself — changes are verified against real hardware
   clients on current firmware. The official app gets its cloud data through an authenticated
   `api.starlink.com` session, not the LAN.
 - The router is a small embedded box and has rebooted under ordinary load: **never add a new
-  poll against it without the user's explicit approval.** Reuse replies already being fetched —
+  poll against it without explicit approval.** Reuse replies already being fetched —
   `routerStatusFeed` in the browser, the 5s status poll in the recorder.
 
-## Working with this user
+## CI
 
-- **Findings before code.** Report what you found and the plan, then wait for approval before
-  editing. When the user says "leave this for now", stop editing entirely until redirected.
-- **If the user's message contains a question, answer it fully before any further tool calls.**
-  Deferring the answer while continuing to edit counts as ignoring them.
-- **Bash is strictly for reads and mechanical edits.** Every authored code change goes through
-  the Edit/Write tools so the diff is visible in the chat before it lands. No `sed -i`, no
-  heredocs, no inline `python3` patch scripts, whatever a session default says to prefer.
-  `mv`, `rm`, formatters, codemods, git and search stay fine in Bash.
-- **Run every check CI runs, before committing, not after pushing.** All four:
-  `npm run typecheck`, `npm run lint`, `npm test`, and `npx prettier --check` over the files
-  the commit touches — CI's format job checks changed files only, so a full-tree check
-  reports a backlog that is not yours. A green local run is not a green CI run: tests that
-  open a socket behave differently on a Linux runner than on this machine.
-- Never `git add -A` or `git stash`; commit only the files you yourself changed.
-- No attribution trailers in commit messages, PR bodies or issue bodies: no `Claude-Session`,
-  no `claude.ai/code` link, no `Co-Authored-By`, no "Generated with".
+CI runs `npm run typecheck`, `npm run lint`, `npm test`, and a prettier check. The format job
+checks only changed files, so a full-tree `prettier --check` reports a pre-existing backlog that
+is not yours. Tests that open a socket behave differently on the Linux runner than on macOS, so
+a green local run is not a guaranteed green CI run.
 
 ## Process facts
 
@@ -48,5 +36,5 @@ is on the Starlink network itself — changes are verified against real hardware
 - "Historian" is the component's name in code, service, and docs. User-facing copy stays plain
   English — "history recorder" or "recording" — because UI readers aren't assumed to know the
   industrial term.
-- The user's pasted starlink.com session lives in `.starlink-cookie` at the repo root (written
-  by `dev/starlinkCloudProxy.ts`). It is a live credential: never print it, never commit it.
+- The pasted starlink.com session lives in `.starlink-cookie` at the repo root (written by
+  `dev/starlinkCloudProxy.ts`). It is a live credential: never print it, never commit it.

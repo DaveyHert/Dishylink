@@ -35,8 +35,6 @@ export async function applyRouterConfigUpdate(
   throw new Error(`Starlink couldn't apply the change: ${message}`);
 }
 
-/** Rename a paired mesh node. Persists on the router and shows in the official
- *  app; goes through the account for the same reason every router write does. */
 export async function setMeshNodeName(deviceId: string, displayName: string): Promise<void> {
   await applyRouterConfigUpdate({ kind: "meshName", deviceId, displayName });
 }
