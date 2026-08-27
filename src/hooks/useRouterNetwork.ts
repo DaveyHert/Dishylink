@@ -21,6 +21,7 @@ import { usageKey, type ClientUsageTotal } from "@core/clientUsage";
 import { apiRequest } from "../lib/apiHost";
 import { subscribeCloudSession } from "../lib/cloudHost";
 import { setRouterClientName } from "../lib/routerClientUpdate";
+import { setMeshNodeName } from "../lib/routerConfigUpdate";
 import { subscribeRouterStatus } from "../lib/routerStatusFeed";
 import {
   CloudNotConnectedError,
@@ -268,6 +269,8 @@ export interface RouterNetwork {
   historianAnswering: boolean | null;
   /** Rename a device on the router (persists across reconnects). */
   renameClient: (clientId: number, givenName: string) => Promise<void>;
+  /** Rename a paired mesh node, keyed by its `Router-<hex>` device id. */
+  renameMeshNode: (deviceId: string, displayName: string) => Promise<void>;
   /** Rolling per-MAC throughput samples (down/up in bps) built from each poll. */
   throughputHistory: Map<string, TelemetrySample[]>;
   /** Live per-MAC rate — the newest sample from the historian's window, which
@@ -592,6 +595,24 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
     );
   }, []);
 
+  const renameMeshNode = useCallback(async (deviceId: string, displayName: string) => {
+    await setMeshNodeName(deviceId, displayName);
+    // The config read is not polled — it refreshes only when the LAN returns
+    // from silence — so this patch is what keeps the new name on screen until
+    // then, the same way `renameClient` leans on the client poll.
+    setWifiConfig((current) =>
+      current
+        ? {
+            ...current,
+            meshConfigs: {
+              ...current.meshConfigs,
+              [deviceId]: { ...current.meshConfigs?.[deviceId], displayName },
+            },
+          }
+        : current,
+    );
+  }, []);
+
   const refreshConfig = useCallback(() => {
     // Re-read from whatever is actually serving this roster: the LAN reader is
     // silent in exactly the case the fallback exists for.
@@ -615,6 +636,7 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
     accountRosterError,
     wifiConfigViaAccount,
     renameClient,
+    renameMeshNode,
     throughputHistory,
     rates,
     ratesAtRoster,

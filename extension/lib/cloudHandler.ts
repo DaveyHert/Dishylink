@@ -25,7 +25,7 @@ import { DishClient, type DishConfigJson } from "@core/dishClient";
 import { prepareDishConfigUpdate } from "@core/dishConfigUpdate";
 import {
   buildRouterConfigRequest,
-  readCurrentNetworks,
+  readRouterConfigContext,
   readCurrentSubnet,
   readRouterWifiConfig,
   type RouterConfigUpdate,
@@ -78,8 +78,8 @@ const cloudHandler = createCloudHandler({
     prepareRouterClientUpdate(await loadRouter(), update, targetId, callGateway),
   prepareRouterConfigUpdate: async (update, targetId, callGateway) => {
     const client = await loadRouter();
-    const networks = await readCurrentNetworks(update, client, targetId, callGateway);
-    return client.encodeRequest(buildRouterConfigRequest(targetId, update, networks));
+    const context = await readRouterConfigContext(update, client, targetId, callGateway);
+    return client.encodeRequest(buildRouterConfigRequest(targetId, update, context));
   },
   readRouterSubnet: async (targetId, callGateway) =>
     readCurrentSubnet(await loadRouter(), targetId, callGateway),
