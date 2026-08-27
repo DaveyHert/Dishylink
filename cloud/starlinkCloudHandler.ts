@@ -11,6 +11,7 @@ import { GrpcWebError, grpcWebUnaryCall } from "../core/grpcWeb";
 import type { DishConfigJson } from "../core/dishClient";
 import type { RouterClientUpdate } from "../core/routerClientUpdate";
 import {
+  meshNameRefusal,
   normalizeNameservers,
   subnetRefusal,
   type RouterConfigUpdate,
@@ -845,6 +846,12 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
       return subnetRefusal(update.subnet, update.password) === null;
     }
     if (update?.kind === "bypass") return typeof update.enabled === "boolean";
+    if (update?.kind === "meshName") {
+      if (typeof update.deviceId !== "string" || !update.deviceId.startsWith("Router-"))
+        return false;
+      if (typeof update.displayName !== "string") return false;
+      return meshNameRefusal(update.displayName) === null;
+    }
     if (update?.kind === "factoryReset") return true;
     if (update?.kind !== "customDns") return false;
     if (!Array.isArray(update.nameservers)) return false;

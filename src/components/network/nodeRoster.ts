@@ -19,13 +19,14 @@ export interface NodeEntry {
 
 /** Friendly name for a live node. The API only ever sends the raw role
  *  ("CONTROLLER"), so the router's human label is ours, as in the app; a mesh
- *  node prefers the name saved in its config over its bare hostname. */
+ *  node prefers the name saved in its config over anything the client entry
+ *  carries. */
 function nodeName(client: WifiClientJson, wifiConfig: WifiNetworkConfigJson | null): string {
   if (client.role === "CONTROLLER") return "Main Router";
   const configured = client.deviceId
     ? wifiConfig?.meshConfigs?.[client.deviceId]?.displayName
     : undefined;
-  return client.givenName || configured || client.name || "Mesh node";
+  return configured || client.givenName || client.name || "Mesh node";
 }
 
 /**

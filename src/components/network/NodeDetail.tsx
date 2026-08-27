@@ -4,6 +4,7 @@
 // reports no per-node throughput or signal (its rxStats / txStats come back
 // empty). This shows what a node actually has: what it serves, and what it is.
 
+import { useState } from "react";
 import type { RadioReading } from "../../hooks/useRadioTemps";
 import type { WifiNetworkConfigJson, WifiStatusJson } from "@core/dishClient";
 import type { SelfIdentity } from "../../lib/selfIdentity";
@@ -11,6 +12,7 @@ import { RouterIcon } from "../../assets/icons/RouterIcon";
 import { formatDeviceEnum, formatUptime } from "../../lib/format";
 import { DataRow, SectionHeading } from "./DataRow";
 import { DeviceRow } from "./NetworkRow";
+import { MeshNodeNameEditor, RenameButton } from "./DeviceNameEditor";
 import { RadioTempsSection } from "./RadioTempsSection";
 import { bandLabel, clientEntryKey } from "./networkFormat";
 import type { NodeEntry } from "./nodeRoster";
@@ -22,6 +24,7 @@ export function NodeDetail({
   radios,
   self,
   onSelect,
+  onRename,
 }: {
   node: NodeEntry;
   wifiConfig: WifiNetworkConfigJson | null;
@@ -33,10 +36,15 @@ export function NodeDetail({
   /** Drill from a node straight into one of its clients, as the app does.
    *  Receives the client row's `clientEntryKey`. */
   onSelect: (entryKey: string | null) => void;
+  onRename?: (deviceId: string, displayName: string) => Promise<void>;
 }) {
+  const [editing, setEditing] = useState(false);
   const client = node.client;
   const meshConfig = node.key ? wifiConfig?.meshConfigs?.[node.key] : undefined;
   const isRouter = client?.role === "CONTROLLER";
+  // `node.key` is a `meshConfigs` id only when it starts `Router-`; it falls back
+  // to a MAC or a positional key otherwise, and the controller has no entry.
+  const canRename = Boolean(onRename) && !isRouter && node.key.startsWith("Router-");
   // The rate the link negotiated, not throughput — the same number the app shows
   // as "Rx rate". The controller reports empty stats for itself, so this is
   // absent there rather than zero.
@@ -57,10 +65,22 @@ export function NodeDetail({
         <div className='min-w-0'>
           <div className='flex items-center gap-2'>
             <span className='text-[18px] font-bold text-foreground'>{node.name}</span>
+            {canRename && !editing && (
+              <RenameButton label='Rename node' onClick={() => setEditing(true)} />
+            )}
           </div>
           <div className='text-[11.5px] font-medium text-muted-foreground'>{node.status}</div>
         </div>
       </div>
+
+      {canRename && editing && onRename && (
+        <MeshNodeNameEditor
+          deviceId={node.key}
+          currentName={meshConfig?.displayName ?? ""}
+          onRename={onRename}
+          onDone={() => setEditing(false)}
+        />
+      )}
 
       <div className='flex flex-col'>
         {client?.role && <DataRow label='Role' value={client.role} />}

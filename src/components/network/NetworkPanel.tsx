@@ -191,6 +191,7 @@ function NetworkPanelBody({
         radios={radio.current}
         self={self}
         onSelect={onSelect}
+        onRename={network.renameMeshNode}
       />
     );
   }

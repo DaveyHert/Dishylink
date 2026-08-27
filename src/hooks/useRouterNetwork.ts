@@ -21,6 +21,7 @@ import { usageKey, type ClientUsageTotal } from "@core/clientUsage";
 import { apiRequest } from "../lib/apiHost";
 import { subscribeCloudSession } from "../lib/cloudHost";
 import { setRouterClientName } from "../lib/routerClientUpdate";
+import { setMeshNodeName } from "../lib/routerConfigUpdate";
 import { subscribeRouterStatus } from "../lib/routerStatusFeed";
 import {
   CloudNotConnectedError,
@@ -268,6 +269,7 @@ export interface RouterNetwork {
   historianAnswering: boolean | null;
   /** Rename a device on the router (persists across reconnects). */
   renameClient: (clientId: number, givenName: string) => Promise<void>;
+  renameMeshNode: (deviceId: string, displayName: string) => Promise<void>;
   /** Rolling per-MAC throughput samples (down/up in bps) built from each poll. */
   throughputHistory: Map<string, TelemetrySample[]>;
   /** Live per-MAC rate — the newest sample from the historian's window, which
@@ -592,6 +594,23 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
     );
   }, []);
 
+  const renameMeshNode = useCallback(async (deviceId: string, displayName: string) => {
+    await setMeshNodeName(deviceId, displayName);
+    // wifiConfig is only re-read when the LAN returns from silence, so without
+    // this patch the new name would not show until the router next went quiet.
+    setWifiConfig((current) =>
+      current
+        ? {
+            ...current,
+            meshConfigs: {
+              ...current.meshConfigs,
+              [deviceId]: { ...current.meshConfigs?.[deviceId], displayName },
+            },
+          }
+        : current,
+    );
+  }, []);
+
   const refreshConfig = useCallback(() => {
     // Re-read from whatever is actually serving this roster: the LAN reader is
     // silent in exactly the case the fallback exists for.
@@ -615,6 +634,7 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
     accountRosterError,
     wifiConfigViaAccount,
     renameClient,
+    renameMeshNode,
     throughputHistory,
     rates,
     ratesAtRoster,

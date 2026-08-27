@@ -83,6 +83,11 @@ export type RouterConfigUpdate =
        *  router's own WiFi down with it, so the machine asking for this is
        *  usually the one that loses its connection. Off is the way back. */
       enabled: boolean;
+    }
+  | {
+      kind: "meshName";
+      deviceId: string;
+      displayName: string;
     };
 
 /** The addresses as they will be sent, or null when any of them is not an address
@@ -148,6 +153,26 @@ export function subnetRefusal(subnet: string, password: string): string | null {
   return null;
 }
 
+export function meshNameRefusal(displayName: string): string | null {
+  return displayName.trim() === "" ? "Name cannot be empty" : null;
+}
+
+export function buildMeshConfigs(
+  meshConfigs: Readonly<Record<string, Json>>,
+  deviceId: string,
+  displayName: string,
+): Record<string, Json> {
+  if (!(deviceId in meshConfigs)) throw new Error("router does not know this mesh node");
+  const rebuilt: Record<string, Json> = {};
+  for (const [id, node] of Object.entries(meshConfigs)) {
+    // incarnation is router-assigned; echoing it back can make the firmware
+    // discard the write, as a stale bssid does in the networks block.
+    const { incarnation: _incarnation, ...kept } = node;
+    rebuilt[id] = id === deviceId ? { ...kept, displayName } : kept;
+  }
+  return rebuilt;
+}
+
 /** The bit of DishClient this needs, named structurally so any codec can serve
  *  it rather than the client alone. */
 interface RouterCodec {
@@ -176,20 +201,24 @@ export async function readRouterWifiConfig(
   return (reply.wifiGetConfig?.wifiConfig as WifiNetworkConfigJson | undefined) ?? null;
 }
 
-/**
- * The networks a write must preserve, fetched through the caller's gateway.
- *
- * Only a subnet change needs them, so every other update skips the round trip
- * and gets the empty list `buildRouterConfigRequest` ignores.
- */
-export async function readCurrentNetworks(
+export interface RouterConfigContext {
+  networks?: Json[];
+  meshConfigs?: Record<string, Json>;
+}
+
+export async function readRouterConfigContext(
   update: RouterConfigUpdate,
   codec: RouterCodec,
   targetId: string,
   callGateway: (requestBytes: Uint8Array) => Promise<Uint8Array>,
-): Promise<Json[]> {
-  if (update.kind !== "subnet") return [];
-  return readRouterNetworks(codec, targetId, callGateway);
+): Promise<RouterConfigContext> {
+  if (update.kind === "subnet")
+    return { networks: await readRouterNetworks(codec, targetId, callGateway) };
+  if (update.kind === "meshName") {
+    const config = await readRouterWifiConfig(codec, targetId, callGateway);
+    return { meshConfigs: (config?.meshConfigs as Record<string, Json> | undefined) ?? {} };
+  }
+  return {};
 }
 
 async function readRouterNetworks(
@@ -221,13 +250,13 @@ export async function readCurrentSubnet(
 export function buildRouterConfigRequest(
   targetId: string,
   update: RouterConfigUpdate,
-  /** Current networks, required for a subnet change and unused otherwise. */
-  networks: readonly Json[] = [],
+  context: RouterConfigContext = {},
 ): RouterConfigRequestJson {
   if (!targetId.startsWith("Router-")) throw new Error("invalid router target id");
   if (update.kind === "subnet") {
     const refusal = subnetRefusal(update.subnet, update.password);
     if (refusal) throw new Error(refusal);
+    const networks = context.networks ?? [];
     if (networks.length === 0) throw new Error("router reported no networks to change");
     return {
       targetId,
@@ -235,6 +264,23 @@ export function buildRouterConfigRequest(
         wifiConfig: {
           networks: buildSubnetNetworks(networks, update.subnet, update.password),
           applyNetworks: true,
+        },
+      },
+    };
+  }
+  if (update.kind === "meshName") {
+    const refusal = meshNameRefusal(update.displayName);
+    if (refusal) throw new Error(refusal);
+    return {
+      targetId,
+      wifiSetConfig: {
+        wifiConfig: {
+          meshConfigs: buildMeshConfigs(
+            context.meshConfigs ?? {},
+            update.deviceId,
+            update.displayName.trim(),
+          ),
+          applyMeshConfigs: true,
         },
       },
     };

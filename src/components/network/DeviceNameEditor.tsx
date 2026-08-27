@@ -1,5 +1,5 @@
-// Inline rename for a device: the pencil affordance beside the name, the edit
-// row it opens, and the failure message the router's write lock produces.
+// Inline rename for a device or mesh node. The write has no LAN path, so a
+// blocked one surfaces the account-required notice rather than a raw error.
 
 import { useState } from "react";
 import type { WifiClientJson } from "@core/dishClient";
@@ -11,11 +11,17 @@ import { displayName } from "./networkFormat";
 import { AccountRequiredError } from "../../lib/routerClientUpdate";
 import { AccountRequiredNotice } from "../shared/AccountRequiredNotice";
 
-export function RenameButton({ onClick }: { onClick: () => void }) {
+export function RenameButton({
+  onClick,
+  label = "Rename device",
+}: {
+  onClick: () => void;
+  label?: string;
+}) {
   return (
     <button
       className='inline-flex h-[26px] w-[26px] flex-none cursor-pointer items-center justify-center rounded-[999px] border-none bg-[color-mix(in_srgb,var(--ink)_6%,var(--surface))] text-ink-secondary [transition:background_120ms_ease,color_120ms_ease] hover:bg-[color-mix(in_srgb,var(--ink)_12%,var(--surface))] hover:text-foreground'
-      aria-label='Rename device'
+      aria-label={label}
       onClick={onClick}
     >
       <PencilIcon />
@@ -23,37 +29,43 @@ export function RenameButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-export function DeviceNameEditor({
-  client,
-  onRename,
+function NameEditorForm({
+  currentName,
+  initialName = currentName,
+  placeholder,
+  extraValid = true,
+  onSave,
   onDone,
 }: {
-  client: WifiClientJson;
-  onRename: (clientId: number, givenName: string) => Promise<void>;
+  /** Save baseline: an entry equal to this is a no-op. Distinct from
+   *  `initialName` so a device known only by address can seed blank yet still
+   *  treat that address as unchanged. */
+  currentName: string;
+  initialName?: string;
+  placeholder: string;
+  extraValid?: boolean;
+  onSave: (name: string) => Promise<void>;
   onDone: () => void;
 }) {
-  const [draftName, setDraftName] = useState(client.givenName ?? client.name ?? "");
+  const [draftName, setDraftName] = useState(initialName);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   const trimmedName = draftName.trim();
-  // Blank or unchanged has nothing to write, so Save is not offered for either.
-  const canSave =
-    client.clientId !== undefined && trimmedName !== "" && trimmedName !== displayName(client);
+  const canSave = extraValid && trimmedName !== "" && trimmedName !== currentName;
 
   const commit = async () => {
-    const { clientId } = client;
-    if (!canSave || clientId === undefined) {
+    if (!canSave) {
       onDone();
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      await onRename(clientId, trimmedName);
+      await onSave(trimmedName);
       onDone();
-    } catch (renameFailure) {
-      setError(renameFailure as Error);
+    } catch (saveFailure) {
+      setError(saveFailure as Error);
     } finally {
       setBusy(false);
     }
@@ -67,7 +79,7 @@ export function DeviceNameEditor({
           autoFocus
           value={draftName}
           disabled={busy}
-          placeholder='Device name'
+          placeholder={placeholder}
           onChange={(event) => {
             setDraftName(event.target.value);
             setError(null);
@@ -96,5 +108,49 @@ export function DeviceNameEditor({
         </div>
       )}
     </>
+  );
+}
+
+export function DeviceNameEditor({
+  client,
+  onRename,
+  onDone,
+}: {
+  client: WifiClientJson;
+  onRename: (clientId: number, givenName: string) => Promise<void>;
+  onDone: () => void;
+}) {
+  return (
+    <NameEditorForm
+      currentName={displayName(client)}
+      initialName={client.givenName ?? client.name ?? ""}
+      placeholder='Device name'
+      extraValid={client.clientId !== undefined}
+      onSave={(name) => onRename(client.clientId as number, name)}
+      onDone={onDone}
+    />
+  );
+}
+
+export function MeshNodeNameEditor({
+  deviceId,
+  currentName,
+  onRename,
+  onDone,
+}: {
+  deviceId: string;
+  /** The stored `meshConfigs` name — what the write targets, not the roster
+   *  label, which can fall back to a hostname. */
+  currentName: string;
+  onRename: (deviceId: string, displayName: string) => Promise<void>;
+  onDone: () => void;
+}) {
+  return (
+    <NameEditorForm
+      currentName={currentName}
+      placeholder='Node name'
+      onSave={(name) => onRename(deviceId, name)}
+      onDone={onDone}
+    />
   );
 }

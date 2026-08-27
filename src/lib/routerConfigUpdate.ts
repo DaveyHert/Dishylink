@@ -34,3 +34,7 @@ export async function applyRouterConfigUpdate(
     );
   throw new Error(`Starlink couldn't apply the change: ${message}`);
 }
+
+export async function setMeshNodeName(deviceId: string, displayName: string): Promise<void> {
+  await applyRouterConfigUpdate({ kind: "meshName", deviceId, displayName });
+}
