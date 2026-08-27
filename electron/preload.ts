@@ -11,6 +11,7 @@ import type { RouterAddress } from "../core/ipAddress";
 import {
   NOTIFICATION_STATE_CHANNEL,
   MENUBAR_THROUGHPUT_CHANNEL,
+  HIDE_TRAY_ICON_CHANNEL,
   UPDATE_STATE_CHANNEL,
 } from "./ipc";
 import type { UpdateState } from "./updater";
@@ -115,6 +116,22 @@ contextBridge.exposeInMainWorld("dishlink", {
           ipcRenderer.on(MENUBAR_THROUGHPUT_CHANNEL, handler);
           return () => {
             ipcRenderer.off(MENUBAR_THROUGHPUT_CHANNEL, handler);
+          };
+        },
+      }
+    : {}),
+  // Hiding the tray icon only makes sense where it is a template glyph among
+  // others, so macOS only.
+  ...(process.platform === "darwin"
+    ? {
+        hideTrayIcon: (): Promise<boolean> => ipcRenderer.invoke("get-hide-tray-icon"),
+        setHideTrayIcon: (hidden: boolean): Promise<boolean> =>
+          ipcRenderer.invoke("set-hide-tray-icon", hidden),
+        onHideTrayIcon: (listener: (hidden: boolean) => void): (() => void) => {
+          const handler = (_event: unknown, hidden: boolean): void => listener(hidden);
+          ipcRenderer.on(HIDE_TRAY_ICON_CHANNEL, handler);
+          return () => {
+            ipcRenderer.off(HIDE_TRAY_ICON_CHANNEL, handler);
           };
         },
       }

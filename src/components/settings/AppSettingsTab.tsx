@@ -68,6 +68,34 @@ function useMenuBarThroughput(): [boolean, (on: boolean) => void] | null {
   return [on, toggle];
 }
 
+/** The same seed-then-follow pattern as `useMenuBarThroughput`, for the macOS
+ *  hide-tray-icon preference. Null off macOS, where the preload omits it. */
+function useHideTrayIcon(): [boolean, (hidden: boolean) => void] | null {
+  const host = window.dishlink;
+  const bridged = typeof host?.setHideTrayIcon === "function" ? host : null;
+  const [hidden, setHidden] = useState(false);
+
+  useEffect(() => {
+    if (!bridged) return;
+    let active = true;
+    void bridged.hideTrayIcon?.().then((value) => {
+      if (active) setHidden(value);
+    });
+    const unsubscribe = bridged.onHideTrayIcon?.((value) => setHidden(value));
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
+  }, [bridged]);
+
+  if (!bridged) return null;
+  const toggle = (next: boolean) => {
+    setHidden(next);
+    void bridged.setHideTrayIcon?.(next).then(setHidden);
+  };
+  return [hidden, toggle];
+}
+
 const NO_SELF_DEVICE = "none";
 
 /** Names one roster entry as the device the dashboard runs on, for hosts that
@@ -224,6 +252,7 @@ function BadgeModeRow() {
 export function AppSettingsTab({ clients }: { clients: WifiClientJson[] }) {
   const toolbarStyle = useSyncExternalStore(subscribeToToolbarStyle, readToolbarStyle);
   const menuBar = useMenuBarThroughput();
+  const hideTrayIcon = useHideTrayIcon();
   // The readout lives in the menu bar on macOS and the taskbar on Windows; name
   // whichever this host is. Only reached when the bridge is present, i.e. desktop.
   const surface = window.dishlink?.platform === "win32" ? "taskbar" : "menu bar";
@@ -259,6 +288,12 @@ export function AppSettingsTab({ clients }: { clients: WifiClientJson[] }) {
           caption={`Show the live ↓/↑ rate in the ${surface}`}
         >
           <Switch checked={menuBar[0]} onCheckedChange={menuBar[1]} />
+        </SettingRow>
+      )}
+
+      {menuBar?.[0] && hideTrayIcon && (
+        <SettingRow title='Hide menu bar icon' caption='Show only the throughput readout, no icon'>
+          <Switch checked={hideTrayIcon[0]} onCheckedChange={hideTrayIcon[1]} />
         </SettingRow>
       )}
     </>
