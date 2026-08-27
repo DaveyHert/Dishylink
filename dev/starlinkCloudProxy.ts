@@ -7,7 +7,7 @@
 // is the host-agnostic createCloudHandler; this file only wires it to a file cookie
 // store and exposes the /cloud/* routes the UI reads.
 
-import { readFileSync, writeFileSync, rmSync } from "node:fs";
+import { chmodSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Plugin } from "vite";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -35,7 +35,12 @@ export interface FileCloudHandlerOptions {
 }
 
 /** null, never "", so every reader agrees on what "no session" looks like. */
-function cookieStore(cookieFile: string) {
+export function cookieStore(cookieFile: string) {
+  try {
+    chmodSync(cookieFile, 0o600);
+  } catch {
+    /* no session stored yet */
+  }
   return {
     readCookie(): string | null {
       try {
@@ -45,7 +50,8 @@ function cookieStore(cookieFile: string) {
       }
     },
     writeCookie(cookie: string): void {
-      writeFileSync(cookieFile, cookie, "utf8");
+      writeFileSync(cookieFile, cookie, { encoding: "utf8", mode: 0o600 });
+      chmodSync(cookieFile, 0o600);
     },
     clearCookie(): void {
       try {

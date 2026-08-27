@@ -20,6 +20,9 @@ ENV HISTORIAN_DATA_DIR=/data
 ENV HISTORIAN_PROTOSET=/app/public/dish.protoset
 ENV BROWSER_DIST=/app/dist
 ENV BROWSER_HOST_PORT=8080
+# /app is root-owned; only /data is writable by the dishylink user this
+# process runs as, and it's already the persistent volume.
+ENV STARLINK_COOKIE_FILE=/data/.starlink-cookie
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates \
@@ -29,11 +32,12 @@ RUN apt-get update \
   && mkdir -p /data \
   && chown dishylink:dishylink /data
 
-# Runtime only needs the historian's protobuf decoder and tsx to load the .mts
-# tree. A stub package.json keeps those files ESM; the monorepo lockfile is
-# not reused here because it would pull Electron and the renderer into the image.
+# Runtime only needs the historian's protobuf decoder, tsx to load the .mts
+# tree, and undici for the cloud handler's resilient fetch. A stub package.json
+# keeps those files ESM; the monorepo lockfile is not reused here because it
+# would pull Electron and the renderer into the image.
 RUN printf '%s\n' '{"name":"dishylink-browser","private":true,"type":"module"}' > package.json \
-  && npm install --omit=dev --ignore-scripts @bufbuild/protobuf@2.6.0 tsx@4.23.1
+  && npm install --omit=dev --ignore-scripts @bufbuild/protobuf@2.6.0 tsx@4.23.1 undici@7.29.0
 
 COPY --from=build --chown=dishylink:dishylink /app/dist ./dist
 COPY --from=build --chown=dishylink:dishylink /app/public/dish.protoset ./public/dish.protoset
@@ -46,6 +50,7 @@ COPY --chown=dishylink:dishylink dev/starlinkCloudProxy.ts ./dev/starlinkCloudPr
 USER dishylink
 EXPOSE 8080
 VOLUME /data
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:8080/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-CMD ["./node_modules/.bin/tsx", "docker/browserHost.mts"]
+# lastWrittenMinute is the recorder's newest persisted minute, in epoch seconds.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=180s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:8080/api/health').then((r)=>r.ok?r.json():Promise.reject(new Error('unhealthy'))).then((h)=>process.exit(Date.now()/1000-h.lastWrittenMinute<180?0:1)).catch(()=>process.exit(1))"
+CMD ["node", "--import", "tsx", "docker/browserHost.mts"]

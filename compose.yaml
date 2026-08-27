@@ -17,11 +17,9 @@ services:
     ports:
       - "8080:8080"
     volumes:
+      # A pasted starlink.com session lives here too (STARLINK_COOKIE_FILE),
+      # so it already survives a restart with no separate mount needed.
       - historian-data:/data
-      # Persist a pasted starlink.com session across restarts:
-      #   touch .starlink-cookie && chmod 600 .starlink-cookie
-      # then uncomment:
-      # - ./.starlink-cookie:/app/.starlink-cookie
     environment:
       HISTORIAN_DATA_DIR: /data
       # Mac LAN identity so "This device" and pause-self-protect survive Docker

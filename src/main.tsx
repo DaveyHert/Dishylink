@@ -8,6 +8,7 @@ import { setCloudHost } from "./lib/cloudHost.ts";
 import { bindNotifications } from "./lib/notifications.ts";
 import { setRecorderInProcess } from "./lib/apiHost.ts";
 import { setRouterAddressHost } from "./lib/routerAddressHost.ts";
+import { setSelfDeviceHost } from "./lib/selfDeviceHost.ts";
 
 // The Electron preload exposes window.dishlink. Marking the root lets the desktop
 // build reserve space for the macOS traffic lights and make its top bar draggable,
@@ -46,15 +47,9 @@ if (desktop) {
   }
 }
 
-// The dev server proxies /router/* itself and honours the address stored beside
-// it, so the setting works there exactly as it does in the packaged app. A built
-// page served from anywhere else reaches no LAN address whatever it is told, and
-// binds nothing.
-//
-// This holds under the desktop shell too. A dev run loads the window from the dev
-// server, so its router calls leave through Vite whatever process is hosting it,
-// and the store the setting writes has to be the one that request consults.
-if (import.meta.env.DEV) {
+// Whichever server proxies /router/* holds the address, so the setting writes to
+// the store those requests consult. A dev run under the desktop shell included.
+if (import.meta.env.DEV || !desktop) {
   const readAddresses = async () => {
     const response = await fetch("/router-address");
     return (await response.json()) as { router: string | null; routerDefault: string };
@@ -69,6 +64,30 @@ if (import.meta.env.DEV) {
       });
       if (!response.ok) return { ok: false, reason: "invalid" };
       return { ok: true, addresses: await response.json() };
+    },
+  });
+}
+
+// The server answering /api sees the proxy hop, not the browser, so the device
+// this runs on is whichever roster entry the user named, and that server holds it.
+if (!desktop && !import.meta.env.DEV) {
+  setSelfDeviceHost({
+    read: async () => {
+      try {
+        const response = await fetch("/api/self-device");
+        if (!response.ok) return null;
+        return ((await response.json()) as { clientId: number | null }).clientId;
+      } catch {
+        return null;
+      }
+    },
+    write: async (clientId) => {
+      const response = await fetch("/api/self-device", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ clientId }),
+      });
+      if (!response.ok) throw new Error("could not save");
     },
   });
 }

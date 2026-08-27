@@ -177,16 +177,15 @@ docker compose up --build
 A Raspberry Pi 4/5 needs the 64-bit OS and enough RAM for the Vite build
 (4 GB is comfortable; 2 GB often OOMs).
 
-Recordings persist in the `historian-data` volume. If `com.dishylink.historian`
-is already running under launchd, stop it first — two recorders double the
-router's 200 ms client poll.
+Recordings, and a pasted starlink.com session, persist in the `historian-data`
+volume — a session survives a restart with no extra mount needed. If
+`com.dishylink.historian` is already running under launchd, stop it first —
+two recorders double the router's 200 ms client poll.
 
 Optional, in `compose.yaml`:
 
 - `HOST_LAN_IP` / `HOST_MAC` — the host's LAN address, so "This device" and
   pause-self-protect still work through Docker Desktop's port publish.
-- `.starlink-cookie` bind-mount — keeps a pasted starlink.com session across
-  restarts (or paste the session in the UI).
 
 Cloud session writes stay localhost-only. Opening the dashboard via the host's
 LAN IP from a phone still shows live data and history.

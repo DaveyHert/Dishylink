@@ -7,7 +7,7 @@
 //   npx tsx dev/bypass.mts off
 //   npx tsx dev/bypass.mts on
 
-import { readFileSync, writeFileSync, rmSync } from "node:fs";
+import { chmodSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { createCloudHandler } from "../cloud/starlinkCloudHandler.ts";
 import { resilientFetch } from "../cloud/resilientFetch.ts";
@@ -45,7 +45,10 @@ const loadRouter = () =>
 const handler = createCloudHandler({
   fetch: resilientFetch,
   readCookie,
-  writeCookie: (cookie: string) => writeFileSync(COOKIE_FILE, cookie, "utf8"),
+  writeCookie: (cookie: string) => {
+    writeFileSync(COOKIE_FILE, cookie, { encoding: "utf8", mode: 0o600 });
+    chmodSync(COOKIE_FILE, 0o600);
+  },
   clearCookie: () => {
     try {
       rmSync(COOKIE_FILE);
