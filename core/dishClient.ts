@@ -29,6 +29,9 @@ interface DishHost {
   dishHandleUrl?: string;
   routerHandleUrl?: string;
   protosetUrl?: string;
+  /** What every client's calls cost on the wire. Set by hosts that reach the LAN
+   *  boxes directly; hosts behind a proxy count at the proxy instead. */
+  onBytes?: (bytes: GrpcWebCallBytes) => void;
 }
 
 let dishHost: DishHost = {};
@@ -479,13 +482,7 @@ function encodeOneofRequest(fieldNumber: number, subMessageBytes: number[] = [])
 // ---------- client ----------
 
 export class DishClient {
-  /**
-   * What each call costs on the wire, when the caller wants to know.
-   *
-   * The dish and the router are on the host's own Wi-Fi, so a recorder that
-   * polls them is charged for it by the router's per-client byte counters. Set
-   * this and that share can be taken back out — see core/selfTrafficCorrection.
-   */
+  /** Overrides the host-wide reporter for this client alone. */
   onBytes?: (bytes: GrpcWebCallBytes) => void;
 
   private constructor(
@@ -535,7 +532,7 @@ export class DishClient {
       this.handleUrl,
       encodeOneofRequest(fieldNumber, subMessageBytes),
       abortSignal,
-      { onBytes: this.onBytes },
+      { onBytes: this.onBytes ?? dishHost.onBytes },
     );
     const responseMessage = fromBinary(this.responseSchema, responseBytes);
     return toJson(this.responseSchema, responseMessage, {

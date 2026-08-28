@@ -16,6 +16,7 @@ import { extensionApiTransport } from "../../lib/apiTransport";
 import { extensionCloudSignIn, extensionCloudTransport } from "../../lib/cloudTransport";
 import { extensionNotificationHost } from "../../lib/notificationHost";
 import { startClientSampler } from "../../lib/clientSampler";
+import { reportSelfTraffic } from "../../lib/selfTrafficReporter";
 import { loadSelfDeviceClientId, storeSelfDeviceClientId } from "../../lib/selfDevice";
 import {
   dishHandleUrl,
@@ -99,7 +100,11 @@ function startSampler(): void {
 // afterwards, and a client loaded against the default would keep dialling it.
 loadRouterAddress()
   .then(() => {
-    setDishHost({ dishHandleUrl: dishHandleUrl(), routerHandleUrl: routerHandleUrl() });
+    setDishHost({
+      dishHandleUrl: dishHandleUrl(),
+      routerHandleUrl: routerHandleUrl(),
+      onBytes: reportSelfTraffic,
+    });
     startSampler();
     return bindNotifications();
   })

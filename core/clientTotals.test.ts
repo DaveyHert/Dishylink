@@ -105,6 +105,38 @@ describe("ClientTotalsCore self-traffic", () => {
     expect(monthlyRx(core)).toBe(7_000 + 2_000 - 500);
   });
 
+  it("reads the corrected counter from the bucket observe wrote to", () => {
+    // An adoption's alias is inferred, so observe deliberately keeps writing to
+    // the old id when it reports again. Resolving through the alias here would
+    // hand the rate tracker a counter belonging to the surviving device.
+    const core = new ClientTotalsCore();
+    const OLD_ID = 111;
+    const NEW_ID = 222;
+
+    let liveKeys = core.notePoll([{ clientId: OLD_ID, macAddress: MAC }]);
+    core.observe(OLD_ID, MAC, 1_000, 0, T0, "Laptop", liveKeys);
+    liveKeys = core.notePoll([{ clientId: OLD_ID, macAddress: MAC }]);
+    core.observe(OLD_ID, MAC, 4_000, 0, T0 + 200, "Laptop", liveKeys);
+
+    // A new id on the same unshared MAC adopts the now-idle bucket.
+    liveKeys = core.notePoll([{ clientId: NEW_ID, macAddress: MAC }]);
+    core.observe(NEW_ID, MAC, 9_000, 0, T0 + 400, "Laptop", liveKeys);
+
+    // The old id reports again, which observe treats as evidence against the
+    // adoption and records under the old key.
+    liveKeys = core.notePoll([
+      { clientId: OLD_ID, macAddress: MAC },
+      { clientId: NEW_ID, macAddress: MAC },
+    ]);
+    core.observe(OLD_ID, MAC, 500, 0, T0 + 600, "Laptop", liveKeys);
+    core.observe(NEW_ID, MAC, 12_000, 0, T0 + 600, "Laptop", liveKeys);
+
+    const oldCounters = core.correctedCounters(OLD_ID, MAC);
+    const newCounters = core.correctedCounters(NEW_ID, MAC);
+    expect(oldCounters).not.toEqual(newCounters);
+    expect(newCounters).toEqual({ rxBytes: 12_000, txBytes: 0 });
+  });
+
   it("keeps the two directions on separate debts", () => {
     const core = new ClientTotalsCore();
     let liveKeys = core.notePoll([{ clientId: CLIENT_ID, macAddress: MAC }]);

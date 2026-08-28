@@ -355,7 +355,10 @@ export class ClientTotalsCore {
     clientId: number | undefined,
     macAddress: string,
   ): { rxBytes: number; txBytes: number } | undefined {
-    const state = this.states.get(this.resolveKey(keyOf(clientId, macAddress)));
+    // Resolved exactly as observe() resolves it, or a rate is measured against a
+    // counter belonging to a different device.
+    const raw = keyOf(clientId, macAddress);
+    const state = this.states.get(this.userMerged.has(raw) ? this.resolveKey(raw) : raw);
     if (!state || state.correctedRx === undefined || state.correctedTx === undefined)
       return undefined;
     return { rxBytes: state.correctedRx, txBytes: state.correctedTx };

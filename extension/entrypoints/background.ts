@@ -1,6 +1,6 @@
 import { defineBackground } from "#imports";
 import { browser } from "wxt/browser";
-import { drainOnce } from "../lib/collector";
+import { drainOnce, recordPageSelfTraffic } from "../lib/collector";
 import { NotificationThrottle, describeTransition } from "@core/alertNotification";
 import type { AlertTransition } from "@core/alertEngine";
 import type { AlertSeverity, AlertState } from "@core/alertDefinitions";
@@ -265,6 +265,17 @@ export default defineBackground(() => {
     // toggling on repeatedly replaces the confirmation rather than stacking it.
     if (request.type === "notify") {
       return postNotification("notify-probe", request.title ?? "", String(request.body ?? ""));
+    }
+    if (request.type === "selfTraffic") {
+      const batch = message as { receivedBytes?: unknown; sentBytes?: unknown };
+      const receivedBytes = Number(batch.receivedBytes);
+      const sentBytes = Number(batch.sentBytes);
+      if (Number.isFinite(receivedBytes) && Number.isFinite(sentBytes))
+        recordPageSelfTraffic({
+          receivedBytes: Math.max(0, receivedBytes),
+          sentBytes: Math.max(0, sentBytes),
+        });
+      return false;
     }
     if (typeof request?.path !== "string") return false;
     // Account calls reach starlink.com over the internet, held apart from the

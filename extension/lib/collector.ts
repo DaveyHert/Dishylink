@@ -51,6 +51,11 @@ function takePendingSelfTraffic(): { receivedBytes: number; sentBytes: number } 
   return taken;
 }
 
+export function recordPageSelfTraffic(bytes: { receivedBytes: number; sentBytes: number }): void {
+  pendingSelfTraffic.receivedBytes += bytes.receivedBytes;
+  pendingSelfTraffic.sentBytes += bytes.sentBytes;
+}
+
 function chargeToSelf(client: DishClient): DishClient {
   client.onBytes = ({ requestBytes, responseBytes }) => {
     pendingSelfTraffic.receivedBytes += responseBytes;
@@ -299,6 +304,12 @@ async function recordClients(
   const liveKeys = odometer.notePoll(
     identified.map((c) => ({ clientId: c.clientId, macAddress: c.macAddress ?? "" })),
   );
+  const selfRow =
+    selfClientId === null ? undefined : identified.find((c) => c.clientId === selfClientId);
+  // Nothing to charge it to: no device named, or the named one absent from this
+  // roster. Held, it would come out of that device's real traffic when it
+  // returned, and grow for as long as the dashboard stayed open meanwhile.
+  const selfTraffic = takePendingSelfTraffic();
   for (const c of identified)
     odometer.observe(
       c.clientId,
@@ -309,9 +320,7 @@ async function recordClients(
       c.givenName ?? c.name,
       liveKeys,
       c.captiveClientId,
-      c.clientId !== undefined && c.clientId === selfClientId
-        ? takePendingSelfTraffic()
-        : undefined,
+      c === selfRow ? selfTraffic : undefined,
     );
   odometer.compact(now);
   await store.writeTotalsSnapshot(odometer.toSnapshot());
