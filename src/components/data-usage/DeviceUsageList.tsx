@@ -47,9 +47,9 @@ export function DeviceUsageList() {
     clearAll,
     answerMerge,
   } = useClientTotals();
-  // The recorder cannot tell which row it runs on, so that device's figure still
-  // carries its polling. Where the user can name it, say so; a server recording
-  // from elsewhere is told through its own configuration instead.
+  // Only where the user can act on it from here. A desktop app resolves its own
+  // machine and has no such setting; a server recording from elsewhere is told
+  // through its own configuration, which is where its warning goes.
   const namingFixesIt = selfDeviceHost()?.namingCorrectsUsage === true;
   // "Active now" and the month a row belongs to are both judged against the
   // current time, which moves whether or not anything re-renders. One clock for
@@ -138,27 +138,18 @@ export function DeviceUsageList() {
       </div>
       {/* Below the rows: the question is about two of them, and reads as a
           footnote to the list rather than a banner over it. */}
-      {!selfDeviceIdentified && !unavailable && (
+      {!selfDeviceIdentified && !unavailable && namingFixesIt && (
         <Callout tone='info' iconSeverity='warn' className='mt-2.5'>
-          One device here counts Dishylink&rsquo;s own checks of your dish and router as its data.{" "}
-          {namingFixesIt ? (
-            <>
-              To leave them out,{" "}
-              <button
-                type='button'
-                className={inlineLinkButton}
-                onClick={() => requestPanel("settings", "app")}
-              >
-                pick the device you are using
-              </button>{" "}
-              under app&rsquo;s settings.
-            </>
-          ) : (
-            <>
-              To leave them out, set <code>HOST_LAN_IP</code> to the address of the machine running
-              the recorder.
-            </>
-          )}
+          The device you are using counts Dishylink&rsquo;s own checks of your dish and router as
+          its data. To leave them out,{" "}
+          <button
+            type='button'
+            className={inlineLinkButton}
+            onClick={() => requestPanel("settings", "app")}
+          >
+            pick it under app&rsquo;s settings
+          </button>
+          .
         </Callout>
       )}
       <DeviceMergePrompt
