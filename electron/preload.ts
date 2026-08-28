@@ -12,6 +12,7 @@ import {
   NOTIFICATION_STATE_CHANNEL,
   MENUBAR_THROUGHPUT_CHANNEL,
   HIDE_TRAY_ICON_CHANNEL,
+  TRAY_ICON_STYLE_CHANNEL,
   UPDATE_STATE_CHANNEL,
 } from "./ipc";
 import type { UpdateState } from "./updater";
@@ -132,6 +133,22 @@ contextBridge.exposeInMainWorld("dishlink", {
           ipcRenderer.on(HIDE_TRAY_ICON_CHANNEL, handler);
           return () => {
             ipcRenderer.off(HIDE_TRAY_ICON_CHANNEL, handler);
+          };
+        },
+        trayIconStyle: (): Promise<"template" | "outline" | "original"> =>
+          ipcRenderer.invoke("get-tray-icon-style"),
+        setTrayIconStyle: (
+          style: "template" | "outline" | "original",
+        ): Promise<"template" | "outline" | "original"> =>
+          ipcRenderer.invoke("set-tray-icon-style", style),
+        onTrayIconStyle: (
+          listener: (style: "template" | "outline" | "original") => void,
+        ): (() => void) => {
+          const handler = (_event: unknown, style: "template" | "outline" | "original"): void =>
+            listener(style);
+          ipcRenderer.on(TRAY_ICON_STYLE_CHANNEL, handler);
+          return () => {
+            ipcRenderer.off(TRAY_ICON_STYLE_CHANNEL, handler);
           };
         },
       }

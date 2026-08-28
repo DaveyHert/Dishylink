@@ -47,6 +47,14 @@ interface Window {
     hideTrayIcon?: () => Promise<boolean>;
     setHideTrayIcon?: (hidden: boolean) => Promise<boolean>;
     onHideTrayIcon?: (listener: (hidden: boolean) => void) => () => void;
+    // macOS menu-bar icon style. macOS only, so optional.
+    trayIconStyle?: () => Promise<"template" | "outline" | "original">;
+    setTrayIconStyle?: (
+      style: "template" | "outline" | "original",
+    ) => Promise<"template" | "outline" | "original">;
+    onTrayIconStyle?: (
+      listener: (style: "template" | "outline" | "original") => void,
+    ) => () => void;
     // Whether a GitHub release newer than this build has been published.
     updateState: () => Promise<{ available: boolean; version: string | null }>;
     onUpdateState: (

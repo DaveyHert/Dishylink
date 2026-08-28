@@ -49,6 +49,9 @@ export interface Preferences {
    *  only while `menuBarThroughput` is on. */
   hideTrayIcon: boolean;
 
+  /** macOS menu-bar icon style. Ignored while `hideTrayIcon` is in effect. */
+  trayIconStyle: "template" | "outline" | "original";
+
   /**
    * The main window's last position and size, restored on launch so it reopens
    * where it was left. null until the window has moved or resized at least once.
@@ -78,6 +81,7 @@ const DEFAULTS: Preferences = {
   notifications: null,
   menuBarThroughput: process.platform === "darwin",
   hideTrayIcon: false,
+  trayIconStyle: "original",
   windowBounds: null,
   routerAddress: null,
   selfClientId: null,
@@ -128,6 +132,10 @@ export function preferences(): Preferences {
           ? parsed.menuBarThroughput
           : DEFAULTS.menuBarThroughput,
       hideTrayIcon: typeof parsed.hideTrayIcon === "boolean" ? parsed.hideTrayIcon : false,
+      trayIconStyle:
+        parsed.trayIconStyle === "template" || parsed.trayIconStyle === "outline"
+          ? parsed.trayIconStyle
+          : "original",
       windowBounds: isWindowBounds(parsed.windowBounds) ? parsed.windowBounds : null,
       routerAddress: storedAddress(parsed.routerAddress),
       selfClientId: storedClientId(parsed.selfClientId),

@@ -45,6 +45,7 @@ import {
   NOTIFICATION_STATE_CHANNEL,
   MENUBAR_THROUGHPUT_CHANNEL,
   HIDE_TRAY_ICON_CHANNEL,
+  TRAY_ICON_STYLE_CHANNEL,
   UPDATE_STATE_CHANNEL,
 } from "./ipc";
 import { formatMenuBarRate, formatSpacedRate } from "./menuBarThroughput";
@@ -58,10 +59,8 @@ import { startUpdateChecks, updateState, onUpdateStateChanged } from "./updater"
 const here = dirname(fileURLToPath(import.meta.url));
 const rendererRoot = join(here, "../dist");
 const iconPath = join(here, "../build/icon.png");
-// A "…Template" name makes Electron treat this as a macOS template image: the OS
-// tints it for light/dark and dims it when the menu is inactive, matching every
-// other menu-bar icon. The colour icon stays on the dock and the Windows tray.
 const trayIconPath = join(here, "../build/trayTemplate.png");
+const trayOutlinePath = join(here, "../build/trayTemplateOutline.png");
 
 // Drives the menu-bar title and per-app data directory; must be set before anything
 // reads it.
@@ -294,9 +293,21 @@ function windowIsForeground(): boolean {
   return mainWindow !== null && mainWindow.isFocused() && !mainWindow.isMinimized();
 }
 
+/** The macOS menu-bar image for the current preference. */
+function macTrayImage() {
+  const style = preferences().trayIconStyle;
+  if (style === "original") {
+    const image = nativeImage.createFromPath(iconPath);
+    return image.isEmpty() ? image : image.resize({ width: 18, height: 18 });
+  }
+  const image = nativeImage.createFromPath(style === "outline" ? trayOutlinePath : trayIconPath);
+  image.setTemplateImage(true);
+  return image;
+}
+
 function createTray(): void {
   if (process.platform === "darwin") {
-    tray = new Tray(nativeImage.createFromPath(trayIconPath));
+    tray = new Tray(macTrayImage());
   } else {
     const image = nativeImage.createFromPath(iconPath);
     tray = new Tray(image.isEmpty() ? image : image.resize({ width: 18, height: 18 }));
@@ -381,11 +392,12 @@ function createTray(): void {
   tray.on("right-click", () => tray?.popUpContextMenu(menu));
 }
 
-/** "↓39Kb/s ↑159Kb/s", right-aligned in a fixed-width block so the icon holds while
- *  the numbers swing in the leading gap (see THROUGHPUT_TITLE_WIDTH). */
-function throughputTitle(downBps: number, upBps: number): string {
+/** "↓39Kb/s ↑159Kb/s". Padded to a fixed width so the icon holds while the
+ *  numbers swing in the leading gap — but that gap is dead space once the icon
+ *  is hidden, so `padded` drops it for that case. */
+function throughputTitle(downBps: number, upBps: number, padded = true): string {
   const readout = `↓${formatMenuBarRate(downBps)} ↑${formatMenuBarRate(upBps)}`;
-  return readout.padStart(THROUGHPUT_TITLE_WIDTH, FIGURE_SPACE);
+  return padded ? readout.padStart(THROUGHPUT_TITLE_WIDTH, FIGURE_SPACE) : readout;
 }
 
 /** Blank the tray icon when the readout stands in for it, else show the template
@@ -394,7 +406,7 @@ function throughputTitle(downBps: number, upBps: number): string {
 function applyTrayIcon(): void {
   if (tray === null || process.platform !== "darwin") return;
   const hidden = preferences().menuBarThroughput && preferences().hideTrayIcon;
-  tray.setImage(hidden ? nativeImage.createEmpty() : nativeImage.createFromPath(trayIconPath));
+  tray.setImage(hidden ? nativeImage.createEmpty() : macTrayImage());
 }
 
 /** Paint the readout from the latest throughput, or clear it when off. A stale
@@ -416,7 +428,9 @@ function applyMenuBarThroughput(): void {
   const downBps = fresh ? sample.downBps : 0;
   const upBps = fresh ? sample.upBps : 0;
   if (process.platform === "darwin") {
-    tray.setTitle(throughputTitle(downBps, upBps), { fontType: "monospaced" });
+    tray.setTitle(throughputTitle(downBps, upBps, !preferences().hideTrayIcon), {
+      fontType: "monospaced",
+    });
   } else {
     // The widget has room for the spaced unit; the menu-bar title packs it out.
     showThroughputWidget();
@@ -673,6 +687,14 @@ function registerMenuBarThroughputHandler(): void {
       setPreference("hideTrayIcon", hidden === true);
       return preferences().hideTrayIcon;
     });
+    ipcMain.handle("get-tray-icon-style", () => preferences().trayIconStyle);
+    ipcMain.handle("set-tray-icon-style", (_event, style: unknown) => {
+      setPreference(
+        "trayIconStyle",
+        style === "template" || style === "outline" ? style : "original",
+      );
+      return preferences().trayIconStyle;
+    });
   }
   // The open window's live throughput — the same 1s dish reading the dashboard draws.
   // The timestamp marks the renderer as reporting, so the recorder's poll defers.
@@ -690,6 +712,7 @@ function registerMenuBarThroughputHandler(): void {
     mainWindow?.webContents.send(MENUBAR_THROUGHPUT_CHANNEL, prefs.menuBarThroughput);
     if (hideIconItem !== null) hideIconItem.checked = prefs.hideTrayIcon;
     mainWindow?.webContents.send(HIDE_TRAY_ICON_CHANNEL, prefs.hideTrayIcon);
+    mainWindow?.webContents.send(TRAY_ICON_STYLE_CHANNEL, prefs.trayIconStyle);
   });
 }
 
