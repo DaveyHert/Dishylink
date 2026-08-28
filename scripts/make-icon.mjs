@@ -27,9 +27,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const source = join(root, "build", "icon.svg");
 const output = join(root, "build", "icon.icns");
 const runtimePng = join(root, "build", "icon.png");
-const trayTemplateSvg = join(root, "build", "trayTemplate.svg");
-const trayTemplatePng = join(root, "build", "trayTemplate.png");
-const trayTemplatePng2x = join(root, "build", "trayTemplate@2x.png");
+const trayTemplates = ["trayTemplate", "trayTemplateOutline"];
 
 // The ten representations iconutil accepts. Anything outside this set makes it
 // reject the whole iconset rather than skip the odd entry.
@@ -63,9 +61,12 @@ try {
   }
   execFileSync("iconutil", ["-c", "icns", iconset, "-o", output], { stdio: "inherit" });
   rasterize(1024, runtimePng);
-  rasterize(16, trayTemplatePng, trayTemplateSvg);
-  rasterize(32, trayTemplatePng2x, trayTemplateSvg);
-  console.log(`icon: ${output}\nicon: ${runtimePng}\nicon: ${trayTemplatePng}`);
+  for (const name of trayTemplates) {
+    const svg = join(root, "build", `${name}.svg`);
+    rasterize(16, join(root, "build", `${name}.png`), svg);
+    rasterize(32, join(root, "build", `${name}@2x.png`), svg);
+  }
+  console.log(`icon: ${output}\nicon: ${runtimePng}\nicon: ${trayTemplates.join(", ")}`);
 } finally {
   rmSync(work, { recursive: true, force: true });
 }

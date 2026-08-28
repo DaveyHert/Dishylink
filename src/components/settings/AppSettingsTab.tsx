@@ -96,6 +96,35 @@ function useHideTrayIcon(): [boolean, (hidden: boolean) => void] | null {
   return [hidden, toggle];
 }
 
+type TrayIconStyle = "template" | "outline" | "original";
+
+/** Seed-then-follow for the macOS menu-bar icon style. Null off macOS. */
+function useTrayIconStyle(): [TrayIconStyle, (style: TrayIconStyle) => void] | null {
+  const host = window.dishlink;
+  const bridged = typeof host?.setTrayIconStyle === "function" ? host : null;
+  const [style, setStyle] = useState<TrayIconStyle>("original");
+
+  useEffect(() => {
+    if (!bridged) return;
+    let active = true;
+    void bridged.trayIconStyle?.().then((value) => {
+      if (active) setStyle(value);
+    });
+    const unsubscribe = bridged.onTrayIconStyle?.((value) => setStyle(value));
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
+  }, [bridged]);
+
+  if (!bridged) return null;
+  const choose = (next: TrayIconStyle) => {
+    setStyle(next);
+    void bridged.setTrayIconStyle?.(next).then(setStyle);
+  };
+  return [style, choose];
+}
+
 const NO_SELF_DEVICE = "none";
 
 /** Names one roster entry as the device the dashboard runs on, for hosts that
@@ -253,6 +282,7 @@ export function AppSettingsTab({ clients }: { clients: WifiClientJson[] }) {
   const toolbarStyle = useSyncExternalStore(subscribeToToolbarStyle, readToolbarStyle);
   const menuBar = useMenuBarThroughput();
   const hideTrayIcon = useHideTrayIcon();
+  const trayStyle = useTrayIconStyle();
   // The readout lives in the menu bar on macOS and the taskbar on Windows; name
   // whichever this host is. Only reached when the bridge is present, i.e. desktop.
   const surface = window.dishlink?.platform === "win32" ? "taskbar" : "menu bar";
@@ -294,6 +324,30 @@ export function AppSettingsTab({ clients }: { clients: WifiClientJson[] }) {
       {menuBar?.[0] && hideTrayIcon && (
         <SettingRow title='Hide menu bar icon' caption='Show only the throughput readout, no icon'>
           <Switch checked={hideTrayIcon[0]} onCheckedChange={hideTrayIcon[1]} />
+        </SettingRow>
+      )}
+
+      {trayStyle && !hideTrayIcon?.[0] && (
+        <SettingRow title='Menu bar icon' caption='How it looks in the menu bar'>
+          <Select
+            value={trayStyle[0]}
+            onValueChange={(value) => trayStyle[1](value as TrayIconStyle)}
+          >
+            <SelectTrigger className={triggerClass} style={{ width: 118 }}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className={selectContentClass}>
+              <SelectItem value='template' className={selectItemClass}>
+                Monochrome
+              </SelectItem>
+              <SelectItem value='outline' className={selectItemClass}>
+                Outline
+              </SelectItem>
+              <SelectItem value='original' className={selectItemClass}>
+                App icon
+              </SelectItem>
+            </SelectContent>
+          </Select>
         </SettingRow>
       )}
     </>

@@ -42,6 +42,8 @@ files:
   - build/icon.png
   - build/trayTemplate.png
   - build/trayTemplate@2x.png
+  - build/trayTemplateOutline.png
+  - build/trayTemplateOutline@2x.png
   - package.json
   - "!node_modules/**/*"
 
