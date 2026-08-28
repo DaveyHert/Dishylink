@@ -819,6 +819,7 @@ async function getClientReadings(): Promise<ClientReading[]> {
   );
   const hostIdentity = readHostIdentity();
   let hostCharged = false;
+  let hostRowFound = false;
   const totalsLiveKeys = clientTotals.notePoll(
     clients.map((client) => ({ clientId: client.clientId, macAddress: client.macAddress })),
   );
@@ -844,8 +845,9 @@ async function getClientReadings(): Promise<ClientReading[]> {
         ? undefined
         : { rxBytes: Number(rxBytes), txBytes: Number(txBytes) };
 
-    const isHost = counters !== undefined && clientIsHost(client, hostIdentity);
-    if (isHost) hostCharged = true;
+    const isHost = clientIsHost(client, hostIdentity);
+    if (isHost) hostRowFound = true;
+    if (isHost && counters !== undefined) hostCharged = true;
 
     // Fold the raw counter into the monthly odometer. Done here, at the fast
     // poll, so a re-association's counter reset is caught the moment it happens
@@ -893,14 +895,14 @@ async function getClientReadings(): Promise<ClientReading[]> {
   if (!hostCharged) takePendingSelfTraffic();
   // Once per run, and only once the roster has actually answered — an empty one
   // is a poll that failed, not a machine that is missing from it.
-  if (!hostCharged && !warnedNoHostRow && clients.length > 0) {
+  if (!hostRowFound && !warnedNoHostRow && clients.length > 0) {
     warnedNoHostRow = true;
     console.warn(
       "[historian] no roster entry matches this machine, so its own polling is counted as that " +
         "device's usage. Set HOST_LAN_IP to this machine's address on the Starlink network.",
     );
   }
-  hostRowIdentified = hostCharged;
+  if (clients.length > 0) hostRowIdentified = hostRowFound;
   clientThroughput.retain(liveEntryKeys);
   return readings;
 }
