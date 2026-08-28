@@ -103,7 +103,7 @@ async function forwardable(request: Request): Promise<RequestInit> {
  * counted here.
  */
 async function chargingLanBytes(
-  targetUrl: string,
+  targetUrl: () => string,
   requestInit: RequestInit,
   send: () => Promise<Response>,
 ): Promise<Response> {
@@ -111,7 +111,7 @@ async function chargingLanBytes(
   const sentBytes =
     (requestInit.body instanceof ArrayBuffer ? requestInit.body.byteLength : 0) +
     headerBytes(new Headers(requestInit.headers)) +
-    targetUrl.length;
+    targetUrl().length;
   void response
     .clone()
     .arrayBuffer()
@@ -134,9 +134,20 @@ function headerBytes(headers: Headers): number {
   return total;
 }
 
-async function proxy(request: Request, targetUrl: string): Promise<Response> {
+/**
+ * `chargeToRecorder` belongs only on the dish and the router, whose traffic never
+ * leaves the LAN. CelesTrak shares this helper and goes out over the dish, so
+ * charging it would quietly erase a real download from the device that made it.
+ */
+async function proxy(
+  request: Request,
+  targetUrl: string,
+  chargeToRecorder = false,
+): Promise<Response> {
   const init = await forwardable(request);
-  return chargingLanBytes(targetUrl, init, () => net.fetch(targetUrl, init));
+  const send = () => net.fetch(targetUrl, init);
+  if (!chargeToRecorder) return send();
+  return chargingLanBytes(() => targetUrl, init, send);
 }
 
 /**
@@ -149,11 +160,22 @@ async function proxy(request: Request, targetUrl: string): Promise<Response> {
 async function proxyRouter(request: Request, path: string): Promise<Response> {
   const init = await forwardable(request);
   if (ROUTER_ORIGIN_OVERRIDE)
-    return chargingLanBytes(ROUTER_ORIGIN_OVERRIDE + path, init, () =>
-      net.fetch(ROUTER_ORIGIN_OVERRIDE + path, init),
+    return chargingLanBytes(
+      () => ROUTER_ORIGIN_OVERRIDE + path,
+      init,
+      () => net.fetch(ROUTER_ORIGIN_OVERRIDE + path, init),
     );
-  return chargingLanBytes(path, init, () =>
-    routerOrigins.run((origin) => net.fetch(origin + path, init)),
+  // The origin is only settled inside run(), which may try more than one, so the
+  // one that answered is read back afterwards rather than guessed at.
+  let reachedUrl = path;
+  return chargingLanBytes(
+    () => reachedUrl,
+    init,
+    () =>
+      routerOrigins.run((origin) => {
+        reachedUrl = origin + path;
+        return net.fetch(reachedUrl, init);
+      }),
   );
 }
 
@@ -193,7 +215,7 @@ export function handleAppProtocol(
     const { pathname, search } = url;
 
     if (pathname.startsWith("/dishy/")) {
-      return proxy(request, DISH_ORIGIN + pathname.slice("/dishy".length) + search);
+      return proxy(request, DISH_ORIGIN + pathname.slice("/dishy".length) + search, true);
     }
     if (pathname.startsWith("/router/")) {
       return proxyRouter(request, pathname.slice("/router".length) + search);

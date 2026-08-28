@@ -108,6 +108,32 @@ describe("SelfTrafficCorrection", () => {
     expect(correction.apply({ rxBytes: 2_000, txBytes: 0 }, T0 + STEP_MS).rxBytes).toBe(1_500);
   });
 
+  it("drops pending traffic no reading could carry", () => {
+    // A recorder off the router's LAN, or one whose row the user has not named,
+    // measures its own calls with nothing to charge them to. Held, the debt
+    // would build for as long as that lasted and then take a bite out of real
+    // traffic the moment the row appeared.
+    const correction = new SelfTrafficCorrection();
+    correction.record({ receivedBytes: 0, sentBytes: 0 });
+    correction.apply({ rxBytes: 1_000, txBytes: 0 }, T0);
+    correction.record({ receivedBytes: 900_000, sentBytes: 0 });
+    correction.forgetPending();
+    expect(correction.apply({ rxBytes: 2_000, txBytes: 0 }, T0 + STEP_MS).rxBytes).toBe(2_000);
+  });
+
+  it("resumes across a teardown without recharging what it already spent", () => {
+    const first = new SelfTrafficCorrection();
+    first.record({ receivedBytes: 0, sentBytes: 0 });
+    first.apply({ rxBytes: 1_000, txBytes: 0 }, T0);
+    first.record({ receivedBytes: 400, sentBytes: 0 });
+    expect(first.apply({ rxBytes: 2_000, txBytes: 0 }, T0 + STEP_MS).rxBytes).toBe(1_600);
+
+    const resumed = new SelfTrafficCorrection();
+    resumed.loadSnapshot(first.toSnapshot());
+    resumed.record({ receivedBytes: 100, sentBytes: 0 });
+    expect(resumed.apply({ rxBytes: 3_000, txBytes: 0 }, T0 + 2 * STEP_MS).rxBytes).toBe(2_500);
+  });
+
   it("spends each poll's measurement once", () => {
     const correction = new SelfTrafficCorrection();
     const result = corrections(correction, [

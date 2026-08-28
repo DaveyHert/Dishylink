@@ -303,10 +303,17 @@ async function recordClients(
   }
   await store.writeSelfTrafficState(selfTraffic.toSnapshot());
 
-  const rxOf = (c: WifiClientJson) =>
-    c === selfRow && corrected ? corrected.rxBytes : Number(c.rxStats?.bytes ?? 0);
-  const txOf = (c: WifiClientJson) =>
-    c === selfRow && corrected ? corrected.txBytes : Number(c.txStats?.bytes ?? 0);
+  // Stored minute rows keep the router's own figures, both of them. Its rate
+  // fields are an average it computes, not a delta of ours, so there is nothing
+  // to take our polling out of — and a corrected byte count sitting beside an
+  // uncorrected rate would be a row that disagreed with itself. The correction
+  // goes only where it changes what someone reads: the odometer below.
+  const rxOf = (c: WifiClientJson) => Number(c.rxStats?.bytes ?? 0);
+  const txOf = (c: WifiClientJson) => Number(c.txStats?.bytes ?? 0);
+  const odometerRxOf = (c: WifiClientJson) =>
+    c === selfRow && corrected ? corrected.rxBytes : rxOf(c);
+  const odometerTxOf = (c: WifiClientJson) =>
+    c === selfRow && corrected ? corrected.txBytes : txOf(c);
   const rows: ClientMinuteRow[] = identified.map((c) => ({
     minute,
     key: usageKey(c.clientId, c.macAddress),
@@ -327,8 +334,8 @@ async function recordClients(
     odometer.observe(
       c.clientId,
       c.macAddress ?? "",
-      rxOf(c),
-      txOf(c),
+      odometerRxOf(c),
+      odometerTxOf(c),
       now,
       c.givenName ?? c.name,
       liveKeys,
