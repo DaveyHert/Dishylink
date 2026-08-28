@@ -26,7 +26,6 @@ import {
   type TelemetrySample,
 } from "@core/telemetry";
 import type { Snapshot as TotalsSnapshot } from "@core/clientTotals";
-import type { SelfTrafficSnapshot } from "@core/selfTrafficCorrection";
 import { restoredRule, type MeterRule } from "@core/dataMeter";
 import type { DevicePause } from "@core/devicePause";
 import type { DeviceGroup } from "@core/deviceGroup";
@@ -141,11 +140,6 @@ export interface HistoryStore {
   readTotalsSnapshot(): Promise<TotalsSnapshot | null>;
   /** Persist the odometer's state so the next drain resumes it across teardown. */
   writeTotalsSnapshot(snapshot: TotalsSnapshot): Promise<void>;
-  /** Where the self-traffic correction left its counters, or null before its
-   *  first write. Durable for the same reason the odometer's state is: the
-   *  worker is torn down between alarms and the correction measures deltas. */
-  readSelfTrafficState(): Promise<SelfTrafficSnapshot | null>;
-  writeSelfTrafficState(snapshot: SelfTrafficSnapshot): Promise<void>;
   /** Every data-limit rule. Durable rather than in-memory because the worker is
    *  torn down between alarms, and a latch that did not survive would re-pause a
    *  device the user had released by hand. */
@@ -253,7 +247,6 @@ const CLIENT_SAMPLES = "clientSamples";
 const CURSOR_KEY = "cursor";
 const RADIO_CURRENT_KEY = "radioCurrent";
 const CLIENT_TOTALS_KEY = "clientTotals";
-const SELF_TRAFFIC_KEY = "selfTraffic";
 const METER_RULES_KEY = "meterRules";
 const DEVICE_PAUSES_KEY = "devicePauses";
 const DEVICE_GROUPS_KEY = "deviceGroups";
@@ -507,20 +500,6 @@ export class IndexedDbHistory implements HistoryStore {
     await transactionDone(tx);
   }
 
-  async readSelfTrafficState(): Promise<SelfTrafficSnapshot | null> {
-    const tx = this.db.transaction(META, "readonly");
-    const snap = await request<SelfTrafficSnapshot | undefined>(
-      tx.objectStore(META).get(SELF_TRAFFIC_KEY),
-    );
-    return snap ?? null;
-  }
-
-  async writeSelfTrafficState(snapshot: SelfTrafficSnapshot): Promise<void> {
-    const tx = this.db.transaction(META, "readwrite");
-    tx.objectStore(META).put(snapshot, SELF_TRAFFIC_KEY);
-    await transactionDone(tx);
-  }
-
   async readMeterRules(): Promise<MeterRule[]> {
     const tx = this.db.transaction(META, "readonly");
     const rules = await request<MeterRule[] | undefined>(tx.objectStore(META).get(METER_RULES_KEY));
@@ -620,7 +599,6 @@ export class InMemoryHistory implements HistoryStore {
   private readonly clientSamples = new Map<string, ClientSampleRow>();
   private readonly samples = new Map<number, TelemetrySample>();
   private totalsSnapshot: TotalsSnapshot | null = null;
-  private selfTrafficState: SelfTrafficSnapshot | null = null;
   private meterRules: MeterRule[] = [];
   private devicePauses: DevicePause[] = [];
   private deviceGroups: DeviceGroup[] = [];
@@ -753,14 +731,6 @@ export class InMemoryHistory implements HistoryStore {
 
   async writeTotalsSnapshot(snapshot: TotalsSnapshot): Promise<void> {
     this.totalsSnapshot = snapshot;
-  }
-
-  async readSelfTrafficState(): Promise<SelfTrafficSnapshot | null> {
-    return this.selfTrafficState;
-  }
-
-  async writeSelfTrafficState(snapshot: SelfTrafficSnapshot): Promise<void> {
-    this.selfTrafficState = snapshot;
   }
 
   async readMeterRules(): Promise<MeterRule[]> {

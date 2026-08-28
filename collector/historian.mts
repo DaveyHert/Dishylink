@@ -32,7 +32,6 @@ import {
   type HostNetworkIdentity,
 } from "../core/hostNetworkIdentity.ts";
 import { clientIsHost } from "../core/routerClientUpdate.ts";
-import { SelfTrafficCorrection, type SelfTrafficBytes } from "../core/selfTrafficCorrection.ts";
 import { join, resolve } from "node:path";
 import { createFileRegistry, fromBinary, toJson, type DescMessage } from "@bufbuild/protobuf";
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
@@ -256,7 +255,7 @@ async function deviceCall(
     AbortSignal.timeout(timeoutMs),
     {
       onBytes: ({ requestBytes: sent, responseBytes: received }) =>
-        selfTraffic.record({ receivedBytes: received, sentBytes: sent }),
+        recordSelfTraffic({ receivedBytes: received, sentBytes: sent }),
     },
   );
   return toJson(responseSchema, fromBinary(responseSchema, bytes), { registry }) as Record<
@@ -457,12 +456,15 @@ export function setAccountSessionReader(reader: (() => boolean) | null): void {
   readAccountSignedIn = reader;
 }
 
-/**
- * This recorder's own polling, taken back out of the usage recorded for the
- * machine it runs on. Every dish and router call rides the host's Wi-Fi, so the
- * router's per-client counters bill it for the recording itself.
- */
-const selfTraffic = new SelfTrafficCorrection();
+/** This recorder's own dish and router traffic since the last client poll. Rides
+ *  the host's Wi-Fi, so the router bills it to the machine we run on. */
+let pendingSelfTraffic = { receivedBytes: 0, sentBytes: 0 };
+
+function takePendingSelfTraffic(): { receivedBytes: number; sentBytes: number } {
+  const taken = pendingSelfTraffic;
+  pendingSelfTraffic = { receivedBytes: 0, sentBytes: 0 };
+  return taken;
+}
 
 /**
  * Who this machine is on the router's roster.
@@ -486,8 +488,9 @@ export function setHostIdentityReader(reader: () => HostNetworkIdentity): void {
  * land on the same row of the router's roster. Counting only what this file
  * asked for would leave that share billed to the user.
  */
-export function recordSelfTraffic(bytes: SelfTrafficBytes): void {
-  selfTraffic.record(bytes);
+export function recordSelfTraffic(bytes: { receivedBytes: number; sentBytes: number }): void {
+  pendingSelfTraffic.receivedBytes += bytes.receivedBytes;
+  pendingSelfTraffic.sentBytes += bytes.sentBytes;
 }
 
 /** Whether the router says each device is blocked, as of the last client poll.
@@ -831,20 +834,13 @@ async function getClientReadings(): Promise<ClientReading[]> {
     // Absent counters are "we did not get a reading", not zero bytes moved —
     // passing 0 here would read as the counter resetting and, worse, would be
     // recorded as a one-second dropout on an otherwise busy device.
-    const rawCounters =
+    const counters =
       rxBytes === undefined || txBytes === undefined
         ? undefined
         : { rxBytes: Number(rxBytes), txBytes: Number(txBytes) };
 
-    // On this machine's own row the counters include our polling of the dish and
-    // the router, which never left the LAN. Both the odometer and the rate
-    // tracker read what comes back here, so correcting it once fixes the monthly
-    // total, the allowance that trips off it, and the throughput chart together.
-    let counters = rawCounters;
-    if (rawCounters && clientIsHost(client, hostIdentity)) {
-      counters = selfTraffic.apply(rawCounters, nowMs);
-      hostCharged = true;
-    }
+    const isHost = counters !== undefined && clientIsHost(client, hostIdentity);
+    if (isHost) hostCharged = true;
 
     // Fold the raw counter into the monthly odometer. Done here, at the fast
     // poll, so a re-association's counter reset is caught the moment it happens
@@ -859,13 +855,17 @@ async function getClientReadings(): Promise<ClientReading[]> {
         client.givenName ?? client.name,
         totalsLiveKeys,
         client.captiveClientId,
+        isHost ? takePendingSelfTraffic() : undefined,
       );
     }
 
     // 15s, not 1m: the shorter window is closer to the truth whenever a delta is
     // unavailable, and txStats has no 1m field at all — preferring it would leave
     // download smoothed over 60s and upload over 15s on the same chart.
-    const rates = clientThroughput.rates(entryKey, counters, nowMs, {
+    const rateCounters = counters
+      ? (clientTotals.correctedCounters(client.clientId, client.macAddress) ?? counters)
+      : undefined;
+    const rates = clientThroughput.rates(entryKey, rateCounters, nowMs, {
       downMbps: finiteMbps(client.rxStats?.throughputMbpsLast15sAvg) ?? 0,
       upMbps: finiteMbps(client.txStats?.throughputMbpsLast15sAvg) ?? 0,
     });
@@ -883,7 +883,9 @@ async function getClientReadings(): Promise<ClientReading[]> {
       txBytes: counters?.txBytes ?? 0,
     });
   }
-  if (!hostCharged) selfTraffic.forgetPending();
+  // Nothing to charge it to: a recorder off the router's own network, or a
+  // roster that left us out. Held, it would come out of the next row to appear.
+  if (!hostCharged) takePendingSelfTraffic();
   clientThroughput.retain(liveEntryKeys);
   return readings;
 }

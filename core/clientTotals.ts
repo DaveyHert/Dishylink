@@ -98,6 +98,21 @@ export interface TotalState {
   /** When the counter was last read. 0 forces the next reading to re-baseline
    *  instead of measuring across it (a fresh bucket, an adoption, a month roll). */
   lastPollMs: number;
+  /**
+   * The recorder's own polling of the dish and router, measured but not yet
+   * taken off this device's counter. Non-zero only for the machine the recorder
+   * runs on, whose Wi-Fi carries it.
+   *
+   * A debt rather than a per-reading subtraction because the recorder polls
+   * several times per router refresh: most readings show a counter that has not
+   * moved, and subtracting within one would discard that reading's share.
+   */
+  selfTrafficDebtRx?: number;
+  selfTrafficDebtTx?: number;
+  /** The counter with that traffic taken off, for a rate tracker that keeps its
+   *  own previous value and so cannot be told about a debt. */
+  correctedRx?: number;
+  correctedTx?: number;
 }
 
 /**
@@ -217,10 +232,24 @@ export const DEFAULT_MAX_GAP_MS = 15_000;
  * on a device that sleeps and roams is most of them. Traffic a genuine reset
  * carried beyond the bound is lost rather than guessed at.
  */
-export const MAX_BYTES_PER_MS = 312_500;
+const MAX_BYTES_PER_MS = 312_500;
+
+/**
+ * Start the corrected counter over from the raw one, owing nothing.
+ *
+ * Every branch that re-baselines adds nothing to the total, so traffic measured
+ * across that span can never be charged. Carried instead, it would come out of
+ * the next reading, which is traffic the user really spent.
+ */
+function rebaseSelfTraffic(state: TotalState, rxBytes: number, txBytes: number): void {
+  state.selfTrafficDebtRx = 0;
+  state.selfTrafficDebtTx = 0;
+  state.correctedRx = rxBytes;
+  state.correctedTx = txBytes;
+}
 
 /** One counter's contribution since the last reading. */
-export function advance(counter: number, previous: number, ceilingBytes: number): number {
+function advance(counter: number, previous: number, ceilingBytes: number): number {
   if (counter >= previous) return counter - previous;
   return counter <= ceilingBytes ? counter : 0;
 }
@@ -317,6 +346,19 @@ export class ClientTotalsCore {
       userMerged: [...this.userMerged],
       rejectedPairs: [...this.rejectedPairs.values()],
     };
+  }
+
+  /** A device's counters with the recorder's own traffic taken off. Identical to
+   *  the raw ones for every device but the machine the recorder runs on, and
+   *  undefined until the device has been read once. */
+  correctedCounters(
+    clientId: number | undefined,
+    macAddress: string,
+  ): { rxBytes: number; txBytes: number } | undefined {
+    const state = this.states.get(this.resolveKey(keyOf(clientId, macAddress)));
+    if (!state || state.correctedRx === undefined || state.correctedTx === undefined)
+      return undefined;
+    return { rxBytes: state.correctedRx, txBytes: state.correctedTx };
   }
 
   /** Whether any bucket already covers this MAC — the seed guard, so a restart
@@ -417,6 +459,7 @@ export class ClientTotalsCore {
     name: string | undefined,
     liveKeys: Set<string>,
     captiveClientId?: string,
+    selfTraffic?: { receivedBytes: number; sentBytes: number },
   ): void {
     // An identity the user merged away routes into its survivor however often it
     // comes back. An adoption's alias does not: that one is inferred, and the old
@@ -427,6 +470,9 @@ export class ClientTotalsCore {
     if (!state)
       state = this.adoptOrCreate(clientId, macAddress, atMs, name, liveKeys, key, captiveClientId);
     if (captiveClientId) state.captiveClientId = captiveClientId;
+
+    state.selfTrafficDebtRx = (state.selfTrafficDebtRx ?? 0) + (selfTraffic?.receivedBytes ?? 0);
+    state.selfTrafficDebtTx = (state.selfTrafficDebtTx ?? 0) + (selfTraffic?.sentBytes ?? 0);
 
     const month = monthOf(atMs);
     if (month !== state.periodMonth) {
@@ -446,10 +492,31 @@ export class ClientTotalsCore {
       state.monthAnchorTx = state.lifetimeTx;
       state.periodMonth = month;
       state.sinceMs = monthStartMs(atMs);
+      rebaseSelfTraffic(state, rxBytes, txBytes);
     } else if (state.lastPollMs !== 0 && atMs - state.lastPollMs <= this.maxGapMs) {
       const ceiling = (atMs - state.lastPollMs) * MAX_BYTES_PER_MS;
-      state.lifetimeRx += advance(rxBytes, state.prevRx, ceiling);
-      state.lifetimeTx += advance(txBytes, state.prevTx, ceiling);
+      const rxAdvance = advance(rxBytes, state.prevRx, ceiling);
+      const txAdvance = advance(txBytes, state.prevTx, ceiling);
+      const rxSpent = Math.min(state.selfTrafficDebtRx, rxAdvance);
+      const txSpent = Math.min(state.selfTrafficDebtTx, txAdvance);
+      state.selfTrafficDebtRx -= rxSpent;
+      state.selfTrafficDebtTx -= txSpent;
+      state.lifetimeRx += rxAdvance - rxSpent;
+      state.lifetimeTx += txAdvance - txSpent;
+      // The corrected counter restarts with the raw one rather than staying
+      // monotonic: the rate tracker reads it, and a hidden reset leaves it
+      // dividing a whole post-reset counter by a single poll interval.
+      state.correctedRx =
+        rxBytes < state.prevRx
+          ? rxAdvance - rxSpent
+          : (state.correctedRx ?? rxBytes) + rxAdvance - rxSpent;
+      state.correctedTx =
+        txBytes < state.prevTx
+          ? txAdvance - txSpent
+          : (state.correctedTx ?? txBytes) + txAdvance - txSpent;
+    } else {
+      // Nothing was measured across this span, so nothing is owed for it.
+      rebaseSelfTraffic(state, rxBytes, txBytes);
     }
     state.prevRx = rxBytes;
     state.prevTx = txBytes;
