@@ -460,6 +460,11 @@ export function setAccountSessionReader(reader: (() => boolean) | null): void {
  *  the host's Wi-Fi, so the router bills it to the machine we run on. */
 let pendingSelfTraffic = { receivedBytes: 0, sentBytes: 0 };
 
+/** Whether the last poll found the roster row this recorder runs on. False means
+ *  its own polling is still counted as that device's usage. */
+let hostRowIdentified = false;
+let warnedNoHostRow = false;
+
 function takePendingSelfTraffic(): { receivedBytes: number; sentBytes: number } {
   const taken = pendingSelfTraffic;
   pendingSelfTraffic = { receivedBytes: 0, sentBytes: 0 };
@@ -886,6 +891,16 @@ async function getClientReadings(): Promise<ClientReading[]> {
   // Nothing to charge it to: a recorder off the router's own network, or a
   // roster that left us out. Held, it would come out of the next row to appear.
   if (!hostCharged) takePendingSelfTraffic();
+  // Once per run, and only once the roster has actually answered — an empty one
+  // is a poll that failed, not a machine that is missing from it.
+  if (!hostCharged && !warnedNoHostRow && clients.length > 0) {
+    warnedNoHostRow = true;
+    console.warn(
+      "[historian] no roster entry matches this machine, so its own polling is counted as that " +
+        "device's usage. Set HOST_LAN_IP to this machine's address on the Starlink network.",
+    );
+  }
+  hostRowIdentified = hostCharged;
   clientThroughput.retain(liveEntryKeys);
   return readings;
 }
@@ -1684,6 +1699,7 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
         // Rides the list both surfaces already poll, so the prompt needs no
         // request of its own and can never disagree with the rows beside it.
         mergeCandidates: clientTotals.mergeCandidates(Date.now()),
+        selfDeviceIdentified: hostRowIdentified,
       }),
     );
     return;

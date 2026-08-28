@@ -25,13 +25,6 @@ let subscribeToThroughput: ((listener: ThroughputListener) => () => void) | null
 let enableLiveThroughput: ((enabled: boolean) => void) | null = null;
 let chargeLanBytes: ((bytes: { receivedBytes: number; sentBytes: number }) => void) | null = null;
 
-/**
- * Charge dish or router traffic this process forwarded for the window.
- *
- * Those calls leave the machine on the same Wi-Fi as the recorder's own, so the
- * router bills them to the same roster entry. A no-op before the recorder
- * starts, and in the dev main that leaves it unstarted.
- */
 export function recordProxiedLanBytes(bytes: { receivedBytes: number; sentBytes: number }): void {
   chargeLanBytes?.(bytes);
 }
@@ -55,8 +48,6 @@ export async function startCollector(rendererRoot: string): Promise<void> {
   // account session this process holds. The recorder decides; only main can send.
   historian.setDevicePauser((clientId, paused) => pauseDevice(clientId, paused));
   historian.setAccountSessionReader(() => accountSignedIn());
-  // The window names the roster entry it is running on, which survives a router
-  // reset renumbering the roster; the addresses read here cannot.
   historian.setHostIdentityReader(() => hostIdentity());
   chargeLanBytes = historian.recordSelfTraffic;
   handleRequest = historian.handleRequest;

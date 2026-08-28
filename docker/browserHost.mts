@@ -95,12 +95,8 @@ function forwardableHeaders(request: IncomingMessage): Headers {
   return headers;
 }
 
-/**
- * `onLanBytes` charges a call to the recorder's own usage, and belongs only on
- * the dish and the router. CelesTrak and the speed test go out over the dish to
- * the internet: that is traffic the user really spent, and subtracting it would
- * quietly erase a speed test from the device that ran it.
- */
+/** `onLanBytes` only for the dish and router. CelesTrak and the speed test go out
+ *  over the dish, so charging them would erase real usage. */
 async function proxyTo(
   targetUrl: string,
   request: IncomingMessage,

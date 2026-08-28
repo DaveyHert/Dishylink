@@ -9,6 +9,7 @@ export interface SelfDeviceBinding {
   read: () => Promise<number | null>;
   /** Null clears the choice, which withdraws the pause control from every row. */
   write: (clientId: number | null) => Promise<void>;
+  namingCorrectsUsage?: boolean;
 }
 
 let binding: SelfDeviceBinding | null = null;

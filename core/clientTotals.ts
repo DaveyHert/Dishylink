@@ -98,19 +98,11 @@ export interface TotalState {
   /** When the counter was last read. 0 forces the next reading to re-baseline
    *  instead of measuring across it (a fresh bucket, an adoption, a month roll). */
   lastPollMs: number;
-  /**
-   * The recorder's own polling of the dish and router, measured but not yet
-   * taken off this device's counter. Non-zero only for the machine the recorder
-   * runs on, whose Wi-Fi carries it.
-   *
-   * A debt rather than a per-reading subtraction because the recorder polls
-   * several times per router refresh: most readings show a counter that has not
-   * moved, and subtracting within one would discard that reading's share.
-   */
+  /** The recorder's own polling, measured but not yet taken off this counter. A
+   *  debt, not a per-reading subtraction: the recorder polls several times per
+   *  router refresh, so most readings show a counter that has not moved. */
   selfTrafficDebtRx?: number;
   selfTrafficDebtTx?: number;
-  /** The counter with that traffic taken off, for a rate tracker that keeps its
-   *  own previous value and so cannot be told about a debt. */
   correctedRx?: number;
   correctedTx?: number;
 }
@@ -234,13 +226,9 @@ export const DEFAULT_MAX_GAP_MS = 15_000;
  */
 const MAX_BYTES_PER_MS = 312_500;
 
-/**
- * Start the corrected counter over from the raw one, owing nothing.
- *
- * Every branch that re-baselines adds nothing to the total, so traffic measured
- * across that span can never be charged. Carried instead, it would come out of
- * the next reading, which is traffic the user really spent.
- */
+/** A branch that re-baselines adds nothing to the total, so traffic measured
+ *  across that span can never be charged. Carried, it would come out of the next
+ *  reading, which is the user's own. */
 function rebaseSelfTraffic(state: TotalState, rxBytes: number, txBytes: number): void {
   state.selfTrafficDebtRx = 0;
   state.selfTrafficDebtTx = 0;

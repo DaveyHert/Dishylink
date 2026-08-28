@@ -41,7 +41,6 @@ function parseTrailers(trailerText: string): { status: number; message: string }
   return { status, message };
 }
 
-/** What one call put on the wire, as close as this layer can see it. */
 export interface GrpcWebCallBytes {
   requestBytes: number;
   responseBytes: number;
@@ -50,13 +49,8 @@ export interface GrpcWebCallBytes {
 /** "HTTP/1.1 200 OK\r\n" and the blank line that ends a header block. */
 const STATUS_LINE_BYTES = 17;
 
-/**
- * A header block's size on the wire: `name: value\r\n` per entry.
- *
- * Read rather than assumed. Node's undici, Chromium's fetch and Electron's
- * net.fetch each send a different set, and any of them shifts with a version
- * bump, so a constant measured on one of them decays silently on the others.
- */
+/** Read rather than assumed: undici, Chromium's fetch and Electron's net.fetch
+ *  each send a different set, so a constant measured on one decays on the rest. */
 function headerBytes(headers: Headers): number {
   let total = 0;
   headers.forEach((value, name) => {
@@ -73,11 +67,8 @@ export async function grpcWebUnaryCall(
   options: {
     fetch?: typeof fetch;
     headers?: Record<string, string>;
-    /**
-     * What this call cost on the wire, reported once it has completed. Only the
-     * headers we set ourselves are visible, so the client's own and the TCP/IP
-     * framing below the socket are a known few-percent undercount.
-     */
+    /** Only the headers we set are visible, so the client's own and the TCP/IP
+     *  framing below the socket are a known few-percent undercount. */
     onBytes?: (bytes: GrpcWebCallBytes) => void;
   } = {},
 ): Promise<Uint8Array> {

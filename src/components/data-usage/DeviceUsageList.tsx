@@ -24,6 +24,10 @@ import { CloseIcon } from "../../assets/icons/CloseIcon";
 import { InfoDot } from "../shared/InfoDot";
 import { DeviceMergePrompt } from "../shared/DeviceMergePrompt";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { Callout } from "../ui/callout";
+import { inlineLinkButton } from "../ui/action-button";
+import { requestPanel } from "../../hooks/usePanelRouting";
+import { selfDeviceHost } from "../../lib/selfDeviceHost";
 
 /** Local `year * 12 + month` — which monthly bucket an instant belongs to. */
 function monthKey(atMs: number): number {
@@ -32,8 +36,21 @@ function monthKey(atMs: number): number {
 }
 
 export function DeviceUsageList() {
-  const { totals, mergeCandidates, unavailable, writeError, reset, remove, clearAll, answerMerge } =
-    useClientTotals();
+  const {
+    totals,
+    mergeCandidates,
+    unavailable,
+    writeError,
+    selfDeviceIdentified,
+    reset,
+    remove,
+    clearAll,
+    answerMerge,
+  } = useClientTotals();
+  // The recorder cannot tell which row it runs on, so that device's figure still
+  // carries its polling. Where the user can name it, say so; a server recording
+  // from elsewhere is told through its own configuration instead.
+  const namingFixesIt = selfDeviceHost()?.namingCorrectsUsage === true;
   // "Active now" and the month a row belongs to are both judged against the
   // current time, which moves whether or not anything re-renders. One clock for
   // the whole list, ticking well inside the two-minute active threshold; a row
@@ -121,6 +138,29 @@ export function DeviceUsageList() {
       </div>
       {/* Below the rows: the question is about two of them, and reads as a
           footnote to the list rather than a banner over it. */}
+      {!selfDeviceIdentified && !unavailable && (
+        <Callout tone='info' iconSeverity='warn' className='mt-2.5'>
+          One device here counts Dishylink&rsquo;s own checks of your dish and router as its data.{" "}
+          {namingFixesIt ? (
+            <>
+              To leave them out,{" "}
+              <button
+                type='button'
+                className={inlineLinkButton}
+                onClick={() => requestPanel("settings", "app")}
+              >
+                pick the device you are using
+              </button>{" "}
+              under app&rsquo;s settings.
+            </>
+          ) : (
+            <>
+              To leave them out, set <code>HOST_LAN_IP</code> to the address of the machine running
+              the recorder.
+            </>
+          )}
+        </Callout>
+      )}
       <DeviceMergePrompt
         candidates={mergeCandidates}
         totals={totals ?? []}

@@ -41,7 +41,11 @@ setCloudHost({ transport: extensionCloudTransport, signIn: extensionCloudSignIn 
 
 // Chrome extensions cannot resolve the viewer's LAN IP or MAC, so the device this
 // runs on is whichever roster entry the user named.
-setSelfDeviceHost({ read: loadSelfDeviceClientId, write: storeSelfDeviceClientId });
+setSelfDeviceHost({
+  read: loadSelfDeviceClientId,
+  write: storeSelfDeviceClientId,
+  namingCorrectsUsage: true,
+});
 
 // The background worker posts OS notifications for alerts the user is not looking
 // at — its alarm fires with no dashboard open. So the extension declares itself an

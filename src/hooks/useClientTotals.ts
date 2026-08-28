@@ -18,6 +18,9 @@ export function useClientTotals() {
    *  the list beside it. */
   const [mergeCandidates, setMergeCandidates] = useState<MergeCandidate[]>([]);
   const [unavailable, setUnavailable] = useState(false);
+  /** False while the recorder cannot tell which row is the machine it runs on,
+   *  whose figure then still carries the recorder's own polling. */
+  const [selfDeviceIdentified, setSelfDeviceIdentified] = useState(true);
   // A rejected write is not an exception — `fetch` resolves on 4xx — and the
   // reload in `finally` puts the row straight back. Without this the buttons
   // would look like they did nothing at all.
@@ -40,9 +43,11 @@ export function useClientTotals() {
       const payload = (await response.json()) as {
         totals?: ClientUsageTotal[];
         mergeCandidates?: MergeCandidate[];
+        selfDeviceIdentified?: boolean;
       };
       setTotals(payload.totals ?? []);
       setMergeCandidates(payload.mergeCandidates ?? []);
+      setSelfDeviceIdentified(payload.selfDeviceIdentified !== false);
       setUnavailable(false);
     } catch {
       setUnavailable(true);
@@ -147,5 +152,15 @@ export function useClientTotals() {
     [load, checkWrite],
   );
 
-  return { totals, mergeCandidates, unavailable, writeError, reset, remove, clearAll, answerMerge };
+  return {
+    totals,
+    mergeCandidates,
+    unavailable,
+    writeError,
+    selfDeviceIdentified,
+    reset,
+    remove,
+    clearAll,
+    answerMerge,
+  };
 }

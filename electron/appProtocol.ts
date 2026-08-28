@@ -94,14 +94,6 @@ async function forwardable(request: Request): Promise<RequestInit> {
   };
 }
 
-/**
- * Charge a dish or router call to the recorder's own usage.
- *
- * Only the LAN devices: this same helper must never wrap CelesTrak or the speed
- * test, whose traffic really does go out over the dish and is the user's to own.
- * The clone is what keeps the body intact for the renderer while its size is
- * counted here.
- */
 async function chargingLanBytes(
   targetUrl: () => string,
   requestInit: RequestInit,
@@ -125,7 +117,6 @@ async function chargingLanBytes(
   return response;
 }
 
-/** A header block's size on the wire: `name: value\r\n` per entry. */
 function headerBytes(headers: Headers): number {
   let total = 0;
   headers.forEach((value, name) => {
@@ -134,11 +125,8 @@ function headerBytes(headers: Headers): number {
   return total;
 }
 
-/**
- * `chargeToRecorder` belongs only on the dish and the router, whose traffic never
- * leaves the LAN. CelesTrak shares this helper and goes out over the dish, so
- * charging it would quietly erase a real download from the device that made it.
- */
+/** `chargeToRecorder` only for the dish and router. CelesTrak shares this helper
+ *  and goes out over the dish, so charging it would erase real usage. */
 async function proxy(
   request: Request,
   targetUrl: string,
@@ -165,8 +153,7 @@ async function proxyRouter(request: Request, path: string): Promise<Response> {
       init,
       () => net.fetch(ROUTER_ORIGIN_OVERRIDE + path, init),
     );
-  // The origin is only settled inside run(), which may try more than one, so the
-  // one that answered is read back afterwards rather than guessed at.
+  // run() may try more than one origin, so the one that answered is read back.
   let reachedUrl = path;
   return chargingLanBytes(
     () => reachedUrl,
