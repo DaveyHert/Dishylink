@@ -220,7 +220,7 @@ export const DEFAULT_MAX_GAP_MS = 15_000;
 const MAX_BYTES_PER_MS = 312_500;
 
 /** One counter's contribution since the last reading. */
-function advance(counter: number, previous: number, ceilingBytes: number): number {
+export function advance(counter: number, previous: number, ceilingBytes: number): number {
   if (counter >= previous) return counter - previous;
   return counter <= ceilingBytes ? counter : 0;
 }
