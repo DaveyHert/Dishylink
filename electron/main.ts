@@ -650,6 +650,14 @@ function registerMenuBarThroughputHandler(): void {
 }
 
 void app.whenReady().then(async () => {
+  // A second launch (the desktop shortcut while the tray copy runs) would start a
+  // second collector and crash on the data-dir writer lock; hand the launch to the
+  // running instance instead.
+  if (!app.requestSingleInstanceLock()) {
+    app.quit();
+    return;
+  }
+  app.on("second-instance", showWindow);
   // Dev shows Electron's default icon; a packaged build carries its own, so set the
   // dock icon only in dev.
   if (process.platform === "darwin" && !app.isPackaged) {
