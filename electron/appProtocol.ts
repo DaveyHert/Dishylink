@@ -13,6 +13,7 @@ import { join, extname, normalize, sep } from "node:path";
 import { createRouterOrigins } from "../core/routerEndpoint";
 import { DISH_LAN_ADDRESS } from "../core/dishClient";
 import { preferences } from "./preferences";
+import { recordProxiedLanBytes } from "./collector";
 
 const DISH_PORT = 9201;
 
@@ -93,8 +94,49 @@ async function forwardable(request: Request): Promise<RequestInit> {
   };
 }
 
+/**
+ * Charge a dish or router call to the recorder's own usage.
+ *
+ * Only the LAN devices: this same helper must never wrap CelesTrak or the speed
+ * test, whose traffic really does go out over the dish and is the user's to own.
+ * The clone is what keeps the body intact for the renderer while its size is
+ * counted here.
+ */
+async function chargingLanBytes(
+  targetUrl: string,
+  requestInit: RequestInit,
+  send: () => Promise<Response>,
+): Promise<Response> {
+  const response = await send();
+  const sentBytes =
+    (requestInit.body instanceof ArrayBuffer ? requestInit.body.byteLength : 0) +
+    headerBytes(new Headers(requestInit.headers)) +
+    targetUrl.length;
+  void response
+    .clone()
+    .arrayBuffer()
+    .then((body) =>
+      recordProxiedLanBytes({
+        receivedBytes: body.byteLength + headerBytes(response.headers),
+        sentBytes,
+      }),
+    )
+    .catch(() => {});
+  return response;
+}
+
+/** A header block's size on the wire: `name: value\r\n` per entry. */
+function headerBytes(headers: Headers): number {
+  let total = 0;
+  headers.forEach((value, name) => {
+    total += name.length + value.length + 4;
+  });
+  return total;
+}
+
 async function proxy(request: Request, targetUrl: string): Promise<Response> {
-  return net.fetch(targetUrl, await forwardable(request));
+  const init = await forwardable(request);
+  return chargingLanBytes(targetUrl, init, () => net.fetch(targetUrl, init));
 }
 
 /**
@@ -106,8 +148,13 @@ async function proxy(request: Request, targetUrl: string): Promise<Response> {
  */
 async function proxyRouter(request: Request, path: string): Promise<Response> {
   const init = await forwardable(request);
-  if (ROUTER_ORIGIN_OVERRIDE) return net.fetch(ROUTER_ORIGIN_OVERRIDE + path, init);
-  return routerOrigins.run((origin) => net.fetch(origin + path, init));
+  if (ROUTER_ORIGIN_OVERRIDE)
+    return chargingLanBytes(ROUTER_ORIGIN_OVERRIDE + path, init, () =>
+      net.fetch(ROUTER_ORIGIN_OVERRIDE + path, init),
+    );
+  return chargingLanBytes(path, init, () =>
+    routerOrigins.run((origin) => net.fetch(origin + path, init)),
+  );
 }
 
 /**

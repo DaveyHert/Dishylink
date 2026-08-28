@@ -11,6 +11,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { AlertTransition } from "../core/alertEngine";
 import { preferences } from "./preferences";
 import { accountSignedIn, pauseDevice } from "./cloud";
+import { hostIdentity } from "./selfDevice";
 import type { ThroughputSample } from "../collector/historian.mts";
 
 export type { ThroughputSample };
@@ -22,6 +23,18 @@ let handleRequest: NodeHandler | null = null;
 let subscribeToAlerts: ((listener: AlertListener) => () => void) | null = null;
 let subscribeToThroughput: ((listener: ThroughputListener) => () => void) | null = null;
 let enableLiveThroughput: ((enabled: boolean) => void) | null = null;
+let chargeLanBytes: ((bytes: { receivedBytes: number; sentBytes: number }) => void) | null = null;
+
+/**
+ * Charge dish or router traffic this process forwarded for the window.
+ *
+ * Those calls leave the machine on the same Wi-Fi as the recorder's own, so the
+ * router bills them to the same roster entry. A no-op before the recorder
+ * starts, and in the dev main that leaves it unstarted.
+ */
+export function recordProxiedLanBytes(bytes: { receivedBytes: number; sentBytes: number }): void {
+  chargeLanBytes?.(bytes);
+}
 
 /**
  * Start the historian in this process. It is configured through the same env the
@@ -42,6 +55,10 @@ export async function startCollector(rendererRoot: string): Promise<void> {
   // account session this process holds. The recorder decides; only main can send.
   historian.setDevicePauser((clientId, paused) => pauseDevice(clientId, paused));
   historian.setAccountSessionReader(() => accountSignedIn());
+  // The window names the roster entry it is running on, which survives a router
+  // reset renumbering the roster; the addresses read here cannot.
+  historian.setHostIdentityReader(() => hostIdentity());
+  chargeLanBytes = historian.recordSelfTraffic;
   handleRequest = historian.handleRequest;
   subscribeToAlerts = historian.onAlertTransitions;
   subscribeToThroughput = historian.onThroughput;

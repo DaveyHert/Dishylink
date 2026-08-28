@@ -217,7 +217,7 @@ export const DEFAULT_MAX_GAP_MS = 15_000;
  * on a device that sleeps and roams is most of them. Traffic a genuine reset
  * carried beyond the bound is lost rather than guessed at.
  */
-const MAX_BYTES_PER_MS = 312_500;
+export const MAX_BYTES_PER_MS = 312_500;
 
 /** One counter's contribution since the last reading. */
 export function advance(counter: number, previous: number, ceilingBytes: number): number {

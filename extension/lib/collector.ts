@@ -24,6 +24,8 @@ import {
 } from "@core/alertEngine";
 import { sortBySeverity, type AlertState } from "@core/alertDefinitions";
 import { ClientTotalsCore, migrateSnapshot } from "@core/clientTotals";
+import { SelfTrafficCorrection } from "@core/selfTrafficCorrection";
+import { loadSelfDeviceClientId } from "./selfDevice";
 import { runMeters } from "./meterEnforcement";
 import type { MeterHost } from "./meterHost";
 import { usageKey } from "@core/clientUsage";
@@ -41,6 +43,23 @@ const OBSTRUCTION_INTERVAL_MS = 3_600_000; // one snapshot an hour, as the histo
 // while tolerating alarm jitter, and the counter delta is valid across any gap
 // the counter did not reset. Tune against real inter-drain gaps if they run wide.
 const CLIENT_MAX_GAP_MS = 5 * 60_000;
+
+/**
+ * This drain's own dish and router traffic, taken back out of the usage recorded
+ * for the machine the browser runs on.
+ *
+ * Rebuilt every tick because the service worker is torn down between alarms; the
+ * counters it measures against are reloaded from storage, so only the bytes
+ * measured within one tick live in memory.
+ */
+const selfTraffic = new SelfTrafficCorrection();
+
+/** Charges a client's calls to the correction above. */
+function chargeToSelf(client: DishClient): DishClient {
+  client.onBytes = ({ requestBytes, responseBytes }) =>
+    selfTraffic.record({ receivedBytes: responseBytes, sentBytes: requestBytes });
+  return client;
+}
 
 export type DrainStatus = { ok: true; at: number } | { ok: false; at: number; message: string };
 
@@ -82,7 +101,7 @@ export async function drainOnce(host: MeterHost): Promise<DrainResult> {
   try {
     [store, client] = await Promise.all([
       IndexedDbHistory.open(),
-      DishClient.load("dish", { handleUrl: dishHandleUrl() }),
+      DishClient.load("dish", { handleUrl: dishHandleUrl() }).then(chargeToSelf),
     ]);
   } catch (error) {
     // No store means nowhere to record alerts and nowhere to read the open
@@ -202,7 +221,7 @@ async function readRouterAlerts(
   store: HistoryStore,
 ): Promise<{ reading: DeviceReading; blocked: Map<string, boolean> }> {
   try {
-    const router = await DishClient.load("router", { handleUrl: routerHandleUrl() });
+    const router = chargeToSelf(await DishClient.load("router", { handleUrl: routerHandleUrl() }));
     // Settled, not all-or-nothing: one RPC faltering (an unreachable client poll)
     // must not drop the radio and status feeds that shared the round trip.
     const [stats, status, clients] = await Promise.allSettled([
@@ -258,8 +277,36 @@ async function recordClients(
 ): Promise<void> {
   const identified = clients.filter((c) => c.clientId !== undefined || c.macAddress);
   const minute = Math.floor(now / 60_000) * 60;
-  const rxOf = (c: WifiClientJson) => Number(c.rxStats?.bytes ?? 0);
-  const txOf = (c: WifiClientJson) => Number(c.txStats?.bytes ?? 0);
+
+  // The row for the machine this browser runs on carries our own polling of the
+  // dish and the router, which never left the LAN. It is corrected once, here,
+  // so the stored minute rows, the odometer and the allowance that trips off it
+  // all read the same figure. Only the device the user named can be corrected:
+  // an address match would be wrong from a browser that is not on this LAN, and
+  // the router masks every MAC it reports.
+  const selfClientId = await loadSelfDeviceClientId();
+  const correctionState = await store.readSelfTrafficState();
+  if (correctionState) selfTraffic.loadSnapshot(correctionState);
+  const selfRow =
+    selfClientId === null ? undefined : identified.find((c) => c.clientId === selfClientId);
+  let corrected: { rxBytes: number; txBytes: number } | undefined;
+  if (selfRow?.rxStats?.bytes !== undefined && selfRow.txStats?.bytes !== undefined) {
+    corrected = selfTraffic.apply(
+      { rxBytes: Number(selfRow.rxStats.bytes), txBytes: Number(selfRow.txStats.bytes) },
+      now,
+    );
+  } else {
+    // Nothing to charge this tick's measurement against. Held, it would build up
+    // for as long as the device stayed unnamed or absent and then take a bite
+    // out of real traffic the moment its row came back.
+    selfTraffic.forgetPending();
+  }
+  await store.writeSelfTrafficState(selfTraffic.toSnapshot());
+
+  const rxOf = (c: WifiClientJson) =>
+    c === selfRow && corrected ? corrected.rxBytes : Number(c.rxStats?.bytes ?? 0);
+  const txOf = (c: WifiClientJson) =>
+    c === selfRow && corrected ? corrected.txBytes : Number(c.txStats?.bytes ?? 0);
   const rows: ClientMinuteRow[] = identified.map((c) => ({
     minute,
     key: usageKey(c.clientId, c.macAddress),

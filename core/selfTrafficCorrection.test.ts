@@ -1,15 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { SelfTrafficCorrection } from "./selfTrafficCorrection";
 
-const WIDE_CEILING = 1_000_000_000;
+const T0 = 1_700_000_000_000;
+const STEP_MS = 200;
 
 function corrections(
   correction: SelfTrafficCorrection,
   readings: { raw: number; self: number }[],
 ): number[] {
-  return readings.map(({ raw, self }) => {
+  return readings.map(({ raw, self }, index) => {
     correction.record({ receivedBytes: self, sentBytes: 0 });
-    return correction.apply({ rxBytes: raw, txBytes: 0 }, WIDE_CEILING).rxBytes;
+    return correction.apply({ rxBytes: raw, txBytes: 0 }, T0 + index * STEP_MS).rxBytes;
   });
 }
 
@@ -17,7 +18,7 @@ describe("SelfTrafficCorrection", () => {
   it("passes the first reading through as the baseline", () => {
     const correction = new SelfTrafficCorrection();
     correction.record({ receivedBytes: 5_000, sentBytes: 5_000 });
-    expect(correction.apply({ rxBytes: 900, txBytes: 400 }, WIDE_CEILING)).toEqual({
+    expect(correction.apply({ rxBytes: 900, txBytes: 400 }, T0)).toEqual({
       rxBytes: 900,
       txBytes: 400,
     });
@@ -79,17 +80,19 @@ describe("SelfTrafficCorrection", () => {
   it("drops a reset the ceiling cannot vouch for, as clientTotals does", () => {
     const correction = new SelfTrafficCorrection();
     correction.record({ receivedBytes: 0, sentBytes: 0 });
-    correction.apply({ rxBytes: 2_000_000_000, txBytes: 0 }, WIDE_CEILING);
+    correction.apply({ rxBytes: 2_000_000_000, txBytes: 0 }, T0);
     correction.record({ receivedBytes: 0, sentBytes: 0 });
-    expect(correction.apply({ rxBytes: 1_000_000_000, txBytes: 0 }, 1_000).rxBytes).toBe(0);
+    // One millisecond on the fastest link this router serves cannot account for
+    // a gigabyte, so the restarted counter is dropped rather than believed.
+    expect(correction.apply({ rxBytes: 1_000_000_000, txBytes: 0 }, T0 + 1).rxBytes).toBe(0);
   });
 
   it("keeps receive and send debts apart", () => {
     const correction = new SelfTrafficCorrection();
     correction.record({ receivedBytes: 0, sentBytes: 0 });
-    correction.apply({ rxBytes: 1_000, txBytes: 1_000 }, WIDE_CEILING);
+    correction.apply({ rxBytes: 1_000, txBytes: 1_000 }, T0);
     correction.record({ receivedBytes: 500, sentBytes: 0 });
-    expect(correction.apply({ rxBytes: 2_000, txBytes: 2_000 }, WIDE_CEILING)).toEqual({
+    expect(correction.apply({ rxBytes: 2_000, txBytes: 2_000 }, T0 + STEP_MS)).toEqual({
       rxBytes: 1_500,
       txBytes: 2_000,
     });
@@ -98,11 +101,11 @@ describe("SelfTrafficCorrection", () => {
   it("accumulates every call made between two polls", () => {
     const correction = new SelfTrafficCorrection();
     correction.record({ receivedBytes: 0, sentBytes: 0 });
-    correction.apply({ rxBytes: 1_000, txBytes: 0 }, WIDE_CEILING);
+    correction.apply({ rxBytes: 1_000, txBytes: 0 }, T0);
     correction.record({ receivedBytes: 100, sentBytes: 0 });
     correction.record({ receivedBytes: 150, sentBytes: 0 });
     correction.record({ receivedBytes: 250, sentBytes: 0 });
-    expect(correction.apply({ rxBytes: 2_000, txBytes: 0 }, WIDE_CEILING).rxBytes).toBe(1_500);
+    expect(correction.apply({ rxBytes: 2_000, txBytes: 0 }, T0 + STEP_MS).rxBytes).toBe(1_500);
   });
 
   it("spends each poll's measurement once", () => {

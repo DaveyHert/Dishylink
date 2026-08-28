@@ -15,7 +15,7 @@
 // each consumer, so core/clientTotals and core/throughputTracker are untouched
 // and keep their reset and gap handling exactly as they are.
 
-import { advance } from "./clientTotals";
+import { advance, MAX_BYTES_PER_MS } from "./clientTotals";
 
 /** A poll's raw reading, as the router reported it. */
 export interface RawCounters {
@@ -54,6 +54,13 @@ function newSide(): Side {
   return { previousRaw: 0, corrected: 0, debtBytes: 0 };
 }
 
+/** Enough to resume exactly, for a recorder torn down between polls. */
+export interface SelfTrafficSnapshot {
+  receiveSide: Side;
+  sendSide: Side;
+  lastApplyMs: number;
+}
+
 /**
  * The host's corrected counters, one instance per recorder.
  *
@@ -63,7 +70,7 @@ function newSide(): Side {
 export class SelfTrafficCorrection {
   private receiveSide = newSide();
   private sendSide = newSide();
-  private started = false;
+  private lastApplyMs = 0;
   private pendingSelfTraffic: SelfTrafficBytes = { receivedBytes: 0, sentBytes: 0 };
 
   /**
@@ -76,19 +83,45 @@ export class SelfTrafficCorrection {
   }
 
   /**
-   * Fold one raw reading in and return what the consumers should see.
-   *
-   * `ceilingBytes` is the caller's bound on what a restarted counter can
-   * legitimately carry, matching what clientTotals applies to the same reading.
+   * Resume from a persisted snapshot. Pending traffic is deliberately not
+   * carried: it was measured by a process that is gone, and the reading it
+   * would have been charged against never arrived.
    */
-  apply(raw: RawCounters, ceilingBytes: number): RawCounters {
+  loadSnapshot(snapshot: SelfTrafficSnapshot): void {
+    this.receiveSide = { ...snapshot.receiveSide };
+    this.sendSide = { ...snapshot.sendSide };
+    this.lastApplyMs = snapshot.lastApplyMs;
+  }
+
+  toSnapshot(): SelfTrafficSnapshot {
+    return {
+      receiveSide: { ...this.receiveSide },
+      sendSide: { ...this.sendSide },
+      lastApplyMs: this.lastApplyMs,
+    };
+  }
+
+  /**
+   * Drop what has accrued since the last reading, unspent.
+   *
+   * For a poll that produced no reading to charge it against: the recorder is
+   * not on the router's own network, or is but was left out of the roster this
+   * time. Holding it instead would let a debt build for as long as that lasts
+   * and then take a bite out of real traffic the moment the row came back.
+   */
+  forgetPending(): void {
+    this.pendingSelfTraffic = { receivedBytes: 0, sentBytes: 0 };
+  }
+
+  /** Fold one raw reading in and return what the consumers should see. */
+  apply(raw: RawCounters, atMs: number): RawCounters {
     const selfTraffic = this.pendingSelfTraffic;
     this.pendingSelfTraffic = { receivedBytes: 0, sentBytes: 0 };
 
     // The first reading establishes the baseline both sides measure from; there
     // is no delta yet, so the traffic that led up to it is not ours to remove.
-    if (!this.started) {
-      this.started = true;
+    if (this.lastApplyMs === 0) {
+      this.lastApplyMs = atMs;
       this.receiveSide.previousRaw = raw.rxBytes;
       this.receiveSide.corrected = raw.rxBytes;
       this.sendSide.previousRaw = raw.txBytes;
@@ -96,6 +129,11 @@ export class SelfTrafficCorrection {
       return { rxBytes: raw.rxBytes, txBytes: raw.txBytes };
     }
 
+    // What the fastest link could have carried since the last reading — the same
+    // bound clientTotals puts on a restarted counter, so a reset is treated
+    // identically on both sides of this correction.
+    const ceilingBytes = Math.max(0, atMs - this.lastApplyMs) * MAX_BYTES_PER_MS;
+    this.lastApplyMs = atMs;
     return {
       rxBytes: applySide(this.receiveSide, raw.rxBytes, selfTraffic.receivedBytes, ceilingBytes),
       txBytes: applySide(this.sendSide, raw.txBytes, selfTraffic.sentBytes, ceilingBytes),

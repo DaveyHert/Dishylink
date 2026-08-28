@@ -17,7 +17,7 @@ import {
   type Registry,
 } from "@bufbuild/protobuf";
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { grpcWebUnaryCall } from "./grpcWeb";
+import { grpcWebUnaryCall, type GrpcWebCallBytes } from "./grpcWeb";
 
 // Same Device service on both boxes; the schema protoset is identical. The
 // defaults are the dev/Electron same-origin proxy paths; a host that reaches the
@@ -479,6 +479,15 @@ function encodeOneofRequest(fieldNumber: number, subMessageBytes: number[] = [])
 // ---------- client ----------
 
 export class DishClient {
+  /**
+   * What each call costs on the wire, when the caller wants to know.
+   *
+   * The dish and the router are on the host's own Wi-Fi, so a recorder that
+   * polls them is charged for it by the router's per-client byte counters. Set
+   * this and that share can be taken back out — see core/selfTrafficCorrection.
+   */
+  onBytes?: (bytes: GrpcWebCallBytes) => void;
+
   private constructor(
     private readonly handleUrl: string,
     private readonly requestSchema: DescMessage,
@@ -526,6 +535,7 @@ export class DishClient {
       this.handleUrl,
       encodeOneofRequest(fieldNumber, subMessageBytes),
       abortSignal,
+      { onBytes: this.onBytes },
     );
     const responseMessage = fromBinary(this.responseSchema, responseBytes);
     return toJson(this.responseSchema, responseMessage, {

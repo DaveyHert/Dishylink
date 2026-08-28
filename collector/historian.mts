@@ -26,7 +26,13 @@ import {
 } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { networkInterfaces } from "node:os";
-import { identityFromEnv } from "../core/hostNetworkIdentity.ts";
+import {
+  identityFromEnv,
+  resolveHostIdentity,
+  type HostNetworkIdentity,
+} from "../core/hostNetworkIdentity.ts";
+import { clientIsHost } from "../core/routerClientUpdate.ts";
+import { SelfTrafficCorrection, type SelfTrafficBytes } from "../core/selfTrafficCorrection.ts";
 import { join, resolve } from "node:path";
 import { createFileRegistry, fromBinary, toJson, type DescMessage } from "@bufbuild/protobuf";
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
@@ -248,6 +254,10 @@ async function deviceCall(
     url,
     requestBytes(fieldNumber),
     AbortSignal.timeout(timeoutMs),
+    {
+      onBytes: ({ requestBytes: sent, responseBytes: received }) =>
+        selfTraffic.record({ receivedBytes: received, sentBytes: sent }),
+    },
   );
   return toJson(responseSchema, fromBinary(responseSchema, bytes), { registry }) as Record<
     string,
@@ -445,6 +455,39 @@ let readAccountSignedIn: (() => boolean) | null = null;
 
 export function setAccountSessionReader(reader: (() => boolean) | null): void {
   readAccountSignedIn = reader;
+}
+
+/**
+ * This recorder's own polling, taken back out of the usage recorded for the
+ * machine it runs on. Every dish and router call rides the host's Wi-Fi, so the
+ * router's per-client counters bill it for the recording itself.
+ */
+const selfTraffic = new SelfTrafficCorrection();
+
+/**
+ * Who this machine is on the router's roster.
+ *
+ * Addresses alone are enough while the recorder sits on the router's own LAN,
+ * which is the only place its counters can be billed to us anyway. A host that
+ * knows its clientId supplies one through the setter below, which settles it
+ * even after a router reset renumbers the roster.
+ */
+let readHostIdentity: () => HostNetworkIdentity = () => resolveHostIdentity();
+
+export function setHostIdentityReader(reader: () => HostNetworkIdentity): void {
+  readHostIdentity = reader;
+}
+
+/**
+ * Charge dish or router traffic this process sent on someone else's behalf.
+ *
+ * The dashboard makes its own calls, and every host proxies them through the
+ * process the recorder runs in, so they leave the machine on the same Wi-Fi and
+ * land on the same row of the router's roster. Counting only what this file
+ * asked for would leave that share billed to the user.
+ */
+export function recordSelfTraffic(bytes: SelfTrafficBytes): void {
+  selfTraffic.record(bytes);
 }
 
 /** Whether the router says each device is blocked, as of the last client poll.
@@ -766,6 +809,8 @@ async function getClientReadings(): Promise<ClientReading[]> {
     (client): client is WireClient & { macAddress: string } =>
       !!client.macAddress && (!client.role || client.role === "CLIENT"),
   );
+  const hostIdentity = readHostIdentity();
+  let hostCharged = false;
   const totalsLiveKeys = clientTotals.notePoll(
     clients.map((client) => ({ clientId: client.clientId, macAddress: client.macAddress })),
   );
@@ -786,10 +831,20 @@ async function getClientReadings(): Promise<ClientReading[]> {
     // Absent counters are "we did not get a reading", not zero bytes moved —
     // passing 0 here would read as the counter resetting and, worse, would be
     // recorded as a one-second dropout on an otherwise busy device.
-    const counters =
+    const rawCounters =
       rxBytes === undefined || txBytes === undefined
         ? undefined
         : { rxBytes: Number(rxBytes), txBytes: Number(txBytes) };
+
+    // On this machine's own row the counters include our polling of the dish and
+    // the router, which never left the LAN. Both the odometer and the rate
+    // tracker read what comes back here, so correcting it once fixes the monthly
+    // total, the allowance that trips off it, and the throughput chart together.
+    let counters = rawCounters;
+    if (rawCounters && clientIsHost(client, hostIdentity)) {
+      counters = selfTraffic.apply(rawCounters, nowMs);
+      hostCharged = true;
+    }
 
     // Fold the raw counter into the monthly odometer. Done here, at the fast
     // poll, so a re-association's counter reset is caught the moment it happens
@@ -828,6 +883,7 @@ async function getClientReadings(): Promise<ClientReading[]> {
       txBytes: counters?.txBytes ?? 0,
     });
   }
+  if (!hostCharged) selfTraffic.forgetPending();
   clientThroughput.retain(liveEntryKeys);
   return readings;
 }
