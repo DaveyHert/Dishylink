@@ -12,6 +12,7 @@
 import { Tooltip as TooltipPrimitive } from "radix-ui";
 import { cn } from "@/lib/utils";
 import { SeverityDot, type Severity } from "../ui/severity-icon";
+import type { ReactNode } from "react";
 
 // Portalled by Radix, so this is presentation only — the resets (not-italic,
 // normal-case, tracking-normal) guard against whatever context it lands in.
@@ -35,6 +36,29 @@ export function InfoDot({ tip, severity = "normal" }: { tip: string; severity?: 
             collisionPadding={12}
           >
             {tip}
+          </TooltipPrimitive.Content>
+        </TooltipPrimitive.Portal>
+      </TooltipPrimitive.Root>
+    </TooltipPrimitive.Provider>
+  );
+}
+
+export function TooltipOnElement({ el, info }: { el: ReactNode, info: string }) {
+  return (
+    <TooltipPrimitive.Provider delayDuration={120}>
+      <TooltipPrimitive.Root>
+        <TooltipPrimitive.Trigger asChild>
+	{el}
+        </TooltipPrimitive.Trigger>
+        <TooltipPrimitive.Portal>
+          <TooltipPrimitive.Content
+            className={infoTip}
+            side='top'
+            align='start'
+            sideOffset={8}
+            collisionPadding={12}
+          >
+            {info}
           </TooltipPrimitive.Content>
         </TooltipPrimitive.Portal>
       </TooltipPrimitive.Root>

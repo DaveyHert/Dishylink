@@ -66,14 +66,18 @@ export function formatClockTimeShort(timestampMs: number): string {
   return new Date(timestampMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
-export function formatDateTime(timestampMs: number): string {
+export function formatDate(timestampMs: number): string {
   const date = new Date(timestampMs);
   const datePart = date.toLocaleDateString(undefined, {
     day: "numeric",
     month: "short",
     year: "numeric",
   });
-  return `${datePart} · ${formatClockTimeShort(timestampMs)}`;
+  return `${datePart}`;
+}
+
+export function formatDateTime(timestampMs: number): string {
+  return `${formatDate(timestampMs)} · ${formatClockTimeShort(timestampMs)}`;
 }
 
 /** The dish's `hasActuators` enum ("HAS_ACTUATORS_YES"/"_NO") → plain Yes/No.
