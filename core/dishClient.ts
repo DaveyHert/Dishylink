@@ -157,6 +157,10 @@ export interface DishStatusJson {
   dlBandwidthRestrictedReason?: string;
   ulBandwidthRestrictedReason?: string;
   isSnrAboveNoiseFloor?: boolean;
+  /** Whether the dish's snow-melt heater is running. Compared with `=== true`
+   *  where it is read: proto3 JSON omits a false field, so absence means "not
+   *  known to be active", never "off". */
+  snowMeltActive?: boolean;
   /** Set when SNR has stayed low long enough to look like weather, not a blip —
    *  the flag behind the dish's own RAIN_SNR_PERSISTENTLY_LOW alert. Absent
    *  (proto3 drops false) means the signal is holding. */

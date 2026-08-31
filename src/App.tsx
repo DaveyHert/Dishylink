@@ -9,6 +9,7 @@ import { useOutageNotifications } from "./hooks/useOutageNotifications";
 import { useThermalEvents } from "./hooks/useThermalEvents";
 import { useDeviceAlerts } from "./hooks/useDeviceAlerts";
 import { useOutageHistory, mergeOutages } from "./hooks/useOutageHistory";
+import { usePostmortemReports } from "./hooks/usePostmortemReports";
 import {
   notificationsOn as readNotificationsOn,
   notificationsBlockedReason as readNotificationsBlockedReason,
@@ -73,6 +74,7 @@ export default function App() {
     () => mergeOutages(telemetry.outageEvents, persistedOutages),
     [telemetry.outageEvents, persistedOutages],
   );
+  const outageReports = usePostmortemReports();
   const routerNetwork = useRouterNetwork(openPanel === "network" || openPanel === "settings");
   const routerUnreachable = useRouterUnreachable(
     routerNetwork.routerReachable,
@@ -151,6 +153,7 @@ export default function App() {
               averagePowerW={averagePowerW}
               outageEvents={outageEvents}
               thermalEvents={thermalEvents}
+              reports={outageReports}
               samples={samples}
               onOpenSatelliteView={openSkyView}
               onExpandTerminal={() => setOpenPanel("terminal")}

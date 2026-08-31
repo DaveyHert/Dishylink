@@ -53,6 +53,8 @@ import { foldSamplesToLatencyMinutes } from "../core/latencyBuckets.ts";
 import { summarizeLatency } from "../core/latencySummary.ts";
 import { ThermalStore } from "./thermalStore.mts";
 import { EventStore } from "./eventStore.mts";
+import { PostmortemStore } from "./postmortemStore.mts";
+import { buildOutageReport, BEFORE_WINDOW_MS } from "../core/postmortem.ts";
 import { ClientStore, type ClientReading } from "./clientStore.mts";
 import { ClientWindow } from "./clientWindow.mts";
 import { resolveRows, foldMinuteCollisions } from "../core/clientHistory.ts";
@@ -81,7 +83,7 @@ import { parseScheduleParam } from "../core/schedule.ts";
 import { CONNECT_ACCOUNT_ADVICE, dataLimitAlertSpec } from "../core/dataMeterAlert.ts";
 import { ThroughputTracker } from "../core/throughputTracker.ts";
 import { usageKey } from "../core/clientUsage.ts";
-import { AlertStore } from "./alertStore.mts";
+import { AlertStore, type AlertEpisode } from "./alertStore.mts";
 import { AlertEngine, type AlertObservation, type AlertTransition } from "../core/alertEngine.ts";
 import { ObstructionStore, packCells } from "./obstructionStore.mts";
 
@@ -120,6 +122,7 @@ const CLIENT_TOTALS_FILE = join(DATA_DIR, "client-totals.json");
 const METERS_FILE = join(DATA_DIR, "meters.json");
 const DEVICE_GROUPS_FILE = join(DATA_DIR, "device-groups.json");
 const ALERTS_FILE = join(DATA_DIR, "alerts.ndjson");
+const POSTMORTEM_FILE = join(DATA_DIR, "postmortems.ndjson");
 const OBSTRUCTION_FILE = join(DATA_DIR, "obstruction.ndjson");
 const LOCK_FILE = join(DATA_DIR, "historian.lock");
 const PORT = Number(process.env.HISTORIAN_PORT ?? 8088);
@@ -307,6 +310,7 @@ async function getStatusAlerts(): Promise<{
   alerts: Record<string, boolean>;
   ethSpeedMbps?: number;
   routerPresence: RouterPresence;
+  snowMeltActive: boolean | null;
 }> {
   const json = (await deviceCall(DISH_URL, GET_STATUS_FIELD)) as {
     dishGetStatus?: DishStatusJson;
@@ -318,6 +322,9 @@ async function getStatusAlerts(): Promise<{
     // needs the negotiated speed to tell a real dead link from a latched flag.
     ethSpeedMbps: status?.ethSpeedMbps,
     routerPresence: routerPresence(status),
+    // `=== true` is the check (see DishStatusJson.snowMeltActive): toJson omits
+    // a false field, so absence is not recorded as "off".
+    snowMeltActive: status?.snowMeltActive === true ? true : null,
   };
 }
 
@@ -362,6 +369,10 @@ async function getRouterStatus(): Promise<{
  */
 let latestRouterLatencyMs: number | null = null;
 let latestRouterPingSuccessPercent: number | null = null;
+// Whether the dish's snow-melt heater was running, read from the same get_status
+// reply getStatusAlerts decodes each cycle. Null when the reply said nothing —
+// proto3 JSON omits a false field, so this is "not known active", never "off".
+let latestSnowMeltActive: boolean | null = null;
 
 /**
  * Wi-Fi radio temperatures from the router. Only `temp2` is ever populated —
@@ -843,6 +854,7 @@ const obstructionStore = new ObstructionStore(OBSTRUCTION_FILE);
 const clientStore = new ClientStore(CLIENTS_FILE);
 const clientWindow = new ClientWindow(CLIENT_SAMPLES_FILE);
 const alertStore = new AlertStore(ALERTS_FILE);
+const postmortemStore = new PostmortemStore(POSTMORTEM_FILE);
 
 /**
  * Decides what changed; this file only writes it down and passes it on. Seeded
@@ -867,7 +879,7 @@ const alertEngine = new AlertEngine(
  * offline reach the user with no window open, which is the entire point of
  * running a recorder rather than a dashboard.
  */
-const alertListeners = new Set<(transitions: AlertTransition[]) => void>();
+export const alertListeners = new Set<(transitions: AlertTransition[]) => void>();
 
 export function onAlertTransitions(listener: (transitions: AlertTransition[]) => void): () => void {
   alertListeners.add(listener);
@@ -944,13 +956,16 @@ export function setLiveThroughputEnabled(enabled: boolean): void {
 }
 
 /** Persist a cycle's transitions, then hand them to whoever is listening. */
-function recordAlertTransitions(transitions: AlertTransition[]): void {
+export function recordAlertTransitions(transitions: AlertTransition[]): void {
   if (transitions.length === 0) return;
   for (const transition of transitions) {
     const { source, key, atMs, kind, spec } = transition;
+    // `close` hands back the episode it closed: an outage can start before the
+    // alert log's 48 h window, and `all()` only serves that window.
+    let closedEpisode: AlertEpisode | null = null;
     if (kind === "fired")
       alertStore.open(source, key, atMs, { label: spec.firing, severity: spec.severity });
-    else alertStore.close(source, key, atMs);
+    else closedEpisode = alertStore.close(source, key, atMs);
     // The service's diary. It runs unattended under launchd with no window and
     // no operator, so "did it see the outage?" is answerable only from what it
     // wrote down. Every transition is logged, not a chosen few, so an
@@ -963,6 +978,37 @@ function recordAlertTransitions(transitions: AlertTransition[]): void {
     if (source === "dish" && THERMAL_ALERT_KEYS.includes(key)) {
       if (kind === "fired") thermalStore.open(key, atMs);
       else thermalStore.close(key, atMs);
+    }
+    // The post-mortem: when a link outage ends, freeze what the recording
+    // knows about it now — the 1 s sample window that answers "the five
+    // minutes before the drop" ages out within hours, so the report is
+    // generated at the close, not on demand. Only these two keys are a link
+    // outage; thermal episodes ride along in the report but never trigger one.
+    if (
+      kind === "cleared" &&
+      source === "system" &&
+      (key === "starlinkOutage" || key === "dishUnreachable")
+    ) {
+      if (closedEpisode) {
+        // The per-minute fallback rows for the same five-minute window: the
+        // whole-minute bucket that covers the drop second is left out, since
+        // it mixes pre-drop and dropped seconds.
+        const beforeStartSec = Math.floor((closedEpisode.startMs - BEFORE_WINDOW_MS) / 60_000) * 60;
+        const beforeEndSec = Math.floor(closedEpisode.startMs / 60_000) * 60;
+        const added = postmortemStore.add(
+          buildOutageReport({
+            source: key,
+            startMs: closedEpisode.startMs,
+            endMs: atMs,
+            generatedAtMs: Date.now(),
+            dishEvents: eventStore.all(),
+            samples: latestSamples,
+            minuteBuckets: store.readRange(beforeStartSec, beforeEndSec),
+            thermal: thermalStore.all(),
+          }),
+        );
+        if (added) console.log(`[historian] post-mortem report generated for ${source}:${key}`);
+      }
     }
   }
   for (const listener of alertListeners) listener(transitions);
@@ -1032,6 +1078,9 @@ function compactSample(sample: TelemetrySample): TelemetrySample {
     routerPingSuccessPercent: Number.isFinite(sample.routerPingSuccessPercent)
       ? Math.round(sample.routerPingSuccessPercent! * 100) / 100
       : null,
+    // A snapshot written before the field existed restores it as undefined,
+    // which must not come back as anything but null.
+    snowMeltActive: sample.snowMeltActive === true ? true : null,
   };
 }
 
@@ -1125,6 +1174,7 @@ async function pollAlerts(): Promise<void> {
   const observation: AlertObservation = {};
   try {
     const dishStatus = await getStatusAlerts();
+    latestSnowMeltActive = dishStatus.snowMeltActive;
     observation.dish = {
       alerts: dishStatus.alerts,
       ethSpeedMbps: dishStatus.ethSpeedMbps,
@@ -1137,6 +1187,7 @@ async function pollAlerts(): Promise<void> {
     // not a cleared alert — and raises the unreachability itself, so it survives
     // in history instead of only being a console warning.
     observation.dish = { alerts: null, atMs: Date.now() };
+    latestSnowMeltActive = null;
   }
   try {
     // One status reply, two consumers: the alert set, and the ping the sample
@@ -1419,6 +1470,7 @@ async function poll(): Promise<void> {
     {
       latencyMs: latestRouterLatencyMs,
       pingSuccessPercent: latestRouterPingSuccessPercent,
+      snowMeltActive: latestSnowMeltActive,
     },
     window,
   );
@@ -1785,6 +1837,13 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
   if (url.pathname === "/api/outages") {
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify({ events: eventStore.all() }));
+    return;
+  }
+  // Auto-generated post-mortems for ended outages. Each report is the shareable
+  // artifact itself: self-contained, frozen at generation, newest first.
+  if (url.pathname === "/api/outages/reports") {
+    response.setHeader("Content-Type", "application/json");
+    response.end(JSON.stringify({ reports: postmortemStore.all() }));
     return;
   }
   if (url.pathname === "/api/obstruction/snapshots") {

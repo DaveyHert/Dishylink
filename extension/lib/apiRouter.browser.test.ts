@@ -25,6 +25,7 @@ function window(count: number, powerW: number): DishWindow {
     powerW,
     routerLatencyMs: null,
     routerPingSuccessPercent: null,
+    snowMeltActive: null,
   }));
   return { samples, newestCounter: count };
 }

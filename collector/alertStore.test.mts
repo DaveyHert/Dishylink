@@ -139,3 +139,35 @@ describe("AlertStore retention", () => {
     expect(served[0].endMs).toBeNull();
   });
 });
+
+describe("AlertStore.close returns the episode it closed", () => {
+  it("returns the closed episode even after it has aged out of all()", () => {
+    // The episode that matters here: closed long past the 48 h window `all()`
+    // serves. The historian's report path must see it anyway.
+    const ancientStart = Date.now() - 49 * 24 * 3_600_000;
+    const now = Date.now();
+    const store = new AlertStore(file);
+    store.open("system", "dishUnreachable", ancientStart);
+    const closed = store.close("system", "dishUnreachable", now);
+    expect(closed).toMatchObject({
+      source: "system",
+      key: "dishUnreachable",
+      startMs: ancientStart,
+      endMs: now,
+    });
+    // and it has indeed aged out of the served list
+    expect(store.all()).toHaveLength(0);
+  });
+
+  it("returns null when nothing was open to close", () => {
+    const store = new AlertStore(file);
+    expect(store.close("system", "starlinkOutage", Date.now())).toBeNull();
+  });
+
+  it("returns null for a second close of the same episode", () => {
+    const store = new AlertStore(file);
+    store.open("system", "starlinkOutage", Date.now() - 60_000);
+    store.close("system", "starlinkOutage", Date.now());
+    expect(store.close("system", "starlinkOutage", Date.now() + 60_000)).toBeNull();
+  });
+});

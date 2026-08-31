@@ -98,13 +98,23 @@ export class AlertStore {
     this.flush();
   }
 
-  close(source: AlertSource, key: string, endMs: number): void {
-    if (!this.isOpen(source, key)) return;
+  /**
+   * Close the open episode for (source, key) and return it. A caller that
+   * cares what just ended (the outage post-mortem) acts on this episode rather
+   * than re-searching `all()`: a long outage can have started outside the
+   * 48 h window `all()` serves, and closed episodes age out of it the moment
+   * they close.
+   */
+  close(source: AlertSource, key: string, endMs: number): AlertEpisode | null {
+    if (!this.isOpen(source, key)) return null;
+    let closed: AlertEpisode | null = null;
     for (const episode of this.episodes) {
       if (episode.source === source && episode.key === key && episode.endMs === null) {
         episode.endMs = endMs;
+        closed = episode;
       }
     }
     this.flush();
+    return closed;
   }
 }

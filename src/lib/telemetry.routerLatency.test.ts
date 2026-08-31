@@ -31,6 +31,11 @@ describe("decodeHistoryWindow", () => {
     expect(samples).toHaveLength(5);
     expect(samples.every((sample) => sample.routerLatencyMs === null)).toBe(true);
   });
+
+  it("leaves snow melt null — the ring says nothing about the heater either", () => {
+    const { samples } = decodeHistoryWindow(ring(5), Date.now());
+    expect(samples.every((sample) => sample.snowMeltActive === null)).toBe(true);
+  });
 });
 
 // Retention is a duration. Any span comfortably wider than these fixtures does,
@@ -79,6 +84,26 @@ describe("TelemetryAccumulator router latency stamping", () => {
     ]);
     expect(samples.slice(2).map((sample) => sample.routerPingSuccessPercent)).toEqual([null, null]);
     expect(samples.slice(2).map((sample) => sample.routerLatencyMs)).toEqual([19.1, 19.1]);
+  });
+});
+
+describe("TelemetryAccumulator snow melt stamping", () => {
+  it("stamps true on the samples the poll appends", () => {
+    const accumulator = new TelemetryAccumulator(RETENTION_MS);
+    const samples = accumulator.ingest(ring(3), Date.now(), { snowMeltActive: true });
+    expect(samples.map((sample) => sample.snowMeltActive)).toEqual([true, true, true]);
+  });
+
+  it("leaves samples null when get_status said nothing, rather than repeating the last reading", () => {
+    const accumulator = new TelemetryAccumulator(RETENTION_MS);
+    const nowMs = Date.now();
+    accumulator.ingest(ring(2), nowMs, { snowMeltActive: true });
+    // Next poll: two further samples, the reply carried no snowMeltActive field
+    // (proto3 JSON omits a false one, so absence is not "off" and not a repeat).
+    const samples = accumulator.ingest(ring(4), nowMs + 2000, {});
+
+    expect(samples.slice(0, 2).map((sample) => sample.snowMeltActive)).toEqual([true, true]);
+    expect(samples.slice(2).map((sample) => sample.snowMeltActive)).toEqual([null, null]);
   });
 });
 
