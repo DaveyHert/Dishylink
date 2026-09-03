@@ -12,18 +12,7 @@
 //
 // Run: npm run historian   (foreground; see collector/README for always-on setup)
 
-import {
-  closeSync,
-  existsSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  renameSync,
-  statSync,
-  unlinkSync,
-  writeFileSync,
-  writeSync,
-} from "node:fs";
+import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { networkInterfaces } from "node:os";
 import { identityFromEnv } from "../core/hostNetworkIdentity.ts";
@@ -59,7 +48,7 @@ import { resolveRows, foldMinuteCollisions } from "../core/clientHistory.ts";
 import { ClientTotalsStore } from "./clientTotals.mts";
 import { MeterStore } from "./meterStore.mts";
 import { DeviceGroupStore } from "./groupStore.mts";
-import { CollectorBusyError } from "./collectorLock.mts";
+import { claimDataDir, releaseDataDir } from "./collectorLock.mts";
 import { isLocalOrigin } from "./localOrigin.mts";
 import {
   announcementSubject,
@@ -121,7 +110,6 @@ const METERS_FILE = join(DATA_DIR, "meters.json");
 const DEVICE_GROUPS_FILE = join(DATA_DIR, "device-groups.json");
 const ALERTS_FILE = join(DATA_DIR, "alerts.ndjson");
 const OBSTRUCTION_FILE = join(DATA_DIR, "obstruction.ndjson");
-const LOCK_FILE = join(DATA_DIR, "historian.lock");
 const PORT = Number(process.env.HISTORIAN_PORT ?? 8088);
 const POLL_MS = 5_000;
 /**
@@ -1846,80 +1834,20 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
   response.end("not found");
 }
 
-// A single collector must own a data dir: two writing the same files duplicate
-// appended rows and clobber each other's snapshots. The lock is keyed to the data
-// dir, not the HTTP port — the embedded host never opens a port, so the port never
-// guarded it. The pidfile is reclaimed when its recorded owner is gone, so a crash
-// (which cannot run the release) does not wedge the next start.
-//
-// globalThis, not module-scope state or a PID compare: Vite's SSR restart can
-// re-evaluate this module within one process, and this must survive that.
-const CLAIM_SENTINEL = Symbol.for("dishylink.historian.dataDirClaim");
-
-function claimDataDir(): void {
-  mkdirSync(DATA_DIR, { recursive: true });
-  if ((globalThis as Record<symbol, unknown>)[CLAIM_SENTINEL] === DATA_DIR) {
-    refuseToStart(
-      `this process already owns ${DATA_DIR} — refusing to start a second writer in the same process`,
-      true,
-    );
-  }
-  for (let attempt = 0; attempt < 5; attempt++) {
-    try {
-      const fd = openSync(LOCK_FILE, "wx");
-      writeSync(fd, String(process.pid));
-      closeSync(fd);
-      (globalThis as Record<symbol, unknown>)[CLAIM_SENTINEL] = DATA_DIR;
-      return;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      const owner = Number(readFileSync(LOCK_FILE, "utf8").trim());
-      if (owner && owner !== process.pid && processAlive(owner)) {
-        refuseToStart(
-          `another collector (pid ${owner}) already owns ${DATA_DIR} — refusing to start a second writer`,
-          true,
-        );
-      }
-      // The recorded owner is gone; drop its stale lock and race for it again.
-      try {
-        unlinkSync(LOCK_FILE);
-      } catch {
-        // Another starter reclaimed it first; the next attempt finds it held.
-      }
-    }
-  }
-  refuseToStart(`could not claim ${DATA_DIR} — refusing to start`);
-}
-
-/** An embedded recorder shares its host's process, so it raises rather than exits
- *  and leaves the host to decide whether it can carry on without a recorder. */
-function refuseToStart(reason: string, busy = false): never {
-  console.error(`[historian] ${reason}`);
-  if (process.env.HISTORIAN_EMBED === "1")
-    throw busy ? new CollectorBusyError(reason) : new Error(reason);
+/** An embedded recorder shares its host's process, so it re-raises rather than
+ *  exits, and leaves the host to decide whether it can carry on without a
+ *  recorder. */
+function refuseToStart(error: Error): never {
+  console.error(`[historian] ${error.message}`);
+  if (process.env.HISTORIAN_EMBED === "1") throw error;
   process.exit(1);
 }
 
-// Signal 0 probes for the process without delivering anything: ESRCH means it is
-// gone, EPERM means it is alive but owned by another user.
-function processAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
-  }
+try {
+  claimDataDir(DATA_DIR);
+} catch (error) {
+  refuseToStart(error as Error);
 }
-
-function releaseDataDir(): void {
-  try {
-    if (Number(readFileSync(LOCK_FILE, "utf8").trim()) === process.pid) unlinkSync(LOCK_FILE);
-  } catch {
-    // Nothing to release, or the lock is no longer ours to remove.
-  }
-}
-
-claimDataDir();
 process.on("exit", releaseDataDir);
 
 // The dev process serves the collector over loopback HTTP. An embedded host (the

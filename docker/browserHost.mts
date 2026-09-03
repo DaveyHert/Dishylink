@@ -179,14 +179,6 @@ const { readCookie } = cookieStore(cookieFile);
 const DATA_DIR = process.env.HISTORIAN_DATA_DIR ?? resolve("collector/data");
 const SELF_DEVICE_FILE = join(DATA_DIR, "self-device.json");
 
-// Pids do not carry across PID namespaces, so a lock left by a previous
-// container names a stranger's process in this one.
-try {
-  rmSync(join(DATA_DIR, "historian.lock"));
-} catch {
-  /* no previous run */
-}
-
 function readSelfDevice(): number | null {
   try {
     const { clientId } = JSON.parse(readFileSync(SELF_DEVICE_FILE, "utf8")) as {
