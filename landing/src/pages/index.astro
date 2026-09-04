@@ -36,12 +36,6 @@ const downloadLinks = [
   { icon: "browsers", label: "Download for Browser", platform: "web", variant: "secondary" },
 ] as const;
 
-const browsers = [
-  { name: "Chrome", logo: "/browsers/chrome.svg", href: null, variant: "primary" },
-  { name: "Firefox", logo: "/browsers/firefox.svg", href: null, variant: "tinted" },
-  { name: "Edge", logo: "/browsers/edge.svg", href: null, variant: "secondary" },
-] as const;
-
 // Answers are escaped text. Only `aside` is rendered as markup, so a link can
 // never arrive through the answer body.
 const link = (href: string, text: string, colour: string) =>
