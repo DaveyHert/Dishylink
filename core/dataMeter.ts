@@ -542,32 +542,31 @@ export function collapseGroupAnnouncements(
   });
 }
 
-/** A recorder's current device roster, as rule reconciliation reads it. */
-export interface MeterRoster {
-  /** Every device key the recorder holds counters for. */
-  keys: readonly string[];
+/** How reconciliation asks which identity a device answers to now. */
+export interface IdentityResolver {
   /** The key a device answers to now, following any identity merge. */
   resolveKey: (key: string) => string;
 }
 
 /**
- * Move rules onto the identities their devices now answer to, dropping any left
- * on a bucket the recorder no longer holds.
+ * Move rules onto the identities their devices now answer to.
  *
  * A reissued id is the same device, so a rule follows the alias the way the
  * odometer folds the counters. Where two rules land on one key, the one whose
  * terms were set most recently is the standing intent and wins.
  *
- * An empty roster is a recorder that has folded no reading yet, never evidence
- * that every device is gone, so nothing is dropped against one.
+ * Nothing is dropped here. A device missing from a poll is away, not gone, and
+ * absence is unreadable anyway for a device the router keeps no counters for. A
+ * rule ends where the user ends it: deleting the rule, or deleting the device's
+ * record, which takes its rules with it.
  */
-export function resolveRuleKeys(rules: readonly MeterRule[], roster: MeterRoster): MeterRule[] {
-  if (roster.keys.length === 0) return [...rules];
-  const known = new Set(roster.keys);
+export function resolveRuleKeys(
+  rules: readonly MeterRule[],
+  resolver: IdentityResolver,
+): MeterRule[] {
   const kept = new Map<string, MeterRule>();
   for (const rule of rules) {
-    const clientKey = roster.resolveKey(rule.clientKey);
-    if (!known.has(clientKey)) continue;
+    const clientKey = resolver.resolveKey(rule.clientKey);
     const moved = clientKey === rule.clientKey ? rule : { ...rule, clientKey };
     // Per rule, not per device: a device answers to as many rules as name it, and
     // deduping by device would silently drop all but one of them. Two rules can

@@ -1306,17 +1306,16 @@ async function pollClients(): Promise<void> {
  * Check every rule against the counters this poll folded.
  *
  * Runs whether or not the router answered: a cycle rolls on the clock, so a rule
- * whose device is away still lets go of it when the cycle turns over.
+ * whose device is away still lets go of it when the cycle turns over. A silent
+ * poll costs the reconciliation nothing either, since it only moves rules between
+ * identities.
  */
 function runMeters(): void {
   const lifetimes = clientTotals.lifetimes();
-  const roster = {
-    keys: lifetimes.map((entry) => entry.clientKey),
-    resolveKey: (key: string) => clientTotals.resolveKey(key),
-  };
-  meters.resolve(roster);
+  const resolver = { resolveKey: (key: string) => clientTotals.resolveKey(key) };
   const groupsBefore = deviceGroups.all();
-  deviceGroups.resolve(roster);
+  meters.resolve(resolver);
+  deviceGroups.resolve(resolver);
   retireProjectedOut(meters.project(deviceGroups.all(), lifetimes, Date.now()), groupsBefore);
   // First, because until a block is known to have landed the reading below cannot
   // be read at all: a roster that has not caught up with the write yet and one
