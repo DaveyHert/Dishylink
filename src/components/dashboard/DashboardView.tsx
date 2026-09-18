@@ -157,7 +157,7 @@ export function DashboardView({
       unit: "ms",
       caption:
         !latencyQuality.unavailable && latencyQuality.data ? (
-          <span className='flex w-full items-center justify-between gap-2'>
+          <span className='flex w-full items-center justify-between gap-2 whitespace-nowrap'>
             <span>
               Quality:{" "}
               <span className='text-[13px] font-semibold text-foreground'>
@@ -171,8 +171,10 @@ export function DashboardView({
                 {latencyQuality.data.grade}
               </span>
             </span>
-            <span aria-hidden>·</span>
-            <span className='flex-none'>
+            <span aria-hidden className='max-[1300px]:hidden'>
+              ·
+            </span>
+            <span className='flex-none max-[1300px]:hidden'>
               {latencyQuality.data.dish.p95 !== null
                 ? `${latencyQuality.data.dish.p95.toFixed(0)} ms p95`
                 : "no data"}
