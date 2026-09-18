@@ -24,13 +24,11 @@
 // unique to one device; a same-vendor group cannot be re-anchored (its MAC is
 // shared and the full MAC is cloud-only) and correctly starts fresh.
 //
-// Totals are a per-device *monthly* figure, the way a data-capped user thinks
-// about usage and the way Starlink bills. The month clears lazily: a device is
-// re-baselined to zero the first time it is seen in a new calendar month, not on
-// a stroke-of-midnight sweep, so an idle device keeps showing last month's total
-// with its last-seen time (as the iOS hotspot list does) instead of blinking to
-// zero for everyone at once. A device unseen since before last month is dropped,
-// so the record stays for at least a month but the list cannot grow forever.
+// Totals are a per-device *monthly* figure, the way Starlink bills. The month
+// clears lazily: a device is re-baselined the first time it is seen in a new
+// calendar month, not on a midnight sweep, so an idle device keeps last month's
+// total instead of every device blinking to zero at once. A device unseen since
+// the month MONTHS_KEPT back is dropped, so the list cannot grow forever.
 //
 // What it cannot do: recover traffic from before it started watching, or across
 // an outage. A recorder seeds the opening value once from the per-minute history
@@ -818,6 +816,13 @@ export class ClientTotalsCore {
       lifetimeRx: state.lifetimeRx,
       lifetimeTx: state.lifetimeTx,
     }));
+  }
+
+  /** Every superseded identity with the bucket it now answers to. Each pair is
+   *  followed to its end here, so a reader resolves in one lookup and cannot
+   *  disagree with `resolveKey` about a chain. */
+  resolvedAliases(): [string, string][] {
+    return [...this.aliases.keys()].map((from) => [from, this.resolveKey(from)]);
   }
 
   /** Public totals, one device (by clientId key) or all (newest activity first).

@@ -1702,6 +1702,10 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
         // Rides the list both surfaces already poll, so the prompt needs no
         // request of its own and can never disagree with the rows beside it.
         mergeCandidates: clientTotals.mergeCandidates(Date.now()),
+        // A merged identity keeps answering the router under its old id, which a
+        // reader matching the live roster against these rows would read as a
+        // second device.
+        aliases: clientTotals.resolvedAliases(),
         selfDeviceIdentified: hostRowIdentified,
       }),
     );
@@ -2071,8 +2075,8 @@ export function start(): void {
   setInterval(() => {
     const dropped = clientStore.compact();
     if (dropped > 0) console.log(`[historian] compacted client log, dropped ${dropped} old row(s)`);
-    // Drop usage records for devices unseen since before last month, on the same
-    // hourly sweep, then persist so the trim survives a restart.
+    // Drop usage records for devices unseen since the month MONTHS_KEPT back, on
+    // the same hourly sweep, then persist so the trim survives a restart.
     const totalsDropped = clientTotals.compact(Date.now());
     if (totalsDropped > 0) {
       clientTotals.snapshot();
