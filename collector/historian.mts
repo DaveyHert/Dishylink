@@ -790,6 +790,8 @@ interface WireClient {
   blocked?: boolean;
   rxStats?: WireStats;
   txStats?: WireStats;
+  rxStatsValid?: boolean;
+  txStatsValid?: boolean;
 }
 
 /** The roster entry a counter reading belongs to. Falls back through IP to the

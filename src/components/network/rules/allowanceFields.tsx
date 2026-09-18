@@ -200,8 +200,9 @@ export function AppliesToField({
       : selected.length === 1
         ? "This device"
         : `${selected.length} devices`;
-  // Held still while the picker is open. The odometer's list refreshes on its own
-  // poll, and a row that moves under the cursor is one the user has to chase.
+  // The order holds still, not the array: the odometer mints a fresh list on its
+  // own poll, so this recomputes and the sort is what keeps a row from moving
+  // under the cursor.
   const rows = useMemo(() => orderedCandidates(candidates), [candidates]);
   return (
     <div className='space-y-1.5'>
@@ -241,8 +242,14 @@ export function AppliesToField({
                   />
                   <span className='flex min-w-0 flex-col gap-px'>
                     <span className='truncate'>{candidate.name}</span>
-                    {vendor && (
-                      <span className='truncate text-[11px] text-muted-foreground'>{vendor}</span>
+                    {candidate.hasCounters === false ? (
+                      <span className='truncate text-[11px] text-muted-foreground'>
+                        {vendor ? `${vendor} · ` : ""}no usage data — hours only
+                      </span>
+                    ) : (
+                      vendor && (
+                        <span className='truncate text-[11px] text-muted-foreground'>{vendor}</span>
+                      )
                     )}
                   </span>
                   {candidate.active && (

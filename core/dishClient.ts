@@ -414,6 +414,22 @@ export interface WifiClientJson {
   downloadMb?: number;
   rxStats?: WifiClientStatsJson;
   txStats?: WifiClientStatsJson;
+  /** Sent as `true` where the router counts the client and omitted where it does
+   *  not, so absent means no. The only thing telling a device that has moved no
+   *  bytes yet from a wired one, which carries empty stats blocks and no flag. */
+  rxStatsValid?: boolean;
+  txStatsValid?: boolean;
+}
+
+/** Whether the router keeps byte counters for this client at all. False for a
+ *  wired one, whose usage therefore cannot be metered on this firmware. */
+export function clientHasCounters(client: WifiClientJson): boolean {
+  return (
+    client.rxStatsValid === true ||
+    client.txStatsValid === true ||
+    client.rxStats?.bytes !== undefined ||
+    client.txStats?.bytes !== undefined
+  );
 }
 
 interface DishResponseJson {
