@@ -17,7 +17,14 @@ export function useClientTotals() {
    *  Rides the totals reply, so a candidate can never name a row that is not in
    *  the list beside it. */
   const [mergeCandidates, setMergeCandidates] = useState<MergeCandidate[]>([]);
+  /** Superseded identity to the bucket it now answers to. A merged device can
+   *  still be reported by the router under its old id, and only this says that
+   *  the id and a row here are one device. */
+  const [aliases, setAliases] = useState<ReadonlyMap<string, string>>(() => new Map());
   const [unavailable, setUnavailable] = useState(false);
+  /** False while the recorder cannot tell which row is the machine it runs on,
+   *  whose figure then still carries the recorder's own polling. */
+  const [selfDeviceIdentified, setSelfDeviceIdentified] = useState(true);
   // A rejected write is not an exception — `fetch` resolves on 4xx — and the
   // reload in `finally` puts the row straight back. Without this the buttons
   // would look like they did nothing at all.
@@ -40,9 +47,13 @@ export function useClientTotals() {
       const payload = (await response.json()) as {
         totals?: ClientUsageTotal[];
         mergeCandidates?: MergeCandidate[];
+        selfDeviceIdentified?: boolean;
+        aliases?: [string, string][];
       };
       setTotals(payload.totals ?? []);
       setMergeCandidates(payload.mergeCandidates ?? []);
+      setAliases(new Map(payload.aliases ?? []));
+      setSelfDeviceIdentified(payload.selfDeviceIdentified !== false);
       setUnavailable(false);
     } catch {
       setUnavailable(true);
@@ -147,5 +158,16 @@ export function useClientTotals() {
     [load, checkWrite],
   );
 
-  return { totals, mergeCandidates, unavailable, writeError, reset, remove, clearAll, answerMerge };
+  return {
+    totals,
+    mergeCandidates,
+    aliases,
+    unavailable,
+    writeError,
+    selfDeviceIdentified,
+    reset,
+    remove,
+    clearAll,
+    answerMerge,
+  };
 }

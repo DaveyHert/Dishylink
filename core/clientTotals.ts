@@ -24,13 +24,11 @@
 // unique to one device; a same-vendor group cannot be re-anchored (its MAC is
 // shared and the full MAC is cloud-only) and correctly starts fresh.
 //
-// Totals are a per-device *monthly* figure, the way a data-capped user thinks
-// about usage and the way Starlink bills. The month clears lazily: a device is
-// re-baselined to zero the first time it is seen in a new calendar month, not on
-// a stroke-of-midnight sweep, so an idle device keeps showing last month's total
-// with its last-seen time (as the iOS hotspot list does) instead of blinking to
-// zero for everyone at once. A device unseen since before last month is dropped,
-// so the record stays for at least a month but the list cannot grow forever.
+// Totals are a per-device *monthly* figure, the way Starlink bills. The month
+// clears lazily: a device is re-baselined the first time it is seen in a new
+// calendar month, not on a midnight sweep, so an idle device keeps last month's
+// total instead of every device blinking to zero at once. A device unseen since
+// the month MONTHS_KEPT back is dropped, so the list cannot grow forever.
 //
 // What it cannot do: recover traffic from before it started watching, or across
 // an outage. A recorder seeds the opening value once from the per-minute history
@@ -98,6 +96,13 @@ export interface TotalState {
   /** When the counter was last read. 0 forces the next reading to re-baseline
    *  instead of measuring across it (a fresh bucket, an adoption, a month roll). */
   lastPollMs: number;
+  /** The recorder's own polling, measured but not yet taken off this counter. A
+   *  debt, not a per-reading subtraction: the recorder polls several times per
+   *  router refresh, so most readings show a counter that has not moved. */
+  selfTrafficDebtRx?: number;
+  selfTrafficDebtTx?: number;
+  correctedRx?: number;
+  correctedTx?: number;
 }
 
 /**
@@ -219,6 +224,16 @@ export const DEFAULT_MAX_GAP_MS = 15_000;
  */
 const MAX_BYTES_PER_MS = 312_500;
 
+/** A branch that re-baselines adds nothing to the total, so traffic measured
+ *  across that span can never be charged. Carried, it would come out of the next
+ *  reading, which is the user's own. */
+function rebaseSelfTraffic(state: TotalState, rxBytes: number, txBytes: number): void {
+  state.selfTrafficDebtRx = 0;
+  state.selfTrafficDebtTx = 0;
+  state.correctedRx = rxBytes;
+  state.correctedTx = txBytes;
+}
+
 /** One counter's contribution since the last reading. */
 function advance(counter: number, previous: number, ceilingBytes: number): number {
   if (counter >= previous) return counter - previous;
@@ -319,6 +334,22 @@ export class ClientTotalsCore {
     };
   }
 
+  /** A device's counters with the recorder's own traffic taken off. Identical to
+   *  the raw ones for every device but the machine the recorder runs on, and
+   *  undefined until the device has been read once. */
+  correctedCounters(
+    clientId: number | undefined,
+    macAddress: string,
+  ): { rxBytes: number; txBytes: number } | undefined {
+    // Resolved exactly as observe() resolves it, or a rate is measured against a
+    // counter belonging to a different device.
+    const raw = keyOf(clientId, macAddress);
+    const state = this.states.get(this.userMerged.has(raw) ? this.resolveKey(raw) : raw);
+    if (!state || state.correctedRx === undefined || state.correctedTx === undefined)
+      return undefined;
+    return { rxBytes: state.correctedRx, txBytes: state.correctedTx };
+  }
+
   /** Whether any bucket already covers this MAC — the seed guard, so a restart
    *  never lays down a second (later-double-counted) bucket for a device already
    *  tracked under its clientId. */
@@ -417,6 +448,7 @@ export class ClientTotalsCore {
     name: string | undefined,
     liveKeys: Set<string>,
     captiveClientId?: string,
+    selfTraffic?: { receivedBytes: number; sentBytes: number },
   ): void {
     // An identity the user merged away routes into its survivor however often it
     // comes back. An adoption's alias does not: that one is inferred, and the old
@@ -427,6 +459,9 @@ export class ClientTotalsCore {
     if (!state)
       state = this.adoptOrCreate(clientId, macAddress, atMs, name, liveKeys, key, captiveClientId);
     if (captiveClientId) state.captiveClientId = captiveClientId;
+
+    state.selfTrafficDebtRx = (state.selfTrafficDebtRx ?? 0) + (selfTraffic?.receivedBytes ?? 0);
+    state.selfTrafficDebtTx = (state.selfTrafficDebtTx ?? 0) + (selfTraffic?.sentBytes ?? 0);
 
     const month = monthOf(atMs);
     if (month !== state.periodMonth) {
@@ -446,10 +481,31 @@ export class ClientTotalsCore {
       state.monthAnchorTx = state.lifetimeTx;
       state.periodMonth = month;
       state.sinceMs = monthStartMs(atMs);
+      rebaseSelfTraffic(state, rxBytes, txBytes);
     } else if (state.lastPollMs !== 0 && atMs - state.lastPollMs <= this.maxGapMs) {
       const ceiling = (atMs - state.lastPollMs) * MAX_BYTES_PER_MS;
-      state.lifetimeRx += advance(rxBytes, state.prevRx, ceiling);
-      state.lifetimeTx += advance(txBytes, state.prevTx, ceiling);
+      const rxAdvance = advance(rxBytes, state.prevRx, ceiling);
+      const txAdvance = advance(txBytes, state.prevTx, ceiling);
+      const rxSpent = Math.min(state.selfTrafficDebtRx, rxAdvance);
+      const txSpent = Math.min(state.selfTrafficDebtTx, txAdvance);
+      state.selfTrafficDebtRx -= rxSpent;
+      state.selfTrafficDebtTx -= txSpent;
+      state.lifetimeRx += rxAdvance - rxSpent;
+      state.lifetimeTx += txAdvance - txSpent;
+      // The corrected counter restarts with the raw one rather than staying
+      // monotonic: the rate tracker reads it, and a hidden reset leaves it
+      // dividing a whole post-reset counter by a single poll interval.
+      state.correctedRx =
+        rxBytes < state.prevRx
+          ? rxAdvance - rxSpent
+          : (state.correctedRx ?? rxBytes) + rxAdvance - rxSpent;
+      state.correctedTx =
+        txBytes < state.prevTx
+          ? txAdvance - txSpent
+          : (state.correctedTx ?? txBytes) + txAdvance - txSpent;
+    } else {
+      // Nothing was measured across this span, so nothing is owed for it.
+      rebaseSelfTraffic(state, rxBytes, txBytes);
     }
     state.prevRx = rxBytes;
     state.prevTx = txBytes;
@@ -760,6 +816,13 @@ export class ClientTotalsCore {
       lifetimeRx: state.lifetimeRx,
       lifetimeTx: state.lifetimeTx,
     }));
+  }
+
+  /** Every superseded identity with the bucket it now answers to. Each pair is
+   *  followed to its end here, so a reader resolves in one lookup and cannot
+   *  disagree with `resolveKey` about a chain. */
+  resolvedAliases(): [string, string][] {
+    return [...this.aliases.keys()].map((from) => [from, this.resolveKey(from)]);
   }
 
   /** Public totals, one device (by clientId key) or all (newest activity first).

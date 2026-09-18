@@ -24,6 +24,7 @@ import {
 } from "@core/alertEngine";
 import { sortBySeverity, type AlertState } from "@core/alertDefinitions";
 import { ClientTotalsCore, migrateSnapshot } from "@core/clientTotals";
+import { loadSelfDeviceClientId } from "./selfDevice";
 import { runMeters } from "./meterEnforcement";
 import type { MeterHost } from "./meterHost";
 import { usageKey } from "@core/clientUsage";
@@ -41,6 +42,27 @@ const OBSTRUCTION_INTERVAL_MS = 3_600_000; // one snapshot an hour, as the histo
 // while tolerating alarm jitter, and the counter delta is valid across any gap
 // the counter did not reset. Tune against real inter-drain gaps if they run wide.
 const CLIENT_MAX_GAP_MS = 5 * 60_000;
+
+let pendingSelfTraffic = { receivedBytes: 0, sentBytes: 0 };
+
+function takePendingSelfTraffic(): { receivedBytes: number; sentBytes: number } {
+  const taken = pendingSelfTraffic;
+  pendingSelfTraffic = { receivedBytes: 0, sentBytes: 0 };
+  return taken;
+}
+
+export function recordPageSelfTraffic(bytes: { receivedBytes: number; sentBytes: number }): void {
+  pendingSelfTraffic.receivedBytes += bytes.receivedBytes;
+  pendingSelfTraffic.sentBytes += bytes.sentBytes;
+}
+
+function chargeToSelf(client: DishClient): DishClient {
+  client.onBytes = ({ requestBytes, responseBytes }) => {
+    pendingSelfTraffic.receivedBytes += responseBytes;
+    pendingSelfTraffic.sentBytes += requestBytes;
+  };
+  return client;
+}
 
 export type DrainStatus = { ok: true; at: number } | { ok: false; at: number; message: string };
 
@@ -82,7 +104,7 @@ export async function drainOnce(host: MeterHost): Promise<DrainResult> {
   try {
     [store, client] = await Promise.all([
       IndexedDbHistory.open(),
-      DishClient.load("dish", { handleUrl: dishHandleUrl() }),
+      DishClient.load("dish", { handleUrl: dishHandleUrl() }).then(chargeToSelf),
     ]);
   } catch (error) {
     // No store means nowhere to record alerts and nowhere to read the open
@@ -202,7 +224,7 @@ async function readRouterAlerts(
   store: HistoryStore,
 ): Promise<{ reading: DeviceReading; blocked: Map<string, boolean> }> {
   try {
-    const router = await DishClient.load("router", { handleUrl: routerHandleUrl() });
+    const router = chargeToSelf(await DishClient.load("router", { handleUrl: routerHandleUrl() }));
     // Settled, not all-or-nothing: one RPC faltering (an unreachable client poll)
     // must not drop the radio and status feeds that shared the round trip.
     const [stats, status, clients] = await Promise.allSettled([
@@ -258,6 +280,12 @@ async function recordClients(
 ): Promise<void> {
   const identified = clients.filter((c) => c.clientId !== undefined || c.macAddress);
   const minute = Math.floor(now / 60_000) * 60;
+
+  const selfClientId = await loadSelfDeviceClientId();
+
+  // Rows keep the router's own figures. Its rate fields are an average it
+  // computes rather than a delta of ours, so a corrected byte count beside one
+  // would be a row disagreeing with itself.
   const rxOf = (c: WifiClientJson) => Number(c.rxStats?.bytes ?? 0);
   const txOf = (c: WifiClientJson) => Number(c.txStats?.bytes ?? 0);
   const rows: ClientMinuteRow[] = identified.map((c) => ({
@@ -276,6 +304,12 @@ async function recordClients(
   const liveKeys = odometer.notePoll(
     identified.map((c) => ({ clientId: c.clientId, macAddress: c.macAddress ?? "" })),
   );
+  const selfRow =
+    selfClientId === null ? undefined : identified.find((c) => c.clientId === selfClientId);
+  // Nothing to charge it to: no device named, or the named one absent from this
+  // roster. Held, it would come out of that device's real traffic when it
+  // returned, and grow for as long as the dashboard stayed open meanwhile.
+  const selfTraffic = takePendingSelfTraffic();
   for (const c of identified)
     odometer.observe(
       c.clientId,
@@ -286,6 +320,7 @@ async function recordClients(
       c.givenName ?? c.name,
       liveKeys,
       c.captiveClientId,
+      c === selfRow ? selfTraffic : undefined,
     );
   odometer.compact(now);
   await store.writeTotalsSnapshot(odometer.toSnapshot());

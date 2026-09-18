@@ -143,6 +143,11 @@ export interface MemberCandidate {
    *  absent device still rolls its cycle and still releases its pause. */
   active: boolean;
   lastSeenMs: number;
+  /** False where the router keeps no byte counters for the device, which on
+   *  current firmware is every wired one. Its hours can still be ruled; only an
+   *  allowance has nothing to measure. Absent means counted, so a caller that
+   *  cannot tell warns about nothing. */
+  hasCounters?: boolean;
 }
 
 /** Devices in the order a picker holds them still: active first, then by name.

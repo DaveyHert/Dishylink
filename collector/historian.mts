@@ -26,7 +26,12 @@ import {
 } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { networkInterfaces } from "node:os";
-import { identityFromEnv } from "../core/hostNetworkIdentity.ts";
+import {
+  identityFromEnv,
+  resolveHostIdentity,
+  type HostNetworkIdentity,
+} from "../core/hostNetworkIdentity.ts";
+import { clientIsHost } from "../core/routerClientUpdate.ts";
 import { join, resolve } from "node:path";
 import { createFileRegistry, fromBinary, toJson, type DescMessage } from "@bufbuild/protobuf";
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
@@ -248,6 +253,10 @@ async function deviceCall(
     url,
     requestBytes(fieldNumber),
     AbortSignal.timeout(timeoutMs),
+    {
+      onBytes: ({ requestBytes: sent, responseBytes: received }) =>
+        recordSelfTraffic({ receivedBytes: received, sentBytes: sent }),
+    },
   );
   return toJson(responseSchema, fromBinary(responseSchema, bytes), { registry }) as Record<
     string,
@@ -445,6 +454,48 @@ let readAccountSignedIn: (() => boolean) | null = null;
 
 export function setAccountSessionReader(reader: (() => boolean) | null): void {
   readAccountSignedIn = reader;
+}
+
+/** This recorder's own dish and router traffic since the last client poll. Rides
+ *  the host's Wi-Fi, so the router bills it to the machine we run on. */
+let pendingSelfTraffic = { receivedBytes: 0, sentBytes: 0 };
+
+/** Whether the last poll found the roster row this recorder runs on. False means
+ *  its own polling is still counted as that device's usage. */
+let hostRowIdentified = false;
+let warnedNoHostRow = false;
+
+function takePendingSelfTraffic(): { receivedBytes: number; sentBytes: number } {
+  const taken = pendingSelfTraffic;
+  pendingSelfTraffic = { receivedBytes: 0, sentBytes: 0 };
+  return taken;
+}
+
+/**
+ * Who this machine is on the router's roster.
+ *
+ * Addresses alone are enough while the recorder sits on the router's own LAN,
+ * which is the only place its counters can be billed to us anyway. A host that
+ * knows its clientId supplies one through the setter below, which settles it
+ * even after a router reset renumbers the roster.
+ */
+let readHostIdentity: () => HostNetworkIdentity = () => resolveHostIdentity();
+
+export function setHostIdentityReader(reader: () => HostNetworkIdentity): void {
+  readHostIdentity = reader;
+}
+
+/**
+ * Charge dish or router traffic this process sent on someone else's behalf.
+ *
+ * The dashboard makes its own calls, and every host proxies them through the
+ * process the recorder runs in, so they leave the machine on the same Wi-Fi and
+ * land on the same row of the router's roster. Counting only what this file
+ * asked for would leave that share billed to the user.
+ */
+export function recordSelfTraffic(bytes: { receivedBytes: number; sentBytes: number }): void {
+  pendingSelfTraffic.receivedBytes += bytes.receivedBytes;
+  pendingSelfTraffic.sentBytes += bytes.sentBytes;
 }
 
 /** Whether the router says each device is blocked, as of the last client poll.
@@ -739,6 +790,8 @@ interface WireClient {
   blocked?: boolean;
   rxStats?: WireStats;
   txStats?: WireStats;
+  rxStatsValid?: boolean;
+  txStatsValid?: boolean;
 }
 
 /** The roster entry a counter reading belongs to. Falls back through IP to the
@@ -766,6 +819,9 @@ async function getClientReadings(): Promise<ClientReading[]> {
     (client): client is WireClient & { macAddress: string } =>
       !!client.macAddress && (!client.role || client.role === "CLIENT"),
   );
+  const hostIdentity = readHostIdentity();
+  let hostCharged = false;
+  let hostRowFound = false;
   const totalsLiveKeys = clientTotals.notePoll(
     clients.map((client) => ({ clientId: client.clientId, macAddress: client.macAddress })),
   );
@@ -791,6 +847,10 @@ async function getClientReadings(): Promise<ClientReading[]> {
         ? undefined
         : { rxBytes: Number(rxBytes), txBytes: Number(txBytes) };
 
+    const isHost = clientIsHost(client, hostIdentity);
+    if (isHost) hostRowFound = true;
+    if (isHost && counters !== undefined) hostCharged = true;
+
     // Fold the raw counter into the monthly odometer. Done here, at the fast
     // poll, so a re-association's counter reset is caught the moment it happens
     // rather than a second later when it has already climbed back up.
@@ -804,13 +864,17 @@ async function getClientReadings(): Promise<ClientReading[]> {
         client.givenName ?? client.name,
         totalsLiveKeys,
         client.captiveClientId,
+        isHost ? takePendingSelfTraffic() : undefined,
       );
     }
 
     // 15s, not 1m: the shorter window is closer to the truth whenever a delta is
     // unavailable, and txStats has no 1m field at all — preferring it would leave
     // download smoothed over 60s and upload over 15s on the same chart.
-    const rates = clientThroughput.rates(entryKey, counters, nowMs, {
+    const rateCounters = counters
+      ? (clientTotals.correctedCounters(client.clientId, client.macAddress) ?? counters)
+      : undefined;
+    const rates = clientThroughput.rates(entryKey, rateCounters, nowMs, {
       downMbps: finiteMbps(client.rxStats?.throughputMbpsLast15sAvg) ?? 0,
       upMbps: finiteMbps(client.txStats?.throughputMbpsLast15sAvg) ?? 0,
     });
@@ -828,6 +892,19 @@ async function getClientReadings(): Promise<ClientReading[]> {
       txBytes: counters?.txBytes ?? 0,
     });
   }
+  // Nothing to charge it to: a recorder off the router's own network, or a
+  // roster that left us out. Held, it would come out of the next row to appear.
+  if (!hostCharged) takePendingSelfTraffic();
+  // Once per run, and only once the roster has actually answered — an empty one
+  // is a poll that failed, not a machine that is missing from it.
+  if (!hostRowFound && !warnedNoHostRow && clients.length > 0) {
+    warnedNoHostRow = true;
+    console.warn(
+      "[historian] no roster entry matches this machine, so its own polling is counted as that " +
+        "device's usage. Set HOST_LAN_IP to this machine's address on the Starlink network.",
+    );
+  }
+  if (clients.length > 0) hostRowIdentified = hostRowFound;
   clientThroughput.retain(liveEntryKeys);
   return readings;
 }
@@ -1229,17 +1306,16 @@ async function pollClients(): Promise<void> {
  * Check every rule against the counters this poll folded.
  *
  * Runs whether or not the router answered: a cycle rolls on the clock, so a rule
- * whose device is away still lets go of it when the cycle turns over.
+ * whose device is away still lets go of it when the cycle turns over. A silent
+ * poll costs the reconciliation nothing either, since it only moves rules between
+ * identities.
  */
 function runMeters(): void {
   const lifetimes = clientTotals.lifetimes();
-  const roster = {
-    keys: lifetimes.map((entry) => entry.clientKey),
-    resolveKey: (key: string) => clientTotals.resolveKey(key),
-  };
-  meters.resolve(roster);
+  const resolver = { resolveKey: (key: string) => clientTotals.resolveKey(key) };
   const groupsBefore = deviceGroups.all();
-  deviceGroups.resolve(roster);
+  meters.resolve(resolver);
+  deviceGroups.resolve(resolver);
   retireProjectedOut(meters.project(deviceGroups.all(), lifetimes, Date.now()), groupsBefore);
   // First, because until a block is known to have landed the reading below cannot
   // be read at all: a roster that has not caught up with the write yet and one
@@ -1626,6 +1702,11 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
         // Rides the list both surfaces already poll, so the prompt needs no
         // request of its own and can never disagree with the rows beside it.
         mergeCandidates: clientTotals.mergeCandidates(Date.now()),
+        // A merged identity keeps answering the router under its old id, which a
+        // reader matching the live roster against these rows would read as a
+        // second device.
+        aliases: clientTotals.resolvedAliases(),
+        selfDeviceIdentified: hostRowIdentified,
       }),
     );
     return;
@@ -1994,8 +2075,8 @@ export function start(): void {
   setInterval(() => {
     const dropped = clientStore.compact();
     if (dropped > 0) console.log(`[historian] compacted client log, dropped ${dropped} old row(s)`);
-    // Drop usage records for devices unseen since before last month, on the same
-    // hourly sweep, then persist so the trim survives a restart.
+    // Drop usage records for devices unseen since the month MONTHS_KEPT back, on
+    // the same hourly sweep, then persist so the trim survives a restart.
     const totalsDropped = clientTotals.compact(Date.now());
     if (totalsDropped > 0) {
       clientTotals.snapshot();

@@ -23,6 +23,7 @@ import {
 import { DetailsModal } from "../ui/details-modal";
 import { StatDetailPanel } from "./StatDetailPanel";
 import { formatThroughputLabel, formatThroughputTick } from "../../lib/format";
+import { AppPrompts } from "../shared/AppPrompts";
 
 const CHART_TIME_RANGES: { label: string; minutes: number }[] = [
   { label: "15M", minutes: 15 },
@@ -211,6 +212,8 @@ export function DashboardView({
 
   return (
     <main className='mx-auto flex max-w-[1400px] flex-col gap-3.5 px-6 pt-3.5 pb-20 animate-[rise_400ms_ease_both]'>
+      <AppPrompts />
+
       {/* Stat tiles */}
       <section className='grid grid-cols-6 gap-3.5 max-[1080px]:grid-cols-3'>
         {statTiles.map((tile) => (

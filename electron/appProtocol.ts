@@ -13,6 +13,7 @@ import { join, extname, normalize, sep } from "node:path";
 import { createRouterOrigins } from "../core/routerEndpoint";
 import { DISH_LAN_ADDRESS } from "../core/dishClient";
 import { preferences } from "./preferences";
+import { recordProxiedLanBytes } from "./collector";
 
 const DISH_PORT = 9201;
 
@@ -93,8 +94,48 @@ async function forwardable(request: Request): Promise<RequestInit> {
   };
 }
 
-async function proxy(request: Request, targetUrl: string): Promise<Response> {
-  return net.fetch(targetUrl, await forwardable(request));
+async function chargingLanBytes(
+  targetUrl: () => string,
+  requestInit: RequestInit,
+  send: () => Promise<Response>,
+): Promise<Response> {
+  const response = await send();
+  const sentBytes =
+    (requestInit.body instanceof ArrayBuffer ? requestInit.body.byteLength : 0) +
+    headerBytes(new Headers(requestInit.headers)) +
+    targetUrl().length;
+  void response
+    .clone()
+    .arrayBuffer()
+    .then((body) =>
+      recordProxiedLanBytes({
+        receivedBytes: body.byteLength + headerBytes(response.headers),
+        sentBytes,
+      }),
+    )
+    .catch(() => {});
+  return response;
+}
+
+function headerBytes(headers: Headers): number {
+  let total = 0;
+  headers.forEach((value, name) => {
+    total += name.length + value.length + 4;
+  });
+  return total;
+}
+
+/** `chargeToRecorder` only for the dish and router. CelesTrak shares this helper
+ *  and goes out over the dish, so charging it would erase real usage. */
+async function proxy(
+  request: Request,
+  targetUrl: string,
+  chargeToRecorder = false,
+): Promise<Response> {
+  const init = await forwardable(request);
+  const send = () => net.fetch(targetUrl, init);
+  if (!chargeToRecorder) return send();
+  return chargingLanBytes(() => targetUrl, init, send);
 }
 
 /**
@@ -106,8 +147,23 @@ async function proxy(request: Request, targetUrl: string): Promise<Response> {
  */
 async function proxyRouter(request: Request, path: string): Promise<Response> {
   const init = await forwardable(request);
-  if (ROUTER_ORIGIN_OVERRIDE) return net.fetch(ROUTER_ORIGIN_OVERRIDE + path, init);
-  return routerOrigins.run((origin) => net.fetch(origin + path, init));
+  if (ROUTER_ORIGIN_OVERRIDE)
+    return chargingLanBytes(
+      () => ROUTER_ORIGIN_OVERRIDE + path,
+      init,
+      () => net.fetch(ROUTER_ORIGIN_OVERRIDE + path, init),
+    );
+  // run() may try more than one origin, so the one that answered is read back.
+  let reachedUrl = path;
+  return chargingLanBytes(
+    () => reachedUrl,
+    init,
+    () =>
+      routerOrigins.run((origin) => {
+        reachedUrl = origin + path;
+        return net.fetch(reachedUrl, init);
+      }),
+  );
 }
 
 /**
@@ -146,7 +202,7 @@ export function handleAppProtocol(
     const { pathname, search } = url;
 
     if (pathname.startsWith("/dishy/")) {
-      return proxy(request, DISH_ORIGIN + pathname.slice("/dishy".length) + search);
+      return proxy(request, DISH_ORIGIN + pathname.slice("/dishy".length) + search, true);
     }
     if (pathname.startsWith("/router/")) {
       return proxyRouter(request, pathname.slice("/router".length) + search);

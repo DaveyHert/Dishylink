@@ -1,8 +1,8 @@
 // The group store's reconciliation, against a real file.
 //
-// What matters here is that a group which can no longer cover anything actually
-// goes: a stale one is projected back into rules on the next poll, so the rule
-// store drops them and the projection writes them again, every poll, for ever.
+// What matters here is that a group survives its devices being away, and follows
+// a member whose identity the router reissued: a group silently down a member
+// spends a pooled allowance at the wrong rate.
 
 import { describe, expect, it } from "vitest";
 import { mkdtempSync } from "node:fs";
@@ -28,7 +28,7 @@ function add(groups: DeviceGroupStore, memberKeys: string[], name = "Kids") {
   });
 }
 
-const roster = (keys: string[]) => ({ keys, resolveKey: (key: string) => key });
+const unmerged = { resolveKey: (key: string) => key };
 
 describe("minting a group's id", () => {
   /** Every group written on one clock reading — two windows saving together, or a
@@ -147,36 +147,26 @@ describe("minting a group's id", () => {
   });
 });
 
-describe("resolving a group against the roster", () => {
-  it("given: its last member gone, should: drop the group", () => {
+describe("resolving a group", () => {
+  it("given: every member away, should: keep the group and its membership", () => {
     const groups = store();
-    add(groups, ["gone"]);
-    groups.resolve(roster(["someone-else"]));
-    expect(groups.all()).toEqual([]);
+    add(groups, ["wired-console", "tablet"]);
+    groups.resolve(unmerged);
+    expect(groups.all()).toHaveLength(1);
+    expect(groups.all()[0].memberKeys).toEqual(["wired-console", "tablet"]);
   });
 
-  it("given: the only group dropped, should: report the change and persist it", () => {
-    const groups = store();
-    add(groups, ["gone"]);
-    // The list shrinks to empty, which an index-by-index comparison reads as
-    // unchanged — so the drop was decided and then never written.
-    expect(groups.resolve(roster(["someone-else"]))).toBe(true);
-    expect(groups.all()).toEqual([]);
-  });
-
-  it("given: a surviving group after a dropped one, should: keep only the survivor", () => {
-    const groups = store();
-    add(groups, ["gone"], "First");
-    add(groups, ["alive"], "Second");
-    groups.resolve(roster(["alive"]));
-    expect(groups.all().map((group) => group.name)).toEqual(["Second"]);
-  });
-
-  it("given: an empty roster, should: drop nobody", () => {
+  it("given: nothing moved, should: report no change", () => {
     const groups = store();
     add(groups, ["a"]);
-    groups.resolve(roster([]));
-    expect(groups.all()).toHaveLength(1);
+    expect(groups.resolve(unmerged)).toBe(false);
+  });
+
+  it("given: a member on a reissued id, should: follow it and persist the move", () => {
+    const groups = store();
+    add(groups, ["old-id"]);
+    expect(groups.resolve({ resolveKey: (key) => (key === "old-id" ? "new-id" : key) })).toBe(true);
+    expect(groups.all()[0].memberKeys).toEqual(["new-id"]);
   });
 });
 

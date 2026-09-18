@@ -16,6 +16,7 @@ import { extensionApiTransport } from "../../lib/apiTransport";
 import { extensionCloudSignIn, extensionCloudTransport } from "../../lib/cloudTransport";
 import { extensionNotificationHost } from "../../lib/notificationHost";
 import { startClientSampler } from "../../lib/clientSampler";
+import { reportSelfTraffic } from "../../lib/selfTrafficReporter";
 import { loadSelfDeviceClientId, storeSelfDeviceClientId } from "../../lib/selfDevice";
 import {
   dishHandleUrl,
@@ -40,7 +41,11 @@ setCloudHost({ transport: extensionCloudTransport, signIn: extensionCloudSignIn 
 
 // Chrome extensions cannot resolve the viewer's LAN IP or MAC, so the device this
 // runs on is whichever roster entry the user named.
-setSelfDeviceHost({ read: loadSelfDeviceClientId, write: storeSelfDeviceClientId });
+setSelfDeviceHost({
+  read: loadSelfDeviceClientId,
+  write: storeSelfDeviceClientId,
+  namingCorrectsUsage: true,
+});
 
 // The background worker posts OS notifications for alerts the user is not looking
 // at — its alarm fires with no dashboard open. So the extension declares itself an
@@ -99,7 +104,11 @@ function startSampler(): void {
 // afterwards, and a client loaded against the default would keep dialling it.
 loadRouterAddress()
   .then(() => {
-    setDishHost({ dishHandleUrl: dishHandleUrl(), routerHandleUrl: routerHandleUrl() });
+    setDishHost({
+      dishHandleUrl: dishHandleUrl(),
+      routerHandleUrl: routerHandleUrl(),
+      onBytes: reportSelfTraffic,
+    });
     startSampler();
     return bindNotifications();
   })

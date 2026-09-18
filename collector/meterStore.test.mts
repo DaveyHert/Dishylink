@@ -223,29 +223,29 @@ describe("MeterStore", () => {
   it("follows a device whose identity the router reissued", () => {
     const store = new MeterStore(tempPath());
     withRule(store, "111");
-    store.resolve({ keys: ["222"], resolveKey: (key) => (key === "111" ? "222" : key) });
+    store.resolve({ resolveKey: (key) => (key === "111" ? "222" : key) });
     expect(only(store, "111")).toBeUndefined();
     expect(only(store, "222")).toBeDefined();
   });
 
-  it("drops a rule whose device no longer has a record", () => {
-    const store = new MeterStore(tempPath());
-    withRule(store, "111");
-    store.resolve({ keys: ["999"], resolveKey: (key) => key });
-    expect(store.all()).toEqual([]);
-  });
-
-  it("keeps every rule when the recorder has folded no reading yet", () => {
+  // A device the router keeps no counters for is never in the odometer at all, so
+  // absence here is not evidence of anything. A rule ends where the user ends it.
+  it("keeps a rule on a device nothing is being counted for, across a restart", () => {
     const path = tempPath();
     const store = new MeterStore(path);
     withRule(store, "111");
-    store.resolve({ keys: [], resolveKey: (key) => key });
-    expect(store.all()).toHaveLength(1);
+    store.resolve({ resolveKey: (key) => key });
+    expect(only(store, "111")).toBeDefined();
     expect(new MeterStore(path).all()).toHaveLength(1);
   });
 
+  it("reports no change when nothing moved, so an unmoved rule is not rewritten", () => {
+    const store = new MeterStore(tempPath());
+    withRule(store, "111");
+    expect(store.resolve({ resolveKey: (key) => key })).toBe(false);
+  });
+
   const mergeInto222 = {
-    keys: ["222"],
     resolveKey: (key: string) => (key === "111" ? "222" : key),
   };
 

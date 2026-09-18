@@ -4,7 +4,7 @@
 // This file is the router: it owns the tab, resolves `selectedKey` to a node or
 // a device, and hands off. The rows and both detail views live beside it.
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CLIENTS_POLL_MS,
   CLOUD_CLIENTS_POLL_MS,
@@ -40,7 +40,9 @@ import { useOuiRegistry } from "../../hooks/useOuiRegistry";
 import { useClientTotals } from "../../hooks/useClientTotals";
 import { useNow } from "../../hooks/useNow";
 import { usageKey } from "@core/clientUsage";
-import { clientEntryKey, isClientDevice, liveThroughputMbps } from "./networkFormat";
+import { clientHasCounters } from "@core/dishClient";
+import { clientEntryKey, displayName, isClientDevice, liveThroughputMbps } from "./networkFormat";
+import type { MemberCandidate } from "./rules/allowanceTerms";
 
 export function NetworkPanel({
   network,
@@ -94,7 +96,7 @@ function NetworkPanelBody({
   useRememberSelfDevice(network.clients, network.clientsSource, self);
   // The odometer's records, for the split-record question below the device list.
   // The rows themselves come from the router and know nothing about stored totals.
-  const { totals, mergeCandidates, writeError, answerMerge } = useClientTotals();
+  const { totals, mergeCandidates, aliases, writeError, answerMerge } = useClientTotals();
   const nowMs = useNow(30_000);
   // Both halves of what pausing needs, so the list can name whichever is missing.
   const { status: cloudStatus } = useCloudAccount(true);
@@ -133,21 +135,39 @@ function NetworkPanelBody({
     });
   }, [devices, self, network.ratesAtRoster]);
 
-  // A limit can be set on any device the recorder holds a record for, not only
-  // the ones answering right now: an absent device's cycle still rolls and its
-  // pause still releases. Live is a tag on the row, decided here because only
-  // this view knows which devices the router is currently reporting.
-  const liveKeys = new Set(devices.map((client) => usageKey(client.clientId, client.macAddress)));
-  const meterCandidates = (totals ?? []).map((total) => {
-    const clientKey = usageKey(total.clientId, total.macAddress);
-    return {
-      clientKey,
-      name: total.name?.trim() || total.macAddress,
-      macAddress: total.macAddress,
-      active: liveKeys.has(clientKey),
-      lastSeenMs: total.lastSeenMs,
-    };
-  });
+  // A merged device goes on answering the router under its old id, so everything
+  // keyed by the odometer resolves through this first. The live-roster maps
+  // (rates, throughput history) do not: they are keyed by what the router said.
+  const resolveMeterKey = useCallback((key: string) => aliases.get(key) ?? key, [aliases]);
+
+  // Both lists, deduped: neither is the network on its own. The odometer knows
+  // devices that are away, the roster knows devices nothing has been counted for.
+  const meterCandidates = useMemo(() => {
+    const byKey = new Map<string, MemberCandidate>();
+    for (const total of totals ?? []) {
+      const clientKey = resolveMeterKey(usageKey(total.clientId, total.macAddress));
+      byKey.set(clientKey, {
+        clientKey,
+        name: total.name?.trim() || total.macAddress,
+        macAddress: total.macAddress,
+        active: false,
+        lastSeenMs: total.lastSeenMs,
+      });
+    }
+    for (const client of devices) {
+      const clientKey = resolveMeterKey(usageKey(client.clientId, client.macAddress));
+      const held = byKey.get(clientKey);
+      byKey.set(clientKey, {
+        clientKey,
+        name: displayName(client),
+        macAddress: client.macAddress ?? held?.macAddress ?? "",
+        active: true,
+        lastSeenMs: held?.lastSeenMs ?? 0,
+        hasCounters: clientHasCounters(client),
+      });
+    }
+    return [...byKey.values()];
+  }, [totals, devices, resolveMeterKey]);
 
   if (network.routerReachable === null) {
     return <Loading message='Contacting the router…' />;
@@ -218,6 +238,7 @@ function NetworkPanelBody({
         isThisDevice={matchesSelf(selected, self)}
         viewerIdentified={selfIdentified(self)}
         meterCandidates={meterCandidates}
+        resolveMeterKey={resolveMeterKey}
         onRename={network.renameClient}
       />
     );

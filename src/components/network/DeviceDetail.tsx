@@ -54,11 +54,16 @@ export function DeviceDetail({
   isThisDevice,
   viewerIdentified,
   meterCandidates,
+  resolveMeterKey,
   onRename,
 }: {
   client: WifiClientJson;
   /** Every device a limit set here could be extended to cover. */
   meterCandidates: MemberCandidate[];
+  /** The key the recorder holds this device's rules under, which is the roster's
+   *  own key until a merge moves it. Asking under the other one reads an empty
+   *  card for a device that is metered. */
+  resolveMeterKey: (key: string) => string;
   /** Live per-MAC rates from the hook's byte-delta tracker. */
   rates: Map<string, ThroughputRates>;
   /** Whether that tracker is still being fed. It runs on the LAN, so a roster
@@ -96,9 +101,10 @@ export function DeviceDetail({
   if (pendingPaused !== null && paused === pendingPaused) setPendingPaused(null);
   const pauseBusy = pendingPaused !== null && paused !== pendingPaused;
   const { status: cloudStatus } = useCloudAccount(true);
-  const meter = useDataMeter(
-    client.macAddress ? usageKey(client.clientId, client.macAddress) : null,
-  );
+  const meterKey = client.macAddress
+    ? resolveMeterKey(usageKey(client.clientId, client.macAddress))
+    : null;
+  const meter = useDataMeter(meterKey);
   // A pause a rule is holding, as against one someone set by hand: the row in the
   // list already tells the two apart, and the detail behind it has to agree.
   const heldByRule = meter.rules.some((rule) => rule.holding);
@@ -294,10 +300,10 @@ export function DeviceDetail({
         </div>
       )}
 
-      {client.macAddress && (
+      {client.macAddress && meterKey !== null && (
         <DataMeterDialog
           meter={meter}
-          clientKey={usageKey(client.clientId, client.macAddress)}
+          clientKey={meterKey}
           deviceName={name}
           macAddress={client.macAddress}
           candidates={meterCandidates}

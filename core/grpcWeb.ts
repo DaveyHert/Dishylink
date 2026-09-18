@@ -41,6 +41,24 @@ function parseTrailers(trailerText: string): { status: number; message: string }
   return { status, message };
 }
 
+export interface GrpcWebCallBytes {
+  requestBytes: number;
+  responseBytes: number;
+}
+
+/** "HTTP/1.1 200 OK\r\n" and the blank line that ends a header block. */
+const STATUS_LINE_BYTES = 17;
+
+/** Read rather than assumed: undici, Chromium's fetch and Electron's net.fetch
+ *  each send a different set, so a constant measured on one decays on the rest. */
+function headerBytes(headers: Headers): number {
+  let total = 0;
+  headers.forEach((value, name) => {
+    total += name.length + value.length + 4;
+  });
+  return total;
+}
+
 /** Perform a unary grpc-web call and return the response message bytes. */
 export async function grpcWebUnaryCall(
   methodUrl: string,
@@ -49,29 +67,45 @@ export async function grpcWebUnaryCall(
   options: {
     fetch?: typeof fetch;
     headers?: Record<string, string>;
+    /** Only the headers we set are visible, so the client's own and the TCP/IP
+     *  framing below the socket are a known few-percent undercount. */
+    onBytes?: (bytes: GrpcWebCallBytes) => void;
   } = {},
 ): Promise<Uint8Array> {
   const doFetch = options.fetch ?? fetch;
+  const requestHeaders = {
+    "Content-Type": "application/grpc-web+proto",
+    "X-Grpc-Web": "1",
+    ...options.headers,
+  };
+  const requestFrame = encodeFrame(requestBytes);
   const httpResponse = await doFetch(methodUrl, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/grpc-web+proto",
-      "X-Grpc-Web": "1",
-      ...options.headers,
-    },
-    body: encodeFrame(requestBytes) as unknown as BodyInit,
+    headers: requestHeaders,
+    body: requestFrame as unknown as BodyInit,
     signal: abortSignal ?? null,
   });
+  const reportBytes = (responseBodyBytes: number): void =>
+    options.onBytes?.({
+      requestBytes:
+        requestFrame.length +
+        headerBytes(new Headers(requestHeaders)) +
+        methodUrl.length +
+        STATUS_LINE_BYTES,
+      responseBytes: responseBodyBytes + headerBytes(httpResponse.headers) + STATUS_LINE_BYTES,
+    });
 
   // Trailers-only responses carry the status in HTTP headers.
   const headerStatus = httpResponse.headers.get("grpc-status");
   if (headerStatus !== null && Number(headerStatus) !== 0) {
+    reportBytes(0);
     throw new GrpcWebError(
       Number(headerStatus),
       httpResponse.headers.get("grpc-message") ?? "unknown error",
     );
   }
   if (!httpResponse.ok) {
+    reportBytes(0);
     throw new GrpcWebError(
       httpResponse.status === 401 || httpResponse.status === 403 ? 16 : 2,
       `HTTP ${httpResponse.status}`,
@@ -79,6 +113,7 @@ export async function grpcWebUnaryCall(
   }
 
   const body = new Uint8Array(await httpResponse.arrayBuffer());
+  reportBytes(body.length);
   let responseMessage: Uint8Array | null = null;
   let readOffset = 0;
   while (readOffset + 5 <= body.length) {

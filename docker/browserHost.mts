@@ -95,17 +95,21 @@ function forwardableHeaders(request: IncomingMessage): Headers {
   return headers;
 }
 
+/** `onLanBytes` only for the dish and router. CelesTrak and the speed test go out
+ *  over the dish, so charging them would erase real usage. */
 async function proxyTo(
   targetUrl: string,
   request: IncomingMessage,
   response: ServerResponse,
   body: Buffer | undefined,
   timeoutMs: number,
+  onLanBytes?: (bytes: { receivedBytes: number; sentBytes: number }) => void,
 ): Promise<void> {
   const hasBody = request.method !== "GET" && request.method !== "HEAD";
+  const requestHeaders = forwardableHeaders(request);
   const upstream = await fetch(targetUrl, {
     method: request.method,
-    headers: forwardableHeaders(request),
+    headers: requestHeaders,
     body: hasBody ? (body as BodyInit) : undefined,
     signal: AbortSignal.timeout(timeoutMs),
   });
@@ -113,7 +117,21 @@ async function proxyTo(
     if (!SKIP_RESPONSE_HEADERS.has(name)) response.setHeader(name, value);
   });
   response.statusCode = upstream.status;
-  response.end(Buffer.from(await upstream.arrayBuffer()));
+  const responseBody = Buffer.from(await upstream.arrayBuffer());
+  onLanBytes?.({
+    receivedBytes: responseBody.length + headerBytes(upstream.headers),
+    sentBytes: (hasBody ? (body?.length ?? 0) : 0) + headerBytes(requestHeaders) + targetUrl.length,
+  });
+  response.end(responseBody);
+}
+
+/** A header block's size on the wire: `name: value\r\n` per entry. */
+function headerBytes(headers: Headers): number {
+  let total = 0;
+  headers.forEach((value, name) => {
+    total += name.length + value.length + 4;
+  });
+  return total;
 }
 
 function sendJson(response: ServerResponse, status: number, payload: unknown): void {
@@ -263,8 +281,12 @@ const guardedCloudHandler = {
 
 // An embedded historian records nothing until start() is called.
 let handleRequest: ((request: IncomingMessage, response: ServerResponse) => void) | null = null;
+/** Dish and router traffic this process forwarded for the dashboard. A no-op
+ *  until the recorder starts, since there is nothing to charge it to. */
+let chargeLanBytes: (bytes: { receivedBytes: number; sentBytes: number }) => void = () => {};
 try {
   const historian = await import("../collector/historian.mts");
+  chargeLanBytes = historian.recordSelfTraffic;
   historian.setRouterAddressReader(() => readRouterAddress());
   historian.setAccountSessionReader(() => readCookie() !== null);
   historian.setDevicePauser(async (clientId, paused) => {
@@ -376,14 +398,21 @@ export async function handleBrowserRequest(
         serveRecorder(request, response);
         return;
       case "dish":
-        await proxyTo(DISH_ORIGIN + route.path, request, response, await readBody(request), 10_000);
+        await proxyTo(
+          DISH_ORIGIN + route.path,
+          request,
+          response,
+          await readBody(request),
+          10_000,
+          chargeLanBytes,
+        );
         return;
       case "router": {
         const path = route.path;
         const body = await readBody(request);
         if (ROUTER_URL_OVERRIDE) {
           const origin = originOf(ROUTER_URL_OVERRIDE);
-          await proxyTo(origin + path, request, response, body, 10_000);
+          await proxyTo(origin + path, request, response, body, 10_000, chargeLanBytes);
           return;
         }
         const upstream = await routerOrigins.run((origin) =>
@@ -401,7 +430,12 @@ export async function handleBrowserRequest(
           if (!SKIP_RESPONSE_HEADERS.has(name)) response.setHeader(name, value);
         });
         response.statusCode = upstream.status;
-        response.end(Buffer.from(await upstream.arrayBuffer()));
+        const responseBody = Buffer.from(await upstream.arrayBuffer());
+        chargeLanBytes({
+          receivedBytes: responseBody.length + headerBytes(upstream.headers),
+          sentBytes: (body?.length ?? 0) + headerBytes(forwardableHeaders(request)) + path.length,
+        });
+        response.end(responseBody);
         return;
       }
       case "celestrak":
