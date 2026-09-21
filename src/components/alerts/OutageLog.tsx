@@ -4,9 +4,9 @@
 // raw jargon explained) via outageEventMeta.
 
 import { canonicalCause, outageEventMeta, type OutageEvent } from "@core/telemetry";
-import { formatClockTimeShort, formatEventDuration } from "../../lib/format";
+import { formatClockTimeShort, formatEventDuration, formatDate } from "../../lib/format";
 import { EmptyState } from "../ui/empty-state";
-import { InfoDot } from "../shared/InfoDot";
+import { InfoDot, TooltipOnElement } from "../shared/InfoDot";
 
 // Severity, not the event kind. The thermal episodes reach this list with human
 // labels and no catalogue entry (useThermalEvents), so a kind lookup returns the
@@ -18,6 +18,12 @@ const SEVERITY_COLOR_VAR: Record<OutageEvent["severity"], string> = {
   warning: "--chart-warm",
   critical: "--status-critical",
 };
+
+function OutageTime(startMs: number) : string {
+  return (
+    <span className='font-mono text-[10.5px] whitespace-nowrap text-muted-foreground tabular-nums'>{formatClockTimeShort(startMs)} </span>
+  );
+}
 
 export function OutageLog({ outageEvents }: { outageEvents: OutageEvent[] }) {
   const newestFirst = [...outageEvents].sort((a, b) => b.startMs - a.startMs);
@@ -42,8 +48,8 @@ export function OutageLog({ outageEvents }: { outageEvents: OutageEvent[] }) {
                 className='grid grid-cols-[auto_1fr_auto] items-center gap-2.5 border-b border-border px-0.5 py-2 text-[13px] font-medium last:border-b-0'
                 key={`${outage.startMs}-${canonicalCause(outage.cause)}`}
               >
-                <span className='font-mono text-[10.5px] whitespace-nowrap text-muted-foreground tabular-nums'>
-                  {formatClockTimeShort(outage.startMs)}
+                <span classname='flex min-w-0 items-center gap-2'>
+                  { <TooltipOnElement el={OutageTime(outage.startMs)} info={formatDate(outage.startMs)} />}
                 </span>
                 <span className='flex min-w-0 items-center gap-2'>
                   <span
