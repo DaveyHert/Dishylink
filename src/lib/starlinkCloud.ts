@@ -331,6 +331,65 @@ export function formatAllowance(usageLimitGB: number | undefined): string {
   return `${Number.isInteger(tb) ? tb : tb.toFixed(1)} TB`;
 }
 
+/**
+ * Whether the feed actually reported this cycle.
+ *
+ * A cycle the account has nothing for arrives as 0 GB across zero days, which is
+ * indistinguishable from real zero usage if you only read the total. The daily
+ * figures are what separates them: days present and adding to zero is a dish
+ * that was off, which is a reading; no days at all is an absence, and must not
+ * be drawn or counted as if it were a measurement of nothing.
+ */
+export function isCycleReported(cycle: UsageCycle): boolean {
+  return Array.isArray(cycle?.dailyData) && cycle.dailyData.length > 0;
+}
+
+export interface AllTimeUsage {
+  /** Billed total across every cycle the account reported. */
+  totalGB: number;
+  /** How many cycles that total covers. Unreported cycles are not among them. */
+  cycles: number;
+  /** How many cycles the feed listed but reported nothing for. */
+  unreported: number;
+  /** Start of the earliest reported cycle; null when none were reported. */
+  from: string | null;
+}
+
+/**
+ * Every reported billing cycle added up.
+ *
+ * "All time" is the span the account actually reported, not a claim about every
+ * byte the service line ever moved: /cloud/usage returns whatever window of
+ * cycles Starlink chooses to send. So the span is returned alongside the figure
+ * and the UI is expected to show it — a bare total would read as complete
+ * history whether or not it is.
+ *
+ * The span starts at the first cycle with data rather than the first one listed,
+ * for the same reason: a service line whose opening cycle was never reported has
+ * no usage behind that month, and dating the total from it would claim coverage
+ * that does not exist.
+ *
+ * `totalAmountGB` is unvalidated upstream JSON, so a cycle missing it (or
+ * carrying something non-numeric) is skipped rather than poisoning the sum with
+ * NaN.
+ */
+export function allTimeUsage(cycles: readonly UsageCycle[]): AllTimeUsage {
+  let totalGB = 0;
+  let reported = 0;
+  let from: string | null = null;
+  for (const cycle of cycles) {
+    if (!isCycleReported(cycle)) continue;
+    reported += 1;
+    // Cycles arrive oldest-first (verified against the live endpoint), the same
+    // ordering CloudDataUsage relies on to find the newest, so the first
+    // reported one is the earliest.
+    from ??= cycle.startDate ?? null;
+    const amount = cycle.totalAmountGB;
+    if (typeof amount === "number" && Number.isFinite(amount)) totalGB += amount;
+  }
+  return { totalGB, cycles: reported, unreported: cycles.length - reported, from };
+}
+
 /** Minor-unit currency amount (57000 = ₦57,000) → localized string. */
 export function formatMoney(amount: number | undefined, currency: string | undefined): string {
   if (amount == null || !currency) return "—";
