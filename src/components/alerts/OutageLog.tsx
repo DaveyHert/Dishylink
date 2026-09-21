@@ -1,12 +1,17 @@
-// Recent outage / event log from the dish's history buffer, newest first.
+// Recent outage / event log from the dish's history buffer, newest first, with
+// the recorder's auto-generated post-mortems for ended outages beneath it.
 // Layout mirrors the official app: time on the left, the event, then a tag/
 // duration on the right. Each cause carries a plain-English tooltip (the dish's
 // raw jargon explained) via outageEventMeta.
 
+import { useState } from "react";
 import { canonicalCause, outageEventMeta, type OutageEvent } from "@core/telemetry";
-import { formatClockTimeShort, formatEventDuration } from "../../lib/format";
+import type { OutageReport } from "@core/postmortem";
+import { formatClockTimeShort, formatDateTime, formatEventDuration } from "../../lib/format";
+import { causeLabel } from "../../lib/outageReportText";
 import { EmptyState } from "../ui/empty-state";
 import { InfoDot } from "../shared/InfoDot";
+import { OutageReportModal } from "./OutageReportModal";
 
 // Severity, not the event kind. The thermal episodes reach this list with human
 // labels and no catalogue entry (useThermalEvents), so a kind lookup returns the
@@ -19,7 +24,14 @@ const SEVERITY_COLOR_VAR: Record<OutageEvent["severity"], string> = {
   critical: "--status-critical",
 };
 
-export function OutageLog({ outageEvents }: { outageEvents: OutageEvent[] }) {
+export function OutageLog({
+  outageEvents,
+  reports,
+}: {
+  outageEvents: OutageEvent[];
+  reports: OutageReport[];
+}) {
+  const [openReport, setOpenReport] = useState<OutageReport | null>(null);
   const newestFirst = [...outageEvents].sort((a, b) => b.startMs - a.startMs);
   return (
     <div className='col-span-4 min-w-0 rounded-xl bg-card px-[18px] py-4'>
@@ -63,6 +75,39 @@ export function OutageLog({ outageEvents }: { outageEvents: OutageEvent[] }) {
           })}
         </div>
       )}
+      {reports.length > 0 && (
+        <div className='mt-3 border-t border-border pt-2.5'>
+          <div className='mb-1.5 flex items-center justify-between gap-3'>
+            <span className='text-[13px] font-semibold tracking-[0.005em] text-foreground'>
+              Outage reports
+            </span>
+            <span className='text-[12px] font-medium text-muted-foreground'>
+              {reports.length} ready
+            </span>
+          </div>
+          <div className='thin-scroll flex max-h-[150px] flex-col overflow-y-auto'>
+            {reports.map((report) => (
+              <button
+                className='grid cursor-pointer grid-cols-[auto_1fr_auto] items-center gap-2.5 border-b border-border px-0.5 py-2 text-left text-[13px] font-medium last:border-b-0 hover:bg-[color-mix(in_srgb,var(--ink)_4%,var(--surface))]'
+                key={report.id}
+                onClick={() => setOpenReport(report)}
+                type='button'
+              >
+                <span className='font-mono text-[10.5px] whitespace-nowrap text-muted-foreground tabular-nums'>
+                  {formatDateTime(report.startMs)}
+                </span>
+                <span className='overflow-hidden text-ellipsis whitespace-nowrap text-foreground'>
+                  {causeLabel(report)}
+                </span>
+                <span className='font-mono text-[10.5px] whitespace-nowrap text-muted-foreground tabular-nums'>
+                  {formatEventDuration(report.durationMs)}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {openReport && <OutageReportModal report={openReport} onClose={() => setOpenReport(null)} />}
     </div>
   );
 }

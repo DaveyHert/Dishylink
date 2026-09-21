@@ -23,6 +23,11 @@ export interface TelemetrySample {
    *  fetched. NEVER sourced from get_ping (1009), which reboots the router.
    *  Stamped the same way and for the same reason as routerLatencyMs. */
   routerPingSuccessPercent: number | null;
+  /** Whether the dish's snow-melt heater was running, from get_status's
+   *  snowMeltActive — stamped the way routerLatencyMs is, because no ring
+   *  buffer replays it. True only when the reply said so: `toJson` omits a
+   *  false field, so absence is "not known to be active", never "off". */
+  snowMeltActive: boolean | null;
 }
 
 export interface OutageEvent {
@@ -303,6 +308,7 @@ export function decodeHistoryWindow(
       powerW: history.powerIn?.[ringIndex] ?? 0,
       routerLatencyMs: null,
       routerPingSuccessPercent: null,
+      snowMeltActive: null,
     });
   }
   return { samples, newestCounter };
@@ -357,10 +363,16 @@ export function decodeWifiHistoryEvents(wifiHistory: {
   return decodeEventLog((wifiHistory.eventLog?.events ?? []) as DishEventJson[]);
 }
 
-/** Readings the router reports live, which no ring buffer can replay. */
-export interface RouterReadings {
+/** Readings no ring buffer can replay, stamped onto the samples a poll appends:
+ *  the router's own ping to the PoP, and the dish's snow-melt heater. Each rides
+ *  a reply the poll already fetches — the devices are never polled for these. */
+export interface StampedReadings {
   latencyMs?: number | null;
   pingSuccessPercent?: number | null;
+  /** True when the dish's get_status said the heater was running. Absent means
+   *  the reply said nothing (proto3 JSON omits a false field), which is not
+   *  recorded as off. */
+  snowMeltActive?: boolean | null;
 }
 
 /**
@@ -536,16 +548,18 @@ export class TelemetryAccumulator {
   }
 
   /**
-   * `router` holds the latest readings taken from the router, stamped onto the
-   * samples this poll appends. The router is polled slower than the dish's 1 Hz
-   * ring, so one reading lands on the handful of samples it spans — a step-wise
-   * series, which is what a point-in-time value honestly is. A field left null
-   * stays null on those samples rather than repeating the last known value.
+   * `stamped` holds the latest readings taken alongside the history poll,
+   * stamped onto the samples this poll appends. Stamped readings come from
+   * status replies (the router's ping, the dish's snow-melt heater) rather than
+   * a replayable ring, so one reading lands on the handful of samples it spans
+   * — a step-wise series, which is what a point-in-time value honestly is. A
+   * field left null stays null on those samples rather than repeating the last
+   * known value.
    */
   ingest(
     history: DishHistoryJson,
     nowMs: number,
-    router: RouterReadings = {},
+    stamped: StampedReadings = {},
     /** Skips the decode below when a caller already has it (avoids re-unrolling
      *  the same ring buffer twice in one poll cycle). */
     precomputedWindow?: ReturnType<typeof decodeHistoryWindow>,
@@ -562,10 +576,11 @@ export class TelemetryAccumulator {
       newestSampleMs: this.samples.length ? this.samples[this.samples.length - 1].timestampMs : 0,
     });
     for (const sample of freshSamples) {
-      if (router.latencyMs != null) sample.routerLatencyMs = router.latencyMs;
-      if (router.pingSuccessPercent != null) {
-        sample.routerPingSuccessPercent = router.pingSuccessPercent;
+      if (stamped.latencyMs != null) sample.routerLatencyMs = stamped.latencyMs;
+      if (stamped.pingSuccessPercent != null) {
+        sample.routerPingSuccessPercent = stamped.pingSuccessPercent;
       }
+      if (stamped.snowMeltActive != null) sample.snowMeltActive = stamped.snowMeltActive;
     }
     this.samples.push(...freshSamples);
     this.newestCounter = window.newestCounter;

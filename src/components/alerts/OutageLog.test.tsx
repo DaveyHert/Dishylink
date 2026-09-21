@@ -22,7 +22,7 @@ type Setter = (events: OutageEvent[]) => void;
 function Harness({ initial, bind }: { initial: OutageEvent[]; bind: (set: Setter) => void }) {
   const [events, setEvents] = useState(initial);
   useEffect(() => bind(setEvents), [bind]);
-  return <OutageLog outageEvents={events} />;
+  return <OutageLog outageEvents={events} reports={[]} />;
 }
 
 test("an existing row keeps its DOM node when a newer event is prepended", async () => {

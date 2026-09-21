@@ -19,7 +19,7 @@ import {
   readRouterPingSuccessPercent,
   type TelemetrySample,
   type OutageEvent,
-  type RouterReadings,
+  type StampedReadings,
 } from "@core/telemetry";
 
 /**
@@ -142,7 +142,7 @@ export function useDishTelemetry(): DishTelemetry {
     // never be sourced from get_ping (1009), which rebooted the router at every
     // cadence it was tried at (2026-07-20). A browser tab must never be what
     // destabilises the router it is monitoring.
-    const routerReadings: RouterReadings = { latencyMs: null, pingSuccessPercent: null };
+    const routerReadings: StampedReadings = { latencyMs: null, pingSuccessPercent: null };
     const unsubscribeRouterStatus = subscribeRouterStatus(({ status, reachable }) => {
       // An unreachable router leaves the series empty rather than repeating a
       // stale reading; it is not an app error.

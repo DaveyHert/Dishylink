@@ -118,6 +118,7 @@ describe("routeApiRequest", () => {
       powerW,
       routerLatencyMs: null,
       routerPingSuccessPercent: null,
+      snowMeltActive: null,
     });
     await store.putSamples([sample(t - 2_000, 9), sample(t - 1_000, 10)], t);
     const reply = await routeApiRequest(store, "/api/samples?minutes=360", NOW);
