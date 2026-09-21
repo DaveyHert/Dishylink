@@ -331,6 +331,40 @@ export function formatAllowance(usageLimitGB: number | undefined): string {
   return `${Number.isInteger(tb) ? tb : tb.toFixed(1)} TB`;
 }
 
+export interface AllTimeUsage {
+  /** Billed total across every cycle the account reported. */
+  totalGB: number;
+  /** How many cycles that total covers. */
+  cycles: number;
+  /** Start of the earliest reported cycle; null when none were reported. */
+  from: string | null;
+}
+
+/**
+ * Every reported billing cycle added up.
+ *
+ * "All time" is the span the account actually reported, not a claim about every
+ * byte the service line ever moved: /cloud/usage returns whatever window of
+ * cycles Starlink chooses to send. So the span is returned alongside the figure
+ * and the UI is expected to show it — a bare total would read as complete
+ * history whether or not it is.
+ *
+ * `totalAmountGB` is unvalidated upstream JSON, so a cycle missing it (or
+ * carrying something non-numeric) is skipped rather than poisoning the sum with
+ * NaN. A cycle reporting a real 0 — which is what the first cycle of a new
+ * service line looks like — still counts toward the span and the cycle count.
+ */
+export function allTimeUsage(cycles: readonly UsageCycle[]): AllTimeUsage {
+  let totalGB = 0;
+  for (const cycle of cycles) {
+    const amount = cycle?.totalAmountGB;
+    if (typeof amount === "number" && Number.isFinite(amount)) totalGB += amount;
+  }
+  // Cycles arrive oldest-first (verified against the live endpoint), the same
+  // ordering CloudDataUsage relies on to find the newest.
+  return { totalGB, cycles: cycles.length, from: cycles[0]?.startDate ?? null };
+}
+
 /** Minor-unit currency amount (57000 = ₦57,000) → localized string. */
 export function formatMoney(amount: number | undefined, currency: string | undefined): string {
   if (amount == null || !currency) return "—";

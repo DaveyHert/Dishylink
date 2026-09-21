@@ -6,8 +6,10 @@ import {
   formatAllowance,
   isUnlimited,
   dishDisplayName,
+  allTimeUsage,
   type CloudTerminal,
   type DeviceTelemetry,
+  type UsageCycle,
 } from "./starlinkCloud";
 
 const now = Date.now();
@@ -107,5 +109,64 @@ describe("dishDisplayName", () => {
     expect(dishDisplayName({ userTerminalId: "01000000-00000000-004c8bb9" } as CloudTerminal)).toBe(
       "STARLINK 4C8BB9",
     );
+  });
+});
+
+describe("allTimeUsage", () => {
+  const cycle = (startDate: string, totalAmountGB: number): UsageCycle => ({
+    startDate,
+    endDate: startDate,
+    totalAmountGB,
+    dailyData: [],
+  });
+
+  it("sums every reported cycle", () => {
+    const summary = allTimeUsage([
+      cycle("2026-03-04T00:00:00+00:00", 2495.966052108),
+      cycle("2026-04-04T00:00:00+00:00", 4136.937441903),
+      cycle("2026-05-04T00:00:00+00:00", 4333.455701169),
+    ]);
+    expect(summary.totalGB).toBeCloseTo(10966.35919518, 6);
+    expect(summary.cycles).toBe(3);
+  });
+
+  it("reports the window it covers, so the figure is not read as all of history", () => {
+    // The endpoint returns whatever span of cycles it chooses. Naming the first
+    // one is what keeps "all time" an honest label rather than a claim about
+    // every byte the account ever moved.
+    const summary = allTimeUsage([
+      cycle("2026-02-04T00:00:00+00:00", 0),
+      cycle("2026-03-04T00:00:00+00:00", 12),
+    ]);
+    expect(summary.from).toBe("2026-02-04T00:00:00+00:00");
+  });
+
+  it("counts a zero-usage activation cycle in the window but not the total", () => {
+    // The first cycle of a new service line reports 0 GB across 0 days. It is
+    // still where billing started, so it belongs in the span and the count.
+    const summary = allTimeUsage([
+      cycle("2026-02-04T00:00:00+00:00", 0),
+      cycle("2026-03-04T00:00:00+00:00", 500),
+    ]);
+    expect(summary.totalGB).toBe(500);
+    expect(summary.cycles).toBe(2);
+  });
+
+  it("is zero — never NaN — when no cycle has been reported", () => {
+    const summary = allTimeUsage([]);
+    expect(summary.totalGB).toBe(0);
+    expect(summary.cycles).toBe(0);
+    expect(summary.from).toBeNull();
+  });
+
+  it("skips a total that upstream sent as absent or non-numeric", () => {
+    // Unvalidated JSON: one bad cycle must not turn the whole figure into NaN.
+    const cycles = [
+      cycle("2026-03-04T00:00:00+00:00", 100),
+      { ...cycle("2026-04-04T00:00:00+00:00", 0), totalAmountGB: undefined },
+      { ...cycle("2026-05-04T00:00:00+00:00", 0), totalAmountGB: Number.NaN },
+      cycle("2026-06-04T00:00:00+00:00", 50),
+    ] as unknown as UsageCycle[];
+    expect(allTimeUsage(cycles).totalGB).toBe(150);
   });
 });

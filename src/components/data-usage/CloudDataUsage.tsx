@@ -1,11 +1,17 @@
 // Starlink's own billing meter (the authoritative usage the portal shows),
 // read from the account session via /cloud/usage. Monthly cycles + daily bars,
-// laid out like the portal's Total Data Usage card. Distinct from the local
-// "Local session" tab, which is historian-recorded and honest about gaps.
+// laid out like the portal's Total Data Usage card, plus an "All" stop that
+// totals every reported cycle and charts them month by month. Distinct from the
+// local "Local session" tab, which is historian-recorded and honest about gaps.
 
 import { useMemo, useState } from "react";
 import { useCloudUsage } from "../../hooks/useCloudAccount";
-import { isUnlimited, formatAllowance, type UsageCycle } from "../../lib/starlinkCloud";
+import {
+  allTimeUsage,
+  isUnlimited,
+  formatAllowance,
+  type UsageCycle,
+} from "../../lib/starlinkCloud";
 import { formatGigabytes } from "../../lib/format";
 import { RangeBars, type RangeBarColumn } from "../shared/RangeBarChart";
 import { SegmentedControl } from "../ui/segmented-control";
@@ -15,6 +21,9 @@ import { Loading } from "../ui/loading";
 import { Explainer } from "../ui/explainer";
 import { ConnectAccount } from "../shared/ConnectAccount";
 
+/** The segmented control's value for the all-cycles view, distinct from any index. */
+const ALL_CYCLES = "all";
+
 function formatGB(gb: number): string {
   const { value, unit } = formatGigabytes(gb);
   return `${value} ${unit}`;
@@ -22,6 +31,33 @@ function formatGB(gb: number): string {
 
 function cycleMonthLabel(cycle: UsageCycle): string {
   return new Date(cycle.startDate).toLocaleDateString([], { month: "short", timeZone: "UTC" });
+}
+
+/** "Mar 2026" — how a cycle is named. The exact billing day repeats across every
+ *  cycle, so it is noise in a per-cycle label; the span is spelled out below the
+ *  chart instead. */
+function cycleMonthYearLabel(cycle: UsageCycle): string {
+  return new Date(cycle.startDate).toLocaleDateString([], {
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+/** "Feb 4, 2026" — the year matters once the span crosses one. */
+function cycleStartLabel(cycle: UsageCycle): string {
+  return new Date(cycle.startDate).toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+/** A cycle's billed total, defended against unvalidated upstream JSON. */
+function cycleTotalGB(cycle: UsageCycle): number {
+  const amount = cycle?.totalAmountGB;
+  return typeof amount === "number" && Number.isFinite(amount) ? amount : 0;
 }
 
 function CycleBars({ cycle }: { cycle: UsageCycle }) {
@@ -55,6 +91,35 @@ function CycleBars({ cycle }: { cycle: UsageCycle }) {
   );
 }
 
+/** One bar per billing cycle — the same chart vocabulary as CycleBars, a month
+ *  to a column instead of a day. */
+function AllCyclesBars({ cycles }: { cycles: UsageCycle[] }) {
+  const maxGB = Math.max(...cycles.map(cycleTotalGB), 1e-9);
+  const columns: RangeBarColumn[] = cycles.map((cycle, index) => {
+    const gb = cycleTotalGB(cycle);
+    return {
+      key: index,
+      label: cycleMonthLabel(cycle),
+      title: `${cycleMonthYearLabel(cycle)} · ${formatGB(gb)}`,
+      bar: (
+        <div
+          className='w-full rounded-t-[3px] bg-chart-ink opacity-80'
+          style={{ height: `${(gb / maxGB) * 100}%` }}
+        />
+      ),
+    };
+  });
+  return (
+    <RangeBars
+      columns={columns}
+      range='month'
+      labelWidthPx={24}
+      heightPx={150}
+      yAxis={{ max: maxGB, format: (v) => formatGB(v) }}
+    />
+  );
+}
+
 const NO_CYCLES: UsageCycle[] = [];
 
 export function CloudDataUsage({ active }: { active: boolean }) {
@@ -66,19 +131,26 @@ export function CloudDataUsage({ active }: { active: boolean }) {
   // identity, which would rebuild every memo keyed on it on every render.
   const cycles = data?.content?.billingCyclesAnnotated ?? NO_CYCLES;
   const plan = data?.content?.servicePlan;
-  const [selected, setSelected] = useState<number | null>(null);
+  // Either ALL_CYCLES or a cycle index as a string, matching the control's values.
+  const [selected, setSelected] = useState<string | null>(null);
 
   // Cycles arrive oldest-first (verified against the live endpoint), so the
   // newest is the last entry. Clamped so a reload that returns fewer cycles
   // can't strand the selection past the end of the list.
   const newestIndex = Math.max(cycles.length - 1, 0);
-  const selectedIndex = Math.min(selected ?? newestIndex, newestIndex);
+  const showAll = selected === ALL_CYCLES;
+  const selectedIndex =
+    selected == null || showAll ? newestIndex : Math.min(Number(selected), newestIndex);
   const cycle = cycles[selectedIndex];
 
-  const monthOptions = useMemo(
-    () => cycles.map((c, i) => ({ label: cycleMonthLabel(c), value: String(i) })),
-    [cycles],
-  );
+  const allTime = useMemo(() => allTimeUsage(cycles), [cycles]);
+
+  // "All" only earns a stop when there is more than one cycle to add up —
+  // with a single cycle it would restate the figure already on screen.
+  const monthOptions = useMemo(() => {
+    const months = cycles.map((c, i) => ({ label: cycleMonthLabel(c), value: String(i) }));
+    return months.length > 1 ? [{ label: "All", value: ALL_CYCLES }, ...months] : months;
+  }, [cycles]);
 
   if (status === "not-connected") {
     // Same framing as the account panel's connect state, so switching between the
@@ -116,48 +188,71 @@ export function CloudDataUsage({ active }: { active: boolean }) {
     <div>
       <div className='mt-3 mb-3.5'>
         <div className='text-[34px] leading-[1.05] font-bold tracking-[-0.01em]'>
-          {formatGB(cycle.totalAmountGB)}
+          {formatGB(showAll ? allTime.totalGB : cycleTotalGB(cycle))}
           <span className='ml-[6px] align-baseline text-[13px] font-medium'>
             {data?.content?.dataBuckets?.[0]?.name ?? "Data"}
           </span>
         </div>
         <div className='mt-0.5 text-[12px] font-medium text-muted-foreground'>
-          <span className='mr-1 font-semibold'>Usage Limit:</span>
-          {unlimited
-            ? `${formatAllowance(plan?.usageLimitGB)} included (unlimited)`
-            : `of ${formatAllowance(plan?.usageLimitGB)} included`}
+          {showAll ? (
+            // The allowance is a per-cycle figure, so it says nothing about a
+            // total across cycles. What the total does need stated is how much
+            // of history it covers.
+            <>
+              <span className='mr-1 font-semibold'>All time:</span>
+              {`${allTime.cycles} billing cycles`}
+            </>
+          ) : (
+            <>
+              <span className='mr-1 font-semibold'>Usage Limit:</span>
+              {unlimited
+                ? `${formatAllowance(plan?.usageLimitGB)} included (unlimited)`
+                : `of ${formatAllowance(plan?.usageLimitGB)} included`}
+            </>
+          )}
         </div>
       </div>
 
       {monthOptions.length > 1 && (
         <SegmentedControl
           options={monthOptions}
-          value={String(selectedIndex)}
-          onChange={(value) => setSelected(Number(value))}
+          value={showAll ? ALL_CYCLES : String(selectedIndex)}
+          onChange={(value) => setSelected(value)}
           label='Billing cycle month'
           className='mb-2.5'
         />
       )}
 
-      <CycleBars cycle={cycle} />
+      {showAll ? <AllCyclesBars cycles={cycles} /> : <CycleBars cycle={cycle} />}
       <div className='mt-1 text-[12px] font-medium'>
-        {new Date(cycle.startDate).toLocaleDateString([], {
-          month: "short",
-          day: "numeric",
-          timeZone: "UTC",
-        })}{" "}
-        –{" "}
-        {new Date(cycle.endDate).toLocaleDateString([], {
-          month: "short",
-          day: "numeric",
-          timeZone: "UTC",
-        })}{" "}
-        · billing cycle
+        {showAll ? (
+          <>
+            {allTime.from ? cycleStartLabel(cycles[0]) : "—"} – now · every reported billing cycle
+          </>
+        ) : (
+          <>
+            {new Date(cycle.startDate).toLocaleDateString([], {
+              month: "short",
+              day: "numeric",
+              timeZone: "UTC",
+            })}{" "}
+            –{" "}
+            {new Date(cycle.endDate).toLocaleDateString([], {
+              month: "short",
+              day: "numeric",
+              timeZone: "UTC",
+            })}{" "}
+            · billing cycle
+          </>
+        )}
       </div>
 
       <Explainer title='Where does this come from?'>
         This is Starlink’s own billing meter, read from your account. It’s complete and counted in
         UTC — the authoritative figure your statement uses.
+        {showAll
+          ? " “All time” adds up every cycle your account reports, which is as far back as Starlink sends — not necessarily the whole life of the service line. The newest cycle is still running, so the total grows with it."
+          : ""}
       </Explainer>
     </div>
   );
