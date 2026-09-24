@@ -22,6 +22,10 @@ export const HIDE_TRAY_ICON_CHANNEL = "hide-tray-icon";
 /** Carries the tray-icon-style preference whenever it changes. macOS only. */
 export const TRAY_ICON_STYLE_CHANNEL = "tray-icon-style";
 
+/** Carries the bits-or-bytes throughput unit whenever it changes, so an open
+ *  window redraws its rates to match. Every platform. */
+export const THROUGHPUT_UNIT_CHANNEL = "throughput-unit";
+
 /** Carries an UpdateState whenever a GitHub Releases check changes it, plus once
  *  per window load so a fresh renderer starts from the real state. */
 export const UPDATE_STATE_CHANNEL = "update-state";

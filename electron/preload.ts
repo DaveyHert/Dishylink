@@ -13,9 +13,11 @@ import {
   MENUBAR_THROUGHPUT_CHANNEL,
   HIDE_TRAY_ICON_CHANNEL,
   TRAY_ICON_STYLE_CHANNEL,
+  THROUGHPUT_UNIT_CHANNEL,
   UPDATE_STATE_CHANNEL,
 } from "./ipc";
 import type { UpdateState } from "./updater";
+import type { ThroughputUnit } from "./menuBarThroughput";
 
 contextBridge.exposeInMainWorld("dishlink", {
   versions: {
@@ -94,6 +96,18 @@ contextBridge.exposeInMainWorld("dishlink", {
     ipcRenderer.on(UPDATE_STATE_CHANNEL, handler);
     return () => {
       ipcRenderer.off(UPDATE_STATE_CHANNEL, handler);
+    };
+  },
+  // Bits or bytes for every throughput figure. Owned by main so the menu-bar
+  // readout follows it with no window open; the renderer mirrors it.
+  throughputUnit: (): Promise<ThroughputUnit> => ipcRenderer.invoke("get-throughput-unit"),
+  setThroughputUnit: (unit: ThroughputUnit): Promise<ThroughputUnit> =>
+    ipcRenderer.invoke("set-throughput-unit", unit),
+  onThroughputUnit: (listener: (unit: ThroughputUnit) => void): (() => void) => {
+    const handler = (_event: unknown, unit: ThroughputUnit): void => listener(unit);
+    ipcRenderer.on(THROUGHPUT_UNIT_CHANNEL, handler);
+    return () => {
+      ipcRenderer.off(THROUGHPUT_UNIT_CHANNEL, handler);
     };
   },
   // The live throughput readout — the macOS menu-bar tray title or the Windows

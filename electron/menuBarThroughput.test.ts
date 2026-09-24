@@ -35,3 +35,20 @@ describe("formatSpacedRate", () => {
     expect(formatSpacedRate(999_999)).toBe("1000 Kb/s");
   });
 });
+
+describe("byte rates", () => {
+  it("divides by 8 before choosing the scale", () => {
+    expect(formatMenuBarRate(0, "bytes")).toBe("0KB/s");
+    // 8 Mb/s is 1 MB/s exactly — the first M in bytes.
+    expect(formatMenuBarRate(8_000_000, "bytes")).toBe("1.0MB/s");
+    // 1.2 Mb/s is 150 KB/s, still under the M threshold.
+    expect(formatMenuBarRate(1_200_000, "bytes")).toBe("150KB/s");
+    expect(formatMenuBarRate(188_000_000, "bytes")).toBe("23.5MB/s");
+    expect(formatMenuBarRate(8_000_000_000, "bytes")).toBe("1.0GB/s");
+  });
+
+  it("spaces the byte unit too", () => {
+    expect(formatSpacedRate(1_200_000, "bytes")).toBe("150 KB/s");
+    expect(formatSpacedRate(188_000_000, "bytes")).toBe("23.5 MB/s");
+  });
+});

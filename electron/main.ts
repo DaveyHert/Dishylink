@@ -46,6 +46,7 @@ import {
   MENUBAR_THROUGHPUT_CHANNEL,
   HIDE_TRAY_ICON_CHANNEL,
   TRAY_ICON_STYLE_CHANNEL,
+  THROUGHPUT_UNIT_CHANNEL,
   UPDATE_STATE_CHANNEL,
 } from "./ipc";
 import { formatMenuBarRate, formatSpacedRate } from "./menuBarThroughput";
@@ -396,7 +397,8 @@ function createTray(): void {
  *  numbers swing in the leading gap — but that gap is dead space once the icon
  *  is hidden, so `padded` drops it for that case. */
 function throughputTitle(downBps: number, upBps: number, padded = true): string {
-  const readout = `↓${formatMenuBarRate(downBps)} ↑${formatMenuBarRate(upBps)}`;
+  const unit = preferences().throughputUnit;
+  const readout = `↓${formatMenuBarRate(downBps, unit)} ↑${formatMenuBarRate(upBps, unit)}`;
   return padded ? readout.padStart(THROUGHPUT_TITLE_WIDTH, FIGURE_SPACE) : readout;
 }
 
@@ -434,7 +436,8 @@ function applyMenuBarThroughput(): void {
   } else {
     // The widget has room for the spaced unit; the menu-bar title packs it out.
     showThroughputWidget();
-    paintThroughputWidget(formatSpacedRate(downBps), formatSpacedRate(upBps));
+    const unit = preferences().throughputUnit;
+    paintThroughputWidget(formatSpacedRate(downBps, unit), formatSpacedRate(upBps, unit));
   }
 }
 
@@ -671,6 +674,20 @@ function registerNotificationHandler(): void {
   onPreferencesChanged(publishNotificationState);
 }
 
+/** Bits or bytes for every throughput figure. Registered on every platform: the
+ *  dashboard reads it everywhere, and the menu-bar readout (where there is one)
+ *  follows it through the same preference. */
+function registerThroughputUnitHandler(): void {
+  ipcMain.handle("get-throughput-unit", () => preferences().throughputUnit);
+  ipcMain.handle("set-throughput-unit", (_event, unit: unknown) => {
+    setPreference("throughputUnit", unit === "bytes" ? "bytes" : "bits");
+    return preferences().throughputUnit;
+  });
+  onPreferencesChanged((prefs) => {
+    mainWindow?.webContents.send(THROUGHPUT_UNIT_CHANNEL, prefs.throughputUnit);
+  });
+}
+
 /** The window's control over the throughput readout. macOS and Windows only:
  *  elsewhere these aren't registered and the preload omits them, so the settings
  *  toggle is absent, not dead. */
@@ -751,6 +768,7 @@ void app.whenReady().then(async () => {
   // Registered for dev and packaged alike: notifications are the alerting channel.
   registerNotificationHandler();
   registerMenuBarThroughputHandler();
+  registerThroughputUnitHandler();
   registerUpdateHandler();
   registerExternalLinkHandler();
   registerHostHandlers();

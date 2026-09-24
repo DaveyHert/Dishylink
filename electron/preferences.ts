@@ -14,6 +14,7 @@ import { app } from "electron";
 import { join } from "node:path";
 import { readFileSync, writeFileSync } from "node:fs";
 import { normalizeIpAddress } from "../core/ipAddress";
+import type { ThroughputUnit } from "./menuBarThroughput";
 
 export interface WindowBounds {
   x: number;
@@ -53,6 +54,13 @@ export interface Preferences {
   trayIconStyle: "template" | "outline" | "original";
 
   /**
+   * Whether throughput reads in bits (Mbps, the dish's own unit) or bytes (MB/s).
+   * Owned here, not in the window's localStorage, because the menu-bar readout
+   * keeps painting from the recorder with no window open.
+   */
+  throughputUnit: ThroughputUnit;
+
+  /**
    * The main window's last position and size, restored on launch so it reopens
    * where it was left. null until the window has moved or resized at least once.
    */
@@ -82,6 +90,7 @@ const DEFAULTS: Preferences = {
   menuBarThroughput: process.platform === "darwin",
   hideTrayIcon: false,
   trayIconStyle: "original",
+  throughputUnit: "bits",
   windowBounds: null,
   routerAddress: null,
   selfClientId: null,
@@ -136,6 +145,7 @@ export function preferences(): Preferences {
         parsed.trayIconStyle === "template" || parsed.trayIconStyle === "outline"
           ? parsed.trayIconStyle
           : "original",
+      throughputUnit: parsed.throughputUnit === "bytes" ? "bytes" : "bits",
       windowBounds: isWindowBounds(parsed.windowBounds) ? parsed.windowBounds : null,
       routerAddress: storedAddress(parsed.routerAddress),
       selfClientId: storedClientId(parsed.selfClientId),

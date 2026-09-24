@@ -32,7 +32,8 @@ import { SettingsModal } from "./components/settings/SettingsModal";
 import { useRouterNetwork } from "./hooks/useRouterNetwork";
 import { useRouterUnreachable } from "./hooks/useRouterUnreachable";
 import { useLiveReadings } from "./hooks/useLiveReadings";
-import { formatThroughput } from "./lib/format";
+import { formatThroughputIn } from "./lib/format";
+import { readThroughputUnit, subscribeToThroughputUnit } from "./lib/throughputUnit";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { useTheme } from "./hooks/useTheme";
 import { dishModelFor } from "./lib/dishMesh";
@@ -100,8 +101,11 @@ export default function App() {
     sparklines,
   } = useLiveReadings(samples);
 
-  const liveDownlink = formatThroughput(status?.downlinkThroughputBps ?? 0);
-  const liveUplink = formatThroughput(status?.uplinkThroughputBps ?? 0);
+  // Subscribed here, at the top, so a unit change re-renders every rate below —
+  // the charts and panels read it through the shared formatters.
+  const throughputUnit = useSyncExternalStore(subscribeToThroughputUnit, readThroughputUnit);
+  const liveDownlink = formatThroughputIn(status?.downlinkThroughputBps ?? 0, throughputUnit);
+  const liveUplink = formatThroughputIn(status?.uplinkThroughputBps ?? 0, throughputUnit);
   const chartSamples = useMemo(
     () => windowTail(samples, windowMinutes, nowMs),
     [samples, windowMinutes, nowMs],

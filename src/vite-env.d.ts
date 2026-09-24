@@ -36,6 +36,11 @@ interface Window {
     // rendering there.
     routerAddress?: () => Promise<RouterAddress>;
     setRouterAddress?: (address: string | null) => Promise<RouterAddress | null>;
+    // Bits or bytes for throughput figures, owned by main so the menu-bar readout
+    // follows it too. Optional so an older desktop build's bridge still type-checks.
+    throughputUnit?: () => Promise<"bits" | "bytes">;
+    setThroughputUnit?: (unit: "bits" | "bytes") => Promise<"bits" | "bytes">;
+    onThroughputUnit?: (listener: (unit: "bits" | "bytes") => void) => () => void;
     // The throughput-readout controls — macOS menu bar or Windows taskbar —
     // exposed by the preload only on those platforms, so they are optional, and
     // the settings toggle renders only where `setMenuBarThroughput` is present.
