@@ -200,7 +200,7 @@ npm run lint:fix        # eslint with --fix
 
 A fresh desktop build opens with no history by design: it fills up as it runs.
 
-### Desktop app (Mac, Windows)
+### Desktop app (Mac, Windows, Linux)
 
 - Lives in the tray / menu bar and **keeps recording after its window is
   closed**; it quits only from the tray's Quit.
@@ -213,6 +213,10 @@ A fresh desktop build opens with no history by design: it fills up as it runs.
 - Native OS notifications for alerts when the window isn't in front, throttled
   so a flapping link can't spam.
 - Auto-updates, and remembers its window position across runs and displays.
+
+On Ubuntu and Debian, install the matching amd64 or arm64 `.deb` package from
+[GitHub Releases](https://github.com/DaveyHert/dishylink/releases). Build details
+and manual build steps are in [LINUX-BUILD.md](LINUX-BUILD.md).
 
 ### Browser extension (Chrome, Edge, Firefox)
 

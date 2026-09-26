@@ -1,0 +1,54 @@
+name: Linux release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build Linux package
+        env:
+          npm_config_arch: ${{ matrix.arch }}
+        run: npm run pack:linux
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dishylink-linux-${{ matrix.arch }}
+          path: release/*.deb
+
+  release:
+    needs: linux
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Dishylink-linux-*
+          path: release
+          merge-multiple: true
+      - name: Create checksums
+        run: sha256sum release/*.deb > release/SHA256SUMS
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            release/*.deb
+            release/SHA256SUMS
+          generate_release_notes: true
+          draft: false

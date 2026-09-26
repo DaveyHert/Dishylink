@@ -15,6 +15,7 @@ import {
   screen,
   shell,
   type MenuItem,
+  type MenuItemConstructorOptions,
 } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
@@ -54,7 +55,7 @@ import {
   paintThroughputWidget,
   hideThroughputWidget,
 } from "./throughputWidget";
-import { startUpdateChecks, updateState, onUpdateStateChanged } from "./updater";
+import { startUpdateChecks, checkForUpdates, updateState, onUpdateStateChanged, installUpdate } from "./updater";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const rendererRoot = join(here, "../dist");
@@ -147,6 +148,7 @@ const devServerUrl = process.env.VITE_DEV_SERVER_URL;
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
+let trayMenu: Menu | null = null;
 
 const NOTIFY_ITEM_ID = "notify-alerts";
 const NOTIFY_REASON_ITEM_ID = "notify-alerts-reason";
@@ -158,6 +160,7 @@ let notifyItem: MenuItem | null = null;
 let notifyReasonItem: MenuItem | null = null;
 let throughputItem: MenuItem | null = null;
 let hideIconItem: MenuItem | null = null;
+let updateItem: MenuItem | null = null;
 
 // The live throughput readout: the macOS tray title, or the Windows floating widget
 // (throughputWidget.ts) — one preference, two paint targets, nothing on Linux.
@@ -313,28 +316,39 @@ function createTray(): void {
     tray = new Tray(image.isEmpty() ? image : image.resize({ width: 18, height: 18 }));
   }
   tray.setToolTip("Dishylink");
-  const menu = Menu.buildFromTemplate([
+  const notifyMenuItem: MenuItemConstructorOptions = {
+    id: NOTIFY_ITEM_ID,
+    label: "Notify Me About Alerts",
+    type: "checkbox",
+    checked: notificationsRequested(notificationState()),
+    click: (item) => {
+      setPreference("notifications", item.checked);
+      if (item.checked)
+        void postNotification(
+          NOTIFICATIONS_ON_CONFIRMATION.title,
+          NOTIFICATIONS_ON_CONFIRMATION.body,
+        ).catch(() => {});
+    },
+  };
+  const updateMenuItem: MenuItemConstructorOptions = {
+    id: "update-dishylink",
+    label: "Check for Updates",
+    enabled: true,
+    click: () => {
+      if (updateState().ready) void installUpdate();
+      else checkForUpdates();
+    },
+  };
+  const linux = process.platform === "linux";
+  const menu = Menu.buildFromTemplate(linux ? [
+    { label: "Show Dishylink", click: showWindow },
+    updateMenuItem,
+    notifyMenuItem,
+    { label: "Quit", role: "quit" },
+  ] : [
     { label: "Open Dishylink", click: showWindow },
     { type: "separator" },
-    {
-      // Alerting runs when no window is open, so it must be switchable from the tray.
-      id: NOTIFY_ITEM_ID,
-      label: "Notify Me About Alerts",
-      type: "checkbox",
-      // Opening value only; the checkbox owns its `checked` after this, and later
-      // values are written by publishNotificationState.
-      checked: notificationsRequested(notificationState()),
-      click: (item) => {
-        setPreference("notifications", item.checked);
-        // Enabling posts one immediately: on macOS the first notification raises the
-        // permission prompt and proves the channel works.
-        if (item.checked)
-          void postNotification(
-            NOTIFICATIONS_ON_CONFIRMATION.title,
-            NOTIFICATIONS_ON_CONFIRMATION.body,
-          ).catch(() => {});
-      },
-    },
+    notifyMenuItem,
     {
       // Why the tick above refused to stay on. Hidden while notifications work.
       id: NOTIFY_REASON_ITEM_ID,
@@ -377,19 +391,27 @@ function createTray(): void {
       checked: app.getLoginItemSettings().openAtLogin,
       click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked, openAsHidden: true }),
     },
+    updateMenuItem,
     { type: "separator" },
     { label: "Quit Dishylink", role: "quit" },
   ]);
+  trayMenu = menu;
   notifyItem = menu.getMenuItemById(NOTIFY_ITEM_ID);
   notifyReasonItem = menu.getMenuItemById(NOTIFY_REASON_ITEM_ID);
   throughputItem = menu.getMenuItemById(THROUGHPUT_ITEM_ID);
   hideIconItem = menu.getMenuItemById(HIDE_ICON_ITEM_ID);
+  updateItem = menu.getMenuItemById("update-dishylink");
+  applyUpdateMenu();
   applyMenuBarThroughput();
   updateThroughputWatchdog();
-  // Left click opens the app; right click shows the menu (setContextMenu would make a
-  // left click open the menu too on macOS).
-  tray.on("click", showWindow);
-  tray.on("right-click", () => tray?.popUpContextMenu(menu));
+  // StatusNotifierItem activation isn't guaranteed to arrive as a left-click event.
+  // Attaching the menu lets Electron's Linux backend show it for native activation.
+  if (linux) {
+    tray.setContextMenu(menu);
+  } else {
+    tray.on("click", showWindow);
+    tray.on("right-click", () => tray?.popUpContextMenu(menu));
+  }
 }
 
 /** "↓39Kb/s ↑159Kb/s". Padded to a fixed width so the icon holds while the
@@ -546,16 +568,46 @@ function publishNotificationState(): void {
     notifyReasonItem.visible = problem !== null;
     notifyReasonItem.label = problem ?? "";
   }
+  refreshLinuxTrayMenu();
   mainWindow?.webContents.send(NOTIFICATION_STATE_CHANNEL, state);
 }
 
 /** Single writer of the update state to the window. */
 function publishUpdateState(): void {
+  applyUpdateMenu();
+  refreshLinuxTrayMenu();
   mainWindow?.webContents.send(UPDATE_STATE_CHANNEL, updateState());
 }
 
+/** Linux caches the native context menu, so reattach it after menu item changes. */
+function refreshLinuxTrayMenu(): void {
+  if (process.platform === "linux" && tray !== null && trayMenu !== null) {
+    tray.setContextMenu(trayMenu);
+  }
+}
+
+function applyUpdateMenu(): void {
+  if (updateItem === null) return;
+  const state = updateState();
+  if (state.installing) {
+    updateItem.label = "Installing Dishylink update…";
+    updateItem.enabled = false;
+  } else if (state.ready && state.version) {
+    updateItem.label = `Install update ${state.version}`;
+    updateItem.enabled = true;
+  } else if (state.available && state.version) {
+    updateItem.label = `Update available: ${state.version}`;
+    updateItem.enabled = true;
+  } else {
+    updateItem.label = "Check for Updates";
+    updateItem.enabled = true;
+  }
+}
+
+
 function registerUpdateHandler(): void {
   ipcMain.handle("get-update-state", () => updateState());
+  ipcMain.handle("install-update", () => installUpdate());
   onUpdateStateChanged(publishUpdateState);
 }
 
@@ -758,7 +810,7 @@ void app.whenReady().then(async () => {
   if (app.isPackaged) startUpdateChecks();
   createTray();
   // A login-triggered launch stays in the tray (no window), so booting doesn't pop one.
-  if (!app.getLoginItemSettings().wasOpenedAtLogin) createWindow();
+  if (!app.getLoginItemSettings().wasOpenedAtLogin && !process.argv.includes("--hidden")) createWindow();
 });
 
 // Lives in the tray after its window closes, so collection keeps running; quits only
