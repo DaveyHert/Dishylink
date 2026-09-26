@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { Readable } from "node:stream";
+import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { pipeline } from "node:stream/promises";
 
 export interface UpdateState {
@@ -61,7 +62,10 @@ function newerThanCurrent(version: string): boolean {
 
 async function githubJson<T>(url: string): Promise<T> {
   const response = await fetch(url, {
-    headers: { Accept: "application/vnd.github+json", "User-Agent": `Dishylink/${app.getVersion()}` },
+    headers: {
+      Accept: "application/vnd.github+json",
+      "User-Agent": `Dishylink/${app.getVersion()}`,
+    },
   });
   if (!response.ok) throw new Error(`GitHub returned HTTP ${response.status}`);
   return response.json() as Promise<T>;
@@ -70,7 +74,10 @@ async function githubJson<T>(url: string): Promise<T> {
 async function downloadFile(url: string, destination: string): Promise<void> {
   const response = await fetch(url, { headers: { "User-Agent": `Dishylink/${app.getVersion()}` } });
   if (!response.ok || !response.body) throw new Error(`Download failed: HTTP ${response.status}`);
-  await pipeline(Readable.fromWeb(response.body), createWriteStream(destination));
+  await pipeline(
+    Readable.fromWeb(response.body as unknown as NodeReadableStream),
+    createWriteStream(destination),
+  );
 }
 
 async function verifySha256(file: string, expected: string): Promise<boolean> {
@@ -80,7 +87,9 @@ async function verifySha256(file: string, expected: string): Promise<boolean> {
 }
 
 async function prepareLinuxUpdate(): Promise<void> {
-  const release = await githubJson<GitHubRelease>(`https://api.github.com/repos/${OWNER}/${REPO}/releases/latest`);
+  const release = await githubJson<GitHubRelease>(
+    `https://api.github.com/repos/${OWNER}/${REPO}/releases/latest`,
+  );
   const version = String(release.tag_name ?? "").replace(/^v/, "");
   if (!version || !newerThanCurrent(version)) {
     setState({ available: false, version: null, ready: false, installing: false });
@@ -120,7 +129,9 @@ function runPkexec(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn("pkexec", args, { stdio: "inherit" });
     child.once("error", reject);
-    child.once("exit", (code) => (code === 0 ? resolve() : reject(new Error(`pkexec exited with ${code}`))));
+    child.once("exit", (code) =>
+      code === 0 ? resolve() : reject(new Error(`pkexec exited with ${code}`)),
+    );
   });
 }
 
@@ -167,7 +178,9 @@ export function startUpdateChecks(): void {
   autoUpdater.on("update-available", (info) =>
     setState({ available: true, version: info.version, ready: false, installing: false }),
   );
-  autoUpdater.on("update-not-available", () => setState({ available: false, version: null, ready: false, installing: false }));
+  autoUpdater.on("update-not-available", () =>
+    setState({ available: false, version: null, ready: false, installing: false }),
+  );
   autoUpdater.on("error", () => {});
 
   checkForUpdates();
