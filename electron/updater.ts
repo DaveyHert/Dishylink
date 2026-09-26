@@ -6,6 +6,7 @@ import { mkdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
+import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 export interface UpdateState {
@@ -37,6 +38,16 @@ const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const OWNER = "DaveyHert";
 const REPO = "dishylink";
 
+interface GitHubReleaseAsset {
+  name: string;
+  browser_download_url: string;
+}
+
+interface GitHubRelease {
+  tag_name?: string;
+  assets?: GitHubReleaseAsset[];
+}
+
 function newerThanCurrent(version: string): boolean {
   const a = app.getVersion().split(".").map(Number);
   const b = version.replace(/^v/, "").split(".").map(Number);
@@ -48,18 +59,18 @@ function newerThanCurrent(version: string): boolean {
   return false;
 }
 
-async function githubJson(url: string): Promise<any> {
+async function githubJson<T>(url: string): Promise<T> {
   const response = await fetch(url, {
     headers: { Accept: "application/vnd.github+json", "User-Agent": `Dishylink/${app.getVersion()}` },
   });
   if (!response.ok) throw new Error(`GitHub returned HTTP ${response.status}`);
-  return response.json();
+  return response.json() as Promise<T>;
 }
 
 async function downloadFile(url: string, destination: string): Promise<void> {
   const response = await fetch(url, { headers: { "User-Agent": `Dishylink/${app.getVersion()}` } });
   if (!response.ok || !response.body) throw new Error(`Download failed: HTTP ${response.status}`);
-  await pipeline(response.body as any, createWriteStream(destination));
+  await pipeline(Readable.fromWeb(response.body), createWriteStream(destination));
 }
 
 async function verifySha256(file: string, expected: string): Promise<boolean> {
@@ -69,7 +80,7 @@ async function verifySha256(file: string, expected: string): Promise<boolean> {
 }
 
 async function prepareLinuxUpdate(): Promise<void> {
-  const release = await githubJson(`https://api.github.com/repos/${OWNER}/${REPO}/releases/latest`);
+  const release = await githubJson<GitHubRelease>(`https://api.github.com/repos/${OWNER}/${REPO}/releases/latest`);
   const version = String(release.tag_name ?? "").replace(/^v/, "");
   if (!version || !newerThanCurrent(version)) {
     setState({ available: false, version: null, ready: false, installing: false });
@@ -78,8 +89,8 @@ async function prepareLinuxUpdate(): Promise<void> {
 
   const arch = process.arch === "arm64" ? "arm64" : "x64";
   const debName = `Dishylink-${version}-${arch}.deb`;
-  const deb = release.assets?.find((asset: any) => asset.name === debName);
-  const sums = release.assets?.find((asset: any) => asset.name === "SHA256SUMS");
+  const deb = release.assets?.find((asset) => asset.name === debName);
+  const sums = release.assets?.find((asset) => asset.name === "SHA256SUMS");
   if (!deb) throw new Error(`Release ${version} has no ${debName}`);
 
   const directory = join(tmpdir(), "dishylink-update");
