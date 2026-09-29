@@ -12,13 +12,15 @@ import ShootingStars from "../components/ShootingStars.astro";
 import HeroGlow from "../components/HeroGlow.astro";
 import DownloadCard from "../components/DownloadCard.astro";
 import { readFileSync } from "node:fs";
-import { GITHUB, SPONSOR, EMAIL, downloadPlatforms } from "../constants";
+import { Image } from "astro:assets";
+import { GITHUB, SPONSOR, EMAIL, STARLINK_REFERRAL, downloadPlatforms } from "../constants";
 import { sections } from "../data/sections";
 
 // Real captures of the running app — no mockups, no illustrations. If a surface
 // changes in the product, replace the file here rather than redrawing anything.
 import dashboardLight from "../assets/shots/dashboard-light.png";
 import dashboardDark from "../assets/shots/dashboard-dark.png";
+import referralQr from "../assets/referral-qr.png";
 
 const title = "Dishylink — Starlink monitoring app for Mac, Windows & browsers";
 const description =
@@ -48,7 +50,7 @@ const faqs: { q: string; a: string; aside?: string }[] = [
   },
   {
     q: "Does it need an account or an internet connection?",
-    a: "No. Dishylink talks to your dish and router directly over your local network, so it keeps working during an outage — which is exactly when you want to see what happened. Connecting a Starlink account is optional, read-only, and only adds your plan and billing data from the cloud.",
+    a: "No. Dishylink talks to your dish and router directly over your local network, so it keeps working during an outage — which is exactly when you want to see what happened. Connecting a Starlink account is optional. It adds your plan and billing data from the cloud, and lets Dishylink pause devices under your network rules.",
   },
   {
     q: "Is my telemetry sent anywhere?",
@@ -147,6 +149,36 @@ const faqs: { q: string; a: string; aside?: string }[] = [
         <p class="mt-10 text-ink-2">
           Or <a href={GITHUB} target="_blank" rel="noopener noreferrer" class="font-semibold text-ink underline underline-offset-4">build it from source</a> — it's open-source.
         </p>
+      </div>
+    </section>
+    <section id="starlink">
+      <SectionRule />
+      <div class="mx-auto grid max-w-5xl items-center gap-12 px-5 py-24 lg:grid-cols-[1fr_auto] lg:gap-20 lg:py-32">
+        <div class="max-sm:text-center">
+          <h2 class="text-section font-semibold text-balance">Don't have a Starlink yet?</h2>
+          <p class="mt-5 max-w-xl text-lg text-ink-2">
+            Order one through my referral link. It costs you nothing extra and helps keep Dishylink
+            free.
+          </p>
+          <div class="mt-8">
+            <Button href={STARLINK_REFERRAL} variant="primary">Order Starlink</Button>
+          </div>
+        </div>
+
+        <figure class="mx-auto hidden flex-col items-center gap-4 sm:flex">
+          <div class="rounded-2xl border border-rule bg-black p-3">
+            <Image
+              src={referralQr}
+              alt="QR code that opens the Starlink order page with the referral applied"
+              width={176}
+              height={176}
+              densities={[1, 2]}
+              format="png"
+              class="size-44 [image-rendering:pixelated]"
+            />
+          </div>
+          <figcaption class="font-mono text-[12px] text-ink-3">Scan to order on your phone</figcaption>
+        </figure>
       </div>
     </section>
     <section id="faq" class="bg-surface/40">

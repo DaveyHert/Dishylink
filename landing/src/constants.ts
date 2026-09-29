@@ -13,6 +13,8 @@ export const SPONSOR = {
   coffee: "https://buymeacoffee.com/daveyhert",
 };
 
+export const STARLINK_REFERRAL = "https://starlink.com/?referral=RC-DF-5748912-79115-57";
+
 /** null = listing not published yet; the UI renders a disabled control instead. */
 export const STORES: Record<string, string | null> = {
   chrome: "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna",
