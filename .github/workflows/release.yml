@@ -75,6 +75,22 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  release-linux:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Both Linux archs in one invocation so electron-builder writes a single
+      # latest-linux.yml covering x64 and arm64 (same pattern as release-mac).
+      - run: npm run release:linux
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   release-extension:
     needs: prepare
     runs-on: ubuntu-latest
