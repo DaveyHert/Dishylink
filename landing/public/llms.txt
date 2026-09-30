@@ -2,7 +2,7 @@
 
 > A free, open-source desktop app and browser extension that monitors the performance and health of your Starlink. It reads your dish and router directly over your local network, so it keeps working during an outage — which is exactly when you want to see what happened.
 
-No account and no internet connection are required. There is no backend, no analytics and no telemetry collection: everything Dishylink records is written to the user's own machine and stays there. Connecting a Starlink account is optional and opt-in. It adds plan and billing figures, and lets network rules pause devices.
+No account and no internet connection are required. There is no backend, no analytics and no telemetry collection: everything Dishylink records is written to the user's own machine and stays there. Connecting a Starlink account is optional, opt-in and read-only, and only adds plan and billing figures.
 
 Dishylink is an unofficial, independent project with no affiliation to SpaceX or Starlink. Starlink is a trademark of Space Exploration Technologies Corp.
 
@@ -15,12 +15,11 @@ Dishylink is an unofficial, independent project with no affiliation to SpaceX or
 - [Data usage](https://dishylink.com/#data): self-measured download/upload volume by day, week and month, plus per-device usage for the billing month from the router's own per-client counters.
 - [Power usage](https://dishylink.com/#power): the dish's actual draw over time with kWh totals per day, week and month, honest about any recording gaps.
 - Latency analytics: latency bucketed by maximum so spikes survive downsampling, outages drawn as red bands, and the router's own ping alongside Starlink's — which tells you whether the lag is Starlink or your own router.
-- [Network rules](https://dishylink.com/#rules): data limits, schedules and timers on a single device or a group. A device is paused when its rule is spent and released when the next cycle starts. Pausing needs a connected Starlink account; limits are counted without one.
 - [Alerts and event log](https://dishylink.com/#alerts): outage, thermal and link events with severity and an in-app bell, over a log that separates a real outage from a degraded link.
 - OS notifications and live throughput: live download and upload rates in the macOS menu bar or a draggable always-on-top pill on Windows, plus native OS notifications — all of it working with the app's window closed.
 - [Control settings](https://dishylink.com/#controls): snow melt, sleep schedule, software-update window, reboot, obstruction-map reset, stow/unstow on motorised kits, and router settings.
 - [Satellite and obstruction map](https://dishylink.com/#satellite): the dish's 123x123 SNR grid rendered as a polar sky dome, an hourly obstruction time-lapse, and the live satellite constellation overhead with pass details per satellite.
-- Optional cloud account tab: your Starlink plan, billing cycles and authoritative monthly data usage, opt-in.
+- Optional cloud account tab: your Starlink plan, billing cycles and authoritative monthly data usage, read-only and opt-in.
 
 ## Platforms
 
