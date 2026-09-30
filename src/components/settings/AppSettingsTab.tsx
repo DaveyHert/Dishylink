@@ -23,6 +23,12 @@ import {
   subscribeToToolbarStyle,
   type ToolbarStyle,
 } from "../../lib/toolbarStyle";
+import {
+  readThroughputUnit,
+  setThroughputUnit,
+  subscribeToThroughputUnit,
+  type ThroughputUnit,
+} from "../../lib/throughputUnit";
 import { selfDeviceHost } from "../../lib/selfDeviceHost";
 import { badgeModeHost, DEFAULT_BADGE_MODE, type BadgeMode } from "../../lib/badgeMode";
 import { displayName, isClientDevice } from "../network/networkFormat";
@@ -280,6 +286,7 @@ function BadgeModeRow() {
 
 export function AppSettingsTab({ clients }: { clients: WifiClientJson[] }) {
   const toolbarStyle = useSyncExternalStore(subscribeToToolbarStyle, readToolbarStyle);
+  const throughputUnit = useSyncExternalStore(subscribeToThroughputUnit, readThroughputUnit);
   const menuBar = useMenuBarThroughput();
   const hideTrayIcon = useHideTrayIcon();
   const trayStyle = useTrayIconStyle();
@@ -303,6 +310,29 @@ export function AppSettingsTab({ clients }: { clients: WifiClientJson[] }) {
             </SelectItem>
             <SelectItem value='rail' className={selectItemClass}>
               Left rail
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </SettingRow>
+
+      <SettingRow
+        title='Throughput units'
+        info='The dish measures in bits per second, as internet plans are sold. Bytes divide that by 8 — the unit file sizes and download progress use. Speed tests and link rates stay in Mbps.'
+        caption={`Download and upload rates, here${menuBar ? ` and in the ${surface}` : ""}`}
+      >
+        <Select
+          value={throughputUnit}
+          onValueChange={(value) => setThroughputUnit(value as ThroughputUnit)}
+        >
+          <SelectTrigger className={triggerClass} style={{ width: 118 }}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className={selectContentClass}>
+            <SelectItem value='bits' className={selectItemClass}>
+              Mbps (bits)
+            </SelectItem>
+            <SelectItem value='bytes' className={selectItemClass}>
+              MB/s (bytes)
             </SelectItem>
           </SelectContent>
         </Select>

@@ -1,10 +1,32 @@
 // Shared display formatting for telemetry values.
 
-export function formatThroughput(bitsPerSecond: number): { value: string; unit: string } {
+import { readThroughputUnit, type ThroughputUnit } from "./throughputUnit";
+
+/** Input is always bits per second, the dish's unit; the output is in `unit` —
+ *  "1.5 Mbps" in bits, or the same rate divided by 8, "187.5 KB/s", in bytes. The
+ *  SI boundaries apply after the division either way. */
+export function formatThroughputIn(
+  bitsPerSecond: number,
+  unit: ThroughputUnit,
+): { value: string; unit: string } {
+  if (unit === "bytes") {
+    const bytesPerSecond = bitsPerSecond / 8;
+    if (bytesPerSecond >= 1e9) return { value: (bytesPerSecond / 1e9).toFixed(2), unit: "GB/s" };
+    if (bytesPerSecond >= 1e6) return { value: (bytesPerSecond / 1e6).toFixed(1), unit: "MB/s" };
+    return { value: (bytesPerSecond / 1e3).toFixed(0), unit: "KB/s" };
+  }
   if (bitsPerSecond >= 1_000_000_000)
     return { value: (bitsPerSecond / 1e9).toFixed(2), unit: "Gbps" };
   if (bitsPerSecond >= 1_000_000) return { value: (bitsPerSecond / 1e6).toFixed(1), unit: "Mbps" };
   return { value: (bitsPerSecond / 1e3).toFixed(0), unit: "kbps" };
+}
+
+// The formatters below read the chosen unit at call time and take the rate as
+// their only argument, because they are handed around as callbacks — a chart's
+// tick formatter passes (value, index), and an index must not land in a unit slot.
+
+export function formatThroughput(bitsPerSecond: number): { value: string; unit: string } {
+  return formatThroughputIn(bitsPerSecond, readThroughputUnit());
 }
 
 /** "268 kbps" / "1.5 Mbps" — value and unit as one label (tooltips, averages). */
@@ -13,7 +35,7 @@ export function formatThroughputLabel(bitsPerSecond: number): string {
   return `${throughput.value} ${throughput.unit}`;
 }
 
-/** Compact axis tick: "268k" / "1.5M" / "2G". */
+/** Compact axis tick: "268k" / "1.5M" / "2G" (bytes: "33K" / "1.5M"). */
 export function formatThroughputTick(bitsPerSecond: number): string {
   const throughput = formatThroughput(bitsPerSecond);
   const compactValue = throughput.value.replace(/\.0$/, "");

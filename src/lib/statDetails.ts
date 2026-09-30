@@ -198,7 +198,7 @@ export function buildStatDetails({
       formatValue: formatThroughputLabel,
       formatTick: formatThroughputTick,
       explainer:
-        "Download throughput is the rate data arrives from the internet to your dish, in bits per second. It spikes while you're actively pulling data and idles near zero when nothing is downloading.",
+        "Download throughput is the rate data arrives from the internet to your dish. It spikes while you're actively pulling data and idles near zero when nothing is downloading.",
     },
     upload: {
       label: "Upload",
