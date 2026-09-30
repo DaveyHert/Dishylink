@@ -89,6 +89,7 @@ contextBridge.exposeInMainWorld("dishlink", {
   // Whether a GitHub release newer than this build has been published. Detection
   // only — nothing here downloads or installs anything; see electron/updater.ts.
   updateState: (): Promise<UpdateState> => ipcRenderer.invoke("get-update-state"),
+  installUpdate: (): Promise<{ ok: boolean; message?: string }> => ipcRenderer.invoke("install-update"),
   onUpdateState: (listener: (state: UpdateState) => void): (() => void) => {
     const handler = (_event: unknown, state: UpdateState): void => listener(state);
     ipcRenderer.on(UPDATE_STATE_CHANNEL, handler);
