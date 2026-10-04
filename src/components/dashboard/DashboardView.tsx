@@ -24,6 +24,7 @@ import { DetailsModal } from "../ui/details-modal";
 import { StatDetailPanel } from "./StatDetailPanel";
 import { formatThroughputLabel, formatThroughputTick } from "../../lib/format";
 import { AppPrompts } from "../shared/AppPrompts";
+import type { ObserverLocation } from "../../lib/satellites";
 
 const CHART_TIME_RANGES: { label: string; minutes: number }[] = [
   { label: "15M", minutes: 15 },
@@ -50,6 +51,7 @@ interface DashboardViewProps {
    *  badge keys off this, not the raw connectionState, so a blip doesn't flash it. */
   stale: boolean;
   obstructionMap: DishObstructionMapJson | null;
+  observerLocation?: ObserverLocation | null;
   liveDownlink: { value: string; unit: string };
   liveUplink: { value: string; unit: string };
   sparklines: LiveSparklines;
@@ -73,6 +75,7 @@ export function DashboardView({
   connectionState,
   stale,
   obstructionMap,
+  observerLocation = null,
   liveDownlink,
   liveUplink,
   sparklines,
@@ -263,6 +266,7 @@ export function DashboardView({
           obstructionMap={obstructionMap}
           obstructionStats={status?.obstructionStats}
           status={status}
+          observerLocation={observerLocation}
           onOpenSatelliteView={onOpenSatelliteView}
         />
 

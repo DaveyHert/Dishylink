@@ -22,7 +22,7 @@ import { Loading } from "../ui/loading";
 import { Callout } from "../ui/callout";
 import { LocationSetup } from "./LocationSetup";
 import { SatelliteCallout, type SelectedSatellite } from "./SatelliteCallout";
-import { buildSatellite } from "./satelliteGeometry";
+import { buildSatelliteModels, resolveSatelliteModel } from "./satelliteModels";
 import { createSkyScene, type ScreenPoint, type SkyScene } from "./skyScene";
 import { SkyControl } from "./SkyControl";
 import { DomeIcon } from "../../assets/icons/DomeIcon";
@@ -30,6 +30,8 @@ import { DomeCanopyIcon } from "../../assets/icons/DomeCanopyIcon";
 import { ImmersiveIcon } from "../../assets/icons/ImmersiveIcon";
 import { useDomeTrim } from "../../hooks/useDomeTrim";
 import { domeTrimEnabled, setDomeTrimEnabled } from "../../lib/domeTrim";
+import { MARKER_FRAMING_RADIUS } from "./celestialMarkers";
+import { CELESTIAL_UPDATE_MS, createLiveCelestialSky } from "./liveCelestialSky";
 
 /** Panels float over the sky rather than covering it: dark enough to hold text,
  *  sheer enough that satellites keep crossing behind them. No blur — the sky
@@ -146,14 +148,34 @@ export function SatelliteView({
     surveyRef.current = survey;
   }, [survey]);
   const hasSurvey = survey !== null;
+  const celestialSky = useMemo(() => createLiveCelestialSky(), []);
+  const latitudeDeg = observerLocation?.latitudeDeg;
+  const longitudeDeg = observerLocation?.longitudeDeg;
+
+  useEffect(() => {
+    const location =
+      latitudeDeg === undefined || longitudeDeg === undefined
+        ? null
+        : { latitudeDeg, longitudeDeg };
+    const update = () => celestialSky.update(location, Date.now());
+    update();
+    if (!hasSurvey || !location) return;
+    const timer = window.setInterval(update, CELESTIAL_UPDATE_MS);
+    return () => window.clearInterval(timer);
+  }, [celestialSky, hasSurvey, latitudeDeg, longitudeDeg]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     const first = surveyRef.current;
     if (!canvas || !first) return;
     const built = createSkyScene(canvas, first, {
-      buildSatelliteMesh: () => buildSatellite("distant"),
+      buildSatelliteMeshes: buildSatelliteModels,
+      satelliteModel: (sat) => resolveSatelliteModel(sat.hardwareVersion),
       trimUnmapped: domeTrimEnabled(),
+      atmosphere: celestialSky.atmosphere,
+      worldMarkers: celestialSky.worldMarkers,
+      worldMarkersBackground: true,
+      framingRadius: MARKER_FRAMING_RADIUS,
     });
     if (!built) {
       setUnsupported(true);
@@ -166,7 +188,7 @@ export function SatelliteView({
       built.dispose();
       setScene(null);
     };
-  }, [hasSurvey]);
+  }, [hasSurvey, celestialSky]);
 
   useEffect(() => {
     if (survey) scene?.setSurvey(survey);

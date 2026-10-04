@@ -47,6 +47,10 @@ export const SatelliteCallout = forwardRef<
             </button>
           </div>
           <div className='grid grid-cols-[auto_1fr] gap-x-3.5 gap-y-[3px] font-mono text-[11px] tabular-nums [&>span:nth-child(odd)]:text-muted-foreground [&>span:nth-child(even)]:text-right'>
+            <span>version</span>
+            <span>{selected.sky.hardwareVersion ?? "Unknown"}</span>
+            <span>NORAD</span>
+            <span>{selected.sky.noradId ?? "Unknown"}</span>
             <span>elevation</span>
             <span>{selected.sky.elevationDeg.toFixed(1)}°</span>
             <span>azimuth</span>

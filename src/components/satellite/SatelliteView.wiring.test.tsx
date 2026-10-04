@@ -23,7 +23,10 @@ import type { DishObstructionMapJson, DishStatusJson } from "@core/dishClient";
 import type { SatelliteFeed } from "../../hooks/useSatellites";
 import type { SatelliteSky } from "../../lib/satellites";
 import { TooltipProvider } from "../ui/tooltip";
+import type { SkySceneOptions } from "./skyScene";
+import { skyLighting } from "../../lib/skyLighting";
 
+let options: SkySceneOptions;
 const calls: string[] = [];
 /** What the component last handed the scene, so a test can drive it back. */
 const scene: {
@@ -35,7 +38,8 @@ const scene: {
 } = { trackers: [], pick: null };
 
 vi.mock("./skyScene", () => ({
-  createSkyScene: () => {
+  createSkyScene: (_canvas: unknown, _survey: unknown, next: SkySceneOptions) => {
+    options = next;
     calls.push("create");
     return {
       setSurvey: () => calls.push("setSurvey"),
@@ -206,4 +210,54 @@ test("the selection ring marks the satellite you tapped, not the serving one", a
     "the ring sits on the tapped satellite, not the serving one at 50,60",
   ).toBe("translate(300px, 200px)");
   expect(ring!.style.display).toBe("block");
+});
+
+test("celestial clock refreshes every 30 seconds, responds to coordinates, and cleans up", async () => {
+  const now = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-03T05:00:00Z"));
+  const interval = vi.spyOn(window, "setInterval");
+  const clear = vi.spyOn(window, "clearInterval");
+  const props = {
+    obstructionMap: MAP,
+    status: STATUS,
+    satellites: activeFeed,
+    observerLocation: { latitudeDeg: 0, longitudeDeg: 105, altitudeM: 0 },
+    onLocationSaved: () => {},
+    onClearLocation: () => {},
+    onClose: () => {},
+  };
+  const view = (location: typeof props.observerLocation | null) => (
+    <TooltipProvider>
+      <SatelliteView {...props} observerLocation={location} />
+    </TooltipProvider>
+  );
+  const rendered = await render(view(props.observerLocation));
+  try {
+    await settle();
+    expect(options.worldMarkersBackground).toBe(true);
+    expect(options.framingRadius).toBe(4.7);
+    expect(options.atmosphere!().stars).toBe(false);
+    const index = interval.mock.calls.findIndex((call) => call[1] === 30_000);
+    expect(index).toBeGreaterThanOrEqual(0);
+    const refresh = interval.mock.calls[index][0] as () => void;
+    now.mockReturnValue(Date.parse("2026-10-03T17:00:00Z"));
+    refresh();
+    expect(options.atmosphere!().stars).toBe(true);
+    const createCount = calls.filter((call) => call === "create").length;
+    now.mockReturnValue(Date.parse("2026-10-03T05:00:00Z"));
+    await rendered.rerender(view({ latitudeDeg: 0, longitudeDeg: -70, altitudeM: 0 }));
+    expect(options.atmosphere!().stars).toBe(true);
+    expect(calls.filter((call) => call === "create").length).toBe(createCount);
+    await rendered.rerender(view(null));
+    expect(options.atmosphere!()).toEqual(skyLighting(-90, -90, 0));
+    expect(options.worldMarkers!([3, 2, 3]).length).toBe(0);
+    expect(clear).toHaveBeenCalledWith(interval.mock.results[index].value);
+    await rendered.rerender(view(props.observerLocation));
+    const lastTimer = interval.mock.results.at(-1)!.value;
+    await rendered.unmount();
+    expect(clear).toHaveBeenCalledWith(lastTimer);
+  } finally {
+    now.mockRestore();
+    interval.mockRestore();
+    clear.mockRestore();
+  }
 });

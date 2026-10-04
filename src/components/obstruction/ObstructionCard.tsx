@@ -16,12 +16,14 @@ import { PauseIcon } from "../../assets/icons/PauseIcon";
 import { useDomeTrim } from "../../hooks/useDomeTrim";
 import { setDomeTrimEnabled } from "../../lib/domeTrim";
 import type { SkyScene } from "../satellite/skyScene";
+import type { ObserverLocation } from "../../lib/satellites";
 
 interface ObstructionCardProps {
   obstructionMap: DishObstructionMapJson | null;
   obstructionStats?: DishObstructionStatsJson;
   /** Live status — drives the dish model and its real orientation. */
   status: DishStatusJson | null;
+  observerLocation?: ObserverLocation | null;
   onOpenSatelliteView: () => void;
 }
 
@@ -29,6 +31,7 @@ export function ObstructionCard({
   obstructionMap,
   obstructionStats,
   status,
+  observerLocation = null,
   onOpenSatelliteView,
 }: ObstructionCardProps) {
   const fractionObstructed = obstructionStats?.fractionObstructed ?? 0;
@@ -50,6 +53,7 @@ export function ObstructionCard({
       <ObstructionDome
         obstructionMap={obstructionMap}
         status={status}
+        observerLocation={observerLocation}
         onSceneChange={handleScene}
       />
 

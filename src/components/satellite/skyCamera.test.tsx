@@ -6,7 +6,9 @@
 // pause button actually has to change.
 
 import { describe, expect, it } from "vitest";
-import { createSkyCamera } from "./skyCamera";
+import { createSkyCamera, skyFramingDistance, SKY_FOV } from "./skyCamera";
+import { lookAt, multiply, perspective } from "./skyMath";
+import { MARKER_FRAMING_RADIUS, markerMesh } from "./celestialMarkers";
 
 /** Steps the camera a second at a time and returns the eye's x each step. */
 function driftOver(camera: ReturnType<typeof createSkyCamera>, seconds: number): number[] {
@@ -23,6 +25,49 @@ function makeCamera() {
   canvas.height = 300;
   return createSkyCamera(canvas, { onTap: () => {}, distance: 3.6 });
 }
+
+describe("sky camera zoom-out framing", () => {
+  it.each([undefined, MARKER_FRAMING_RADIUS])("wheel respects opt-in bound %s", (framingRadius) => {
+    const canvas = document.createElement("canvas");
+    Object.defineProperties(canvas, {
+      clientWidth: { value: 800 },
+      clientHeight: { value: 600 },
+    });
+    const camera = createSkyCamera(canvas, { framingRadius });
+    canvas.dispatchEvent(new WheelEvent("wheel", { deltaY: 100000 }));
+    const { eye, target } = camera.view(0, 0);
+    expect(Math.hypot(...eye.map((v, i) => v - target[i]))).toBeCloseTo(
+      framingRadius === undefined ? 5.5 : skyFramingDistance(framingRadius, 800 / 600),
+    );
+    camera.dispose();
+  });
+
+  it.each([0.5, 1, 16 / 9])("fits disks and labels across shell at aspect %s", (aspect) => {
+    const canvas = document.createElement("canvas");
+    Object.defineProperties(canvas, {
+      clientWidth: { value: 600 * aspect },
+      clientHeight: { value: 600 },
+    });
+    const camera = createSkyCamera(canvas, { framingRadius: MARKER_FRAMING_RADIUS });
+    canvas.dispatchEvent(new WheelEvent("wheel", { deltaY: 100000 }));
+    const { eye, target } = camera.view(0, 0);
+    const mvp = multiply(perspective(SKY_FOV, aspect, 0.12, 90), lookAt(eye, target, [0, 1, 0]));
+    for (let azimuth = 0; azimuth < 360; azimuth += 15) {
+      for (const elevation of [0.1, 30, 60, 90]) {
+        const mesh = markerMesh({ azimuth, elevation }, { azimuth, elevation }, eye);
+        for (let i = 0; i < mesh.length; i += 6) {
+          const point = [mesh[i], mesh[i + 1], mesh[i + 2], 1];
+          const clip = [0, 1, 2, 3].map((row) =>
+            point.reduce((sum, v, col) => sum + mvp[col * 4 + row] * v, 0),
+          );
+          expect(clip[3]).toBeGreaterThan(0);
+          for (const value of clip.slice(0, 3)) expect(Math.abs(value / clip[3])).toBeLessThan(1);
+        }
+      }
+    }
+    camera.dispose();
+  });
+});
 
 describe("sky camera rotation", () => {
   it("drifts on its own from the moment the view opens", () => {

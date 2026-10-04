@@ -138,6 +138,7 @@ export default function App() {
               connectionState={telemetry.connectionState}
               stale={telemetry.stale}
               obstructionMap={telemetry.obstructionMap}
+              observerLocation={observerLocation}
               liveDownlink={liveDownlink}
               liveUplink={liveUplink}
               sparklines={sparklines}
