@@ -108,4 +108,70 @@ describe("CloudDataUsage", () => {
     expect(text()).not.toContain("463");
     expect(text()).toContain("unlimited");
   });
+
+  test("offers an All stop that totals every reported cycle", async () => {
+    stubUsage({
+      content: {
+        servicePlan: { usageLimitGB: 100_000 },
+        dataBuckets: [{ name: "Residential Data" }],
+        billingCyclesAnnotated: [
+          {
+            startDate: "2026-06-06T00:00:00+00:00",
+            endDate: "2026-07-06T00:00:00+00:00",
+            totalAmountGB: 463.49,
+            dailyData: [[1], [2]],
+          },
+          {
+            startDate: "2026-07-06T00:00:00+00:00",
+            endDate: "2026-08-06T00:00:00+00:00",
+            totalAmountGB: 304.24,
+            dailyData: [[3], [4]],
+          },
+        ],
+      },
+    });
+    render(<CloudDataUsage active />);
+
+    const all = await waitFor(
+      () =>
+        [...document.querySelectorAll("[data-slot='segmented-control-item']")].find(
+          (item) => item.textContent?.trim() === "All",
+        ) ?? null,
+      "All stop",
+    );
+    (all as HTMLElement).click();
+
+    // 463.49 + 304.24 = 767.73, and the per-cycle allowance line gives way to
+    // the span the total covers.
+    await waitFor(() => (text().includes("768") || text().includes("767") ? true : null), "total");
+    expect(text()).toContain("2 billing cycles");
+    expect(text()).not.toContain("Usage Limit");
+    // Cycles are named by month, not by the billing day, which is the same
+    // number on every one of them and so carries nothing per cycle.
+    expect(text()).toContain("Jul 2026");
+    expect(text()).not.toContain("Jul 6, 2026");
+  });
+
+  test("has no All stop with a single cycle — it would restate the figure on screen", async () => {
+    stubUsage({
+      content: {
+        servicePlan: { usageLimitGB: 100_000 },
+        billingCyclesAnnotated: [
+          {
+            startDate: "2026-07-06T00:00:00+00:00",
+            endDate: "2026-08-06T00:00:00+00:00",
+            totalAmountGB: 304.24,
+            dailyData: [[3], [4]],
+          },
+        ],
+      },
+    });
+    render(<CloudDataUsage active />);
+
+    await waitFor(() => (text().includes("GB") ? true : null), "usage headline");
+    const labels = [...document.querySelectorAll("[data-slot='segmented-control-item']")].map(
+      (item) => item.textContent?.trim(),
+    );
+    expect(labels).not.toContain("All");
+  });
 });
