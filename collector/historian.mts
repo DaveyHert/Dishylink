@@ -18,6 +18,7 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  readlinkSync,
   renameSync,
   statSync,
   unlinkSync,
@@ -32,7 +33,7 @@ import {
   type HostNetworkIdentity,
 } from "../core/hostNetworkIdentity.ts";
 import { clientIsHost } from "../core/routerClientUpdate.ts";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { createFileRegistry, fromBinary, toJson, type DescMessage } from "@bufbuild/protobuf";
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { grpcWebUnaryCall } from "../core/grpcWeb.ts";
@@ -1981,14 +1982,35 @@ function refuseToStart(reason: string, busy = false): never {
   process.exit(1);
 }
 
-// Signal 0 probes for the process without delivering anything: ESRCH means it is
-// gone, EPERM means it is alive but owned by another user.
+// Signal 0 only proves that *some* process has this PID. Linux reuses PIDs, so
+// an unrelated process (for example a GNOME helper) must not keep a stale lock
+// alive. Confirm the executable or command line is Dishylink/the dev historian
+// before treating the lock as owned. On other platforms, retain the PID probe.
 function processAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
-    return true;
   } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "EPERM") return false;
+  }
+
+  if (process.platform !== "linux") return true;
+
+  try {
+    const executable = basename(readlinkSync(`/proc/${pid}/exe`))
+      .replace(/ \(deleted\)$/, "")
+      .toLowerCase();
+    const commandLine = readFileSync(`/proc/${pid}/cmdline`, "utf8");
+    const isDishylink = executable === "dishylink";
+    const isHistorian = commandLine
+      .split("\0")
+      .some((argument) => /(?:^|[/\\])collector[/\\]historian\.mts$/i.test(argument));
+    return isDishylink || isHistorian;
+  } catch (error) {
+    // The process may have exited between kill(0) and reading /proc. If access
+    // is restricted, keep the lock rather than risk two writers.
+    const code = (error as NodeJS.ErrnoException).code;
+    return code !== "ENOENT" && code !== "ESRCH";
   }
 }
 
