@@ -19,7 +19,14 @@ import {
 } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
-import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { registerAppProtocolScheme, handleAppProtocol, APP_ENTRY_URL } from "./appProtocol";
 import {
   startCollector,
@@ -55,7 +62,13 @@ import {
   paintThroughputWidget,
   hideThroughputWidget,
 } from "./throughputWidget";
-import { startUpdateChecks, checkForUpdates, updateState, onUpdateStateChanged, installUpdate } from "./updater";
+import {
+  startUpdateChecks,
+  checkForUpdates,
+  updateState,
+  onUpdateStateChanged,
+  installUpdate,
+} from "./updater";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const rendererRoot = join(here, "../dist");
@@ -154,13 +167,17 @@ const NOTIFY_ITEM_ID = "notify-alerts";
 const NOTIFY_REASON_ITEM_ID = "notify-alerts-reason";
 const THROUGHPUT_ITEM_ID = "menubar-throughput";
 const HIDE_ICON_ITEM_ID = "hide-tray-icon";
+const START_ON_SYSTEM_START_ITEM_ID = "start-on-system-start";
+const ABOUT_ITEM_ID = "about-dishylink";
 
-// Tray items updated in place after build (rebuilding would drop an open popup).
-let notifyItem: MenuItem | null = null;
-let notifyReasonItem: MenuItem | null = null;
-let throughputItem: MenuItem | null = null;
-let hideIconItem: MenuItem | null = null;
-let updateItem: MenuItem | null = null;
+// Tray and application menu items updated in place after build (rebuilding would
+// drop an open popup and could leave the two surfaces out of sync).
+let notifyItems: MenuItem[] = [];
+let notifyReasonItems: MenuItem[] = [];
+let throughputItems: MenuItem[] = [];
+let hideIconItems: MenuItem[] = [];
+let startOnSystemStartItems: MenuItem[] = [];
+let updateItems: MenuItem[] = [];
 
 // The live throughput readout: the macOS tray title, or the Windows floating widget
 // (throughputWidget.ts) — one preference, two paint targets, nothing on Linux.
@@ -308,14 +325,131 @@ function macTrayImage() {
   return image;
 }
 
-function createTray(): void {
-  if (process.platform === "darwin") {
-    tray = new Tray(macTrayImage());
-  } else {
-    const image = nativeImage.createFromPath(iconPath);
-    tray = new Tray(image.isEmpty() ? image : image.resize({ width: 18, height: 18 }));
+function linuxAutostartFile(): string {
+  return join(app.getPath("appData"), "autostart", "dishylink.desktop");
+}
+
+/** Read one XDG autostart entry. A per-user entry can disable an entry installed
+ *  system-wide by setting Hidden=true, or can enable/disable its own entry with
+ *  X-GNOME-Autostart-enabled. */
+function autostartEntryEnabled(path: string): boolean | null {
+  try {
+    const entry = readFileSync(path, "utf8");
+    if (/^Hidden\s*=\s*true\s*$/im.test(entry)) return false;
+    if (/^X-GNOME-Autostart-enabled\s*=\s*false\s*$/im.test(entry)) return false;
+    return true;
+  } catch {
+    return null;
   }
-  tray.setToolTip("Dishylink");
+}
+
+function systemAutostartEnabled(): boolean {
+  const configDirs = (process.env.XDG_CONFIG_DIRS || "/etc/xdg").split(":").filter(Boolean);
+  for (const directory of configDirs) {
+    const enabled = autostartEntryEnabled(join(directory, "autostart", "dishylink.desktop"));
+    if (enabled !== null) return enabled;
+  }
+  return false;
+}
+
+function startOnSystemStartEnabled(): boolean {
+  if (process.platform !== "linux") return app.getLoginItemSettings().openAtLogin;
+  return autostartEntryEnabled(linuxAutostartFile()) ?? systemAutostartEnabled();
+}
+
+/** Linux's supported startup hook is an XDG autostart desktop file. A user-level
+ *  Hidden=true entry overrides the package's system-wide default without editing
+ *  a root-owned file; removing that override restores the package default. */
+function setLinuxAutostart(enabled: boolean): void {
+  const path = linuxAutostartFile();
+  const userEnabled = autostartEntryEnabled(path);
+  const systemEnabled = systemAutostartEnabled();
+
+  if (enabled) {
+    if (userEnabled === true) return;
+    if (systemEnabled) {
+      if (userEnabled === false) unlinkSync(path);
+      return;
+    }
+    mkdirSync(dirname(path), { recursive: true });
+    const executable = process.execPath
+      .replaceAll("\\", "\\\\")
+      .replaceAll('"', '\\"')
+      .replaceAll("%", "%%");
+    writeFileSync(
+      path,
+      `[Desktop Entry]\nType=Application\nName=Dishylink\nComment=Starlink network monitoring and control\nExec="${executable}" --hidden\nTerminal=false\nX-GNOME-Autostart-enabled=true\n`,
+    );
+    return;
+  }
+
+  if (systemEnabled) {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(
+      path,
+      "[Desktop Entry]\nType=Application\nName=Dishylink\nHidden=true\nX-GNOME-Autostart-enabled=false\n",
+    );
+  } else if (userEnabled !== null) {
+    unlinkSync(path);
+  }
+}
+
+function setStartOnSystemStart(enabled: boolean): void {
+  if (process.platform === "linux") setLinuxAutostart(enabled);
+  else app.setLoginItemSettings({ openAtLogin: enabled, openAsHidden: enabled });
+}
+
+function toggleStartOnSystemStart(enabled: boolean): void {
+  try {
+    setStartOnSystemStart(enabled);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    dialog.showErrorBox("Couldn’t update startup setting", detail);
+  }
+  const actual = startOnSystemStartEnabled();
+  for (const item of startOnSystemStartItems) item.checked = actual;
+}
+
+function showAbout(): void {
+  const detail = [
+    `Version: ${app.getVersion()}`,
+    `Electron: ${process.versions.electron}`,
+    `Chromium: ${process.versions.chrome}`,
+    `Node.js: ${process.versions.node}`,
+    "",
+    "Created by Davey Hert.",
+    "Linux packaging, tray integration, startup controls, and collector reliability: Matthew Hale (@haleme-chs).",
+    "",
+    "Open-source Starlink monitoring app.",
+  ].join("\n");
+  const options = {
+    type: "info" as const,
+    title: "About Dishylink",
+    message: "Dishylink",
+    detail,
+    buttons: ["Dishylink on GitHub", "@haleme-chs on GitHub", "Close"],
+    defaultId: 2,
+    cancelId: 2,
+    noLink: true,
+  };
+  const dialogResult =
+    mainWindow?.isVisible() === true
+      ? dialog.showMessageBox(mainWindow, options)
+      : dialog.showMessageBox(options);
+  void dialogResult.then(({ response }) => {
+    const url =
+      response === 0
+        ? "https://github.com/DaveyHert/dishylink"
+        : response === 1
+          ? "https://github.com/haleme-chs"
+          : null;
+    if (url !== null)
+      void shell.openExternal(url).catch((error: unknown) => logFailure("open about link", error));
+  });
+}
+
+function menuTemplate(): MenuItemConstructorOptions[] {
+  const linux = process.platform === "linux";
   const notifyMenuItem: MenuItemConstructorOptions = {
     id: NOTIFY_ITEM_ID,
     label: "Notify Me About Alerts",
@@ -339,15 +473,11 @@ function createTray(): void {
       else checkForUpdates();
     },
   };
-  const linux = process.platform === "linux";
-  const menu = Menu.buildFromTemplate(linux ? [
-    { label: "Show Dishylink", click: showWindow },
-    updateMenuItem,
-    notifyMenuItem,
-    { label: "Quit", role: "quit" },
-  ] : [
-    { label: "Open Dishylink", click: showWindow },
+
+  return [
+    { label: linux ? "Show Dishylink" : "Open Dishylink", click: showWindow },
     { type: "separator" },
+    updateMenuItem,
     notifyMenuItem,
     {
       // Why the tick above refused to stay on. Hidden while notifications work.
@@ -385,22 +515,50 @@ function createTray(): void {
         ]
       : []),
     {
-      // openAsHidden + the wasOpenedAtLogin check below start collection with no window.
-      label: "Start at Login",
+      id: START_ON_SYSTEM_START_ITEM_ID,
+      label: "Start on System Start",
       type: "checkbox",
-      checked: app.getLoginItemSettings().openAtLogin,
-      click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked, openAsHidden: true }),
+      enabled: app.isPackaged,
+      checked: app.isPackaged && startOnSystemStartEnabled(),
+      click: (item) => toggleStartOnSystemStart(item.checked),
     },
-    updateMenuItem,
     { type: "separator" },
-    { label: "Quit Dishylink", role: "quit" },
+    { id: ABOUT_ITEM_ID, label: "About", click: showAbout },
+    { type: "separator" },
+    { label: linux ? "Quit" : "Quit Dishylink", role: "quit" },
+  ];
+}
+
+function createTray(): void {
+  const linux = process.platform === "linux";
+  if (process.platform === "darwin") {
+    tray = new Tray(macTrayImage());
+  } else {
+    const image = nativeImage.createFromPath(iconPath);
+    tray = new Tray(image.isEmpty() ? image : image.resize({ width: 18, height: 18 }));
+  }
+  tray.setToolTip("Dishylink");
+
+  const menu = Menu.buildFromTemplate(menuTemplate());
+  const applicationMenu = Menu.buildFromTemplate([
+    { label: "App", submenu: menuTemplate() },
+    { role: "viewMenu" },
   ]);
+  Menu.setApplicationMenu(applicationMenu);
+  const appMenu = applicationMenu.items[0]?.submenu ?? null;
+  const menus = appMenu === null ? [menu] : [menu, appMenu];
+  const itemsById = (id: string) =>
+    menus
+      .map((currentMenu) => currentMenu.getMenuItemById(id))
+      .filter((item): item is MenuItem => item !== null);
+
   trayMenu = menu;
-  notifyItem = menu.getMenuItemById(NOTIFY_ITEM_ID);
-  notifyReasonItem = menu.getMenuItemById(NOTIFY_REASON_ITEM_ID);
-  throughputItem = menu.getMenuItemById(THROUGHPUT_ITEM_ID);
-  hideIconItem = menu.getMenuItemById(HIDE_ICON_ITEM_ID);
-  updateItem = menu.getMenuItemById("update-dishylink");
+  notifyItems = itemsById(NOTIFY_ITEM_ID);
+  notifyReasonItems = itemsById(NOTIFY_REASON_ITEM_ID);
+  throughputItems = itemsById(THROUGHPUT_ITEM_ID);
+  hideIconItems = itemsById(HIDE_ICON_ITEM_ID);
+  startOnSystemStartItems = itemsById(START_ON_SYSTEM_START_ITEM_ID);
+  updateItems = itemsById("update-dishylink");
   applyUpdateMenu();
   applyMenuBarThroughput();
   updateThroughputWatchdog();
@@ -437,8 +595,8 @@ function applyTrayIcon(): void {
 function applyMenuBarThroughput(): void {
   if (!MENU_BAR_THROUGHPUT_SUPPORTED || tray === null) return;
   const on = preferences().menuBarThroughput;
-  if (throughputItem !== null) throughputItem.checked = on;
-  if (hideIconItem !== null) hideIconItem.visible = on;
+  for (const item of throughputItems) item.checked = on;
+  for (const item of hideIconItems) item.visible = on;
   applyTrayIcon();
   if (!on) {
     if (process.platform === "darwin") tray.setTitle("");
@@ -498,13 +656,14 @@ function startMenuBarThroughput(): void {
  *  item pointing at node_modules/electron, so there it only clears one. */
 function configureLoginItem(): void {
   if (!app.isPackaged) {
-    // macOS refuses login-item changes for a non-bundled app; only clear if present.
-    if (app.getLoginItemSettings().openAtLogin) app.setLoginItemSettings({ openAtLogin: false });
+    // A dev run must not leave a login item pointing at node_modules/electron.
+    if (process.platform !== "linux" && app.getLoginItemSettings().openAtLogin)
+      app.setLoginItemSettings({ openAtLogin: false });
     return;
   }
   const marker = join(app.getPath("userData"), ".setup-done");
   if (existsSync(marker)) return;
-  app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true });
+  setStartOnSystemStart(true);
   try {
     writeFileSync(marker, new Date().toISOString());
   } catch {
@@ -562,11 +721,11 @@ function notificationState(): NotificationState {
  *  control), so none of them can disagree. */
 function publishNotificationState(): void {
   const state = notificationState();
-  if (notifyItem !== null) notifyItem.checked = notificationsRequested(state);
-  if (notifyReasonItem !== null) {
-    const problem = notificationsProblem(state);
-    notifyReasonItem.visible = problem !== null;
-    notifyReasonItem.label = problem ?? "";
+  for (const item of notifyItems) item.checked = notificationsRequested(state);
+  const problem = notificationsProblem(state);
+  for (const item of notifyReasonItems) {
+    item.visible = problem !== null;
+    item.label = problem ?? "";
   }
   refreshLinuxTrayMenu();
   mainWindow?.webContents.send(NOTIFICATION_STATE_CHANNEL, state);
@@ -587,23 +746,23 @@ function refreshLinuxTrayMenu(): void {
 }
 
 function applyUpdateMenu(): void {
-  if (updateItem === null) return;
+  if (updateItems.length === 0) return;
   const state = updateState();
+  let label = "Check for Updates";
+  let enabled = true;
   if (state.installing) {
-    updateItem.label = "Installing Dishylink update…";
-    updateItem.enabled = false;
+    label = "Installing Dishylink update…";
+    enabled = false;
   } else if (state.ready && state.version) {
-    updateItem.label = `Install update ${state.version}`;
-    updateItem.enabled = true;
+    label = `Install update ${state.version}`;
   } else if (state.available && state.version) {
-    updateItem.label = `Update available: ${state.version}`;
-    updateItem.enabled = true;
-  } else {
-    updateItem.label = "Check for Updates";
-    updateItem.enabled = true;
+    label = `Update available: ${state.version}`;
+  }
+  for (const item of updateItems) {
+    item.label = label;
+    item.enabled = enabled;
   }
 }
-
 
 function registerUpdateHandler(): void {
   ipcMain.handle("get-update-state", () => updateState());
@@ -762,7 +921,7 @@ function registerMenuBarThroughputHandler(): void {
     applyMenuBarThroughput();
     updateThroughputWatchdog();
     mainWindow?.webContents.send(MENUBAR_THROUGHPUT_CHANNEL, prefs.menuBarThroughput);
-    if (hideIconItem !== null) hideIconItem.checked = prefs.hideTrayIcon;
+    for (const item of hideIconItems) item.checked = prefs.hideTrayIcon;
     mainWindow?.webContents.send(HIDE_TRAY_ICON_CHANNEL, prefs.hideTrayIcon);
     mainWindow?.webContents.send(TRAY_ICON_STYLE_CHANNEL, prefs.trayIconStyle);
   });
@@ -810,7 +969,8 @@ void app.whenReady().then(async () => {
   if (app.isPackaged) startUpdateChecks();
   createTray();
   // A login-triggered launch stays in the tray (no window), so booting doesn't pop one.
-  if (!app.getLoginItemSettings().wasOpenedAtLogin && !process.argv.includes("--hidden")) createWindow();
+  if (!app.getLoginItemSettings().wasOpenedAtLogin && !process.argv.includes("--hidden"))
+    createWindow();
 });
 
 // Lives in the tray after its window closes, so collection keeps running; quits only
