@@ -56,10 +56,20 @@ interface Window {
       listener: (style: "template" | "outline" | "original") => void,
     ) => () => void;
     // Whether a GitHub release newer than this build has been published.
-    updateState: () => Promise<{ available: boolean; version: string | null; ready: boolean; installing: boolean }>;
+    updateState: () => Promise<{
+      available: boolean;
+      version: string | null;
+      ready: boolean;
+      installing: boolean;
+    }>;
     installUpdate: () => Promise<{ ok: boolean; message?: string }>;
     onUpdateState: (
-      listener: (state: { available: boolean; version: string | null; ready: boolean; installing: boolean }) => void,
+      listener: (state: {
+        available: boolean;
+        version: string | null;
+        ready: boolean;
+        installing: boolean;
+      }) => void,
     ) => () => void;
   };
 }
