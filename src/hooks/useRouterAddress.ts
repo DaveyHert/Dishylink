@@ -11,6 +11,7 @@ import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { routerAddressHost, type RouterAddress } from "../lib/routerAddressHost";
 
 let addresses: RouterAddress | null = null;
+let saves = 0;
 let reading: Promise<void> | null = null;
 const listeners = new Set<() => void>();
 
@@ -36,19 +37,25 @@ export function useRouterAddressState(): [RouterAddress | null, (next: RouterAdd
     () => null,
   );
 
+  // Read on every mount, not once: another tab may have changed the stored
+  // address since this window last asked.
   useEffect(() => {
-    if (!host || addresses || reading) return;
+    if (!host || reading) return;
+    const savesAtStart = saves;
     reading = host
       .read()
       .then((value) => {
         // A save that landed while this read was in flight is the newer value.
-        if (!addresses) publish(value);
+        if (saves === savesAtStart) publish(value);
       })
       .finally(() => {
         reading = null;
       });
   }, [host]);
 
-  const setAddresses = useCallback((next: RouterAddress) => publish(next), []);
+  const setAddresses = useCallback((next: RouterAddress) => {
+    saves += 1;
+    publish(next);
+  }, []);
   return [host ? current : null, setAddresses];
 }

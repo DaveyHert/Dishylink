@@ -37,3 +37,24 @@ test("a save in one component reaches every other reader without a remount", asy
   // Two readers, one trip to the host: the value is shared, not fetched per component.
   expect(read).toHaveBeenCalledTimes(1);
 });
+
+test("a remount reads the stored address again, so another tab's save shows up", async () => {
+  let stored: RouterAddress = DEFAULT;
+  setRouterAddressHost({
+    read: () => Promise.resolve(stored),
+    write: () => Promise.reject(new Error("unused")),
+  });
+  function Reader() {
+    const [addresses] = useRouterAddressState();
+    return <p data-testid='reader'>{addresses ? (addresses.router ?? "default") : "unread"}</p>;
+  }
+  const text = () => document.querySelector("[data-testid=reader]")?.textContent;
+
+  await render(<Reader />);
+  await expect.poll(text).toBe("default");
+  await cleanup();
+
+  stored = { router: "192.168.3.1", routerDefault: "192.168.1.1" };
+  await render(<Reader />);
+  await expect.poll(text).toBe("192.168.3.1");
+});
