@@ -33,6 +33,8 @@ only to Starlink.
 | <img src="docs/platforms/windows.svg" alt="" width="16" align="top"> **Windows** 10+         | `EXE`     | Universal              |                                       [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest]                                        |
 | <img src="docs/platforms/windows.svg" alt="" width="16" align="top"> **Windows** 10+         | `EXE`     | `x64`                  |                                       [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest]                                        |
 | <img src="docs/platforms/windows.svg" alt="" width="16" align="top"> **Windows** 10+         | `EXE`     | `arm64`                |                                       [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest]                                        |
+| <img src="docs/platforms/linux.svg" alt="" width="16" align="top"> **Linux**                 | `AppImage`| `x64`                  |                                       [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest]                                        |
+| <img src="docs/platforms/linux.svg" alt="" width="16" align="top"> **Linux**                 | `AppImage`| `arm64`                |                                       [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest]                                        |
 | <img src="landing/public/browsers/chrome.svg" alt="" width="16" align="top"> **Chrome** 144+ | Extension | Any                    | [<img src="docs/platforms/download.svg" alt="Download" width="16">](https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna) |
 | <img src="landing/public/browsers/edge.svg" alt="" width="16" align="top"> **Edge**          | Extension | Any                    | [<img src="docs/platforms/download.svg" alt="Download" width="16">](https://microsoftedge.microsoft.com/addons/detail/pknccegejhlgmeiojalenedmkbcaimdo)  |
 | <img src="landing/public/browsers/firefox.svg" alt="" width="16" align="top"> **Firefox**    | Extension | Any                    |                     [<img src="docs/platforms/download.svg" alt="Download" width="16">](https://addons.mozilla.org/addon/dishylink/)                     |
@@ -40,7 +42,8 @@ only to Starlink.
 [latest]: https://github.com/DaveyHert/dishylink/releases/latest
 
 Not sure which to pick? On Windows, take Universal. On macOS, take `arm64` for
-Apple silicon (M1 and later) or `x64` for Intel.
+Apple silicon (M1 and later) or `x64` for Intel. On Linux, take the AppImage that
+matches your CPU (`uname -m`: `x86_64` → `x64`, `aarch64` → `arm64`).
 
 ## Features
 
@@ -154,6 +157,7 @@ dish/router and records its own history. Packaging:
 ```bash
 npm run pack:mac        # signed Mac build
 npm run pack:win        # Windows build
+npm run pack:linux      # Linux AppImage (x64 + arm64)
 npm run build:extension # Chromium extension bundle
 npm run build:extension:firefox
 npm run build:extension:edge
@@ -200,12 +204,12 @@ npm run lint:fix        # eslint with --fix
 
 A fresh desktop build opens with no history by design: it fills up as it runs.
 
-### Desktop app (Mac, Windows)
+### Desktop app (Mac, Windows, Linux)
 
 - Lives in the tray / menu bar and **keeps recording after its window is
   closed**; it quits only from the tray's Quit.
 - **Live throughput readout** — ↓/↑ rates in the macOS menu bar, or a draggable
-  always-on-top pill on Windows. Whichever surface, the open window feeds it
+  always-on-top pill on Windows (not on Linux). Whichever surface, the open window feeds it
   when there is one and the recorder takes over when there isn't, so the dish is
   never polled twice.
 - **Start at Login**, launching hidden, so collection covers the outages that
