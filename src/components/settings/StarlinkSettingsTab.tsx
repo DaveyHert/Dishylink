@@ -296,7 +296,7 @@ export function StarlinkSettingsTab({
             confirmLabel={t("settings.factoryResetDish")}
             warning={t("settings.factoryResetDishWarning")}
             onRun={async () => {
-              await (await loadDish()).factoryReset();
+              await (await loadDish()).dishFactoryReset();
               return t("settings.factoryResetDishSent");
             }}
           />

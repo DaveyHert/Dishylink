@@ -72,6 +72,7 @@ const REQUEST_FIELD = {
   dishGetConfig: 2011,
   wifiGetConfig: 3009,
   dishClearObstructionMap: 2017,
+  dishFactoryReset: 2021,
 } as const;
 
 // ---------- response JSON shapes (proto3 JSON mapping; uint64 → string) ----------
@@ -624,6 +625,13 @@ export class DishClient {
    *  the official app leaves once bypass is on. FactoryResetRequest is empty. */
   async factoryReset(abortSignal?: AbortSignal): Promise<void> {
     await this.call(REQUEST_FIELD.factoryReset, abortSignal);
+  }
+
+  /** Wipe the dish back to its shipped state. The dish answers the generic
+   *  factory_reset above with Unimplemented; this is its own request. */
+  async dishFactoryReset(abortSignal?: AbortSignal): Promise<void> {
+    // DishFactoryResetRequest { bool app_reset = 1 } — field 1, varint wire type
+    await this.call(REQUEST_FIELD.dishFactoryReset, abortSignal, [0x08, 0x01]);
   }
 
   /** Stow (fold flat) or unstow the dish. Motorized (mast) models only. */
