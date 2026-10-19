@@ -11,6 +11,7 @@ import type { OutageReport } from "@core/postmortem";
 import { DetailsModal } from "../ui/details-modal";
 import { actionButton } from "../ui/action-button";
 import { Badge } from "../ui/badge";
+import { Callout } from "../ui/callout";
 import { formatEventDuration } from "../../lib/format";
 import { DataRow, SectionHeading } from "../network/DataRow";
 import { BandSwitchBands, BandSwitchDevice } from "./BandSwitchDetail";
@@ -107,9 +108,9 @@ export function EventDetailModal({
             </section>
           ))
         ) : (
-          <p className='mt-4 text-[13px] font-medium text-ink-secondary'>
+          <Callout tone='info' className='mt-4'>
             {t("eventDetail.noReport")}
-          </p>
+          </Callout>
         )}
 
         {report && (

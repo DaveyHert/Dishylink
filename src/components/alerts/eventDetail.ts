@@ -3,7 +3,9 @@
 
 import type { TFunction } from "i18next";
 import {
+  canonicalCause,
   knownEventKind,
+  OUTAGE_SAMPLE_RUN,
   outageEventKind,
   outageEventMeta,
   type EventKind,
@@ -36,11 +38,19 @@ const KIND_BY_SEVERITY: Record<OutageEvent["severity"], EventKind> = {
   advisory: "info",
 };
 
-/** The detail's Outage / Degraded / Info tag. A row titled in plain words
- *  (a thermal episode) has no firmware token to look up, so its severity
- *  decides; a row the recorder timed was an outage by definition. */
+/** Interruptions the dish files as outages whatever their length. One shorter
+ *  than the recorder's own outage threshold is a blip, not lost service. */
+const INTERRUPTION_CAUSES = new Set(["NO_PINGS", "NO_DOWNLINK", "UNKNOWN"]);
+const SHORTEST_OUTAGE_MS = OUTAGE_SAMPLE_RUN * 1000;
+
+/** The rating an event shows as its row's dot and its detail's tag. A row
+ *  titled in plain words (a thermal episode) has no firmware token to look up,
+ *  so its severity decides; a row the recorder timed was an outage by
+ *  definition. */
 export function eventDetailKind(event: OutageEvent, report: OutageReport | null): EventKind {
   if (report) return "outage";
+  if (INTERRUPTION_CAUSES.has(canonicalCause(event.cause)) && event.durationMs < SHORTEST_OUTAGE_MS)
+    return "degraded";
   const known = knownEventKind(event.cause);
   if (known) return known;
   if (/^[A-Z0-9_]+$/.test(event.cause)) return outageEventKind(event.cause);

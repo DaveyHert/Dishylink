@@ -178,6 +178,64 @@ test("the packet-loss event carries the official app's name and a Degraded tag",
   expect(bodyText()).toContain("Degraded");
 });
 
+test("each row's dot carries the same rating as its detail's tag, whatever the device stamped", async () => {
+  const at = (minutesAgo: number) => NOW - minutesAgo * 60_000;
+  const events: OutageEvent[] = [
+    // Stamped warning by the dish; service stopped for longer than a blip.
+    {
+      startMs: at(1),
+      durationMs: 12_000,
+      cause: "EVENT_REASON_OUTAGE_NO_PINGS",
+      severity: "warning",
+    },
+    // Stamped advisory, but the dish was down while it booted.
+    {
+      startMs: at(2),
+      durationMs: 30_000,
+      cause: "EVENT_REASON_OUTAGE_BOOTING",
+      severity: "advisory",
+    },
+    // Stamped advisory, but the link was impaired.
+    {
+      startMs: at(3),
+      durationMs: 5_300,
+      cause: "EVENT_REASON_HIGH_DOWNLINK_PACKET_LOSS",
+      severity: "advisory",
+    },
+    {
+      startMs: at(4),
+      durationMs: 0,
+      cause: "EVENT_REASON_CLIENT_SWITCHING_BAND",
+      severity: "advisory",
+    },
+    { startMs: at(5), durationMs: 60_000, cause: "thermal throttle", severity: "warning" },
+  ];
+  render(<OutageLog outageEvents={events} reports={[]} />);
+  await expect.poll(() => document.querySelectorAll("[data-kind]").length).toBe(5);
+  const kinds = [...document.querySelectorAll<HTMLElement>("[data-kind]")].map(
+    (dot) => dot.dataset.kind,
+  );
+  expect(kinds).toEqual(["outage", "outage", "degraded", "info", "degraded"]);
+  expect(kinds).toEqual(events.map((event) => eventDetailKind(event, null)));
+});
+
+test("an interruption shorter than eight seconds is a blip, rated degraded rather than an outage", () => {
+  const interruption = (cause: string, durationMs: number): OutageEvent => ({
+    startMs: NOW,
+    durationMs,
+    cause: `EVENT_REASON_OUTAGE_${cause}`,
+    severity: "warning",
+  });
+  expect(eventDetailKind(interruption("NO_PINGS", 1_000), null)).toBe("degraded");
+  expect(eventDetailKind(interruption("NO_DOWNLINK", 7_999), null)).toBe("degraded");
+  expect(eventDetailKind(interruption("UNKNOWN", 2_420), null)).toBe("degraded");
+  expect(eventDetailKind(interruption("NO_PINGS", 8_000), null)).toBe("outage");
+  // Other outage causes keep their rating however short.
+  expect(eventDetailKind(interruption("OBSTRUCTED", 1_000), null)).toBe("outage");
+  // A report means the recorder timed it as an outage.
+  expect(eventDetailKind(interruption("NO_PINGS", 1_000), report())).toBe("outage");
+});
+
 test("the copied text prints the same sections the card shows", () => {
   const text = eventDetailText(dishEvent, report(), i18n.t, "en");
   expect(text).toContain("Dishylink outage report: Ping Network Interruption");

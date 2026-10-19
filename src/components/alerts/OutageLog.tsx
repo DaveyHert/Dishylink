@@ -21,7 +21,8 @@ import { EmptyState } from "../ui/empty-state";
 import { InfoDot } from "../shared/InfoDot";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { EventDetailModal } from "./EventDetailModal";
-import { SeverityMark } from "./SeverityMark";
+import { EventKindMark } from "./EventKindMark";
+import { eventDetailKind } from "./eventDetail";
 
 interface Row {
   event: OutageEvent;
@@ -74,7 +75,7 @@ export function OutageLog({
         // Its own provider so the list works wherever it is mounted; the app's
         // root provider uses the same delay.
         <TooltipProvider delayDuration={200}>
-          <div className='thin-scroll flex max-h-[240px] flex-col overflow-y-auto'>
+          <div className='thin-scroll grid max-h-[240px] grid-cols-[auto_1fr_auto_auto] content-start overflow-y-auto'>
             {rows.map((row) => {
               const { event } = row;
               const meta = outageEventMeta(event.cause, t);
@@ -84,7 +85,7 @@ export function OutageLog({
               // inside a button is invalid and unreachable to a screen reader.
               return (
                 <div
-                  className='group relative grid grid-cols-[auto_1fr_auto_auto] items-center gap-2.5 border-b border-border px-0.5 py-2 text-[13px] font-medium last:border-b-0'
+                  className='group relative col-span-4 grid grid-cols-subgrid items-center gap-2.5 border-b border-border px-0.5 py-2 text-[13px] font-medium last:border-b-0'
                   key={`${event.startMs}-${canonicalCause(event.cause)}`}
                 >
                   <button
@@ -114,7 +115,7 @@ export function OutageLog({
                     </TooltipContent>
                   </Tooltip>
                   <span className='pointer-events-none relative flex min-w-0 items-center gap-2'>
-                    <SeverityMark severity={event.severity} />
+                    <EventKindMark kind={eventDetailKind(event, row.report)} />
                     <span className='overflow-hidden text-ellipsis whitespace-nowrap text-foreground'>
                       {meta.label}
                     </span>
