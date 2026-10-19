@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { canonicalCause, outageEventKind, outageEventMeta } from "@core/telemetry";
+import { canonicalCause, outageEventKind, outageEventMeta as meta } from "@core/telemetry";
+import { createI18n } from "@core/i18n/resources";
 import { formatEventDuration } from "./format";
+
+const { t } = createI18n("en");
+const outageEventMeta = (cause: string) => meta(cause, t);
 
 describe("canonicalCause", () => {
   it("reduces raw enum, legacy humanized label, and outage-cause spelling to one token", () => {
@@ -94,15 +98,15 @@ describe("outageEventKind", () => {
 
 describe("formatEventDuration", () => {
   it("shows whole seconds with no ms, rounding a sub-second blip up to 1s", () => {
-    expect(formatEventDuration(779)).toBe("1s");
-    expect(formatEventDuration(2100)).toBe("2s");
-    expect(formatEventDuration(61_000)).toBe("1m 1s");
-    expect(formatEventDuration(1_092_000)).toBe("18m 12s");
-    expect(formatEventDuration(3_600_000)).toBe("1h");
+    expect(formatEventDuration(779, t)).toBe("1s");
+    expect(formatEventDuration(2100, t)).toBe("2s");
+    expect(formatEventDuration(61_000, t)).toBe("1m 1s");
+    expect(formatEventDuration(1_092_000, t)).toBe("18m 12s");
+    expect(formatEventDuration(3_600_000, t)).toBe("1h");
   });
 
   it("shows nothing for a point-in-time event, rather than inventing a 1s length", () => {
     // The router logs power cycles and band switches with durationNs: 0.
-    expect(formatEventDuration(0)).toBe("");
+    expect(formatEventDuration(0, t)).toBe("");
   });
 });

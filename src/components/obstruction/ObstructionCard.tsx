@@ -1,6 +1,7 @@
 // The dashboard's Obstructions card: the dish's view of its own sky, full-bleed.
 
 import { useCallback, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Callout } from "../ui/callout";
 import { Loading } from "../ui/loading";
 import type {
@@ -31,6 +32,7 @@ export function ObstructionCard({
   status,
   onOpenSatelliteView,
 }: ObstructionCardProps) {
+  const { t } = useTranslation();
   const fractionObstructed = obstructionStats?.fractionObstructed ?? 0;
   const trimmed = useDomeTrim();
   // The dome drifts on its own; this holds it still for anyone reading the map
@@ -55,7 +57,7 @@ export function ObstructionCard({
 
       {!obstructionMap?.snr && (
         <div className='absolute inset-0 flex items-center justify-center'>
-          <Loading message='Waiting for obstruction data…' />
+          <Loading message={t("obstruction.waiting")} />
         </div>
       )}
 
@@ -68,13 +70,15 @@ export function ObstructionCard({
       <div className='pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-[#000000cc] to-transparent' />
 
       <div className='pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between gap-3 px-[18px] py-4'>
-        <span className='text-[16px] font-semibold tracking-[0.005em]'>Obstructions</span>
+        <span className='text-[16px] font-semibold tracking-[0.005em]'>
+          {t("obstruction.title")}
+        </span>
         {/* The chrome layer lets clicks through to the scene behind it, so each
             control has to claim its own. */}
         <div className='flex items-center gap-3'>
           <span className='pointer-events-auto'>
             <SkyControl
-              label={rotating ? "Pause rotation" : "Resume rotation"}
+              label={rotating ? t("obstruction.pauseRotation") : t("obstruction.resumeRotation")}
               pressed={!rotating}
               onClick={() => scene && setRotating(scene.toggleRotation())}
             >
@@ -83,7 +87,7 @@ export function ObstructionCard({
           </span>
           <span className='pointer-events-auto'>
             <SkyControl
-              label={trimmed ? "Show unmapped sky" : "Hide unmapped sky"}
+              label={trimmed ? t("obstruction.showUnmapped") : t("obstruction.hideUnmapped")}
               pressed={trimmed}
               onClick={() => setDomeTrimEnabled(!trimmed)}
             >
@@ -94,7 +98,7 @@ export function ObstructionCard({
             className='pointer-events-auto cursor-pointer border-0 bg-transparent p-0 font-sans text-[13px] font-semibold text-(--accent) transition-[color,opacity] duration-120 hover:opacity-75'
             onClick={onOpenSatelliteView}
           >
-            Live satellite view ›
+            {t("obstruction.liveSatelliteView")}
           </button>
         </div>
       </div>
@@ -109,8 +113,8 @@ export function ObstructionCard({
             otherwise read through the text. */}
         <Callout className='mt-3 border border-[#8b97a824] bg-[#000000b3] backdrop-blur-md'>
           {fractionObstructed < 0.005
-            ? "Your Starlink has an unobstructed view of the sky. The map becomes more accurate as the dish collects data."
-            : "Obstructed patches cause brief interruptions as satellites pass behind them."}
+            ? t("obstruction.clearViewNote")
+            : t("obstruction.obstructedNote")}
         </Callout>
       </div>
     </div>

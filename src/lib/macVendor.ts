@@ -7,6 +7,8 @@
 // to no real vendor — we detect that bit and report "Private" rather than a
 // wrong brand.
 
+import type { TFunction } from "i18next";
+
 let ouiRegistry: Record<string, string> | null = null;
 let ouiLoad: Promise<void> | null = null;
 const registryListeners = new Set<() => void>();
@@ -60,6 +62,16 @@ export function vendorForMac(macAddress: string | undefined): string | undefined
   if (!macAddress) return undefined;
   const vendor = ouiRegistry?.[ouiKey(macAddress)];
   if (vendor) return vendor;
-  if (isPrivateMac(macAddress)) return "Private";
+  if (isPrivateMac(macAddress)) return PRIVATE_VENDOR;
   return undefined;
+}
+
+/** What vendorForMac reports for a randomized MAC. A marker, not a sentence:
+ *  callers compare against it, and the screens word it via vendorLabel. */
+export const PRIVATE_VENDOR = "Private";
+
+/** A vendor as the reader sees it: real brands as the registry spells them,
+ *  the randomized-MAC marker in the user's language. */
+export function vendorLabel(vendor: string | undefined, t: TFunction): string | undefined {
+  return vendor === PRIVATE_VENDOR ? t("devices.privateVendor") : vendor;
 }

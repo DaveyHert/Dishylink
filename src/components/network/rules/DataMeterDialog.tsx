@@ -1,6 +1,7 @@
 // A device's limit, read or written. A device with no rule opens on the form.
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { DataMeter } from "../../../hooks/useDataMeter";
 import { DialogDescription, DialogHeader, DialogTitle } from "../../ui/dialog";
 import { SpinLoader } from "../../loaders/SpinLoader";
@@ -29,6 +30,7 @@ export function DataMeterDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const showForm = editing || (meter.rule === null && !meter.loading);
   const withSelf = candidates.some((candidate) => candidate.clientKey === clientKey)
@@ -63,7 +65,7 @@ export function DataMeterDialog({
       ) : (
         <>
           <DialogHeader className='pb-4'>
-            <DialogTitle className='text-[19px] leading-snug'>Data limit</DialogTitle>
+            <DialogTitle className='text-[19px] leading-snug'>{t("network.dataLimit")}</DialogTitle>
             <DialogDescription className='text-[13px]'>{deviceName}</DialogDescription>
           </DialogHeader>
           <div className='grid min-h-[220px] place-items-center border-t border-border/60'>

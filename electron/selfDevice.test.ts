@@ -59,7 +59,7 @@ describe("hostIdentity", () => {
         router.callGateway,
         hostIdentity(),
       ),
-    ).rejects.toThrow(/Refusing/);
+    ).rejects.toThrow(/refuseSelfPause/);
   });
 
   test("given: an id outside a uint32, should: keep what is stored", () => {

@@ -1,3 +1,4 @@
+import { Trans } from "react-i18next";
 import { requestPanel } from "../../hooks/usePanelRouting";
 import { inlineLinkButton } from "../ui/action-button";
 
@@ -5,12 +6,17 @@ import { inlineLinkButton } from "../ui/action-button";
  *  reader has to act on somewhere else. */
 export function AccountRequiredNotice() {
   return (
-    <>
-      An authorized account is required —{" "}
-      <button type='button' className={inlineLinkButton} onClick={() => requestPanel("account")}>
-        sign in
-      </button>{" "}
-      to use this feature.
-    </>
+    <Trans
+      i18nKey='account.required'
+      components={{
+        link: (
+          <button
+            type='button'
+            className={inlineLinkButton}
+            onClick={() => requestPanel("account")}
+          />
+        ),
+      }}
+    />
   );
 }

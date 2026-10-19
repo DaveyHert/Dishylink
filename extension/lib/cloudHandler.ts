@@ -25,7 +25,7 @@ import { DishClient, type DishConfigJson } from "@core/dishClient";
 import { prepareDishConfigUpdate } from "@core/dishConfigUpdate";
 import {
   buildRouterConfigRequest,
-  readCurrentNetworks,
+  readRouterConfigContext,
   readCurrentSubnet,
   readRouterWifiConfig,
   type RouterConfigUpdate,
@@ -78,8 +78,8 @@ const cloudHandler = createCloudHandler({
     prepareRouterClientUpdate(await loadRouter(), update, targetId, callGateway),
   prepareRouterConfigUpdate: async (update, targetId, callGateway) => {
     const client = await loadRouter();
-    const networks = await readCurrentNetworks(update, client, targetId, callGateway);
-    return client.encodeRequest(buildRouterConfigRequest(targetId, update, networks));
+    const context = await readRouterConfigContext(update, client, targetId, callGateway);
+    return client.encodeRequest(buildRouterConfigRequest(targetId, update, context));
   },
   readRouterSubnet: async (targetId, callGateway) =>
     readCurrentSubnet(await loadRouter(), targetId, callGateway),
@@ -173,7 +173,8 @@ export async function handleCloudRequest(request: CloudRequest): Promise<CloudRe
         status: 409,
         body: {
           error: "self_device_unknown",
-          message: "Choose this device under Settings → App before pausing others.",
+          // A catalog key: the dashboard words it in the user's language.
+          message: "errors.selfDeviceUnknown",
         },
       };
     if (update.clientId === selfClientId)
@@ -181,7 +182,7 @@ export async function handleCloudRequest(request: CloudRequest): Promise<CloudRe
         status: 409,
         body: {
           error: "self_pause_refused",
-          message: "This is the device you are using, so it cannot be paused from here.",
+          message: "errors.selfPauseRefused",
         },
       };
     return cloudHandler.updateClient(update);

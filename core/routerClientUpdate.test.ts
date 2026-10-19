@@ -170,7 +170,7 @@ describe("buildRouterPauseRequest", () => {
         router.callGateway,
         host,
       ),
-    ).rejects.toThrow(/Refusing/);
+    ).rejects.toThrow(/refuseSelfPause/);
     await expect(
       prepareRouterClientUpdate(
         router.codec,
@@ -196,7 +196,7 @@ describe("buildRouterPauseRequest", () => {
         router.callGateway,
         host,
       ),
-    ).rejects.toThrow(/Refusing/);
+    ).rejects.toThrow(/refuseSelfPause/);
   });
 
   test("given: a viewer off the router's network, should: leave the address guard silent", async () => {
@@ -239,7 +239,7 @@ describe("buildRouterPauseRequest", () => {
         router.callGateway,
         elsewhere,
       ),
-    ).rejects.toThrow(/Refusing/);
+    ).rejects.toThrow(/refuseSelfPause/);
     await expect(
       prepareRouterClientUpdate(
         router.codec,
@@ -265,7 +265,7 @@ describe("buildRouterPauseRequest", () => {
         router.callGateway,
         host,
       ),
-    ).rejects.toThrow(/Refusing/);
+    ).rejects.toThrow(/refuseSelfPause/);
   });
 });
 
@@ -309,7 +309,7 @@ describe("buildRouterRenameRequest", () => {
 
   test("given: a client the router has never reported, should: refuse rather than append", () => {
     expect(() => buildRouterRenameRequest(TARGET, config, 99, "Ghost")).toThrow(
-      /not known to the router/,
+      /deviceUnknownToRouter/,
     );
   });
 

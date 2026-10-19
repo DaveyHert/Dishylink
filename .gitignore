@@ -17,6 +17,7 @@ collector/data
 
 # Machine-specific agent state.
 .claude/
+CLAUDE.local.md
 
 # Working notes and throwaway probe scripts. Local to whoever is mid-task.
 HANDOFF.md

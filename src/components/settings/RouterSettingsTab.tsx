@@ -2,6 +2,7 @@
 // Read-mostly by design: the one write here is a reboot.
 
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Callout } from "@/components/ui/callout";
 import { Loading } from "@/components/ui/loading";
 import { DishClient, type WifiNetworkConfigJson } from "@core/dishClient";
@@ -70,6 +71,7 @@ export function RouterSettingsTab({
    *  A write that takes it down is covered by the read on its return instead. */
   onConfigChanged: () => void;
 }) {
+  const { t } = useTranslation();
   const ssids = useMemo(() => ssidsWithBands(wifiConfig), [wifiConfig]);
   const meshNodes = Object.values(wifiConfig?.meshConfigs ?? {});
   const [addresses, setAddresses] = useRouterAddressState();
@@ -101,20 +103,16 @@ export function RouterSettingsTab({
 
   return (
     <>
-      {routerReachable === null && <Loading message='Contacting the router…' />}
+      {routerReachable === null && <Loading message={t("settings.contactingRouter")} />}
       {/* Branch on the diagnosis rather than on `routerReachable` again: it is
           derived from that same flag, so this cannot render an empty callout. */}
       {unreachable && <Callout tone='error'>{unreachable.message}</Callout>}
 
       {configKnown && (
         <>
-          <SectionLabel>Networks</SectionLabel>
+          <SectionLabel>{t("settings.networks")}</SectionLabel>
           {ssids.map(([ssid, bands]) => (
-            <SettingRow
-              key={ssid}
-              title={ssid}
-              caption='WPA2 · password managed in the Starlink app'
-            >
+            <SettingRow key={ssid} title={ssid} caption={t("settings.wpa2Caption")}>
               {[...new Set(bands)].map((band) => (
                 <Badge key={band}>{band}</Badge>
               ))}
@@ -123,15 +121,21 @@ export function RouterSettingsTab({
 
           {meshNodes.length > 0 && (
             <>
-              <SectionLabel>Mesh nodes</SectionLabel>
+              <SectionLabel>{t("settings.meshNodes")}</SectionLabel>
               {meshNodes.map((node, nodeIndex) => (
                 <SettingRow
                   key={nodeIndex}
-                  title={node.displayName ?? "Mesh node"}
-                  caption={node.hardwareVersion ? `hardware ${node.hardwareVersion}` : undefined}
+                  title={node.displayName ?? t("settings.meshNode")}
+                  caption={
+                    node.hardwareVersion
+                      ? t("settings.meshHardware", { version: node.hardwareVersion })
+                      : undefined
+                  }
                 >
                   <Badge tone={node.auth !== "MESH_AUTH_TRUSTED" ? "critical" : "neutral"}>
-                    {node.auth === "MESH_AUTH_TRUSTED" ? "trusted" : (node.auth ?? "unknown")}
+                    {node.auth === "MESH_AUTH_TRUSTED"
+                      ? t("settings.meshTrusted")
+                      : (node.auth ?? t("common.unknown"))}
                   </Badge>
                 </SettingRow>
               ))}
@@ -140,8 +144,8 @@ export function RouterSettingsTab({
 
           {wifiConfig?.boot?.evenSideSoftwareVersion && (
             <SettingRow
-              title='Router firmware'
-              caption={`country ${wifiConfig.countryCode ?? "—"}`}
+              title={t("settings.routerFirmware")}
+              caption={t("settings.routerCountry", { country: wifiConfig.countryCode ?? "—" })}
             >
               <span className='font-mono text-[12px] text-muted-foreground tabular-nums'>
                 {wifiConfig.boot.evenSideSoftwareVersion}
@@ -151,51 +155,47 @@ export function RouterSettingsTab({
         </>
       )}
 
-      <SectionLabel>Maintenance</SectionLabel>
+      <SectionLabel>{t("settings.maintenance")}</SectionLabel>
       <DangerAction
-        title='Reboot router'
-        caption={
-          answering
-            ? "WiFi drops for a minute or two; the dish stays up"
-            : "Unavailable until the router answers"
-        }
-        buttonLabel='Reboot'
-        slideLabel='Slide to reboot router'
-        confirmLabel='Reboot router'
+        title={t("settings.rebootRouter")}
+        caption={answering ? t("settings.rebootRouterDesc") : t("settings.routerUnavailable")}
+        buttonLabel={t("settings.reboot")}
+        slideLabel={t("settings.slideRebootRouter")}
+        confirmLabel={t("settings.rebootRouter")}
         disabled={!answering}
         onRun={async () => {
           const routerClient = await DishClient.load("router");
           await routerClient.reboot();
-          return "Reboot sent — the router is restarting.";
+          return t("settings.rebootRouterSent");
         }}
       />
       <DangerAction
-        title='Factory reset router'
+        title={t("settings.factoryResetRouter")}
         caption={
           answering || accountConnected
-            ? "Wipes the WiFi name, password and every router setting. Not reversible."
-            : "Needs the router on this network, or your Starlink account"
+            ? t("settings.factoryResetRouterDesc")
+            : t("settings.factoryResetRouterNeeds")
         }
-        buttonLabel='Factory reset'
-        slideLabel='Slide to factory reset the router'
-        confirmLabel='Factory reset router'
-        warning='Factory reset will clear your WiFi network name, password, and other settings. This will interrupt your service until you set it up again.'
+        buttonLabel={t("settings.factoryReset")}
+        slideLabel={t("settings.slideFactoryResetRouter")}
+        confirmLabel={t("settings.factoryResetRouter")}
+        warning={t("settings.factoryResetRouterWarning")}
         disabled={!answering && !accountConnected}
         onRun={async () => {
           // A bypassed router is off the LAN, which is exactly when a reset is
           // wanted: the account reaches it there and nothing local does.
           if (!answering) {
             await applyRouterConfigUpdate({ kind: "factoryReset" });
-            return "Factory reset sent through your Starlink account — the router is wiping and restarting.";
+            return t("settings.factoryResetRouterSentViaAccount");
           }
           await (await DishClient.load("router")).factoryReset();
-          return "Factory reset sent — the router is wiping and restarting.";
+          return t("settings.factoryResetRouterSent");
         }}
       />
-      <CollapsibleSection title='Advanced'>
+      <CollapsibleSection title={t("settings.advanced")}>
         {addresses && (
           <>
-            <SectionLabel>Connection</SectionLabel>
+            <SectionLabel>{t("settings.connection")}</SectionLabel>
             <RouterAddressRow
               addresses={addresses}
               onChanged={(next) => {
@@ -207,7 +207,7 @@ export function RouterSettingsTab({
         )}
         {showDns && (
           <>
-            <SectionLabel>DNS</SectionLabel>
+            <SectionLabel>{t("settings.dns")}</SectionLabel>
             <CustomDnsSection
               nameservers={wifiConfig?.nameservers ?? []}
               disabled={!accountConnected}
@@ -218,7 +218,7 @@ export function RouterSettingsTab({
             />
           </>
         )}
-        <SectionLabel>Network</SectionLabel>
+        <SectionLabel>{t("settings.network")}</SectionLabel>
         <SubnetSection
           currentSubnet={configSubnet ?? cloudSubnet}
           disabled={!accountConnected}
@@ -233,7 +233,7 @@ export function RouterSettingsTab({
             rereadCloudSubnet();
           }}
         />
-        <SectionLabel>Bypass</SectionLabel>
+        <SectionLabel>{t("settings.bypass")}</SectionLabel>
         <BypassSection
           reported={bypassed}
           routerAnswering={answering}

@@ -24,9 +24,9 @@ import {
   ruleKey,
   sharedUsageByGroup,
   upsertRule,
+  type IdentityResolver,
   type MeterCycle,
   type MeterReading,
-  type MeterRoster,
   type MeterRule,
   type MeterTransition,
 } from "../core/dataMeter.ts";
@@ -171,9 +171,10 @@ export class MeterStore {
     return { dropped, reannounced };
   }
 
-  /** Reconcile rules against the odometer's roster. True when any rule moved. */
-  resolve(roster: MeterRoster): boolean {
-    const kept = resolveRuleKeys(this.rules, roster);
+  /** Move rules onto the identities their devices answer to now. True when any
+   *  rule moved. */
+  resolve(resolver: IdentityResolver): boolean {
+    const kept = resolveRuleKeys(this.rules, resolver);
     const changed = listChanged(kept, this.rules);
     if (changed) {
       this.rules = kept;

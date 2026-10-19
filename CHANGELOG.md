@@ -2,6 +2,57 @@
 
 All notable changes to Dishylink are documented here.
 
+## [1.2.0] - 2026-09-18
+
+### Device usage
+
+- Dishylink no longer charges its own checks to the device it runs on. It
+  measures what its own polling costs and takes that out before a figure is
+  stored, so the machine you run it on shows the usage you made, not the usage
+  of watching. Satellite lookups are no longer counted against it either, and
+  stored rows keep their raw figures.
+- The note explaining that a device's figure still includes Dishylink's own
+  checks now appears only where you can act on it.
+
+### Network rules
+
+- A wired device now says so in the rule picker. The router keeps no byte
+  counters for wired clients, so a data allowance has nothing to measure there.
+  Hours can still be ruled with a schedule or a timer.
+- The picker lists every device on the network, not only the ones a usage
+  record exists for.
+- A rule, or a device's place in a group, is no longer lost while the device is
+  away. Absence was being read as deletion. A rule ends when you delete the
+  rule, or delete the device's record.
+- A device whose records were merged opens its own limit again, rather than an
+  empty one.
+
+### Latency
+
+- Latency quality history, with per-minute histograms and its own dashboard.
+  (#34)
+
+### Desktop, browser and hosting
+
+- The macOS menu bar icon can match the rest of the menu bar, or be hidden so
+  only the throughput readout shows. (#38)
+- Opening Dishylink while it is already running brings the open window forward
+  instead of failing. (#43)
+- Mesh nodes can be renamed from the Nodes tab.
+- The web dashboard and the history recorder ship as Docker images. (#16)
+- Dishylink is now on the Edge Add-ons store.
+
+### Also added
+
+- Dishylink asks once whether you would rate it, and separately whether you
+  would help fund it. "Maybe later" brings it back in two days, "Don't ask
+  again" ends it, and acting on either ask ends it for good.
+
+### Fixed
+
+- The history recorder no longer trips over its own data directory when a
+  second copy starts inside the same process.
+
 ## [1.1.0] - 2026-08-22
 
 ### Network rules

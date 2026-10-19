@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { createI18n } from "@core/i18n/resources";
 import { buildDeviceList } from "./deviceList";
+
+const { t } = createI18n("en");
 import { lanOnlineDeviceIds } from "../../lib/lanPresence";
 import type { CloudTerminal, DeviceTelemetry } from "../../lib/starlinkCloud";
 
@@ -56,7 +59,7 @@ describe("buildDeviceList status, joined against LAN presence", () => {
   it("greens the dish and controller mid-cycle, and only reds the dead mesh", () => {
     // With a sub-cadence freshness window, these two would read offline for the
     // back half of every upload cycle.
-    const items = buildDeviceList(terminals, cloudMidCycle);
+    const items = buildDeviceList(terminals, cloudMidCycle, new Set(), t);
     expect(statusOf(items, DISH_KEY)).toBe("online");
     expect(statusOf(items, MAIN_ROUTER_KEY)).toBe("online");
     expect(statusOf(items, MESH_KEY)).toBe("offline");
@@ -78,7 +81,7 @@ describe("buildDeviceList status, joined against LAN presence", () => {
       [MAIN_ROUTER]: { kind: "router", timestampMs: NOW - 6 * 3_600_000 } as DeviceTelemetry,
       [MESH]: cloudMidCycle[MESH],
     };
-    const items = buildDeviceList(terminals, hoursStale, lanOnline);
+    const items = buildDeviceList(terminals, hoursStale, lanOnline, t);
     expect(statusOf(items, DISH_KEY)).toBe("online");
     expect(statusOf(items, MAIN_ROUTER_KEY)).toBe("online");
     // No local vote for the dead mesh, so the cloud still rules it offline.
@@ -88,7 +91,7 @@ describe("buildDeviceList status, joined against LAN presence", () => {
   it("leaves the dots to the cloud when nothing local answers", () => {
     // Viewing the account from another network: no LAN presence at all, and a
     // healthy dish must not turn red just because we cannot reach it from here.
-    const items = buildDeviceList(terminals, cloudMidCycle, new Set());
+    const items = buildDeviceList(terminals, cloudMidCycle, new Set(), t);
     expect(statusOf(items, DISH_KEY)).toBe("online");
     expect(statusOf(items, MAIN_ROUTER_KEY)).toBe("online");
   });

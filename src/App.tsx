@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useTranslation } from "react-i18next";
 import { useDishTelemetry } from "./hooks/useDishTelemetry";
 import { useLanPresence } from "./hooks/useLanPresence";
 import { AnimatePresence, motion } from "motion/react";
@@ -9,6 +10,7 @@ import { useOutageNotifications } from "./hooks/useOutageNotifications";
 import { useThermalEvents } from "./hooks/useThermalEvents";
 import { useDeviceAlerts } from "./hooks/useDeviceAlerts";
 import { useOutageHistory, mergeOutages } from "./hooks/useOutageHistory";
+import { useOutageReports } from "./hooks/useOutageReports";
 import {
   notificationsOn as readNotificationsOn,
   notificationsBlockedReason as readNotificationsBlockedReason,
@@ -38,6 +40,7 @@ import { useTheme } from "./hooks/useTheme";
 import { dishModelFor } from "./lib/dishMesh";
 
 export default function App() {
+  const { t } = useTranslation();
   const { theme, cycleTheme } = useTheme();
   const {
     openPanel,
@@ -49,6 +52,14 @@ export default function App() {
     openSkyView,
   } = usePanelRouting();
   const [windowMinutes, setWindowMinutes] = useState(15);
+  const [networkDeviceKey, setNetworkDeviceKey] = useState<string | null>(null);
+  const openNetworkDevice = useCallback(
+    (entryKey: string) => {
+      setNetworkDeviceKey(entryKey);
+      setOpenPanel("network");
+    },
+    [setOpenPanel],
+  );
   const notificationsOn = useSyncExternalStore(subscribeToNotifications, readNotificationsOn);
   const notificationsBlockedReason = useSyncExternalStore(
     subscribeToNotifications,
@@ -73,6 +84,7 @@ export default function App() {
     () => mergeOutages(telemetry.outageEvents, persistedOutages),
     [telemetry.outageEvents, persistedOutages],
   );
+  const outageReports = useOutageReports();
   const routerNetwork = useRouterNetwork(openPanel === "network" || openPanel === "settings");
   const routerUnreachable = useRouterUnreachable(
     routerNetwork.routerReachable,
@@ -151,9 +163,11 @@ export default function App() {
               averagePowerW={averagePowerW}
               outageEvents={outageEvents}
               thermalEvents={thermalEvents}
+              reports={outageReports}
               samples={samples}
               onOpenSatelliteView={openSkyView}
               onExpandTerminal={() => setOpenPanel("terminal")}
+              onOpenDevice={openNetworkDevice}
             />
           </motion.div>
         )}
@@ -161,19 +175,27 @@ export default function App() {
 
       {/* Terminal modal */}
       {openPanel === "terminal" && status && (
-        <DetailsModal title='Starlink Dish Terminal' onClose={() => setOpenPanel(null)} size='xxl'>
+        <DetailsModal
+          title={t("navigation.dishTerminal")}
+          onClose={() => setOpenPanel(null)}
+          size='xxl'
+        >
           <DishTerminalCard status={status} stale={telemetry.stale} expanded />
         </DetailsModal>
       )}
       {/* Speed test modal */}
       {openPanel === "speedtest" && (
-        <DetailsModal title='Speed test' onClose={() => setOpenPanel(null)}>
+        <DetailsModal title={t("navigation.speedTest")} onClose={() => setOpenPanel(null)}>
           <SpeedTestPanel samples={samples} status={status} />
         </DetailsModal>
       )}
       {/* Alignment modal */}
       {openPanel === "alignment" && (
-        <DetailsModal title='Alignment' onClose={() => setOpenPanel(null)} size='wide'>
+        <DetailsModal
+          title={t("navigation.alignment")}
+          onClose={() => setOpenPanel(null)}
+          size='wide'
+        >
           <AlignmentPanel
             status={status}
             stale={telemetry.stale}
@@ -184,13 +206,21 @@ export default function App() {
       )}
       {/* Data usage modal */}
       {openPanel === "datausage" && (
-        <DetailsModal title='Data usage' onClose={() => setOpenPanel(null)} size='wide'>
+        <DetailsModal
+          title={t("navigation.dataUsage")}
+          onClose={() => setOpenPanel(null)}
+          size='wide'
+        >
           <DataUsagePanel />
         </DetailsModal>
       )}
       {/* Account modal */}
       {openPanel === "account" && (
-        <DetailsModal title='Starlink account' onClose={() => setOpenPanel(null)} size='wide'>
+        <DetailsModal
+          title={t("navigation.starlinkAccount")}
+          onClose={() => setOpenPanel(null)}
+          size='wide'
+        >
           <AccountPanel lanOnline={lanOnline} />
         </DetailsModal>
       )}
@@ -199,7 +229,11 @@ export default function App() {
         <NetworkPanel
           network={routerNetwork}
           unreachable={routerUnreachable}
-          onClose={() => setOpenPanel(null)}
+          initialSelectedKey={networkDeviceKey}
+          onClose={() => {
+            setNetworkDeviceKey(null);
+            setOpenPanel(null);
+          }}
         />
       )}
       {/* Settings modal */}

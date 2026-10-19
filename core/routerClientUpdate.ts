@@ -1,5 +1,6 @@
 import type { WifiClientConfigJson, WifiClientJson, WifiNetworkConfigJson } from "./dishClient";
 import type { HostNetworkIdentity } from "./hostNetworkIdentity";
+import { LocalizedError } from "./i18n/errors";
 import { readRouterWifiConfig } from "./routerConfigUpdate";
 
 const PERMANENT_GROUP = "_permanent";
@@ -84,7 +85,7 @@ export function buildRouterRenameRequest(
   const existing = [...(config.clientConfigs ?? [])];
   if (!existing.some((client) => client.clientId === clientId)) {
     if (liveClient?.clientId !== clientId || !liveClient.macAddress)
-      throw new Error("Device is not known to the router");
+      throw new LocalizedError("errors.deviceUnknownToRouter");
     existing.push({ clientId, macAddress: liveClient.macAddress });
   }
 
@@ -171,7 +172,7 @@ export async function prepareRouterClientUpdate(
   hostIdentity?: HostNetworkIdentity,
 ): Promise<Uint8Array> {
   const config = await readRouterWifiConfig(codec, targetId, callGateway);
-  if (!config) throw new Error("Starlink router reported no configuration");
+  if (!config) throw new LocalizedError("errors.routerNoConfiguration");
 
   if (update.kind === "rename") {
     // A device with a saved entry needs no roster, which is what lets an offline
@@ -193,9 +194,9 @@ export async function prepareRouterClientUpdate(
   // device is associated, and the host guard matches on the addresses it reports.
   const clients = await readRouterClients(codec, targetId, callGateway);
   const liveClient = clients.find((client) => client.clientId === update.clientId);
-  if (!liveClient) throw new Error("Device is no longer connected to the router");
+  if (!liveClient) throw new LocalizedError("errors.deviceNoLongerConnected");
   if (update.paused && hostIdentity && clientIsHost(liveClient, hostIdentity))
-    throw new Error("Refusing to pause the device Dishylink is running on");
+    throw new LocalizedError("errors.refuseSelfPause");
   return codec.encodeRequest(
     buildRouterPauseRequest(targetId, config, update.clientId, update.paused, liveClient),
   );

@@ -11,56 +11,48 @@
 // (modem_asic_temp, tx_if_temp) live on TransceiverGetStatus, which this
 // firmware answers with Unimplemented. The flags are the whole signal.
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { useNow } from "./useNow";
+import { usePolledEndpoint } from "./usePolledEndpoint";
 import type { OutageEvent } from "@core/telemetry";
-import { apiRequest } from "../lib/apiHost";
+import type { TranslationKey } from "@core/i18n/resources";
 
 interface ThermalAlertSpec {
   /** Key on `alerts`, as emitted by the protobuf JSON mapping. */
   alertKey: string;
-  cause: string;
+  /** The row's title in the events log; it doubles as the event's cause. */
+  cause: TranslationKey;
   severity: OutageEvent["severity"];
-  onsetTitle: string;
-  onsetBody: string;
-  clearedTitle: string;
-  clearedBody: string;
 }
 
 const THERMAL_ALERTS: ThermalAlertSpec[] = [
   {
     alertKey: "thermalShutdown",
-    cause: "thermal shutdown",
+    cause: "events.thermalShutdownEpisode",
     severity: "critical",
-    onsetTitle: "Dish thermal shutdown",
-    onsetBody:
-      "The dish has shut itself down to avoid overheating. Service stays offline until it cools.",
-    clearedTitle: "Dish thermal shutdown ended",
-    clearedBody: "The dish has cooled enough to come back online.",
   },
   {
     alertKey: "thermalThrottle",
-    cause: "thermal throttle",
+    cause: "events.thermalThrottleEpisode",
     severity: "warning",
-    onsetTitle: "Dish thermally throttled",
-    onsetBody: "The dish is hot and is limiting performance to cool down. Expect reduced speeds.",
-    clearedTitle: "Dish thermal throttling ended",
-    clearedBody: "The dish has cooled down and is back to full performance.",
   },
   {
     alertKey: "powerSupplyThermalThrottle",
-    cause: "power supply thermal throttle",
+    cause: "events.powerSupplyThermalThrottleEpisode",
     severity: "warning",
-    onsetTitle: "Power supply thermally throttled",
-    onsetBody:
-      "The dish's power supply is hot and is limiting output. Check for airflow around it.",
-    clearedTitle: "Power supply throttling ended",
-    clearedBody: "The dish's power supply has cooled back to normal.",
   },
 ];
 
 const SPEC_BY_ALERT_KEY = new Map(THERMAL_ALERTS.map((spec) => [spec.alertKey, spec]));
-const REFRESH_MS = 30_000;
+
+/** The episode's name in the user's language, or the raw key for one the
+ *  catalog does not know. */
+export function thermalEpisodeLabel(alertKey: string, t: TFunction): string {
+  const spec = SPEC_BY_ALERT_KEY.get(alertKey);
+  return spec ? t(spec.cause) : alertKey;
+}
 
 interface ThermalEpisodeJson {
   alertKey: string;
@@ -68,12 +60,19 @@ interface ThermalEpisodeJson {
   endMs: number | null;
 }
 
+const NO_EPISODES: ThermalEpisodeJson[] = [];
+
+function pickEpisodes(body: unknown): ThermalEpisodeJson[] {
+  return (body as { episodes?: ThermalEpisodeJson[] }).episodes ?? NO_EPISODES;
+}
+
 /**
  * Thermal episodes from the historian's durable log, shaped as OutageEvents for
  * the events log. Empty when the historian isn't running.
  */
 export function useThermalEvents(): OutageEvent[] {
-  const [episodes, setEpisodes] = useState<ThermalEpisodeJson[]>([]);
+  const { t } = useTranslation();
+  const episodes = usePolledEndpoint("/api/thermal", pickEpisodes, NO_EPISODES);
   // An episode still running has no end, so its duration is measured against now
   // and grows while it runs. Taken from the ticking clock so it actually advances
   // on screen; read straight from Date.now() it would sit at whatever it was when
@@ -81,39 +80,20 @@ export function useThermalEvents(): OutageEvent[] {
   // every second.
   const nowMs = useNow();
 
-  useEffect(() => {
-    let disposed = false;
-    const load = async () => {
-      try {
-        const response = await apiRequest("/api/thermal", { signal: AbortSignal.timeout(4_000) });
-        if (!response.ok) return;
-        const body = (await response.json()) as { episodes?: ThermalEpisodeJson[] };
-        if (!disposed) setEpisodes(body.episodes ?? []);
-      } catch {
-        // historian down: the dish's own events still populate the log
-      }
-    };
-    load();
-    const timerId = window.setInterval(load, REFRESH_MS);
-    return () => {
-      disposed = true;
-      window.clearInterval(timerId);
-    };
-  }, []);
-
   return useMemo(() => {
     return episodes.flatMap((episode) => {
       const spec = SPEC_BY_ALERT_KEY.get(episode.alertKey);
       if (!spec) return [];
       const isOngoing = episode.endMs === null;
+      const label = t(spec.cause);
       return [
         {
           startMs: episode.startMs,
           durationMs: (episode.endMs ?? nowMs) - episode.startMs,
-          cause: isOngoing ? `${spec.cause} (ongoing)` : spec.cause,
+          cause: isOngoing ? t("events.ongoing", { label }) : label,
           severity: spec.severity,
         },
       ];
     });
-  }, [episodes, nowMs]);
+  }, [episodes, nowMs, t]);
 }

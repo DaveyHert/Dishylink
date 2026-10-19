@@ -12,6 +12,8 @@
 // from the account.
 
 import type { WifiNetworkConfigJson } from "./dishClient";
+import { LocalizedError } from "./i18n/errors";
+import type { TranslationKey } from "./i18n/resources";
 import { normalizeIpAddress } from "./ipAddress";
 
 /** The most the router's own app offers: one primary and three backups. */
@@ -35,8 +37,8 @@ export type SubnetPreset = (typeof SUBNET_PRESETS)[number];
 
 /** WPA2-PSK's own bounds. Rejecting here is kinder than letting the router take
  *  a passphrase no device can then use to reconnect. */
-const MIN_PASSPHRASE = 8;
-const MAX_PASSPHRASE = 63;
+export const MIN_PASSPHRASE = 8;
+export const MAX_PASSPHRASE = 63;
 
 /** The router's address once `subnet` applies — the app has to follow it there. */
 export function routerAddressForSubnet(subnet: string): string {
@@ -83,6 +85,11 @@ export type RouterConfigUpdate =
        *  router's own WiFi down with it, so the machine asking for this is
        *  usually the one that loses its connection. Off is the way back. */
       enabled: boolean;
+    }
+  | {
+      kind: "meshName";
+      deviceId: string;
+      displayName: string;
     };
 
 /** The addresses as they will be sent, or null when any of them is not an address
@@ -141,11 +148,35 @@ export function buildSubnetNetworks(
 }
 
 /** Why a subnet change cannot be sent, or null when it can. */
-export function subnetRefusal(subnet: string, password: string): string | null {
-  if (!isSubnetPreset(subnet)) return "unsupported subnet";
-  if (password.length < MIN_PASSPHRASE || password.length > MAX_PASSPHRASE)
-    return `Password must contain ${MIN_PASSPHRASE} to ${MAX_PASSPHRASE} characters`;
+/** Why a subnet write would be refused, as a code the UI words in the user's
+ *  language: the subnet is not one the router offers, or the passphrase is
+ *  outside the length the router accepts. */
+export type SubnetRefusal = "unsupportedSubnet" | "passwordLength";
+
+export function subnetRefusal(subnet: string, password: string): SubnetRefusal | null {
+  if (!isSubnetPreset(subnet)) return "unsupportedSubnet";
+  if (password.length < MIN_PASSPHRASE || password.length > MAX_PASSPHRASE) return "passwordLength";
   return null;
+}
+
+export function meshNameRefusal(displayName: string): TranslationKey | null {
+  return displayName.trim() === "" ? "errors.meshNameEmpty" : null;
+}
+
+export function buildMeshConfigs(
+  meshConfigs: Readonly<Record<string, Json>>,
+  deviceId: string,
+  displayName: string,
+): Record<string, Json> {
+  if (!(deviceId in meshConfigs)) throw new Error("router does not know this mesh node");
+  const rebuilt: Record<string, Json> = {};
+  for (const [id, node] of Object.entries(meshConfigs)) {
+    // incarnation is router-assigned; echoing it back can make the firmware
+    // discard the write, as a stale bssid does in the networks block.
+    const { incarnation: _incarnation, ...kept } = node;
+    rebuilt[id] = id === deviceId ? { ...kept, displayName } : kept;
+  }
+  return rebuilt;
 }
 
 /** The bit of DishClient this needs, named structurally so any codec can serve
@@ -176,20 +207,24 @@ export async function readRouterWifiConfig(
   return (reply.wifiGetConfig?.wifiConfig as WifiNetworkConfigJson | undefined) ?? null;
 }
 
-/**
- * The networks a write must preserve, fetched through the caller's gateway.
- *
- * Only a subnet change needs them, so every other update skips the round trip
- * and gets the empty list `buildRouterConfigRequest` ignores.
- */
-export async function readCurrentNetworks(
+export interface RouterConfigContext {
+  networks?: Json[];
+  meshConfigs?: Record<string, Json>;
+}
+
+export async function readRouterConfigContext(
   update: RouterConfigUpdate,
   codec: RouterCodec,
   targetId: string,
   callGateway: (requestBytes: Uint8Array) => Promise<Uint8Array>,
-): Promise<Json[]> {
-  if (update.kind !== "subnet") return [];
-  return readRouterNetworks(codec, targetId, callGateway);
+): Promise<RouterConfigContext> {
+  if (update.kind === "subnet")
+    return { networks: await readRouterNetworks(codec, targetId, callGateway) };
+  if (update.kind === "meshName") {
+    const config = await readRouterWifiConfig(codec, targetId, callGateway);
+    return { meshConfigs: (config?.meshConfigs as Record<string, Json> | undefined) ?? {} };
+  }
+  return {};
 }
 
 async function readRouterNetworks(
@@ -221,20 +256,37 @@ export async function readCurrentSubnet(
 export function buildRouterConfigRequest(
   targetId: string,
   update: RouterConfigUpdate,
-  /** Current networks, required for a subnet change and unused otherwise. */
-  networks: readonly Json[] = [],
+  context: RouterConfigContext = {},
 ): RouterConfigRequestJson {
   if (!targetId.startsWith("Router-")) throw new Error("invalid router target id");
   if (update.kind === "subnet") {
     const refusal = subnetRefusal(update.subnet, update.password);
     if (refusal) throw new Error(refusal);
-    if (networks.length === 0) throw new Error("router reported no networks to change");
+    const networks = context.networks ?? [];
+    if (networks.length === 0) throw new LocalizedError("errors.routerNoNetworks");
     return {
       targetId,
       wifiSetConfig: {
         wifiConfig: {
           networks: buildSubnetNetworks(networks, update.subnet, update.password),
           applyNetworks: true,
+        },
+      },
+    };
+  }
+  if (update.kind === "meshName") {
+    const refusal = meshNameRefusal(update.displayName);
+    if (refusal) throw new LocalizedError(refusal);
+    return {
+      targetId,
+      wifiSetConfig: {
+        wifiConfig: {
+          meshConfigs: buildMeshConfigs(
+            context.meshConfigs ?? {},
+            update.deviceId,
+            update.displayName.trim(),
+          ),
+          applyMeshConfigs: true,
         },
       },
     };

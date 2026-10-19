@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { TranslationKey } from "@core/i18n/resources";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { HeartIcon } from "../../assets/icons/HeartIcon";
@@ -47,6 +49,14 @@ interface MenuLinkItem {
   children: React.ReactNode;
 }
 
+interface MenuLinkEntry {
+  href: string;
+  icon: IconComponent;
+  iconClassName?: string;
+  /** A catalog key, or a literal (a handle, a brand) that reads the same everywhere. */
+  label: TranslationKey | { literal: string };
+}
+
 function MenuLink({ href, icon: Icon, iconClassName, children }: MenuLinkItem) {
   return (
     <button
@@ -62,56 +72,56 @@ function MenuLink({ href, icon: Icon, iconClassName, children }: MenuLinkItem) {
   );
 }
 
-const SECTIONS: { label: string; items: MenuLinkItem[] }[] = [
+const SECTIONS: { label: TranslationKey; items: MenuLinkEntry[] }[] = [
   {
-    label: "Support development",
+    label: "support.sectionSupport",
     items: [
       {
         href: SUPPORT_LINKS.starRepo,
         icon: StarIcon,
         iconClassName: "text-(--accent)",
-        children: "Star project on GitHub",
+        label: "support.starRepo",
       },
       {
         href: SUPPORT_LINKS.githubSponsors,
         icon: HeartIcon,
         iconClassName: "text-[#ea4aaa]",
-        children: "Become a GitHub Sponsor",
+        label: "support.githubSponsor",
       },
       {
         href: SUPPORT_LINKS.patreon,
         icon: PatreonIcon,
         iconClassName: "text-ink",
-        children: "Become a Patreon",
+        label: "support.patreon",
       },
       {
         href: SUPPORT_LINKS.buyMeACoffee,
         icon: CoffeeIcon,
         iconClassName: "text-ink",
-        children: "Buy Me a Coffee",
+        label: "support.buyMeACoffee",
       },
     ],
   },
   {
-    label: "Feedback",
+    label: "support.sectionFeedback",
     items: [
-      { href: SUPPORT_LINKS.reportIssue, icon: BugIcon, children: "Report an issue" },
-      { href: SUPPORT_LINKS.requestFeature, icon: BulbIcon, children: "Request a feature" },
+      { href: SUPPORT_LINKS.reportIssue, icon: BugIcon, label: "support.reportIssue" },
+      { href: SUPPORT_LINKS.requestFeature, icon: BulbIcon, label: "support.requestFeature" },
     ],
   },
   {
-    label: "Contact",
+    label: "support.sectionContact",
     items: [
-      { href: SUPPORT_LINKS.contact, icon: MailIcon, children: "Contact me" },
-      { href: SUPPORT_LINKS.x, icon: XIcon, children: "@daveyhert" },
-      { href: SUPPORT_LINKS.linkedin, icon: LinkedinIcon, children: "LinkedIn" },
+      { href: SUPPORT_LINKS.contact, icon: MailIcon, label: "support.contactMe" },
+      { href: SUPPORT_LINKS.x, icon: XIcon, label: { literal: "@daveyhert" } },
+      { href: SUPPORT_LINKS.linkedin, icon: LinkedinIcon, label: { literal: "LinkedIn" } },
     ],
   },
   {
-    label: "Legal",
+    label: "support.sectionLegal",
     items: [
-      { href: SUPPORT_LINKS.privacyPolicy, icon: ShieldIcon, children: "Privacy Policy" },
-      { href: SUPPORT_LINKS.disclaimer, icon: ScaleIcon, children: "Disclaimer" },
+      { href: SUPPORT_LINKS.privacyPolicy, icon: ShieldIcon, label: "support.privacyPolicy" },
+      { href: SUPPORT_LINKS.disclaimer, icon: ScaleIcon, label: "support.disclaimer" },
     ],
   },
 ];
@@ -132,6 +142,7 @@ function useUpdateAvailable(): string | null {
 }
 
 export function SupportMenu() {
+  const { t } = useTranslation();
   const updateVersion = useUpdateAvailable();
 
   return (
@@ -139,8 +150,8 @@ export function SupportMenu() {
       <PopoverTrigger asChild>
         <button
           className='relative inline-flex size-8 cursor-pointer items-center justify-center rounded-full border-0 bg-card text-ink-secondary transition-colors hover:text-foreground'
-          aria-label={updateVersion ? "Support and more (update available)" : "Support and more"}
-          title='Support & more'
+          aria-label={updateVersion ? t("support.ariaUpdateAvailable") : t("support.aria")}
+          title={t("support.title")}
         >
           <HeartIcon />
           {updateVersion && (
@@ -172,7 +183,7 @@ export function SupportMenu() {
         {updateVersion && (
           <div className={SECTION}>
             <div className={cn(MENU_LABEL, "flex items-center gap-1.5")}>
-              Update available
+              {t("support.updateAvailable")}
               <span className='size-1 rounded-full bg-red-500 shadow-[0_0_4px_1.5px_rgba(239,68,68,0.85)]' />
             </div>
             <MenuLink
@@ -180,16 +191,18 @@ export function SupportMenu() {
               icon={DownloadIcon}
               iconClassName='text-status-good'
             >
-              Download v{updateVersion}
+              {t("support.downloadVersion", { version: updateVersion })}
             </MenuLink>
           </div>
         )}
 
         {SECTIONS.map((section) => (
           <div key={section.label} className={SECTION}>
-            <div className={MENU_LABEL}>{section.label}</div>
-            {section.items.map((item) => (
-              <MenuLink key={item.href} {...item} />
+            <div className={MENU_LABEL}>{t(section.label)}</div>
+            {section.items.map(({ label, ...item }) => (
+              <MenuLink key={item.href} {...item}>
+                {typeof label === "string" ? t(label) : label.literal}
+              </MenuLink>
             ))}
           </div>
         ))}

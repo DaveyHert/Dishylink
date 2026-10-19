@@ -4,7 +4,8 @@
 // This file is the router: it owns the tab, resolves `selectedKey` to a node or
 // a device, and hands off. The rows and both detail views live beside it.
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import {
   CLIENTS_POLL_MS,
   CLOUD_CLIENTS_POLL_MS,
@@ -40,23 +41,30 @@ import { useOuiRegistry } from "../../hooks/useOuiRegistry";
 import { useClientTotals } from "../../hooks/useClientTotals";
 import { useNow } from "../../hooks/useNow";
 import { usageKey } from "@core/clientUsage";
-import { clientEntryKey, isClientDevice, liveThroughputMbps } from "./networkFormat";
+import { clientHasCounters } from "@core/dishClient";
+import { clientEntryKey, displayName, isClientDevice, liveThroughputMbps } from "./networkFormat";
+import type { MemberCandidate } from "./rules/allowanceTerms";
 
 export function NetworkPanel({
   network,
   unreachable,
+  initialSelectedKey = null,
   onClose,
 }: {
   network: RouterNetwork;
   /** Why the router is silent, when it is. Null while it is answering. */
   unreachable: RouterUnreachable | null;
+  /** A device to open on, as its `clientEntryKey`: set when another surface
+   *  (an event's detail) links to a device. */
+  initialSelectedKey?: string | null;
   onClose: () => void;
 }) {
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const { t } = useTranslation();
+  const [selectedKey, setSelectedKey] = useState<string | null>(initialSelectedKey);
 
   return (
     <DetailsModal
-      title='Network'
+      title={t("navigation.network")}
       size='wide'
       onClose={onClose}
       onBack={selectedKey ? () => setSelectedKey(null) : undefined}
@@ -84,6 +92,7 @@ function NetworkPanelBody({
   selectedKey: string | null;
   onSelect: (entryKey: string | null) => void;
 }) {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<"connected" | "nodes" | "rules">("connected");
   useOuiRegistry();
   // Radio temps come from the historian, not the router directly. Poll only
@@ -94,7 +103,7 @@ function NetworkPanelBody({
   useRememberSelfDevice(network.clients, network.clientsSource, self);
   // The odometer's records, for the split-record question below the device list.
   // The rows themselves come from the router and know nothing about stored totals.
-  const { totals, mergeCandidates, writeError, answerMerge } = useClientTotals();
+  const { totals, mergeCandidates, aliases, writeError, answerMerge } = useClientTotals();
   const nowMs = useNow(30_000);
   // Both halves of what pausing needs, so the list can name whichever is missing.
   const { status: cloudStatus } = useCloudAccount(true);
@@ -133,24 +142,42 @@ function NetworkPanelBody({
     });
   }, [devices, self, network.ratesAtRoster]);
 
-  // A limit can be set on any device the recorder holds a record for, not only
-  // the ones answering right now: an absent device's cycle still rolls and its
-  // pause still releases. Live is a tag on the row, decided here because only
-  // this view knows which devices the router is currently reporting.
-  const liveKeys = new Set(devices.map((client) => usageKey(client.clientId, client.macAddress)));
-  const meterCandidates = (totals ?? []).map((total) => {
-    const clientKey = usageKey(total.clientId, total.macAddress);
-    return {
-      clientKey,
-      name: total.name?.trim() || total.macAddress,
-      macAddress: total.macAddress,
-      active: liveKeys.has(clientKey),
-      lastSeenMs: total.lastSeenMs,
-    };
-  });
+  // A merged device goes on answering the router under its old id, so everything
+  // keyed by the odometer resolves through this first. The live-roster maps
+  // (rates, throughput history) do not: they are keyed by what the router said.
+  const resolveMeterKey = useCallback((key: string) => aliases.get(key) ?? key, [aliases]);
+
+  // Both lists, deduped: neither is the network on its own. The odometer knows
+  // devices that are away, the roster knows devices nothing has been counted for.
+  const meterCandidates = useMemo(() => {
+    const byKey = new Map<string, MemberCandidate>();
+    for (const total of totals ?? []) {
+      const clientKey = resolveMeterKey(usageKey(total.clientId, total.macAddress));
+      byKey.set(clientKey, {
+        clientKey,
+        name: total.name?.trim() || total.macAddress,
+        macAddress: total.macAddress,
+        active: false,
+        lastSeenMs: total.lastSeenMs,
+      });
+    }
+    for (const client of devices) {
+      const clientKey = resolveMeterKey(usageKey(client.clientId, client.macAddress));
+      const held = byKey.get(clientKey);
+      byKey.set(clientKey, {
+        clientKey,
+        name: displayName(client, t),
+        macAddress: client.macAddress ?? held?.macAddress ?? "",
+        active: true,
+        lastSeenMs: held?.lastSeenMs ?? 0,
+        hasCounters: clientHasCounters(client),
+      });
+    }
+    return [...byKey.values()];
+  }, [totals, devices, resolveMeterKey, t]);
 
   if (network.routerReachable === null) {
-    return <Loading message='Contacting the router…' />;
+    return <Loading message={t("settings.contactingRouter")} />;
   }
   // Branch on the diagnosis rather than on `routerReachable` again: it is
   // derived from that same flag, so this cannot render an empty callout.
@@ -177,7 +204,7 @@ function NetworkPanelBody({
     );
   }
 
-  const nodes = buildNodeRoster(network.clients, network.wifiConfig);
+  const nodes = buildNodeRoster(network.clients, network.wifiConfig, t);
 
   const selectedNode = selectedKey
     ? nodes.find((node) => node.client?.macAddress === selectedKey)
@@ -191,6 +218,7 @@ function NetworkPanelBody({
         radios={radio.current}
         self={self}
         onSelect={onSelect}
+        onRename={network.renameMeshNode}
       />
     );
   }
@@ -217,6 +245,7 @@ function NetworkPanelBody({
         isThisDevice={matchesSelf(selected, self)}
         viewerIdentified={selfIdentified(self)}
         meterCandidates={meterCandidates}
+        resolveMeterKey={resolveMeterKey}
         onRename={network.renameClient}
       />
     );
@@ -226,14 +255,17 @@ function NetworkPanelBody({
     <div>
       <SegmentedControl
         variant='glider'
-        label='Network view'
+        label={t("network.viewLabel")}
         className='mb-3.5'
         value={tab}
         onChange={setTab}
         options={[
-          { value: "connected", label: <TabLabel text='Connected' count={devices.length} /> },
-          { value: "nodes", label: <TabLabel text='Nodes' count={nodes.length} /> },
-          { value: "rules", label: <TabLabel text='Rules' /> },
+          {
+            value: "connected",
+            label: <TabLabel text={t("network.tabConnected")} count={devices.length} />,
+          },
+          { value: "nodes", label: <TabLabel text={t("network.tabNodes")} count={nodes.length} /> },
+          { value: "rules", label: <TabLabel text={t("network.tabRules")} /> },
         ]}
       />
 
@@ -243,15 +275,14 @@ function NetworkPanelBody({
         <Callout
           tone='info'
           className='mb-2.5'
-          dismissLabel='Dismiss this note'
+          dismissLabel={t("network.dismissNote")}
           onDismiss={() => {
             setAccountRosterNoticeDismissed(true);
             setNoticeDismissed(true);
           }}
         >
-          {unreachable ? `${unreachable.message} ` : ""}These devices come from your Starlink
-          account, so they refresh every {CLOUD_CLIENTS_POLL_MS / 1000}&nbsp;s and carry no live
-          throughput.
+          {unreachable ? `${unreachable.message} ` : ""}
+          {t("network.cloudRosterNote", { seconds: CLOUD_CLIENTS_POLL_MS / 1000 })}
         </Callout>
       )}
 
@@ -261,12 +292,12 @@ function NetworkPanelBody({
             <div className='mb-2 text-[11.5px] text-destructive'>{network.accountRosterError}</div>
           )}
           <ListSection
-            caption={`${devices.length} device${devices.length === 1 ? "" : "s"} · ${
+            caption={`${t("network.deviceCount", { count: devices.length })} · ${
               viaCloud
                 ? network.accountRosterError
-                  ? "via your Starlink account, no longer refreshing"
-                  : `via your Starlink account, refreshed every ${CLOUD_CLIENTS_POLL_MS / 1000} s`
-                : `live from the router, refreshed every ${CLIENTS_POLL_MS / 1000} s`
+                  ? t("network.viaAccountStale")
+                  : t("network.viaAccount", { seconds: CLOUD_CLIENTS_POLL_MS / 1000 })
+                : t("network.liveFromRouter", { seconds: CLIENTS_POLL_MS / 1000 })
             }`}
           >
             {sortedDevices.map((client, index) => (
@@ -280,35 +311,34 @@ function NetworkPanelBody({
           </ListSection>
           {(accountUnavailable || needsSelfDevice) && (
             <Callout tone='info' iconSeverity='warn' className='mt-2.5'>
-              Pause feature disabled! To enable,{" "}
-              {accountUnavailable && (
-                <>
-                  <button
-                    type='button'
-                    className={inlineLinkButton}
-                    onClick={() => requestPanel("account")}
-                  >
-                    {needsAccount ? "sign in" : "reconnect"}
-                  </button>{" "}
-                  to your Starlink account
-                </>
-              )}
-              {accountUnavailable && needsSelfDevice && " and "}
-              {needsSelfDevice && (
-                <>
-                  pick the current device you are using under app&rsquo;s{" "}
-                  <button
-                    type='button'
-                    className={inlineLinkButton}
-                    onClick={() => requestPanel("settings", "app")}
-                  >
-                    settings
-                  </button>
-                </>
-              )}
-              .
-              {needsSelfDevice &&
-                " That keeps your own device off the list of things this app can cut off."}
+              <Trans
+                i18nKey={
+                  accountUnavailable && needsSelfDevice
+                    ? "network.pauseDisabledBoth"
+                    : accountUnavailable
+                      ? "network.pauseDisabledAccount"
+                      : "network.pauseDisabledSelf"
+                }
+                values={{
+                  action: needsAccount ? t("network.signIn") : t("network.reconnect"),
+                }}
+                components={{
+                  account: (
+                    <button
+                      type='button'
+                      className={inlineLinkButton}
+                      onClick={() => requestPanel("account")}
+                    />
+                  ),
+                  settings: (
+                    <button
+                      type='button'
+                      className={inlineLinkButton}
+                      onClick={() => requestPanel("settings", "app")}
+                    />
+                  ),
+                }}
+              />
             </Callout>
           )}
           {/* The device list is where a split record is noticed — one name on two
@@ -330,7 +360,7 @@ function NetworkPanelBody({
       )}
 
       {tab === "nodes" && (
-        <ListSection caption='Router and mesh nodes'>
+        <ListSection caption={t("network.nodesCaption")}>
           {nodes.map((node) => (
             <NetworkRow
               key={node.key}
@@ -339,7 +369,7 @@ function NetworkPanelBody({
               sub={node.status}
               band={
                 node.devices.length
-                  ? `${node.devices.length} device${node.devices.length === 1 ? "" : "s"}`
+                  ? t("network.deviceCount", { count: node.devices.length })
                   : undefined
               }
               showChevron={node.connected}

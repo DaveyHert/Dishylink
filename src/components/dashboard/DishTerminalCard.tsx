@@ -1,24 +1,33 @@
 // Hardware, alignment, GPS, and network facts from the live status message.
 
 import type { DishStatusJson, DishReadyStatesJson } from "@core/dishClient";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { routerPresence } from "@core/routerPresence";
 import { dishModelFor, specForModel } from "../../lib/dishMesh";
-import { formatAttitudeState, formatRelativeTime, formatUptime } from "../../lib/format";
+import {
+  attitudeStateLabel,
+  formatAttitudeState,
+  formatRelativeTime,
+  formatUptime,
+} from "../../lib/format";
 import { FactGrid, FactRow } from "../ui/fact-row";
 import { DishIcon } from "../../assets/icons/DishIcon";
 import { ExpandIcon } from "../../assets/icons/ExpandIcon";
 import { formatServiceClass } from "./serviceClass";
 
 /** Why downlink is capped, if it is. NO_LIMIT / NO_RESTRICTION read as "none". */
-function formatBandwidthLimit(reason?: string): string {
-  if (!reason || reason === "NO_LIMIT" || reason === "NO_RESTRICTION") return "none";
+function formatBandwidthLimit(reason: string | undefined, t: TFunction): string {
+  if (!reason || reason === "NO_LIMIT" || reason === "NO_RESTRICTION")
+    return t("terminal.limitNone");
   return reason.replaceAll("_", " ").toLowerCase();
 }
 
 /** Subsystem health as one line: "all ready", or the ones that aren't. proto3
  *  drops false, so a subsystem is ready only when explicitly true. */
-function readyStatesFact(states?: DishReadyStatesJson): DeviceFact {
-  if (!states) return { label: "Subsystems", value: "—" };
+function readyStatesFact(states: DishReadyStatesJson | undefined, t: TFunction): DeviceFact {
+  const label = t("terminal.subsystems");
+  if (!states) return { label, value: "—" };
   const known: [string, boolean | undefined][] = [
     ["SCP", states.scp],
     ["L1L2", states.l1l2],
@@ -27,8 +36,8 @@ function readyStatesFact(states?: DishReadyStatesJson): DeviceFact {
     ["RF", states.rf],
   ];
   const down = known.filter(([, ready]) => ready !== true).map(([name]) => name);
-  if (down.length === 0) return { label: "Subsystems", value: "all ready", tone: "good" };
-  return { label: "Subsystems", value: `${down.join(", ")} coming up`, tone: "warn" };
+  if (down.length === 0) return { label, value: t("terminal.allReady"), tone: "good" };
+  return { label, value: t("terminal.comingUp", { names: down.join(", ") }), tone: "warn" };
 }
 
 interface DeviceFact {
@@ -50,17 +59,18 @@ const TONE_VAR: Record<NonNullable<DeviceFact["tone"]>, string> = {
  * pattern rain fade makes, and is what raises the dish's RAIN_SNR alert. Below
  * the noise floor is worse still. Absent flags (proto3 drops false) mean clear.
  */
-function signalCondition(status: DishStatusJson): DeviceFact {
+function signalCondition(status: DishStatusJson, t: TFunction): DeviceFact {
+  const label = t("terminal.signal");
   if (status.isSnrPersistentlyLow) {
-    return { label: "Signal", value: "weather affecting signal", tone: "warn" };
+    return { label, value: t("terminal.signalWeather"), tone: "warn" };
   }
   if (status.isSnrAboveNoiseFloor === false) {
-    return { label: "Signal", value: "weak — below noise floor", tone: "bad" };
+    return { label, value: t("terminal.signalWeak"), tone: "bad" };
   }
   if (status.isSnrAboveNoiseFloor) {
-    return { label: "Signal", value: "normal", tone: "good" };
+    return { label, value: t("terminal.signalNormal"), tone: "good" };
   }
-  return { label: "Signal", value: "—" };
+  return { label, value: "—" };
 }
 
 export function DishTerminalCard({
@@ -82,26 +92,38 @@ export function DishTerminalCard({
   /** When set on the card, an expand icon opens the full popup view. */
   onExpand?: () => void;
 }) {
+  const { t } = useTranslation();
   const alignment = status.alignmentStats;
   // The dish's position/navigation filter, in the app's own vocabulary
   // ("Converged"). Null when the dish doesn't report it.
   const positionState = formatAttitudeState(status.gpsStats?.pntFilterConvergenceState);
 
   const facts: DeviceFact[] = [
-    { label: "Model", value: specForModel(dishModelFor(status)).displayName },
-    signalCondition(status),
-    { label: "Hardware", value: status.deviceInfo?.hardwareVersion ?? "—" },
-    { label: "Firmware", value: status.deviceInfo?.softwareVersion ?? "—" },
-    { label: "Country", value: status.deviceInfo?.countryCode ?? "—" },
-    { label: "Uptime", value: formatUptime(Number(status.deviceState?.uptimeS ?? 0)) },
-    { label: "Boot count", value: String(status.deviceInfo?.bootcount ?? "—") },
     {
-      label: "Service class",
-      value: formatServiceClass(status.classOfService, status.mobilityClass),
+      label: t("terminal.model"),
+      value:
+        dishModelFor(status) === "unknown"
+          ? t("terminal.unknownModel")
+          : specForModel(dishModelFor(status)).displayName,
+    },
+    signalCondition(status, t),
+    { label: t("terminal.hardware"), value: status.deviceInfo?.hardwareVersion ?? "—" },
+    { label: t("terminal.firmware"), value: status.deviceInfo?.softwareVersion ?? "—" },
+    { label: t("terminal.country"), value: status.deviceInfo?.countryCode ?? "—" },
+    {
+      label: t("terminal.uptime"),
+      value: formatUptime(Number(status.deviceState?.uptimeS ?? 0), t),
+    },
+    { label: t("terminal.bootCount"), value: String(status.deviceInfo?.bootcount ?? "—") },
+    {
+      label: t("terminal.serviceClass"),
+      value: formatServiceClass(status.classOfService, status.mobilityClass, t),
     },
     {
-      label: "Satellites in View (GPS)",
-      value: status.gpsStats?.gpsValid ? `${status.gpsStats.gpsSats ?? 0} satellites` : "no fix",
+      label: t("terminal.gpsSatellites"),
+      value: status.gpsStats?.gpsValid
+        ? t("terminal.satellitesCount", { count: status.gpsStats.gpsSats ?? 0 })
+        : t("terminal.noFix"),
     },
     {
       // "GPS fix" is receiver jargon — a "fix" is a computed position — and it
@@ -112,44 +134,58 @@ export function DishTerminalCard({
       // the healthy case, and "filter converged" would sit there permanently saying
       // nothing. An absent state stays silent rather than printing a dash, which
       // would read as a fault where there is none.
-      label: "Position",
+      label: t("terminal.position"),
       value: !status.gpsStats?.gpsValid
-        ? "no fix"
+        ? t("terminal.noFix")
         : positionState && positionState !== "Converged"
-          ? `locked · ${positionState}`
-          : "locked",
+          ? t("terminal.lockedWithState", {
+              state: attitudeStateLabel(status.gpsStats?.pntFilterConvergenceState, t),
+            })
+          : t("terminal.locked"),
       // Green whenever the dish has a position. An absent state is unknown, not
       // a fault, so it must not downgrade a perfectly good lock.
       tone: status.gpsStats?.gpsValid && positionState !== "Unconverged" ? "good" : "warn",
     },
-    { label: "Ethernet link", value: status.ethSpeedMbps ? `${status.ethSpeedMbps} Mbps` : "—" },
     {
-      label: "NAT",
+      label: t("terminal.ethernetLink"),
+      value: status.ethSpeedMbps ? `${status.ethSpeedMbps} Mbps` : "—",
+    },
+    {
+      label: t("terminal.nat"),
       value: (status.natFlag ?? "—").replace("NAT_", "").replaceAll("_", " ").toLowerCase(),
     },
     {
       // The dish sends router identities, not a count — keep both: the count
       // reads at a glance, the ids say which routers. The controller counts here
       // too, so this is every router the dish is talking to, mesh or not.
-      label: "Downstream routers",
+      label: t("terminal.downstreamRouters"),
       value: status.connectedRouters?.length
         ? `${status.connectedRouters.length} · ${status.connectedRouters.join(", ")}` +
-          (routerPresence(status) === "bypassed" ? " · bypassed" : "")
+          (routerPresence(status) === "bypassed" ? ` · ${t("terminal.bypassed")}` : "")
         : "0",
     },
-    { label: "Bandwidth limit", value: formatBandwidthLimit(status.dlBandwidthRestrictedReason) },
-    readyStatesFact(status.readyStates),
     {
-      label: "Boresight",
+      label: t("terminal.bandwidthLimit"),
+      value: formatBandwidthLimit(status.dlBandwidthRestrictedReason, t),
+    },
+    readyStatesFact(status.readyStates, t),
+    {
+      label: t("terminal.boresight"),
       value: alignment
-        ? `az ${alignment.boresightAzimuthDeg?.toFixed(1)}° · el ${alignment.boresightElevationDeg?.toFixed(1)}°`
+        ? t("terminal.boresightValue", {
+            az: alignment.boresightAzimuthDeg?.toFixed(1),
+            el: alignment.boresightElevationDeg?.toFixed(1),
+          })
         : "—",
     },
     {
-      label: "Tilt",
+      label: t("terminal.tilt"),
       value: alignment?.tiltAngleDeg !== undefined ? `${alignment.tiltAngleDeg.toFixed(1)}°` : "—",
     },
-    { label: "Software update", value: (status.softwareUpdateState ?? "—").toLowerCase() },
+    {
+      label: t("terminal.softwareUpdate"),
+      value: (status.softwareUpdateState ?? "—").toLowerCase(),
+    },
   ];
 
   // Pending-update banner: a reboot is scheduled when the countdown is ≥ 0
@@ -158,9 +194,11 @@ export function DishTerminalCard({
   const updateState = status.softwareUpdateState ?? "";
   const updateBanner =
     rebootSeconds >= 0
-      ? `Update ready — reboot possible in ${formatUptime(rebootSeconds)}`
+      ? t("terminal.updateReady", { duration: formatUptime(rebootSeconds, t) })
       : updateState && updateState !== "IDLE"
-        ? `Software update: ${updateState.replaceAll("_", " ").toLowerCase()}`
+        ? t("terminal.updateState", {
+            state: updateState.replaceAll("_", " ").toLowerCase(),
+          })
         : null;
 
   return (
@@ -169,7 +207,7 @@ export function DishTerminalCard({
         {!expanded && (
           <span className='flex items-center gap-2 text-[16px] font-semibold tracking-[0.005em] text-foreground'>
             <DishIcon size={26} className={stale ? "opacity-40" : undefined} />
-            Starlink Dish Terminal
+            {t("navigation.dishTerminal")}
           </span>
         )}
         <div className='flex items-center gap-2.5'>
@@ -179,8 +217,10 @@ export function DishTerminalCard({
               {/* "last known" alone left the reader unable to tell a five-second
                   gap from a five-hour one, while every figure below still looked
                   live. Say how old the snapshot actually is. */}
-              not answering ·{" "}
-              {lastStatusAtMs ? `from ${formatRelativeTime(lastStatusAtMs)}` : "last known"}
+              {t("terminal.notAnswering")} ·{" "}
+              {lastStatusAtMs
+                ? t("terminal.fromAgo", { when: formatRelativeTime(lastStatusAtMs, t) })
+                : t("terminal.lastKnown")}
             </span>
           )}
           <span className='font-mono text-[12px] font-medium text-muted-foreground tabular-nums'>
@@ -190,7 +230,7 @@ export function DishTerminalCard({
             <button
               className='inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-muted-foreground transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_8%,var(--surface))] hover:text-foreground'
               onClick={onExpand}
-              aria-label='Open full terminal view'
+              aria-label={t("navigation.openTerminalView")}
             >
               <ExpandIcon />
             </button>

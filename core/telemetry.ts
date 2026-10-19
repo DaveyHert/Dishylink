@@ -2,7 +2,9 @@
 // plus an accumulator that stitches successive polls into a longer window
 // than the 15 minutes the dish itself retains.
 
+import type { TFunction } from "i18next";
 import type { DishHistoryJson, DishOutageJson, DishEventJson } from "./dishClient";
+import type { TranslationKey } from "./i18n/resources";
 
 export interface TelemetrySample {
   timestampMs: number;
@@ -30,6 +32,15 @@ export interface OutageEvent {
   durationMs: number;
   cause: string;
   severity: "advisory" | "warning" | "critical";
+  /** Which device moved between which Wi-Fi bands, on the router's band-switch
+   *  events. Band values are the router's RF_* codes. */
+  bandSwitch?: BandSwitch;
+}
+
+export interface BandSwitch {
+  clientId: number;
+  fromBand: string;
+  toBand: string;
 }
 
 /**
@@ -86,151 +97,52 @@ export type EventKind = "outage" | "degraded" | "info";
 export interface OutageMeta {
   /** Row title. */
   label: string;
-  /** Plain-English "what this was", shown in the row's info dot. */
+  /** Plain-language "what this was", shown in the row's info dot. */
   tip?: string;
   /** What happened, decided here so no surface has to infer it from a token. */
   kind: EventKind;
 }
 
-// Canonical token → how the event is shown. Distinct per cause (not collapsed):
-// each keeps its own meaning, with the raw dish jargon explained in `tip`.
-const OUTAGE_META: Record<string, OutageMeta> = {
-  NO_PINGS: {
-    label: "Ping Network Interruption",
-    tip: "Radio frequency link looked fine but pings to the ground station/POP failed — traffic wasn't actually flowing.",
-    kind: "outage",
-  },
-  NO_DOWNLINK: {
-    label: "Downlink Network Interruption",
-    tip: "Dish was pointed at a satellite but received no decodable downlink signal.",
-    kind: "outage",
-  },
-  NO_SATS: {
-    label: "No satellite in range",
-    tip: "No Starlink satellite was overhead to connect to.",
-    kind: "outage",
-  },
-  NO_SCHEDULE: {
-    label: "No service scheduled",
-    tip: "Network gave your cell no time slot (seen during network congestion, service issues, account problems, or right after boot before a schedule downloads).",
-    kind: "outage",
-  },
-  UNKNOWN: {
-    label: "Unknown Event",
-    tip: "Dish couldn't classify the drop.",
-    kind: "outage",
-  },
-  OBSTRUCTED: {
-    label: "Dish's view obstructed",
-    tip: "Something physically blocked the dish's view of the sky (branch, roof, pole), so it dropped the satellite.",
-    kind: "outage",
-  },
-  THERMAL_SHUTDOWN: {
-    label: "Overheated",
-    tip: "The dish's internal temperature exceeded safe limits (hot climate + direct sun) and it shut down to cool off.",
-    kind: "outage",
-  },
-  RAIN_SNR_PERSISTENTLY_LOW: {
-    label: "Weather interference",
-    tip: "Heavy rain/snow degraded signal-to-noise below usable level.",
-    kind: "outage",
-  },
+// Canonical token → what the event was. The wording lives in the catalog under
+// `events.<TOKEN>.label` / `.tip`, resolved with the caller's t(). Distinct per
+// cause (not collapsed): each keeps its own meaning, with the raw dish jargon
+// explained in the tip. `tip: false` marks the few that have none.
+const OUTAGE_KIND: Record<string, EventKind> = {
+  NO_PINGS: "outage",
+  NO_DOWNLINK: "outage",
+  NO_SATS: "outage",
+  NO_SCHEDULE: "outage",
+  UNKNOWN: "outage",
+  OBSTRUCTED: "outage",
+  THERMAL_SHUTDOWN: "outage",
+  RAIN_SNR_PERSISTENTLY_LOW: "outage",
   // A prior build persisted this label before we stored raw enums; keep it as an
   // alias so those rows still resolve to the same meaning and dedupe.
-  WEAK_SIGNAL_FROM_WEATHER: {
-    label: "Weather interference",
-    tip: "Heavy rain/snow degraded signal-to-noise below usable level.",
-    kind: "outage",
-  },
-  BOOTING: {
-    label: "Starlink booting",
-    tip: "Dish was rebooting / powering up.",
-    kind: "outage",
-  },
-  SKY_SEARCH: {
-    label: "Searching for satellites",
-    tip: "Dish was scanning the sky to lock onto satellites (after boot or being moved).",
-    kind: "outage",
-  },
-  ACTUATOR_ACTIVITY: {
-    label: "Repositioning",
-    tip: "The dish's motors were physically moving it (repositioning/realigning); RF is muted while it moves.",
-    kind: "outage",
-  },
-  STOWED: {
-    label: "Dish stowed",
-    tip: "Dish was folded in stow position.",
-    kind: "outage",
-  },
-  SLEEPING: {
-    label: "Scheduled sleep",
-    tip: 'Scheduled sleep window (the "snooze" schedule in the app).',
-    kind: "outage",
-  },
-  CABLE_TEST: {
-    label: "Cable test",
-    tip: "Dish was running its cable diagnostic.",
-    kind: "outage",
-  },
-  INHIBIT_RF: {
-    label: "Transmission paused",
-    tip: "Dish stopped transmitting (RF inhibited — for safety, or commanded off).",
-    kind: "outage",
-  },
+  WEAK_SIGNAL_FROM_WEATHER: "outage",
+  BOOTING: "outage",
+  SKY_SEARCH: "outage",
+  ACTUATOR_ACTIVITY: "outage",
+  STOWED: "outage",
+  SLEEPING: "outage",
+  CABLE_TEST: "outage",
+  INHIBIT_RF: "outage",
   // Router (wifi_get_history) events. The rest of the EventReason set auto-cleans
   // via prettifyToken ("Router software update", "Router reboot", …); only these
   // need bespoke wording.
-  ROUTER_POWER_CYCLE: {
-    label: "Router powered on",
-    tip: "The router lost and regained power (unplugged/replugged, or a power blip).",
-    kind: "info",
-  },
-  CLIENT_SWITCHING_BAND: {
-    label: "Device switched WiFi band",
-    tip: "A connected device moved between the 2.4 GHz and 5 GHz bands. This is normal when devices are optimizing their connection for best WiFi performance.",
-    kind: "info",
-  },
+  ROUTER_POWER_CYCLE: "info",
+  CLIENT_SWITCHING_BAND: "info",
   // prettifyToken renders this one as "Eth no link", which explains nothing.
-  ETH_NO_LINK: {
-    label: "Ethernet cable link to dish disconnected",
-    tip: "The ethernet link between the router and the dish went dead. Expected for a few seconds while either device reboots; at any other time, check the cable at both ends.",
-    kind: "outage",
-  },
-
-  // Router (wifi_get_history) events. The router logs these into the same event
-  // log the dish writes outages to, which is why the kind matters more here than
-  // anywhere: none of the four below is an outage, and three of them ran for
-  // half a minute or more while throughput carried on uninterrupted.
-  ROUTER_POP_IPV4_PING_DROP: {
-    label: "Router lost its keepalive ping (IPv4)",
-    tip: "The router's own ping to the ground station went unanswered. It watches the link with these pings; losing them means the path looked unhealthy to the router, not that your traffic stopped — data usually keeps flowing right through it.",
-    kind: "degraded",
-  },
-  ROUTER_POP_IPV6_PING_DROP: {
-    label: "Router lost its keepalive ping (IPv6)",
-    tip: "As the IPv4 drop, on the IPv6 path. Seen alone it usually means only IPv6 was affected, which most traffic can route around.",
-    kind: "degraded",
-  },
-  ROUTER_DISH_PING_DROP: {
-    label: "Router lost contact with the dish briefly",
-    tip: "The router's keepalive ping to the dish over the Ethernet cable went unanswered. Expected while the dish reboots; otherwise it points at the cable between them.",
-    kind: "degraded",
-  },
-  HIGH_DOWNLINK_PACKET_LOSS: {
-    label: "High downlink packet loss",
-    tip: "A raised share of incoming packets was lost. The connection stayed up — this is quality degrading, not service stopping.",
-    kind: "degraded",
-  },
-  CLIENT_SWITCHING_UPSTREAM_MAC: {
-    label: "Device moved to another access point",
-    tip: "A connected device handed off between the router and a mesh node, or between radios.",
-    kind: "info",
-  },
-  ROUTER_PUBLIC_IPV4_CHANGE: {
-    label: "Public IP address changed",
-    tip: "Starlink issued the router a different public IPv4 address — normal on a CGNAT network.",
-    kind: "info",
-  },
+  ETH_NO_LINK: "outage",
+  // The router logs these into the same event log the dish writes outages to,
+  // which is why the kind matters more here than anywhere: none of the four
+  // below is an outage, and three of them ran for half a minute or more while
+  // throughput carried on uninterrupted.
+  ROUTER_POP_IPV4_PING_DROP: "degraded",
+  ROUTER_POP_IPV6_PING_DROP: "degraded",
+  ROUTER_DISH_PING_DROP: "degraded",
+  HIGH_DOWNLINK_PACKET_LOSS: "degraded",
+  CLIENT_SWITCHING_UPSTREAM_MAC: "info",
+  ROUTER_PUBLIC_IPV4_CHANGE: "info",
 };
 
 /** Sentence-case an unmapped enum token ("SOME_NEW_THING" → "Some new thing"). */
@@ -245,13 +157,20 @@ function prettifyToken(token: string): string {
 /** Display metadata for an event's cause. Dish enums (raw, or a legacy humanized
  *  string) map to the catalogue; an already-human label (thermal episodes) passes
  *  through as its own title with no tip. */
-export function outageEventMeta(cause: string): OutageMeta {
-  if (!cause) return { label: "Unknown event", kind: "info" };
-  const meta = OUTAGE_META[canonicalCause(cause)];
-  if (meta) return meta;
+export function outageEventMeta(cause: string, t: TFunction): OutageMeta {
+  if (!cause) return { label: t("events.unknown"), kind: "info" };
+  const token = canonicalCause(cause);
+  const kind = OUTAGE_KIND[token];
+  if (kind) {
+    return {
+      label: t(`events.${token}.label` as TranslationKey),
+      tip: t(`events.${token}.tip` as TranslationKey),
+      kind,
+    };
+  }
   const bare = cause.replace(/^EVENT_REASON_/, "");
   return {
-    label: /^[A-Z0-9_]+$/.test(bare) ? prettifyToken(canonicalCause(cause)) : cause,
+    label: /^[A-Z0-9_]+$/.test(bare) ? prettifyToken(token) : cause,
     // A token no catalogue knows still has to be given a kind, and the firmware
     // namespaces its own: only OUTAGE_* means service stopped. Everything else
     // defaults to `info` rather than `outage` — an unrecognised token painting a
@@ -263,14 +182,22 @@ export function outageEventMeta(cause: string): OutageMeta {
 }
 
 /** Just the title — for notifications and other one-line uses. */
-export function outageEventLabel(cause: string): string {
-  return outageEventMeta(cause).label;
+export function outageEventLabel(cause: string, t: TFunction): string {
+  return outageEventMeta(cause, t).label;
 }
 
 /** What the event was, for surfaces that treat outages differently from the
  *  link and informational events sharing the same log. */
 export function outageEventKind(cause: string): EventKind {
-  return outageEventMeta(cause).kind;
+  return (
+    knownEventKind(cause) ?? (/^EVENT_REASON_OUTAGE_|^OUTAGE_/.test(cause) ? "outage" : "info")
+  );
+}
+
+/** The catalogued kind, or undefined for a cause the catalogue does not know:
+ *  a new firmware token, or a row titled in plain words (thermal episodes). */
+export function knownEventKind(cause: string): EventKind | undefined {
+  return OUTAGE_KIND[canonicalCause(cause)];
 }
 
 /**
@@ -324,17 +251,29 @@ export function decodeHistoryWindow(
  *  (Unix-epoch timestamps, an EventReason `reason`, an EventSeverity). Cause is
  *  stored raw; humanized only at display via outageEventMeta. */
 function decodeEventLog(events: DishEventJson[]): OutageEvent[] {
-  return events.map((event) => ({
-    startMs: unixNsToMs(event.startTimestampNs ?? "0"),
-    durationMs: Number(BigInt(event.durationNs ?? "0") / 1_000_000n),
-    cause: event.reason ?? "",
-    severity:
-      event.severity === "EVENT_SEVERITY_CRITICAL"
-        ? "critical"
-        : event.severity === "EVENT_SEVERITY_WARNING"
-          ? "warning"
-          : "advisory",
-  }));
+  return events.map((event) => {
+    const decoded: OutageEvent = {
+      startMs: unixNsToMs(event.startTimestampNs ?? "0"),
+      durationMs: Number(BigInt(event.durationNs ?? "0") / 1_000_000n),
+      cause: event.reason ?? "",
+      severity:
+        event.severity === "EVENT_SEVERITY_CRITICAL"
+          ? "critical"
+          : event.severity === "EVENT_SEVERITY_WARNING"
+            ? "warning"
+            : "advisory",
+    };
+    const bandSwitch = decodeBandSwitch(event.clientSwitchingBandMetadata);
+    if (bandSwitch) decoded.bandSwitch = bandSwitch;
+    return decoded;
+  });
+}
+
+function decodeBandSwitch(
+  metadata: DishEventJson["clientSwitchingBandMetadata"],
+): BandSwitch | undefined {
+  if (metadata?.clientId === undefined || !metadata.fromBand || !metadata.toBand) return undefined;
+  return { clientId: metadata.clientId, fromBand: metadata.fromBand, toBand: metadata.toBand };
 }
 
 export function decodeOutageEvents(history: DishHistoryJson): OutageEvent[] {

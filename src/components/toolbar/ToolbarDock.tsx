@@ -7,6 +7,7 @@ interface ToolbarDockProps {
   items: ToolbarItem[];
   activeId: string | null;
   onSelect: (id: ToolbarItemId) => void;
+  navLabel: string;
 }
 
 // Peak scale under the cursor and the reach over which neighbours taper back to
@@ -77,7 +78,7 @@ function DockTile({
   );
 }
 
-export function ToolbarDock({ items, activeId, onSelect }: ToolbarDockProps) {
+export function ToolbarDock({ items, activeId, onSelect, navLabel }: ToolbarDockProps) {
   // Infinity parks every tile at rest scale until the pointer is over the dock.
   const pointerX = useMotionValue(Number.POSITIVE_INFINITY);
 
@@ -111,7 +112,7 @@ export function ToolbarDock({ items, activeId, onSelect }: ToolbarDockProps) {
   return (
     <div className='fixed bottom-[25px] left-1/2 z-30 -translate-x-1/2'>
       <motion.nav
-        aria-label='Dashboard sections'
+        aria-label={navLabel}
         initial={{ opacity: 0, y: 26 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 26 }}

@@ -1,0 +1,11 @@
+<svg width="16" height="16" viewBox="0 0 144 144" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <mask id="mark">
+      <rect width="144" height="144" fill="#FFFFFF" />
+      <circle cx="72" cy="72" r="42" fill="none" stroke="#000000" stroke-width="14" />
+      <circle cx="104.16" cy="39.84" r="13" fill="#FFFFFF" />
+      <circle cx="104.16" cy="39.84" r="7" fill="#000000" />
+    </mask>
+  </defs>
+  <path d="M108 0H36C16.1178 0 0 16.1178 0 36V108C0 127.882 16.1178 144 36 144H108C127.882 144 144 127.882 144 108V36C144 16.1178 127.882 0 108 0Z" fill="#000000" mask="url(#mark)" />
+</svg>

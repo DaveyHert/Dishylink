@@ -6,6 +6,7 @@
 // browser is its own component, and the list it renders is built by a pure
 // function beside it.
 
+import { useTranslation } from "react-i18next";
 import { useCloudAccount } from "../../hooks/useCloudAccount";
 import { disconnectCloud } from "../../lib/starlinkCloud";
 import { Loading } from "../ui/loading";
@@ -17,6 +18,7 @@ import { Card, Field } from "./accountChrome";
 import { DevicesSection } from "./DevicesSection";
 
 export function AccountPanel({ lanOnline }: { lanOnline: ReadonlySet<string> }) {
+  const { t, i18n } = useTranslation();
   const { data, status, reload } = useCloudAccount(true);
 
   if (status === "not-connected") {
@@ -29,15 +31,15 @@ export function AccountPanel({ lanOnline }: { lanOnline: ReadonlySet<string> }) 
   if (status === "error") {
     return (
       <Callout tone='error' className='mt-2.5'>
-        Couldn’t reach your Starlink account.{" "}
+        {t("account.unreachable")}{" "}
         <button type='button' className={inlineLinkButton} onClick={reload}>
-          Try again
+          {t("common.tryAgain")}
         </button>
       </Callout>
     );
   }
   if (status === "loading" || !data) {
-    return <Loading message='Loading your Starlink account…' size={26} stacked />;
+    return <Loading message={t("account.loading")} size={26} stacked />;
   }
 
   const identity = data.identity;
@@ -49,7 +51,7 @@ export function AccountPanel({ lanOnline }: { lanOnline: ReadonlySet<string> }) 
   return (
     <div className='flex flex-col gap-3.5 pb-2'>
       <Card
-        title='Profile'
+        title={t("account.profile")}
         meta={
           <button
             type='button'
@@ -59,14 +61,14 @@ export function AccountPanel({ lanOnline }: { lanOnline: ReadonlySet<string> }) 
             onClick={() => void disconnectCloud().finally(reload)}
             className='card-meta cursor-pointer border-0 bg-transparent underline underline-offset-2 hover:text-foreground'
           >
-            Disconnect
+            {t("account.disconnect")}
           </button>
         }
       >
         <div className='grid grid-cols-3 gap-4 max-[820px]:grid-cols-1 '>
-          <Field label='Name'>{identity?.name ?? "—"}</Field>
-          <Field label='Email'>{identity?.email ?? "—"}</Field>
-          <Field label='Account'>
+          <Field label={t("account.name")}>{identity?.name ?? "—"}</Field>
+          <Field label={t("account.email")}>{identity?.email ?? "—"}</Field>
+          <Field label={t("account.account")}>
             <span className='mono-value'>
               {identity?.accountId ?? line?.accountReferenceId ?? "—"}
             </span>
@@ -75,34 +77,34 @@ export function AccountPanel({ lanOnline }: { lanOnline: ReadonlySet<string> }) 
       </Card>
 
       <div className='grid grid-cols-2 gap-3.5 max-[820px]:grid-cols-1'>
-        <Card title='Service plan'>
+        <Card title={t("account.servicePlan")}>
           <div className='flex flex-col gap-4'>
-            <Field label='Plan'>
+            <Field label={t("account.plan")}>
               <span className='inline-flex items-center gap-2'>
                 {sub?.productDescription ?? "—"}
                 {sub?.active && (
                   <Badge variant='status' tone='good'>
-                    Active
+                    {t("account.active")}
                   </Badge>
                 )}
               </span>
             </Field>
-            <Field label='Service line'>
+            <Field label={t("account.serviceLine")}>
               <span className='mono-value'>{line?.serviceLineNumber ?? "—"}</span>
             </Field>
-            <Field label='Active since'>
-              {sub?.startDate ? new Date(sub.startDate).toLocaleDateString() : "—"}
+            <Field label={t("account.activeSince")}>
+              {sub?.startDate ? new Date(sub.startDate).toLocaleDateString(i18n.language) : "—"}
             </Field>
           </div>
         </Card>
 
-        <Card title='Service location'>
+        <Card title={t("account.serviceLocation")}>
           <div className='flex flex-col gap-4'>
-            <Field label='Address'>
+            <Field label={t("account.address")}>
               {address?.formattedAddress ?? `${address?.locality ?? ""}, ${address?.region ?? ""}`}
             </Field>
             {address?.geoLocation?.latitude != null && (
-              <Field label='Coordinates'>
+              <Field label={t("account.coordinates")}>
                 <span className='mono-value'>
                   {address.geoLocation.latitude.toFixed(4)},{" "}
                   {address.geoLocation.longitude?.toFixed(4)}
@@ -114,10 +116,10 @@ export function AccountPanel({ lanOnline }: { lanOnline: ReadonlySet<string> }) 
       </div>
 
       <Card
-        title='Devices'
+        title={t("account.devices")}
         meta={
           <span className='text-[12px] font-medium text-muted-foreground'>
-            {terminals.length} terminal{terminals.length === 1 ? "" : "s"}
+            {t("account.terminalCount", { count: terminals.length })}
           </span>
         }
       >

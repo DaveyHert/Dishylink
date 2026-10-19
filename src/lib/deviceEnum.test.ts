@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { createI18n } from "@core/i18n/resources";
 import { formatActuatorState, formatAttitudeState, formatDeviceEnum } from "./format";
+
+const { t } = createI18n("en");
 
 describe("formatDeviceEnum", () => {
   it("renders enums the way the official app does", () => {
@@ -51,11 +54,11 @@ describe("formatActuatorState", () => {
     // Confirmed against hardware: our dish omits actuator_state entirely and the
     // official app shows "Idle" for it. Unlike the attitude filter, silence here
     // has a documented meaning.
-    expect(formatActuatorState(undefined)).toBe("Idle");
+    expect(formatActuatorState(undefined, t)).toBe("Idle");
   });
 
   it("names the motor states a mast-mounted kit reports", () => {
-    expect(formatActuatorState("ACTUATOR_STATE_TILT")).toBe("Tilt");
-    expect(formatActuatorState("ACTUATOR_STATE_FAULTED")).toBe("Faulted");
+    expect(formatActuatorState("ACTUATOR_STATE_TILT", t)).toBe("Tilt");
+    expect(formatActuatorState("ACTUATOR_STATE_FAULTED", t)).toBe("Faulted");
   });
 });

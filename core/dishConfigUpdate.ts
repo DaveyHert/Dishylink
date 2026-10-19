@@ -1,4 +1,5 @@
 import { CONFIG_APPLY_FLAG, type DishClient, type DishConfigJson } from "./dishClient";
+import { LocalizedError } from "./i18n/errors";
 
 export interface DishConfigRequestJson {
   targetId: string;
@@ -27,6 +28,6 @@ export async function prepareDishConfigUpdate(
 ): Promise<Uint8Array> {
   const deviceInfo = await dish.getDeviceInfo(AbortSignal.timeout(5_000));
   const targetId = deviceInfo.id;
-  if (!targetId) throw new Error("Starlink dish identity is unavailable");
+  if (!targetId) throw new LocalizedError("errors.dishIdentityUnavailable");
   return dish.encodeRequest(requestFor(targetId, changes));
 }

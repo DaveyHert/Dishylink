@@ -3,6 +3,7 @@
 // the account on its own, so the settings that show it never go dark waiting for
 // a click here.
 
+import { useTranslation } from "react-i18next";
 import { Button } from "../ui/button";
 import { SpinLoader } from "../loaders/SpinLoader";
 
@@ -15,6 +16,7 @@ export function AccountRosterOffer({
   error: string | null;
   onConnect: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className='mt-3.5 flex flex-col items-center gap-1.5'>
       <Button
@@ -24,17 +26,17 @@ export function AccountRosterOffer({
       >
         {status === "loading" ? (
           <>
-            <SpinLoader variant='segment' size={16} label='Connecting' />
-            Connecting…
+            <SpinLoader variant='segment' size={16} label={t("connect.connecting")} />
+            {t("network.connectingEllipsis")}
           </>
         ) : (
-          "Connect through Cloud"
+          t("network.connectThroughCloud")
         )}
       </Button>
       <span
         className={error ? "text-[11.5px] text-destructive" : "text-[11.5px] text-muted-foreground"}
       >
-        {error ?? "Your devices, read from your Starlink account until the router answers again."}
+        {error ?? t("network.rosterViaAccount")}
       </span>
     </div>
   );

@@ -174,6 +174,34 @@ export const sections: SectionContent[] = [
     ],
   },
   {
+    label: "Network rules",
+    id: "rules",
+    layout: "media-right",
+    title: "Set the rules for every device on your network.",
+    body: [
+      "Set a data limit, a schedule or a timer on any device, or on a whole group at once. When the data or time runs out, Dishylink pauses it for you, then lets it back on when the next window opens.",
+      "Connect your Starlink account and the pausing happens on its own.",
+    ],
+    bullets: [
+      [
+        "Data limits",
+        "Cap what a device can use per day, week, month or billing cycle. Share one allowance across a group, or give each device its own.",
+      ],
+      [
+        "Schedules",
+        "Keep the kids' tablets online from 4 to 9 on school nights and longer at weekends, all in one rule.",
+      ],
+      ["Timers", "Hand out an hour of access, or up to a full day, and it switches off by itself."],
+    ],
+    media: [
+      screenshot(
+        "network-rules",
+        "Dishylink's Network Rules tab: a data limit shared across a group of devices with its usage bar and reset time, a weekday schedule for the kids' devices with the hours they can be online, and a one-hour timer counting down, beside a button to create a new rule.",
+        halfWidthSizing,
+      ),
+    ],
+  },
+  {
     label: "Alerts & Event Log",
     id: "alerts",
     layout: "full-media",

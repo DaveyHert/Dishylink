@@ -12,7 +12,7 @@ import {
   type DeviceGroup,
   type GroupAllowanceMode,
 } from "../core/deviceGroup.ts";
-import { listChanged, type MeterCycle, type MeterRoster } from "../core/dataMeter.ts";
+import { listChanged, type IdentityResolver, type MeterCycle } from "../core/dataMeter.ts";
 import type { Schedule } from "../core/schedule.ts";
 
 const VERSION = 1;
@@ -61,9 +61,10 @@ export class DeviceGroupStore {
     return this.groups.find((group) => group.groupId === groupId);
   }
 
-  /** Reconcile membership against the odometer's roster. True when any moved. */
-  resolve(roster: MeterRoster): boolean {
-    const resolved = resolveGroupMembers(this.groups, roster);
+  /** Move members onto the identities their devices answer to now. True when any
+   *  moved. */
+  resolve(resolver: IdentityResolver): boolean {
+    const resolved = resolveGroupMembers(this.groups, resolver);
     const changed = listChanged(resolved, this.groups);
     if (changed) {
       this.groups = resolved;

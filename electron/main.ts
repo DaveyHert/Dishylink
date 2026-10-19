@@ -38,12 +38,16 @@ import {
   NotificationThrottle,
   notificationsRequested,
   notificationsProblem,
-  NOTIFICATIONS_ON_CONFIRMATION,
+  notificationsOnConfirmation,
   type NotificationState,
 } from "../core/alertNotification";
+import { isSupportedLocale } from "../core/i18n/locale";
+import { t, setLocale, onLocaleChanged } from "./i18n";
 import {
   NOTIFICATION_STATE_CHANNEL,
   MENUBAR_THROUGHPUT_CHANNEL,
+  HIDE_TRAY_ICON_CHANNEL,
+  TRAY_ICON_STYLE_CHANNEL,
   UPDATE_STATE_CHANNEL,
 } from "./ipc";
 import { formatMenuBarRate, formatSpacedRate } from "./menuBarThroughput";
@@ -57,6 +61,8 @@ import { startUpdateChecks, updateState, onUpdateStateChanged } from "./updater"
 const here = dirname(fileURLToPath(import.meta.url));
 const rendererRoot = join(here, "../dist");
 const iconPath = join(here, "../build/icon.png");
+const trayIconPath = join(here, "../build/trayTemplate.png");
+const trayOutlinePath = join(here, "../build/trayTemplateOutline.png");
 
 // Drives the menu-bar title and per-app data directory; must be set before anything
 // reads it.
@@ -147,11 +153,13 @@ let tray: Tray | null = null;
 const NOTIFY_ITEM_ID = "notify-alerts";
 const NOTIFY_REASON_ITEM_ID = "notify-alerts-reason";
 const THROUGHPUT_ITEM_ID = "menubar-throughput";
+const HIDE_ICON_ITEM_ID = "hide-tray-icon";
 
 // Tray items updated in place after build (rebuilding would drop an open popup).
 let notifyItem: MenuItem | null = null;
 let notifyReasonItem: MenuItem | null = null;
 let throughputItem: MenuItem | null = null;
+let hideIconItem: MenuItem | null = null;
 
 // The live throughput readout: the macOS tray title, or the Windows floating widget
 // (throughputWidget.ts) — one preference, two paint targets, nothing on Linux.
@@ -228,7 +236,7 @@ function createWindow(): void {
     ...(restoredBounds ? { x: savedBounds.x, y: savedBounds.y } : {}),
     minWidth: 800,
     minHeight: 700,
-    title: "Dishylink — Starlink Companion Desktop App (Unofficial)",
+    title: t("desktop.windowTitle"),
     titleBarStyle: "hiddenInset",
     show: false,
     // Matches index.css's dark --page. Electron's own default is white, which the
@@ -287,17 +295,47 @@ function windowIsForeground(): boolean {
   return mainWindow !== null && mainWindow.isFocused() && !mainWindow.isMinimized();
 }
 
+/** The macOS menu-bar image for the current preference. */
+function macTrayImage() {
+  const style = preferences().trayIconStyle;
+  if (style === "original") {
+    const image = nativeImage.createFromPath(iconPath);
+    return image.isEmpty() ? image : image.resize({ width: 18, height: 18 });
+  }
+  const image = nativeImage.createFromPath(style === "outline" ? trayOutlinePath : trayIconPath);
+  image.setTemplateImage(true);
+  return image;
+}
+
 function createTray(): void {
-  const image = nativeImage.createFromPath(iconPath);
-  tray = new Tray(image.isEmpty() ? image : image.resize({ width: 18, height: 18 }));
+  if (process.platform === "darwin") {
+    tray = new Tray(macTrayImage());
+  } else {
+    const image = nativeImage.createFromPath(iconPath);
+    tray = new Tray(image.isEmpty() ? image : image.resize({ width: 18, height: 18 }));
+  }
   tray.setToolTip("Dishylink");
+  let menu = buildTrayMenu();
+  // The labels are translated text, so the menu is rebuilt when the window
+  // reports a new language; the items it holds are re-resolved from the new one.
+  onLocaleChanged(() => {
+    menu = buildTrayMenu();
+    publishNotificationState();
+  });
+  // Left click opens the app; right click shows the menu (setContextMenu would make a
+  // left click open the menu too on macOS).
+  tray.on("click", showWindow);
+  tray.on("right-click", () => tray?.popUpContextMenu(menu));
+}
+
+function buildTrayMenu(): Menu {
   const menu = Menu.buildFromTemplate([
-    { label: "Open Dishylink", click: showWindow },
+    { label: t("desktop.openApp"), click: showWindow },
     { type: "separator" },
     {
       // Alerting runs when no window is open, so it must be switchable from the tray.
       id: NOTIFY_ITEM_ID,
-      label: "Notify Me About Alerts",
+      label: t("desktop.notifyMe"),
       type: "checkbox",
       // Opening value only; the checkbox owns its `checked` after this, and later
       // values are written by publishNotificationState.
@@ -306,11 +344,10 @@ function createTray(): void {
         setPreference("notifications", item.checked);
         // Enabling posts one immediately: on macOS the first notification raises the
         // permission prompt and proves the channel works.
-        if (item.checked)
-          void postNotification(
-            NOTIFICATIONS_ON_CONFIRMATION.title,
-            NOTIFICATIONS_ON_CONFIRMATION.body,
-          ).catch(() => {});
+        if (item.checked) {
+          const confirmation = notificationsOnConfirmation(t);
+          void postNotification(confirmation.title, confirmation.body).catch(() => {});
+        }
       },
     },
     {
@@ -328,40 +365,60 @@ function createTray(): void {
             id: THROUGHPUT_ITEM_ID,
             label:
               process.platform === "darwin"
-                ? "Show Throughput in Menu Bar"
-                : "Show Throughput in Taskbar",
+                ? t("desktop.showThroughputMenuBar")
+                : t("desktop.showThroughputTaskbar"),
             type: "checkbox" as const,
             checked: preferences().menuBarThroughput,
             click: (item: MenuItem) => setPreference("menuBarThroughput", item.checked),
           },
         ]
       : []),
+    ...(process.platform === "darwin"
+      ? [
+          {
+            id: HIDE_ICON_ITEM_ID,
+            label: t("desktop.hideMenuBarIcon"),
+            type: "checkbox" as const,
+            checked: preferences().hideTrayIcon,
+            visible: preferences().menuBarThroughput,
+            click: (item: MenuItem) => setPreference("hideTrayIcon", item.checked),
+          },
+        ]
+      : []),
     {
       // openAsHidden + the wasOpenedAtLogin check below start collection with no window.
-      label: "Start at Login",
+      label: t("desktop.startAtLogin"),
       type: "checkbox",
       checked: app.getLoginItemSettings().openAtLogin,
       click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked, openAsHidden: true }),
     },
     { type: "separator" },
-    { label: "Quit Dishylink", role: "quit" },
+    { label: t("desktop.quit"), role: "quit" },
   ]);
   notifyItem = menu.getMenuItemById(NOTIFY_ITEM_ID);
   notifyReasonItem = menu.getMenuItemById(NOTIFY_REASON_ITEM_ID);
   throughputItem = menu.getMenuItemById(THROUGHPUT_ITEM_ID);
+  hideIconItem = menu.getMenuItemById(HIDE_ICON_ITEM_ID);
   applyMenuBarThroughput();
   updateThroughputWatchdog();
-  // Left click opens the app; right click shows the menu (setContextMenu would make a
-  // left click open the menu too on macOS).
-  tray.on("click", showWindow);
-  tray.on("right-click", () => tray?.popUpContextMenu(menu));
+  return menu;
 }
 
-/** "↓39Kb/s ↑159Kb/s", right-aligned in a fixed-width block so the icon holds while
- *  the numbers swing in the leading gap (see THROUGHPUT_TITLE_WIDTH). */
-function throughputTitle(downBps: number, upBps: number): string {
+/** "↓39Kb/s ↑159Kb/s". Padded to a fixed width so the icon holds while the
+ *  numbers swing in the leading gap — but that gap is dead space once the icon
+ *  is hidden, so `padded` drops it for that case. */
+function throughputTitle(downBps: number, upBps: number, padded = true): string {
   const readout = `↓${formatMenuBarRate(downBps)} ↑${formatMenuBarRate(upBps)}`;
-  return readout.padStart(THROUGHPUT_TITLE_WIDTH, FIGURE_SPACE);
+  return padded ? readout.padStart(THROUGHPUT_TITLE_WIDTH, FIGURE_SPACE) : readout;
+}
+
+/** Blank the tray icon when the readout stands in for it, else show the template
+ *  glyph. macOS only; the guard against a hidden icon with no title lives in the
+ *  `menuBarThroughput` half of the condition. */
+function applyTrayIcon(): void {
+  if (tray === null || process.platform !== "darwin") return;
+  const hidden = preferences().menuBarThroughput && preferences().hideTrayIcon;
+  tray.setImage(hidden ? nativeImage.createEmpty() : macTrayImage());
 }
 
 /** Paint the readout from the latest throughput, or clear it when off. A stale
@@ -371,6 +428,8 @@ function applyMenuBarThroughput(): void {
   if (!MENU_BAR_THROUGHPUT_SUPPORTED || tray === null) return;
   const on = preferences().menuBarThroughput;
   if (throughputItem !== null) throughputItem.checked = on;
+  if (hideIconItem !== null) hideIconItem.visible = on;
+  applyTrayIcon();
   if (!on) {
     if (process.platform === "darwin") tray.setTitle("");
     else hideThroughputWidget();
@@ -381,7 +440,9 @@ function applyMenuBarThroughput(): void {
   const downBps = fresh ? sample.downBps : 0;
   const upBps = fresh ? sample.upBps : 0;
   if (process.platform === "darwin") {
-    tray.setTitle(throughputTitle(downBps, upBps), { fontType: "monospaced" });
+    tray.setTitle(throughputTitle(downBps, upBps, !preferences().hideTrayIcon), {
+      fontType: "monospaced",
+    });
   } else {
     // The widget has room for the spaced unit; the menu-bar title packs it out.
     showThroughputWidget();
@@ -474,8 +535,8 @@ function registerCloudHandlers(): void {
  *  a binary it can't verify. */
 function undeliverableReason(): string {
   return app.isPackaged
-    ? "macOS isn’t delivering notifications — allow Dishylink under System Settings ▸ Notifications."
-    : "Native notifications need the installed Dishylink app; a dev run can’t post them.";
+    ? t("desktop.notificationsUndeliverable")
+    : t("desktop.notificationsDevRun");
 }
 
 /** The one notification answer every surface renders: stored request + channel as last
@@ -560,7 +621,7 @@ function startAlertNotifications(): void {
     // Only an explicit yes; an unseeded preference is unknown, not consent.
     if (preferences().notifications !== true) return;
     for (const transition of transitions) {
-      const notification = describeTransition(transition);
+      const notification = describeTransition(transition, t);
       if (!notification) continue;
       // Stamped from the reading, so a flapping link is rate-limited by device time.
       if (!throttle.allow(notification.key, transition.atMs)) continue;
@@ -579,6 +640,11 @@ function registerHostHandlers(): void {
   // from the host's own interfaces, plus the roster entry a window on the router's
   // network has since matched to them.
   ipcMain.handle("get-self-identity", () => hostIdentity());
+  // The window reports the interface language it uses; main follows, so the tray
+  // menu and the notifications it posts with no window open read the same way.
+  ipcMain.on("set-locale", (_event, locale: unknown) => {
+    if (isSupportedLocale(locale)) setLocale(locale);
+  });
   // Written whenever the window resolves this machine on a roster read over the LAN.
   ipcMain.handle("remember-self-device", (_event, clientId: unknown) => {
     if (typeof clientId === "number") rememberSelfDevice(clientId);
@@ -632,6 +698,21 @@ function registerMenuBarThroughputHandler(): void {
     setPreference("menuBarThroughput", on === true);
     return preferences().menuBarThroughput;
   });
+  if (process.platform === "darwin") {
+    ipcMain.handle("get-hide-tray-icon", () => preferences().hideTrayIcon);
+    ipcMain.handle("set-hide-tray-icon", (_event, hidden: boolean) => {
+      setPreference("hideTrayIcon", hidden === true);
+      return preferences().hideTrayIcon;
+    });
+    ipcMain.handle("get-tray-icon-style", () => preferences().trayIconStyle);
+    ipcMain.handle("set-tray-icon-style", (_event, style: unknown) => {
+      setPreference(
+        "trayIconStyle",
+        style === "template" || style === "outline" ? style : "original",
+      );
+      return preferences().trayIconStyle;
+    });
+  }
   // The open window's live throughput — the same 1s dish reading the dashboard draws.
   // The timestamp marks the renderer as reporting, so the recorder's poll defers.
   ipcMain.on("report-throughput", (_event, downBps: number, upBps: number) => {
@@ -646,10 +727,21 @@ function registerMenuBarThroughputHandler(): void {
     applyMenuBarThroughput();
     updateThroughputWatchdog();
     mainWindow?.webContents.send(MENUBAR_THROUGHPUT_CHANNEL, prefs.menuBarThroughput);
+    if (hideIconItem !== null) hideIconItem.checked = prefs.hideTrayIcon;
+    mainWindow?.webContents.send(HIDE_TRAY_ICON_CHANNEL, prefs.hideTrayIcon);
+    mainWindow?.webContents.send(TRAY_ICON_STYLE_CHANNEL, prefs.trayIconStyle);
   });
 }
 
 void app.whenReady().then(async () => {
+  // A second launch (the desktop shortcut while the tray copy runs) would start a
+  // second collector and crash on the data-dir writer lock; hand the launch to the
+  // running instance instead.
+  if (!app.requestSingleInstanceLock()) {
+    app.quit();
+    return;
+  }
+  app.on("second-instance", showWindow);
   // Dev shows Electron's default icon; a packaged build carries its own, so set the
   // dock icon only in dev.
   if (process.platform === "darwin" && !app.isPackaged) {

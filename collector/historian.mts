@@ -26,7 +26,12 @@ import {
 } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { networkInterfaces } from "node:os";
-import { identityFromEnv } from "../core/hostNetworkIdentity.ts";
+import {
+  identityFromEnv,
+  resolveHostIdentity,
+  type HostNetworkIdentity,
+} from "../core/hostNetworkIdentity.ts";
+import { clientIsHost } from "../core/routerClientUpdate.ts";
 import { join, resolve } from "node:path";
 import { createFileRegistry, fromBinary, toJson, type DescMessage } from "@bufbuild/protobuf";
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
@@ -53,6 +58,9 @@ import { foldSamplesToLatencyMinutes } from "../core/latencyBuckets.ts";
 import { summarizeLatency } from "../core/latencySummary.ts";
 import { ThermalStore } from "./thermalStore.mts";
 import { EventStore } from "./eventStore.mts";
+import { PostmortemStore } from "./postmortemStore.mts";
+import { buildOutageReport, BEFORE_WINDOW_MS, isOutageSourceKey } from "../core/postmortem.ts";
+import { THERMAL_ALERT_KEYS } from "../core/alertDefinitions.ts";
 import { ClientStore, type ClientReading } from "./clientStore.mts";
 import { ClientWindow } from "./clientWindow.mts";
 import { resolveRows, foldMinuteCollisions } from "../core/clientHistory.ts";
@@ -81,7 +89,7 @@ import { parseScheduleParam } from "../core/schedule.ts";
 import { CONNECT_ACCOUNT_ADVICE, dataLimitAlertSpec } from "../core/dataMeterAlert.ts";
 import { ThroughputTracker } from "../core/throughputTracker.ts";
 import { usageKey } from "../core/clientUsage.ts";
-import { AlertStore } from "./alertStore.mts";
+import { AlertStore, type AlertEpisode } from "./alertStore.mts";
 import { AlertEngine, type AlertObservation, type AlertTransition } from "../core/alertEngine.ts";
 import { ObstructionStore, packCells } from "./obstructionStore.mts";
 
@@ -120,6 +128,7 @@ const CLIENT_TOTALS_FILE = join(DATA_DIR, "client-totals.json");
 const METERS_FILE = join(DATA_DIR, "meters.json");
 const DEVICE_GROUPS_FILE = join(DATA_DIR, "device-groups.json");
 const ALERTS_FILE = join(DATA_DIR, "alerts.ndjson");
+const POSTMORTEM_FILE = join(DATA_DIR, "postmortems.ndjson");
 const OBSTRUCTION_FILE = join(DATA_DIR, "obstruction.ndjson");
 const LOCK_FILE = join(DATA_DIR, "historian.lock");
 const PORT = Number(process.env.HISTORIAN_PORT ?? 8088);
@@ -179,7 +188,6 @@ const routerOrigins = createRouterOrigins(
  * firmware answers with Unimplemented — so these booleans are the whole signal,
  * and they only exist while they are set. Nobody records them but us.
  */
-const THERMAL_ALERT_KEYS = ["thermalThrottle", "thermalShutdown", "powerSupplyThermalThrottle"];
 const SAMPLE_WINDOW_MS = 6 * 3_600_000;
 const SNAPSHOT_EVERY_MS = 60_000;
 /** A debugging aid, not a store — nothing should ever need more than the most
@@ -248,6 +256,10 @@ async function deviceCall(
     url,
     requestBytes(fieldNumber),
     AbortSignal.timeout(timeoutMs),
+    {
+      onBytes: ({ requestBytes: sent, responseBytes: received }) =>
+        recordSelfTraffic({ receivedBytes: received, sentBytes: sent }),
+    },
   );
   return toJson(responseSchema, fromBinary(responseSchema, bytes), { registry }) as Record<
     string,
@@ -445,6 +457,48 @@ let readAccountSignedIn: (() => boolean) | null = null;
 
 export function setAccountSessionReader(reader: (() => boolean) | null): void {
   readAccountSignedIn = reader;
+}
+
+/** This recorder's own dish and router traffic since the last client poll. Rides
+ *  the host's Wi-Fi, so the router bills it to the machine we run on. */
+let pendingSelfTraffic = { receivedBytes: 0, sentBytes: 0 };
+
+/** Whether the last poll found the roster row this recorder runs on. False means
+ *  its own polling is still counted as that device's usage. */
+let hostRowIdentified = false;
+let warnedNoHostRow = false;
+
+function takePendingSelfTraffic(): { receivedBytes: number; sentBytes: number } {
+  const taken = pendingSelfTraffic;
+  pendingSelfTraffic = { receivedBytes: 0, sentBytes: 0 };
+  return taken;
+}
+
+/**
+ * Who this machine is on the router's roster.
+ *
+ * Addresses alone are enough while the recorder sits on the router's own LAN,
+ * which is the only place its counters can be billed to us anyway. A host that
+ * knows its clientId supplies one through the setter below, which settles it
+ * even after a router reset renumbers the roster.
+ */
+let readHostIdentity: () => HostNetworkIdentity = () => resolveHostIdentity();
+
+export function setHostIdentityReader(reader: () => HostNetworkIdentity): void {
+  readHostIdentity = reader;
+}
+
+/**
+ * Charge dish or router traffic this process sent on someone else's behalf.
+ *
+ * The dashboard makes its own calls, and every host proxies them through the
+ * process the recorder runs in, so they leave the machine on the same Wi-Fi and
+ * land on the same row of the router's roster. Counting only what this file
+ * asked for would leave that share billed to the user.
+ */
+export function recordSelfTraffic(bytes: { receivedBytes: number; sentBytes: number }): void {
+  pendingSelfTraffic.receivedBytes += bytes.receivedBytes;
+  pendingSelfTraffic.sentBytes += bytes.sentBytes;
 }
 
 /** Whether the router says each device is blocked, as of the last client poll.
@@ -739,6 +793,8 @@ interface WireClient {
   blocked?: boolean;
   rxStats?: WireStats;
   txStats?: WireStats;
+  rxStatsValid?: boolean;
+  txStatsValid?: boolean;
 }
 
 /** The roster entry a counter reading belongs to. Falls back through IP to the
@@ -766,6 +822,9 @@ async function getClientReadings(): Promise<ClientReading[]> {
     (client): client is WireClient & { macAddress: string } =>
       !!client.macAddress && (!client.role || client.role === "CLIENT"),
   );
+  const hostIdentity = readHostIdentity();
+  let hostCharged = false;
+  let hostRowFound = false;
   const totalsLiveKeys = clientTotals.notePoll(
     clients.map((client) => ({ clientId: client.clientId, macAddress: client.macAddress })),
   );
@@ -791,6 +850,10 @@ async function getClientReadings(): Promise<ClientReading[]> {
         ? undefined
         : { rxBytes: Number(rxBytes), txBytes: Number(txBytes) };
 
+    const isHost = clientIsHost(client, hostIdentity);
+    if (isHost) hostRowFound = true;
+    if (isHost && counters !== undefined) hostCharged = true;
+
     // Fold the raw counter into the monthly odometer. Done here, at the fast
     // poll, so a re-association's counter reset is caught the moment it happens
     // rather than a second later when it has already climbed back up.
@@ -804,13 +867,18 @@ async function getClientReadings(): Promise<ClientReading[]> {
         client.givenName ?? client.name,
         totalsLiveKeys,
         client.captiveClientId,
+        isHost ? takePendingSelfTraffic() : undefined,
+        client.ipAddress,
       );
     }
 
     // 15s, not 1m: the shorter window is closer to the truth whenever a delta is
     // unavailable, and txStats has no 1m field at all — preferring it would leave
     // download smoothed over 60s and upload over 15s on the same chart.
-    const rates = clientThroughput.rates(entryKey, counters, nowMs, {
+    const rateCounters = counters
+      ? (clientTotals.correctedCounters(client.clientId, client.macAddress) ?? counters)
+      : undefined;
+    const rates = clientThroughput.rates(entryKey, rateCounters, nowMs, {
       downMbps: finiteMbps(client.rxStats?.throughputMbpsLast15sAvg) ?? 0,
       upMbps: finiteMbps(client.txStats?.throughputMbpsLast15sAvg) ?? 0,
     });
@@ -828,6 +896,19 @@ async function getClientReadings(): Promise<ClientReading[]> {
       txBytes: counters?.txBytes ?? 0,
     });
   }
+  // Nothing to charge it to: a recorder off the router's own network, or a
+  // roster that left us out. Held, it would come out of the next row to appear.
+  if (!hostCharged) takePendingSelfTraffic();
+  // Once per run, and only once the roster has actually answered — an empty one
+  // is a poll that failed, not a machine that is missing from it.
+  if (!hostRowFound && !warnedNoHostRow && clients.length > 0) {
+    warnedNoHostRow = true;
+    console.warn(
+      "[historian] no roster entry matches this machine, so its own polling is counted as that " +
+        "device's usage. Set HOST_LAN_IP to this machine's address on the Starlink network.",
+    );
+  }
+  if (clients.length > 0) hostRowIdentified = hostRowFound;
   clientThroughput.retain(liveEntryKeys);
   return readings;
 }
@@ -843,6 +924,7 @@ const obstructionStore = new ObstructionStore(OBSTRUCTION_FILE);
 const clientStore = new ClientStore(CLIENTS_FILE);
 const clientWindow = new ClientWindow(CLIENT_SAMPLES_FILE);
 const alertStore = new AlertStore(ALERTS_FILE);
+const postmortemStore = new PostmortemStore(POSTMORTEM_FILE);
 
 /**
  * Decides what changed; this file only writes it down and passes it on. Seeded
@@ -944,13 +1026,20 @@ export function setLiveThroughputEnabled(enabled: boolean): void {
 }
 
 /** Persist a cycle's transitions, then hand them to whoever is listening. */
-function recordAlertTransitions(transitions: AlertTransition[]): void {
+export function recordAlertTransitions(transitions: AlertTransition[]): void {
   if (transitions.length === 0) return;
   for (const transition of transitions) {
     const { source, key, atMs, kind, spec } = transition;
+    // `close` hands back the episode it closed: an outage can start before the
+    // alert log's 48 h window, and `all()` only serves that window.
+    let closedEpisode: AlertEpisode | null = null;
     if (kind === "fired")
-      alertStore.open(source, key, atMs, { label: spec.firing, severity: spec.severity });
-    else alertStore.close(source, key, atMs);
+      alertStore.open(source, key, atMs, {
+        label: spec.firing,
+        labelVars: spec.vars,
+        severity: spec.severity,
+      });
+    else closedEpisode = alertStore.close(source, key, atMs);
     // The service's diary. It runs unattended under launchd with no window and
     // no operator, so "did it see the outage?" is answerable only from what it
     // wrote down. Every transition is logged, not a chosen few, so an
@@ -963,6 +1052,32 @@ function recordAlertTransitions(transitions: AlertTransition[]): void {
     if (source === "dish" && THERMAL_ALERT_KEYS.includes(key)) {
       if (kind === "fired") thermalStore.open(key, atMs);
       else thermalStore.close(key, atMs);
+    }
+    // The 1 s samples that answer "the five minutes before the drop" age out
+    // within hours, so the report is written the moment the outage ends.
+    if (closedEpisode && source === "system" && isOutageSourceKey(key)) {
+      const beforeStartSec = Math.floor((closedEpisode.startMs - BEFORE_WINDOW_MS) / 60_000) * 60;
+      const beforeEndSec = Math.floor(closedEpisode.startMs / 60_000) * 60;
+      const added = postmortemStore.add(
+        buildOutageReport({
+          source: key,
+          startMs: closedEpisode.startMs,
+          endMs: atMs,
+          generatedAtMs: Date.now(),
+          dishEvents: eventStore.all(),
+          samples: latestSamples,
+          minuteBuckets: store.readRange(beforeStartSec, beforeEndSec),
+          dishAlerts: alertStore
+            .all()
+            .filter((episode) => episode.source === "dish")
+            .map((episode) => ({
+              alertKey: episode.key,
+              startMs: episode.startMs,
+              endMs: episode.endMs,
+            })),
+        }),
+      );
+      if (added) console.log(`[historian] outage report written for ${key}`);
     }
   }
   for (const listener of alertListeners) listener(transitions);
@@ -1229,17 +1344,16 @@ async function pollClients(): Promise<void> {
  * Check every rule against the counters this poll folded.
  *
  * Runs whether or not the router answered: a cycle rolls on the clock, so a rule
- * whose device is away still lets go of it when the cycle turns over.
+ * whose device is away still lets go of it when the cycle turns over. A silent
+ * poll costs the reconciliation nothing either, since it only moves rules between
+ * identities.
  */
 function runMeters(): void {
   const lifetimes = clientTotals.lifetimes();
-  const roster = {
-    keys: lifetimes.map((entry) => entry.clientKey),
-    resolveKey: (key: string) => clientTotals.resolveKey(key),
-  };
-  meters.resolve(roster);
+  const resolver = { resolveKey: (key: string) => clientTotals.resolveKey(key) };
   const groupsBefore = deviceGroups.all();
-  deviceGroups.resolve(roster);
+  meters.resolve(resolver);
+  deviceGroups.resolve(resolver);
   retireProjectedOut(meters.project(deviceGroups.all(), lifetimes, Date.now()), groupsBefore);
   // First, because until a block is known to have landed the reading below cannot
   // be read at all: a roster that has not caught up with the write yet and one
@@ -1626,6 +1740,11 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
         // Rides the list both surfaces already poll, so the prompt needs no
         // request of its own and can never disagree with the rows beside it.
         mergeCandidates: clientTotals.mergeCandidates(Date.now()),
+        // A merged identity keeps answering the router under its old id, which a
+        // reader matching the live roster against these rows would read as a
+        // second device.
+        aliases: clientTotals.resolvedAliases(),
+        selfDeviceIdentified: hostRowIdentified,
       }),
     );
     return;
@@ -1785,6 +1904,13 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
   if (url.pathname === "/api/outages") {
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify({ events: eventStore.all() }));
+    return;
+  }
+  // Auto-generated post-mortems for ended outages. Each report is the shareable
+  // artifact itself: self-contained, frozen at generation, newest first.
+  if (url.pathname === "/api/outages/reports") {
+    response.setHeader("Content-Type", "application/json");
+    response.end(JSON.stringify({ reports: postmortemStore.all() }));
     return;
   }
   if (url.pathname === "/api/obstruction/snapshots") {
@@ -1994,8 +2120,8 @@ export function start(): void {
   setInterval(() => {
     const dropped = clientStore.compact();
     if (dropped > 0) console.log(`[historian] compacted client log, dropped ${dropped} old row(s)`);
-    // Drop usage records for devices unseen since before last month, on the same
-    // hourly sweep, then persist so the trim survives a restart.
+    // Drop usage records for devices unseen since the month MONTHS_KEPT back, on
+    // the same hourly sweep, then persist so the trim survives a restart.
     const totalsDropped = clientTotals.compact(Date.now());
     if (totalsDropped > 0) {
       clientTotals.snapshot();

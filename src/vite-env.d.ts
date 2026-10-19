@@ -18,6 +18,9 @@ interface Window {
     platform: string;
     // The renderer has no shell access, so opening links crosses to main.
     openExternal: (url: string) => void;
+    // Tells main which interface language this window uses, so its tray menu
+    // and notifications match.
+    setLocale?: (locale: string) => void;
     signIn: () => Promise<{ ok: boolean; message?: string }>;
     cloud: (request: {
       path: string;
@@ -43,6 +46,18 @@ interface Window {
     setMenuBarThroughput?: (on: boolean) => Promise<boolean>;
     onMenuBarThroughput?: (listener: (on: boolean) => void) => () => void;
     reportThroughput?: (downBps: number, upBps: number) => void;
+    // Drop the macOS tray icon so only the readout shows. macOS only, so optional.
+    hideTrayIcon?: () => Promise<boolean>;
+    setHideTrayIcon?: (hidden: boolean) => Promise<boolean>;
+    onHideTrayIcon?: (listener: (hidden: boolean) => void) => () => void;
+    // macOS menu-bar icon style. macOS only, so optional.
+    trayIconStyle?: () => Promise<"template" | "outline" | "original">;
+    setTrayIconStyle?: (
+      style: "template" | "outline" | "original",
+    ) => Promise<"template" | "outline" | "original">;
+    onTrayIconStyle?: (
+      listener: (style: "template" | "outline" | "original") => void,
+    ) => () => void;
     // Whether a GitHub release newer than this build has been published.
     updateState: () => Promise<{ available: boolean; version: string | null }>;
     onUpdateState: (

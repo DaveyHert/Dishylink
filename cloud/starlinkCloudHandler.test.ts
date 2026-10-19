@@ -858,6 +858,61 @@ describe("updateRouterConfig", () => {
     ).resolves.toMatchObject({ status: 400 });
     expect(prepared).toBe(false);
   });
+
+  const MESH_RENAME = {
+    kind: "meshName" as const,
+    deviceId: "Router-01000000000000000049375B",
+    displayName: "Garage",
+  };
+
+  it("given: a well-formed mesh rename, should: prepare and dispatch it", async () => {
+    let prepared = false;
+    const handler = createCloudHandler({
+      fetch: gateway(
+        async () =>
+          ({
+            status: 200,
+            ok: true,
+            headers: { get: () => null },
+            arrayBuffer: async () => new Uint8Array([0, 0, 0, 0, 0]).buffer,
+          }) as unknown as Response,
+      ),
+      readCookie: () => SESSION,
+      retryDelayMs: 0,
+      prepareRouterConfigUpdate: async () => {
+        prepared = true;
+        return new Uint8Array();
+      },
+    });
+
+    await expect(handler.updateRouterConfig(MESH_RENAME)).resolves.toMatchObject({ status: 200 });
+    expect(prepared).toBe(true);
+  });
+
+  it("given: a mesh rename with an empty name, should: refuse before the account is touched", async () => {
+    let prepared = false;
+    const handler = createCloudHandler({
+      readCookie: () => SESSION,
+      prepareRouterConfigUpdate: async () => {
+        prepared = true;
+        return new Uint8Array();
+      },
+    });
+
+    await expect(
+      handler.updateRouterConfig({ ...MESH_RENAME, displayName: "  " }),
+    ).resolves.toMatchObject({ status: 400 });
+    expect(prepared).toBe(false);
+  });
+
+  it("given: a mesh rename with a non-router device id, should: refuse it", async () => {
+    await expect(
+      createCloudHandler({ readCookie: () => SESSION }).updateRouterConfig({
+        ...MESH_RENAME,
+        deviceId: "ut0158168c",
+      }),
+    ).resolves.toMatchObject({ status: 400 });
+  });
 });
 
 // The roster and the config read the same way the writes are sent: named by the

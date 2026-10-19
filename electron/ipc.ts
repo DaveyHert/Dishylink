@@ -15,6 +15,13 @@ export const NOTIFICATION_STATE_CHANNEL = "notification-state";
  *  match rather than sitting on a stale value. macOS and Windows only. */
 export const MENUBAR_THROUGHPUT_CHANNEL = "menubar-throughput";
 
+/** Carries the hide-tray-icon preference whenever it changes, so an open window's
+ *  switch follows a toggle made from the tray. macOS only. */
+export const HIDE_TRAY_ICON_CHANNEL = "hide-tray-icon";
+
+/** Carries the tray-icon-style preference whenever it changes. macOS only. */
+export const TRAY_ICON_STYLE_CHANNEL = "tray-icon-style";
+
 /** Carries an UpdateState whenever a GitHub Releases check changes it, plus once
  *  per window load so a fresh renderer starts from the real state. */
 export const UPDATE_STATE_CHANNEL = "update-state";

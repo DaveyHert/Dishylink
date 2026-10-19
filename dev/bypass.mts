@@ -12,7 +12,7 @@ import { resolve } from "node:path";
 import { createCloudHandler } from "../cloud/starlinkCloudHandler.ts";
 import { resilientFetch } from "../cloud/resilientFetch.ts";
 import { DishClient, ROUTER_LAN_HANDLE_URL } from "../core/dishClient.ts";
-import { buildRouterConfigRequest, readCurrentNetworks } from "../core/routerConfigUpdate.ts";
+import { buildRouterConfigRequest, readRouterConfigContext } from "../core/routerConfigUpdate.ts";
 
 const COOKIE_FILE = resolve(process.cwd(), ".starlink-cookie");
 
@@ -58,8 +58,8 @@ const handler = createCloudHandler({
   },
   prepareRouterConfigUpdate: async (update, targetId, callGateway) => {
     const client = await loadRouter();
-    const networks = await readCurrentNetworks(update, client, targetId, callGateway);
-    return client.encodeRequest(buildRouterConfigRequest(targetId, update, networks));
+    const context = await readRouterConfigContext(update, client, targetId, callGateway);
+    return client.encodeRequest(buildRouterConfigRequest(targetId, update, context));
   },
 });
 

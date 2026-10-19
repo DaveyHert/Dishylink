@@ -5,10 +5,19 @@
 
 import { expect, describe, test } from "vitest";
 import { render } from "vitest-browser-react";
-import { TelemetryChart } from "./TelemetryChart";
+import { TelemetryChart, type ChartSeries } from "./TelemetryChart";
 import { windowTail } from "../../lib/telemetryWindow";
-import { LATENCY_SERIES } from "../../lib/statDetails";
 import type { OutageEvent, TelemetrySample } from "@core/telemetry";
+
+const LATENCY_SERIES: ChartSeries[] = [
+  {
+    id: "latency",
+    label: "Latency",
+    colorVar: "--chart-ink",
+    getValue: (sample) => sample.latencyMs,
+    bucketReduce: "max",
+  },
+];
 
 // Real wall-clock, not a pinned constant: the chart's window ends at Date.now(),
 // so a fixture dated to a fixed instant falls outside every window and renders

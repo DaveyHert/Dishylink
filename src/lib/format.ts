@@ -1,4 +1,10 @@
 // Shared display formatting for telemetry values.
+//
+// Anything that puts words (or a locale's clock) next to a figure takes the
+// caller's `t` or language, so it reads the same way the rest of the screen does.
+
+import type { TFunction } from "i18next";
+import type { TranslationKey } from "@core/i18n/resources";
 
 export function formatThroughput(bitsPerSecond: number): { value: string; unit: string } {
   if (bitsPerSecond >= 1_000_000_000)
@@ -20,19 +26,22 @@ export function formatThroughputTick(bitsPerSecond: number): string {
   return `${compactValue}${throughput.unit[0] === "k" ? "k" : throughput.unit[0]}`;
 }
 
-export function formatUptime(uptimeSeconds: number): string {
+export function formatUptime(uptimeSeconds: number, t: TFunction): string {
   const days = Math.floor(uptimeSeconds / 86_400);
   const hours = Math.floor((uptimeSeconds % 86_400) / 3_600);
   const minutes = Math.floor((uptimeSeconds % 3_600) / 60);
-  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m ${Math.floor(uptimeSeconds % 60)}s`;
+  if (days > 0) return t("time.uptimeDays", { days, hours, minutes });
+  if (hours > 0) return t("time.uptimeHours", { hours, minutes });
+  return t("time.uptimeMinutes", { minutes, seconds: Math.floor(uptimeSeconds % 60) });
 }
 
-export function formatDurationMs(durationMs: number): string {
+export function formatDurationMs(durationMs: number, t: TFunction): string {
   if (durationMs < 1000) return `${Math.round(durationMs)} ms`;
   if (durationMs < 60_000) return `${(durationMs / 1000).toFixed(1)} s`;
-  return `${Math.floor(durationMs / 60_000)}m ${Math.round((durationMs % 60_000) / 1000)}s`;
+  return t("time.spanMinutesSeconds", {
+    minutes: Math.floor(durationMs / 60_000),
+    seconds: Math.round((durationMs % 60_000) / 1000),
+  });
 }
 
 /** Event-log duration the way the official app shows it: whole seconds (no ms),
@@ -41,20 +50,25 @@ export function formatDurationMs(durationMs: number): string {
  *  Point-in-time events have no duration at all — the router logs power cycles
  *  and band switches with `durationNs: 0` — and get an empty string. Rounding
  *  those up to "1s" would state a length the event never had. */
-export function formatEventDuration(durationMs: number): string {
+export function formatEventDuration(durationMs: number, t: TFunction): string {
   if (durationMs <= 0) return "";
   const totalSeconds = Math.max(1, Math.round(durationMs / 1000));
-  if (totalSeconds < 60) return `${totalSeconds}s`;
+  if (totalSeconds < 60) return t("time.spanSeconds", { count: totalSeconds });
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  if (minutes < 60) return seconds ? `${minutes}m ${seconds}s` : `${minutes}m`;
+  if (minutes < 60)
+    return seconds
+      ? t("time.spanMinutesSeconds", { minutes, seconds })
+      : t("time.spanMinutes", { count: minutes });
   const hours = Math.floor(minutes / 60);
   const remMinutes = minutes % 60;
-  return remMinutes ? `${hours}h ${remMinutes}m` : `${hours}h`;
+  return remMinutes
+    ? t("time.spanHoursMinutes", { hours, minutes: remMinutes })
+    : t("time.spanHours", { count: hours });
 }
 
-export function formatClockTime(timestampMs: number): string {
-  return new Date(timestampMs).toLocaleTimeString([], {
+export function formatClockTime(timestampMs: number, locale: string): string {
+  return new Date(timestampMs).toLocaleTimeString(locale, {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -62,31 +76,27 @@ export function formatClockTime(timestampMs: number): string {
 }
 
 /** Hour and minute only, no seconds ("5:48 PM"), as the official app shows event times. */
-export function formatClockTimeShort(timestampMs: number): string {
-  return new Date(timestampMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+export function formatClockTimeShort(timestampMs: number, locale: string): string {
+  return new Date(timestampMs).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" });
 }
 
-export function formatDate(timestampMs: number): string {
+export function formatDateTime(timestampMs: number, locale: string): string {
   const date = new Date(timestampMs);
-  const datePart = date.toLocaleDateString(undefined, {
+  const datePart = date.toLocaleDateString(locale, {
     day: "numeric",
     month: "short",
     year: "numeric",
   });
-  return `${datePart}`;
-}
-
-export function formatDateTime(timestampMs: number): string {
-  return `${formatDate(timestampMs)} · ${formatClockTimeShort(timestampMs)}`;
+  return `${datePart} · ${formatClockTimeShort(timestampMs, locale)}`;
 }
 
 /** The dish's `hasActuators` enum ("HAS_ACTUATORS_YES"/"_NO") → plain Yes/No.
  *  Anything else — the "_UNKNOWN" default or an absent field — reads as Unknown
  *  rather than a blank, so the row still says something. */
-export function formatHasActuators(hasActuators: string | undefined): string {
-  if (hasActuators === "HAS_ACTUATORS_YES") return "Yes";
-  if (hasActuators === "HAS_ACTUATORS_NO") return "No";
-  return "Unknown";
+export function formatHasActuators(hasActuators: string | undefined, t: TFunction): string {
+  if (hasActuators === "HAS_ACTUATORS_YES") return t("common.yes");
+  if (hasActuators === "HAS_ACTUATORS_NO") return t("common.no");
+  return t("common.unknownCapitalised");
 }
 
 function withoutTrailingZeros(value: number, decimals: number): string {
@@ -127,15 +137,18 @@ export function formatBytes(bytes: number): string {
 
 /** Coarse "how long ago" for a past timestamp: "just now", "5 min ago",
  *  "3 hours ago", "2 days ago". For last-seen labels, not precise timing. */
-export function formatRelativeTime(timestampMs: number, nowMs: number = Date.now()): string {
+export function formatRelativeTime(
+  timestampMs: number,
+  t: TFunction,
+  nowMs: number = Date.now(),
+): string {
   const seconds = Math.max(0, Math.round((nowMs - timestampMs) / 1000));
-  if (seconds < 60) return "just now";
+  if (seconds < 60) return t("time.justNow");
   const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 60) return t("time.minutesAgo", { count: minutes });
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
-  const days = Math.round(hours / 24);
-  return `${days} day${days === 1 ? "" : "s"} ago`;
+  if (hours < 24) return t("time.hoursAgo", { count: hours });
+  return t("time.daysAgo", { count: Math.round(hours / 24) });
 }
 
 /**
@@ -163,9 +176,25 @@ export function formatAttitudeState(value: string | undefined): string | null {
   return formatDeviceEnum(value, "FILTER_");
 }
 
+const ATTITUDE_STATE_KEY: Record<string, TranslationKey> = {
+  FILTER_CONVERGED: "alignment.state.converged",
+  FILTER_UNCONVERGED: "alignment.state.unconverged",
+  FILTER_RESET: "alignment.state.reset",
+  FILTER_FAULTED: "alignment.state.faulted",
+  FILTER_INVALID: "alignment.state.invalid",
+};
+
+/** The attitude state as the reader sees it. A state the catalog has no word
+ *  for keeps the dish's own vocabulary, as the official app shows it. */
+export function attitudeStateLabel(value: string | undefined, t: TFunction): string | null {
+  if (!value) return null;
+  const key = ATTITUDE_STATE_KEY[value];
+  return key ? t(key) : formatAttitudeState(value);
+}
+
 /** Motor state — "Idle", "Tilt". Absent IS the zero value here: our dish omits
  *  the field and the official app shows "Idle" for it, which is the mapping
  *  proto3 specifies and the app confirms. */
-export function formatActuatorState(value: string | undefined): string {
-  return formatDeviceEnum(value, "ACTUATOR_STATE_") ?? "Idle";
+export function formatActuatorState(value: string | undefined, t: TFunction): string {
+  return formatDeviceEnum(value, "ACTUATOR_STATE_") ?? t("common.idle");
 }

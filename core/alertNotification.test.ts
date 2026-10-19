@@ -7,8 +7,10 @@ import {
   notificationsRequested,
 } from "./alertNotification";
 import { dataLimitAlertSpec } from "./dataMeterAlert";
+import { createI18n } from "./i18n/resources";
 
 const NOW = 1_700_000_000_000;
+const { t } = createI18n("en");
 
 /** Drive the engine to produce a real transition rather than hand-building one,
  *  so the wording is tested against what a host actually receives. */
@@ -19,7 +21,7 @@ function transitionFor(dishAlerts: Record<string, boolean>, atMs = NOW) {
 
 describe("describeTransition", () => {
   it("words an onset with the alert's firing message", () => {
-    const notification = describeTransition(transitionFor({ dishWaterDetected: true }));
+    const notification = describeTransition(transitionFor({ dishWaterDetected: true }), t);
     expect(notification).toMatchObject({
       title: "Dish alert",
       body: "Water detected inside the dish",
@@ -31,7 +33,7 @@ describe("describeTransition", () => {
     const engine = new AlertEngine();
     engine.update({ dish: { alerts: { dishWaterDetected: true }, atMs: NOW } });
     const [cleared] = engine.update({ dish: { alerts: {}, atMs: NOW + 1_000 } });
-    expect(describeTransition(cleared!)).toMatchObject({
+    expect(describeTransition(cleared!, t)).toMatchObject({
       title: "Dish alert cleared",
       body: "No water inside the dish",
     });
@@ -60,28 +62,39 @@ describe("describeTransition", () => {
     // The onset is worth interrupting someone with; its retirement a minute later
     // reports nothing new, and would claim a still-capped device is within its
     // allowance.
-    expect(describeTransition({ ...cleared, kind: "fired" })).not.toBeNull();
-    expect(describeTransition(cleared)).toBeNull();
+    const fired = describeTransition({ ...cleared, kind: "fired" }, t);
+    expect(fired).not.toBeNull();
+    // The wording names the device and the allowance the rule carries.
+    expect(fired?.body).toBe("iPhone reached its 10.0 GB data allowance");
+    expect(describeTransition(cleared, t)).toBeNull();
   });
 
   it("gives the onset and the clear different throttle keys", () => {
     const engine = new AlertEngine();
     const [fired] = engine.update({ dish: { alerts: { dishWaterDetected: true }, atMs: NOW } });
     const [cleared] = engine.update({ dish: { alerts: {}, atMs: NOW + 1_000 } });
-    expect(describeTransition(fired!)?.key).not.toBe(describeTransition(cleared!)?.key);
+    expect(describeTransition(fired!, t)?.key).not.toBe(describeTransition(cleared!, t)?.key);
   });
 
   it("stays silent for an alert not worth interrupting anyone for", () => {
     // isHeating is advisory and carries no `notify` flag.
-    expect(describeTransition(transitionFor({ isHeating: true }))).toBeNull();
+    expect(describeTransition(transitionFor({ isHeating: true }), t)).toBeNull();
   });
 
   it("names the app, not a device, for conditions it observes itself", () => {
     const engine = new AlertEngine();
     const [transition] = engine.update({ dish: { alerts: null, atMs: NOW } });
-    expect(describeTransition(transition!)).toMatchObject({
+    expect(describeTransition(transition!, t)).toMatchObject({
       title: "Dishylink alert",
       body: "Dish isn’t answering",
+    });
+  });
+
+  it("words the same transition in the host's own language", () => {
+    const { t: de } = createI18n("de");
+    expect(describeTransition(transitionFor({ dishWaterDetected: true }), de)).toMatchObject({
+      title: "Antenne-Warnung",
+      body: "Wasser in der Antenne erkannt",
     });
   });
 });

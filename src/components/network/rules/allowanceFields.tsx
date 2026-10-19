@@ -2,6 +2,7 @@
 // limit, so a rule and the group it can become are never worded two ways.
 
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   CalendarClockIcon,
   ChevronDownIcon,
@@ -11,17 +12,18 @@ import {
   TimerIcon,
 } from "lucide-react";
 import { MAX_COUNTDOWN_MS, type MeterCycle } from "@core/dataMeter";
+import type { TranslationKey } from "@core/i18n/resources";
 import { classifyDevice } from "../../../lib/deviceKind";
-import { vendorForMac } from "../../../lib/macVendor";
+import { vendorForMac, vendorLabel } from "../../../lib/macVendor";
 import { DeviceTypeIcon } from "../../../assets/icons/DeviceTypeIcon";
 import { Input } from "../../ui/input";
 import { Slider } from "../../ui/slider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/select";
 import {
-  CYCLE_OPTIONS,
+  cycleOptions,
   MINUTE_MS,
-  WEEKDAYS,
+  weekdayNames,
   ceilingFor,
   ceilingLabel,
   formatDuration,
@@ -37,35 +39,31 @@ import {
 
 export type { RuleMode };
 
-const RULE_MODES: { mode: RuleMode; label: string; icon: typeof TimerIcon; detail: string }[] = [
-  {
-    mode: "limit",
-    label: "Limit",
-    icon: GaugeIcon,
-    detail: "Pauses once a set amount of data is used, and frees up when the cycle turns over.",
-  },
+const RULE_MODES: {
+  mode: RuleMode;
+  label: TranslationKey;
+  icon: typeof TimerIcon;
+  detail: TranslationKey;
+}[] = [
+  { mode: "limit", label: "rules.modeLimit", icon: GaugeIcon, detail: "rules.modeLimitDetail" },
   {
     mode: "schedule",
-    label: "Schedule",
+    label: "rules.modeSchedule",
     icon: CalendarClockIcon,
-    detail: "Pauses outside the hours you set, on chosen weekdays or dates.",
+    detail: "rules.modeScheduleDetail",
   },
-  {
-    mode: "timer",
-    label: "Timer",
-    icon: TimerIcon,
-    detail: "Pauses once a countdown runs out, starting from when you save.",
-  },
+  { mode: "timer", label: "rules.modeTimer", icon: TimerIcon, detail: "rules.modeTimerDetail" },
 ];
 
 /** Sits beside a rule form's title, explaining what each of the three kinds does. */
 export function RuleModesInfo() {
+  const { t } = useTranslation();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <button
           type='button'
-          aria-label='What each kind of rule does'
+          aria-label={t("rules.whatEachKind")}
           className='grid size-5 shrink-0 translate-y-px cursor-help place-items-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground'
         >
           <InfoIcon className='size-3.5' />
@@ -74,7 +72,7 @@ export function RuleModesInfo() {
       <TooltipContent side='bottom' align='start' className='max-w-64 space-y-1.5 text-left'>
         {RULE_MODES.map((option) => (
           <p key={option.mode}>
-            <span className='font-semibold'>{option.label}:</span> {option.detail}
+            <span className='font-semibold'>{t(option.label)}:</span> {t(option.detail)}
           </p>
         ))}
       </TooltipContent>
@@ -89,6 +87,7 @@ export function RuleModeToggle({
   mode: RuleMode;
   onChange: (next: RuleMode) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className='flex items-center gap-1 rounded-full border border-border/70 p-0.5'>
       {RULE_MODES.map((option) => {
@@ -107,7 +106,7 @@ export function RuleModeToggle({
             }`}
           >
             <Icon className='size-3.5' />
-            {option.label}
+            {t(option.label)}
           </button>
         );
       })}
@@ -118,6 +117,7 @@ export function RuleModeToggle({
 const QUICK_DURATIONS_MIN = [30, 60, 120, 360, 720, 1440];
 
 function CountdownFields({ draft }: { draft: AllowanceDraft }) {
+  const { t } = useTranslation();
   const { hoursText, setHoursText, minutesText, setMinutesText, countdownMs } = draft;
   const setTotal = (totalMinutes: number) => {
     const clamped = Math.min(24 * 60, Math.max(1, totalMinutes));
@@ -128,7 +128,7 @@ function CountdownFields({ draft }: { draft: AllowanceDraft }) {
     <div className='space-y-3'>
       <div className='grid grid-cols-2 gap-3'>
         <label className='space-y-1.5'>
-          <span className='text-[12px] font-medium text-foreground'>Hours</span>
+          <span className='text-[12px] font-medium text-foreground'>{t("rules.hours")}</span>
           <Input
             value={hoursText}
             inputMode='numeric'
@@ -138,7 +138,7 @@ function CountdownFields({ draft }: { draft: AllowanceDraft }) {
           />
         </label>
         <label className='space-y-1.5'>
-          <span className='text-[12px] font-medium text-foreground'>Minutes</span>
+          <span className='text-[12px] font-medium text-foreground'>{t("rules.minutes")}</span>
           <Input
             value={minutesText}
             inputMode='numeric'
@@ -161,9 +161,7 @@ function CountdownFields({ draft }: { draft: AllowanceDraft }) {
         ))}
       </div>
       {countdownMs !== undefined && countdownMs >= MAX_COUNTDOWN_MS && (
-        <p className='text-[11.5px] text-muted-foreground'>
-          A timer runs for at most 24 hours. Use an allowance for anything longer.
-        </p>
+        <p className='text-[11.5px] text-muted-foreground'>{t("rules.timerMax")}</p>
       )}
     </div>
   );
@@ -190,23 +188,25 @@ export function AppliesToField({
   carriesAllowance: boolean;
   timer: boolean;
 }) {
+  const { t } = useTranslation();
   // Open when the selection is not the single device a card opens with — a rule
   // written from the list starts with none, and a collapsed picker hides the one
   // thing it still needs.
   const [open, setOpen] = useState(selected.length !== 1);
   const summary =
     selected.length === 0
-      ? "Pick devices"
+      ? t("rules.pickDevices")
       : selected.length === 1
-        ? "This device"
-        : `${selected.length} devices`;
-  // Held still while the picker is open. The odometer's list refreshes on its own
-  // poll, and a row that moves under the cursor is one the user has to chase.
+        ? t("network.thisDevice")
+        : t("network.deviceCount", { count: selected.length });
+  // The order holds still, not the array: the odometer mints a fresh list on its
+  // own poll, so this recomputes and the sort is what keeps a row from moving
+  // under the cursor.
   const rows = useMemo(() => orderedCandidates(candidates), [candidates]);
   return (
     <div className='space-y-1.5'>
       <div className='flex items-baseline justify-between'>
-        <span className='text-[12px] font-medium text-foreground'>Applies to</span>
+        <span className='text-[12px] font-medium text-foreground'>{t("rules.appliesTo")}</span>
         <button
           type='button'
           onClick={() => setOpen(!open)}
@@ -222,7 +222,7 @@ export function AppliesToField({
         <>
           <div className='thin-scroll max-h-52 space-y-0.5 overflow-y-auto rounded-lg border border-border/60 p-1'>
             {rows.map((candidate) => {
-              const vendor = vendorForMac(candidate.macAddress);
+              const vendor = vendorLabel(vendorForMac(candidate.macAddress), t);
               return (
                 <label
                   key={candidate.clientKey}
@@ -241,13 +241,20 @@ export function AppliesToField({
                   />
                   <span className='flex min-w-0 flex-col gap-px'>
                     <span className='truncate'>{candidate.name}</span>
-                    {vendor && (
-                      <span className='truncate text-[11px] text-muted-foreground'>{vendor}</span>
+                    {candidate.hasCounters === false ? (
+                      <span className='truncate text-[11px] text-muted-foreground'>
+                        {vendor ? `${vendor} · ` : ""}
+                        {t("rules.noUsageData")}
+                      </span>
+                    ) : (
+                      vendor && (
+                        <span className='truncate text-[11px] text-muted-foreground'>{vendor}</span>
+                      )
                     )}
                   </span>
                   {candidate.active && (
-                    <span className='ml-auto shrink-0 text-[10.5px] tracking-wide text-muted-foreground'>
-                      ACTIVE NOW
+                    <span className='ml-auto shrink-0 text-[10.5px] tracking-wide text-muted-foreground uppercase'>
+                      {t("rules.activeNow")}
                     </span>
                   )}
                 </label>
@@ -259,22 +266,22 @@ export function AppliesToField({
               <MemberModeChoice
                 selected={!shared}
                 onSelect={() => onSharedChange(false)}
-                title='Each'
-                detail='Every device gets the full allowance on its own.'
+                title={t("rules.each")}
+                detail={t("rules.eachDetail")}
               />
               <MemberModeChoice
                 selected={shared}
                 onSelect={() => onSharedChange(true)}
-                title='Shared'
-                detail='One allowance between them. They pause together.'
+                title={t("rules.shared")}
+                detail={t("rules.sharedDetail")}
               />
             </div>
           )}
           {selected.length > 1 && !carriesAllowance && (
             <p className='pt-1 text-[11.5px] text-muted-foreground'>
               {timer
-                ? `All ${selected.length} devices start and end on one clock.`
-                : `These hours apply to all ${selected.length} devices.`}
+                ? t("rules.allStartOneClock", { count: selected.length })
+                : t("rules.hoursApplyAll", { count: selected.length })}
             </p>
           )}
         </>
@@ -314,13 +321,14 @@ function MemberModeChoice({
 }
 
 export function AllowanceFields({ draft }: { draft: AllowanceDraft }) {
+  const { t, i18n } = useTranslation();
   const { allocationText, setAllocationText, ceiling, setCeiling, kind, billingDay } = draft;
   if (draft.timer) return <CountdownFields draft={draft} />;
   return (
     <>
       <div className='grid grid-cols-2 gap-3'>
         <label className='space-y-1.5'>
-          <span className='text-[12px] font-medium text-foreground'>Allowance</span>
+          <span className='text-[12px] font-medium text-foreground'>{t("rules.allowance")}</span>
           <div className='relative'>
             <Input
               value={allocationText}
@@ -338,13 +346,13 @@ export function AllowanceFields({ draft }: { draft: AllowanceDraft }) {
           </div>
         </label>
         <div className='space-y-1.5'>
-          <span className='text-[12px] font-medium text-foreground'>Resets</span>
+          <span className='text-[12px] font-medium text-foreground'>{t("rules.resets")}</span>
           <Select value={kind} onValueChange={(next) => draft.setKind(next as MeterCycle["kind"])}>
-            <SelectTrigger className='w-full text-[13px]' aria-label='Resets'>
+            <SelectTrigger className='w-full text-[13px]' aria-label={t("rules.resets")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {CYCLE_OPTIONS.map((option) => (
+              {cycleOptions(t).map((option) => (
                 <SelectItem
                   key={option.value}
                   value={option.value}
@@ -352,8 +360,8 @@ export function AllowanceFields({ draft }: { draft: AllowanceDraft }) {
                 >
                   {option.value === "billing"
                     ? billingDay === null
-                      ? "Starlink billing (needs your account)"
-                      : `Starlink billing (${billingDay})`
+                      ? t("rules.billingNeedsAccount")
+                      : t("rules.billingDay", { day: billingDay })
                     : option.label}
                 </SelectItem>
               ))}
@@ -368,13 +376,13 @@ export function AllowanceFields({ draft }: { draft: AllowanceDraft }) {
           max={ceiling}
           step={stepFor(ceiling)}
           onValueChange={([next]) => setAllocationText(String(next))}
-          aria-label='Allowance in gigabytes'
+          aria-label={t("rules.allowanceGb")}
         />
         <div className='flex shrink-0 flex-col items-center gap-0.5'>
           <button
             type='button'
             onClick={() => setCeiling(stepCeiling(ceiling, Number(allocationText) || 0, 1))}
-            aria-label='Extend the slider'
+            aria-label={t("rules.extendSlider")}
             className={stepButtonClass}
           >
             <ChevronUpIcon className='size-3' />
@@ -382,7 +390,7 @@ export function AllowanceFields({ draft }: { draft: AllowanceDraft }) {
           <button
             type='button'
             onClick={() => setCeiling(stepCeiling(ceiling, Number(allocationText) || 0, 1))}
-            title='Change how far the slider reaches'
+            title={t("rules.sliderReach")}
             className='cursor-pointer rounded-sm px-1 text-[11.5px] leading-none tabular-nums text-muted-foreground transition-colors hover:bg-accent hover:text-foreground'
           >
             {ceilingLabel(ceiling)}
@@ -390,7 +398,7 @@ export function AllowanceFields({ draft }: { draft: AllowanceDraft }) {
           <button
             type='button'
             onClick={() => setCeiling(stepCeiling(ceiling, Number(allocationText) || 0, -1))}
-            aria-label='Shorten the slider'
+            aria-label={t("rules.shortenSlider")}
             className={stepButtonClass}
           >
             <ChevronDownIcon className='size-3' />
@@ -400,17 +408,17 @@ export function AllowanceFields({ draft }: { draft: AllowanceDraft }) {
 
       {kind === "weekly" && (
         <div className='space-y-1.5'>
-          <span className='text-[12px] font-medium text-foreground'>Resets on</span>
+          <span className='text-[12px] font-medium text-foreground'>{t("rules.resetsOn")}</span>
           <Select
             value={String(draft.weekday)}
             onValueChange={(next) => draft.setWeekday(Number(next))}
           >
-            <SelectTrigger className='w-full text-[13px]' aria-label='Resets on'>
+            <SelectTrigger className='w-full text-[13px]' aria-label={t("rules.resetsOn")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {WEEKDAYS.map((label, index) => (
-                <SelectItem key={label} value={String(index)}>
+              {weekdayNames(i18n.language, "long").map((label, index) => (
+                <SelectItem key={index} value={String(index)}>
                   {label}
                 </SelectItem>
               ))}
@@ -420,7 +428,7 @@ export function AllowanceFields({ draft }: { draft: AllowanceDraft }) {
       )}
       {kind === "monthly" && (
         <label className='block space-y-1.5'>
-          <span className='text-[12px] font-medium text-foreground'>Resets on day</span>
+          <span className='text-[12px] font-medium text-foreground'>{t("rules.resetsOnDay")}</span>
           <div className='relative'>
             <Input
               value={draft.dayText}
@@ -433,7 +441,7 @@ export function AllowanceFields({ draft }: { draft: AllowanceDraft }) {
               <button
                 type='button'
                 onClick={() => draft.setDayText(String(stepDay(draft.day, 1)))}
-                aria-label='Later in the month'
+                aria-label={t("rules.laterInMonth")}
                 className={stepButtonClass}
               >
                 <ChevronUpIcon className='size-3' />
@@ -441,7 +449,7 @@ export function AllowanceFields({ draft }: { draft: AllowanceDraft }) {
               <button
                 type='button'
                 onClick={() => draft.setDayText(String(stepDay(draft.day, -1)))}
-                aria-label='Earlier in the month'
+                aria-label={t("rules.earlierInMonth")}
                 className={stepButtonClass}
               >
                 <ChevronDownIcon className='size-3' />

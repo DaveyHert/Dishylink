@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -124,6 +125,7 @@ function TimeDial({ minutes, onChange }: { minutes: number; onChange: (minutes: 
     if (wantPM !== isPM) onChange(wrap(minutes + 12 * 60));
   };
 
+  const { t } = useTranslation();
   const [editingHour, setEditingHour] = useState(false);
   const [editingMinute, setEditingMinute] = useState(false);
   const [hourInput, setHourInput] = useState("");
@@ -163,7 +165,7 @@ function TimeDial({ minutes, onChange }: { minutes: number; onChange: (minutes: 
   return (
     <div className='flex items-center justify-center gap-1.5'>
       <TimeStepper
-        label='hour'
+        unit='hour'
         onUp={() => stepHour(1)}
         onDown={() => stepHour(-1)}
         editing={editingHour}
@@ -188,7 +190,7 @@ function TimeDial({ minutes, onChange }: { minutes: number; onChange: (minutes: 
           <button
             type='button'
             onClick={startEditHour}
-            title='Click to type'
+            title={t("time.clickToType")}
             className='grid w-8 cursor-text place-items-center rounded-sm transition-colors hover:bg-accent'
           >
             <TwoDigit value={hour12} tensSequence={HOUR_TENS} onesSequence={HOUR_ONES} />
@@ -199,7 +201,7 @@ function TimeDial({ minutes, onChange }: { minutes: number; onChange: (minutes: 
       <span className='text-[16px] font-semibold leading-none text-muted-foreground'>:</span>
 
       <TimeStepper
-        label='minute'
+        unit='minute'
         onUp={() => stepMinute(1)}
         onDown={() => stepMinute(-1)}
         editing={editingMinute}
@@ -224,7 +226,7 @@ function TimeDial({ minutes, onChange }: { minutes: number; onChange: (minutes: 
           <button
             type='button'
             onClick={startEditMinute}
-            title='Click to type'
+            title={t("time.clickToType")}
             className='grid w-8 cursor-text place-items-center rounded-sm transition-colors hover:bg-accent'
           >
             <TwoDigit value={minute} tensSequence={MINUTE_TENS} onesSequence={MINUTE_ONES} />
@@ -263,24 +265,26 @@ function TimeDial({ minutes, onChange }: { minutes: number; onChange: (minutes: 
 
 /** A vertical hour/minute control: up chevron, the (animated or editable) digits, down chevron. */
 function TimeStepper({
-  label,
+  unit,
   onUp,
   onDown,
   editing,
   children,
 }: {
-  label: string;
+  unit: "hour" | "minute";
   onUp: () => void;
   onDown: () => void;
   editing: boolean;
   children: React.ReactNode;
 }) {
+  const { t } = useTranslation();
+  const label = unit === "hour" ? t("time.hourUnit") : t("time.minuteUnit");
   return (
     <div className='flex flex-col items-center gap-0.5'>
       <button
         type='button'
         onClick={onUp}
-        aria-label={`Increase ${label}`}
+        aria-label={t("time.increase", { unit: label })}
         tabIndex={editing ? -1 : 0}
         className={stepBtnClass}
       >
@@ -290,7 +294,7 @@ function TimeStepper({
       <button
         type='button'
         onClick={onDown}
-        aria-label={`Decrease ${label}`}
+        aria-label={t("time.decrease", { unit: label })}
         tabIndex={editing ? -1 : 0}
         className={stepBtnClass}
       >

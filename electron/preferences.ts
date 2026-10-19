@@ -14,6 +14,7 @@ import { app } from "electron";
 import { join } from "node:path";
 import { readFileSync, writeFileSync } from "node:fs";
 import { normalizeIpAddress } from "../core/ipAddress";
+import { isSupportedLocale, type SupportedLocale } from "../core/i18n/locale";
 
 export interface WindowBounds {
   x: number;
@@ -45,6 +46,13 @@ export interface Preferences {
    */
   menuBarThroughput: boolean;
 
+  /** Drop the macOS tray icon, leaving only the throughput readout. Honoured
+   *  only while `menuBarThroughput` is on. */
+  hideTrayIcon: boolean;
+
+  /** macOS menu-bar icon style. Ignored while `hideTrayIcon` is in effect. */
+  trayIconStyle: "template" | "outline" | "original";
+
   /**
    * The main window's last position and size, restored on launch so it reopens
    * where it was left. null until the window has moved or resized at least once.
@@ -68,14 +76,24 @@ export interface Preferences {
    * is made from off the router's network, where an address match means nothing.
    */
   selfClientId: number | null;
+
+  /**
+   * The interface language the window settled on, so this process words its
+   * tray menu and notifications the same way with no window open. null until a
+   * window has reported one; the OS locale stands in until then.
+   */
+  locale: SupportedLocale | null;
 }
 
 const DEFAULTS: Preferences = {
   notifications: null,
   menuBarThroughput: process.platform === "darwin",
+  hideTrayIcon: false,
+  trayIconStyle: "original",
   windowBounds: null,
   routerAddress: null,
   selfClientId: null,
+  locale: null,
 };
 
 /** A clientId is a uint32 the router issued, so anything else on disk is not one. */
@@ -122,9 +140,15 @@ export function preferences(): Preferences {
         typeof parsed.menuBarThroughput === "boolean"
           ? parsed.menuBarThroughput
           : DEFAULTS.menuBarThroughput,
+      hideTrayIcon: typeof parsed.hideTrayIcon === "boolean" ? parsed.hideTrayIcon : false,
+      trayIconStyle:
+        parsed.trayIconStyle === "template" || parsed.trayIconStyle === "outline"
+          ? parsed.trayIconStyle
+          : "original",
       windowBounds: isWindowBounds(parsed.windowBounds) ? parsed.windowBounds : null,
       routerAddress: storedAddress(parsed.routerAddress),
       selfClientId: storedClientId(parsed.selfClientId),
+      locale: isSupportedLocale(parsed.locale) ? parsed.locale : null,
     };
   } catch {
     // No file yet, or unreadable. Either way the defaults are the answer.

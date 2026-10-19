@@ -4,6 +4,7 @@
 // An offline row is already a disabled button, so its dimmed look comes from
 // disabled: / group-disabled: rather than a separate offline class.
 
+import { useTranslation } from "react-i18next";
 import type { WifiClientJson } from "@core/dishClient";
 import { matchesSelf } from "../../lib/selfIdentity";
 import type { SelfIdentity } from "../../lib/selfIdentity";
@@ -50,6 +51,7 @@ export function NetworkRow({
   highlight?: boolean;
   onClick?: () => void;
 }) {
+  const { t } = useTranslation();
   const restBg = highlight
     ? "bg-[color-mix(in_srgb,var(--ink)_9%,var(--surface))]"
     : "bg-[color-mix(in_srgb,var(--ink)_4%,var(--surface))]";
@@ -81,7 +83,11 @@ export function NetworkRow({
               className={`size-[18px] flex-none ${METER_INDICATOR_COLOR[meterIndicator] || "text-muted-foreground"}`}
             />
           )}
-          {paused && <Badge>{meterIndicator === "held" ? "Paused · limit" : "Paused"}</Badge>}
+          {paused && (
+            <Badge>
+              {meterIndicator === "held" ? t("network.pausedByLimit") : t("network.paused")}
+            </Badge>
+          )}
           {band && <Badge>{band}</Badge>}
         </span>
       )}
@@ -107,8 +113,9 @@ export function DeviceRow({
   /** Receives the row's `clientEntryKey`, which NetworkPanel resolves back. */
   onSelect: (entryKey: string | null) => void;
 }) {
+  const { t } = useTranslation();
   const isSelf = matchesSelf(client, self);
-  const name = displayName(client);
+  const name = displayName(client, t);
   const meterIndicator = useMeterIndicators().get(usageKey(client.clientId, client.macAddress));
   return (
     <NetworkRow
@@ -117,7 +124,7 @@ export function DeviceRow({
       subIcon={
         <DeviceTypeIcon kind={classifyDevice(name)} size={13} className='text-ink-secondary' />
       }
-      sub={deviceRowSubtitle(client, isSelf)}
+      sub={deviceRowSubtitle(client, isSelf, t)}
       band={bandLabel(client)}
       paused={client.blocked}
       meterIndicator={meterIndicator}

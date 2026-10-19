@@ -3,6 +3,8 @@
 // keeps the controls in the app's language rather than the library's default.
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { errorText } from "../../lib/errorText";
 import { ChevronRightIcon } from "lucide-react";
 import { actionButton } from "../ui/action-button";
 import { Button } from "@/components/ui/button";
@@ -132,6 +134,7 @@ export function DangerAction({
   disabled?: boolean;
   onRun: () => Promise<string>;
 }) {
+  const { t } = useTranslation();
   const [armed, setArmed] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -143,7 +146,7 @@ export function DangerAction({
     try {
       setResult(await onRun());
     } catch (error) {
-      setResult(`Failed: ${(error as Error).message}`);
+      setResult(t("common.failed", { message: errorText(error) }));
     } finally {
       setBusy(false);
       setArmed(false);
@@ -162,7 +165,7 @@ export function DangerAction({
               <div ref={armedRef} className='flex flex-col gap-2 pt-1 pb-0.5'>
                 <SlideToConfirm
                   label={slideLabel}
-                  busyLabel={busy ? "Sending…" : "Confirm to continue"}
+                  busyLabel={busy ? t("common.sending") : t("common.confirmContinue")}
                   tone='danger'
                   busy={confirming || busy}
                   onConfirm={() => setConfirming(true)}
@@ -194,7 +197,7 @@ export function DangerAction({
           <>
             {!slideLabel && (
               <button className={actionButton("danger")} disabled={busy} onClick={() => void run()}>
-                {busy ? "Sending…" : confirmLabel}
+                {busy ? t("common.sending") : confirmLabel}
               </button>
             )}
             <button
@@ -202,7 +205,7 @@ export function DangerAction({
               disabled={busy}
               onClick={() => setArmed(false)}
             >
-              Cancel
+              {t("common.cancel")}
             </button>
           </>
         )}
@@ -215,7 +218,7 @@ export function DangerAction({
           overlayClassName='bg-black/30 backdrop-blur-[2px]'
         >
           <DialogHeader>
-            <DialogTitle className='text-[19px] leading-snug'>Are you sure?</DialogTitle>
+            <DialogTitle className='text-[19px] leading-snug'>{t("common.areYouSure")}</DialogTitle>
             <DialogDescription className='text-[13.5px] leading-relaxed'>
               {caption}
             </DialogDescription>
@@ -227,7 +230,7 @@ export function DangerAction({
               disabled={busy}
               onClick={() => setConfirming(false)}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               variant='destructive'
@@ -235,7 +238,7 @@ export function DangerAction({
               disabled={busy}
               onClick={() => void run()}
             >
-              {busy ? "Sending…" : confirmLabel}
+              {busy ? t("common.sending") : confirmLabel}
             </Button>
           </DialogFooter>
         </DialogContent>

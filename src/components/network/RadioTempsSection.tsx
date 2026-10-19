@@ -1,5 +1,6 @@
 // Per-radio temperature readout on the router's node detail.
 
+import { useTranslation } from "react-i18next";
 import type { RadioReading } from "../../hooks/useRadioTemps";
 import { InfoDot } from "../shared/InfoDot";
 import { DataRow, SectionHeading } from "./DataRow";
@@ -12,11 +13,12 @@ import { radioBandLabel } from "./networkFormat";
  * Wi-Fi to cool itself — highlighted so it reads as the event it is.
  */
 export function RadioTempsSection({ radios }: { radios: RadioReading[] }) {
+  const { t } = useTranslation();
   if (radios.length === 0) return null;
   return (
     <>
-      <SectionHeading title='Radio temperatures'>
-        <InfoDot tip="How warm each of the router's Wi-Fi radios is running. If one gets too hot, the router slows that band's Wi-Fi down to cool off — you'll see that noted here when it happens." />
+      <SectionHeading title={t("network.radioTemps")}>
+        <InfoDot tip={t("network.radioTempsTip")} />
       </SectionHeading>
       <div className='flex flex-col'>
         {radios.map((radio) => {
@@ -29,14 +31,14 @@ export function RadioTempsSection({ radios }: { radios: RadioReading[] }) {
           return (
             <DataRow
               key={radio.band}
-              label={radioBandLabel(radio.band)}
+              label={radioBandLabel(radio.band, t)}
               value={
                 <>
                   {radio.tempC}°
                   {throttling && (
                     <span style={{ color: "var(--status-critical)" }}>
                       {" · "}
-                      throttled to {radio.dutyCycle}%
+                      {t("network.throttledTo", { percent: radio.dutyCycle })}
                     </span>
                   )}
                 </>

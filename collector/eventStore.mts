@@ -21,13 +21,14 @@ import {
   readJsonLines,
   writeJsonLinesAtomically,
 } from "./jsonLinesFile.mts";
-import { canonicalCause } from "../core/telemetry.ts";
+import { canonicalCause, type BandSwitch } from "../core/telemetry.ts";
 
 export interface StoredEvent {
   startMs: number;
   durationMs: number;
   cause: string;
   severity: "advisory" | "warning" | "critical";
+  bandSwitch?: BandSwitch;
 }
 
 // 48 hours. The event log is a "what happened recently" panel, not an archive;
@@ -69,7 +70,9 @@ export class EventStore {
     for (const event of incoming) {
       const existing = this.events.get(keyOf(event));
       // A known outage whose duration has grown is the same outage, still running.
-      if (existing && existing.durationMs >= event.durationMs) continue;
+      // An entry missing its band-switch details takes them from a later sighting.
+      const gainsDetails = existing && !existing.bandSwitch && event.bandSwitch;
+      if (existing && existing.durationMs >= event.durationMs && !gainsDetails) continue;
       this.events.set(keyOf(event), event);
       changed++;
     }

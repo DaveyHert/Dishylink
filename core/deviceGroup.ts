@@ -16,9 +16,9 @@ import {
   ruleKey,
   sharedUsageByGroup,
   upsertRule,
+  type IdentityResolver,
   type MeterCycle,
   type MeterReading,
-  type MeterRoster,
   type MeterRule,
 } from "./dataMeter";
 import type { Schedule } from "./schedule";
@@ -87,31 +87,26 @@ export function groupsForDevice(groups: readonly DeviceGroup[], clientKey: strin
 }
 
 /**
- * Move members onto the identities their devices now answer to, dropping any the
- * recorder no longer holds.
+ * Move members onto the identities their devices now answer to.
  *
  * A member left behind on a reissued id shrinks the group, which makes a pooled
- * allowance cross later than it was set to. An empty roster is a recorder that
- * has folded no reading yet, so nothing is dropped against one.
+ * allowance cross later than it was set to.
  *
- * A group whose last member is gone is dropped: it can never be reached, and it
- * would meter again unannounced if one of those devices came back. A group down
- * to one member is kept, since deleting it would take a limit the user set with
- * nothing said about it.
+ * No member is dropped for being absent, the same way no rule is: an away device
+ * is still in the group it was put in. Membership ends where the user ends it:
+ * an edit, or deleting the device's record, which removes it from every group.
  */
 export function resolveGroupMembers(
   groups: readonly DeviceGroup[],
-  roster: MeterRoster,
+  resolver: IdentityResolver,
 ): DeviceGroup[] {
-  if (roster.keys.length === 0) return [...groups];
-  const known = new Set(roster.keys);
   return groups.flatMap((group) => {
     const resolved: string[] = [];
     for (const memberKey of group.memberKeys) {
-      const current = roster.resolveKey(memberKey);
+      const current = resolver.resolveKey(memberKey);
       // A merge can land two members on one key; counting it twice would spend
       // the allowance at double rate.
-      if (known.has(current) && !resolved.includes(current)) resolved.push(current);
+      if (!resolved.includes(current)) resolved.push(current);
     }
     if (resolved.length === 0) return [];
     return resolved.length === group.memberKeys.length &&

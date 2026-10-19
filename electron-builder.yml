@@ -29,9 +29,10 @@ publish:
   repo: dishylink
   releaseType: draft
 
-# Only the built app ships. build/icon.png is named explicitly because main.ts
-# loads the tray/dock icon from ../build/icon.png at runtime, so it has to sit
-# inside the asar; being the buildResources dir would otherwise keep it out.
+# Only the built app ships. The build/*.png icons are named explicitly because
+# main.ts loads them from ../build at runtime (dock/Windows tray from icon.png,
+# macOS menu bar from trayTemplate.png), so they have to sit inside the asar;
+# being the buildResources dir would otherwise keep them out.
 # electron-builder bundles production node_modules by default, but vite bundles
 # every runtime dependency into dist-electron/, so the dependency tree is dead
 # weight in the asar — excluding it drops the package from ~46 MB to ~4 MB.
@@ -39,6 +40,10 @@ files:
   - dist/**/*
   - dist-electron/**/*
   - build/icon.png
+  - build/trayTemplate.png
+  - build/trayTemplate@2x.png
+  - build/trayTemplateOutline.png
+  - build/trayTemplateOutline@2x.png
   - package.json
   - "!node_modules/**/*"
 

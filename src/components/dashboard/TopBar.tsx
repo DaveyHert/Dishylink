@@ -3,11 +3,13 @@
 // status readouts (country, uptime) drop so the strip stays on one line.
 
 import { LaptopIcon } from "../../assets/icons/LaptopIcon";
+import { useTranslation } from "react-i18next";
 import { MoonIcon } from "../../assets/icons/MoonIcon";
 import { SunIcon } from "../../assets/icons/SunIcon";
 import { nextTheme, type ThemeName } from "../../lib/theme";
 import type { DishConnectionState } from "../../hooks/useDishTelemetry";
 import type { DishStatusJson } from "@core/dishClient";
+import type { TranslationKey } from "../../i18n";
 import { formatUptime } from "../../lib/format";
 import { AlertsMenu } from "../alerts/AlertsMenu";
 import { SupportMenu } from "../shared/SupportMenu";
@@ -25,10 +27,10 @@ interface TopBarProps {
   onToggleNotifications: () => void;
 }
 
-const CONNECTION_LABEL: Record<DishConnectionState, string> = {
-  connecting: "connecting",
-  online: "online",
-  unreachable: "dish unreachable",
+const CONNECTION_LABEL: Record<DishConnectionState, TranslationKey> = {
+  connecting: "status.connecting",
+  online: "status.online",
+  unreachable: "status.dishUnreachable",
 };
 
 // The status dot: a 7px disc that pulses while the link is live or being found,
@@ -65,6 +67,7 @@ export function TopBar({
   notificationsBlockedReason,
   onToggleNotifications,
 }: TopBarProps) {
+  const { t } = useTranslation();
   const ThemeIcon = THEME_ICON[theme];
 
   return (
@@ -77,7 +80,7 @@ export function TopBar({
         <div className='flex items-center gap-2.5'>
           <span className={statusItem}>
             <span className={`${statusDot} ${CONNECTION_DOT[connectionState]} `} />
-            {CONNECTION_LABEL[connectionState]}
+            {t(CONNECTION_LABEL[connectionState])}
           </span>
           {status?.deviceInfo?.countryCode && (
             <span className={`${statusItem} ${statusDivider}`}>
@@ -86,7 +89,9 @@ export function TopBar({
           )}
           {status?.deviceState?.uptimeS && (
             <span className={`${statusItem} ${statusDivider}`}>
-              up {formatUptime(Number(status.deviceState.uptimeS))}
+              {t("status.uptime", {
+                duration: formatUptime(Number(status.deviceState.uptimeS), t),
+              })}
             </span>
           )}
         </div>
@@ -101,8 +106,8 @@ export function TopBar({
         <button
           className={iconButton}
           onClick={onCycleTheme}
-          aria-label={`Color theme: ${theme}. Switch to ${nextTheme(theme)}.`}
-          title={`Color theme: ${theme}`}
+          aria-label={t("status.switchTheme", { theme, next: nextTheme(theme) })}
+          title={t("status.colorTheme", { theme })}
         >
           <ThemeIcon />
         </button>

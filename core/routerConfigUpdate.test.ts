@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildMeshConfigs,
   buildRouterConfigRequest,
   buildSubnetNetworks,
+  meshNameRefusal,
   normalizeNameservers,
-  readCurrentNetworks,
+  readRouterConfigContext,
   readCurrentSubnet,
   routerAddressForSubnet,
   subnetRefusal,
@@ -201,19 +203,19 @@ describe("subnetRefusal", () => {
   });
 
   it("refuses a subnet outside the presets", () => {
-    expect(subnetRefusal("172.16.0.1/24", "hunter2hunter2")).toMatch(/unsupported/);
+    expect(subnetRefusal("172.16.0.1/24", "hunter2hunter2")).toBe("unsupportedSubnet");
   });
 
   it("refuses a passphrase no device could reconnect with", () => {
-    expect(subnetRefusal("192.168.2.1/24", "short")).toMatch(/8 to 63 characters/);
+    expect(subnetRefusal("192.168.2.1/24", "short")).toBe("passwordLength");
   });
 
   it("refuses an empty passphrase, which is what the masked value would become", () => {
-    expect(subnetRefusal("192.168.2.1/24", "")).toMatch(/8 to 63 characters/);
+    expect(subnetRefusal("192.168.2.1/24", "")).toBe("passwordLength");
   });
 
   it("refuses a passphrase past WPA2's ceiling", () => {
-    expect(subnetRefusal("192.168.2.1/24", "x".repeat(64))).toMatch(/8 to 63 characters/);
+    expect(subnetRefusal("192.168.2.1/24", "x".repeat(64))).toBe("passwordLength");
     expect(subnetRefusal("192.168.2.1/24", "x".repeat(63))).toBeNull();
   });
 });
@@ -223,7 +225,7 @@ describe("buildRouterConfigRequest for a subnet", () => {
     const request = buildRouterConfigRequest(
       TARGET,
       { kind: "subnet", subnet: "192.168.2.1/24", password: "hunter2hunter2" },
-      ROUTER_NETWORKS,
+      { networks: ROUTER_NETWORKS },
     );
     expect(Object.keys(request.wifiSetConfig!.wifiConfig)).toEqual(["networks", "applyNetworks"]);
     expect(request.wifiSetConfig!.wifiConfig.applyNetworks).toBe(true);
@@ -234,9 +236,9 @@ describe("buildRouterConfigRequest for a subnet", () => {
       buildRouterConfigRequest(
         TARGET,
         { kind: "subnet", subnet: "192.168.2.1/24", password: "hunter2hunter2" },
-        [],
+        { networks: [] },
       ),
-    ).toThrow(/no networks/);
+    ).toThrow(/routerNoNetworks/);
   });
 
   it("refuses a bad passphrase before the account is touched", () => {
@@ -244,9 +246,108 @@ describe("buildRouterConfigRequest for a subnet", () => {
       buildRouterConfigRequest(
         TARGET,
         { kind: "subnet", subnet: "192.168.2.1/24", password: "short" },
-        ROUTER_NETWORKS,
+        { networks: ROUTER_NETWORKS },
       ),
-    ).toThrow(/8 to 63 characters/);
+    ).toThrow(/passwordLength/);
+  });
+});
+
+const MESH_ID = "Router-01000000000000000049375B";
+
+/** Shaped like the router's own reply: the changed node plus a second one, and
+ *  the router-assigned `incarnation` present on both. */
+const MESH_CONFIGS = {
+  [MESH_ID]: {
+    displayName: "Mesh 1",
+    auth: "MESH_AUTH_TRUSTED",
+    hardwareVersion: "v2",
+    incarnation: "4319674938922986994",
+  },
+  "Router-0100000000000000000ABCDE": {
+    displayName: "Mesh 2",
+    auth: "MESH_AUTH_TRUSTED",
+    incarnation: "9876543210",
+  },
+};
+
+describe("meshNameRefusal", () => {
+  it("accepts any non-empty name", () => {
+    expect(meshNameRefusal("Garage")).toBeNull();
+  });
+
+  it("refuses a name that is empty once trimmed", () => {
+    expect(meshNameRefusal("   ")).toBe("errors.meshNameEmpty");
+  });
+});
+
+describe("buildMeshConfigs", () => {
+  const built = buildMeshConfigs(MESH_CONFIGS, MESH_ID, "Garage");
+
+  it("changes only the named node's display name", () => {
+    expect(built[MESH_ID].displayName).toBe("Garage");
+    expect(built["Router-0100000000000000000ABCDE"].displayName).toBe("Mesh 2");
+  });
+
+  it("keeps the node's other fields", () => {
+    expect(built[MESH_ID]).toMatchObject({ auth: "MESH_AUTH_TRUSTED", hardwareVersion: "v2" });
+  });
+
+  it("drops the router-assigned incarnation from every entry", () => {
+    for (const entry of Object.values(built)) expect(entry).not.toHaveProperty("incarnation");
+  });
+
+  it("refuses a node the router has not reported", () => {
+    expect(() => buildMeshConfigs(MESH_CONFIGS, "Router-000000000000000000000000", "X")).toThrow(
+      /does not know this mesh node/,
+    );
+  });
+});
+
+describe("buildRouterConfigRequest for a mesh node name", () => {
+  it("sends the meshConfigs map with the apply flag and nothing else", () => {
+    const request = buildRouterConfigRequest(
+      TARGET,
+      { kind: "meshName", deviceId: MESH_ID, displayName: "Garage" },
+      { meshConfigs: MESH_CONFIGS },
+    );
+    expect(Object.keys(request.wifiSetConfig!.wifiConfig)).toEqual([
+      "meshConfigs",
+      "applyMeshConfigs",
+    ]);
+    expect(request.wifiSetConfig!.wifiConfig.applyMeshConfigs).toBe(true);
+  });
+
+  it("trims the name before it is stored", () => {
+    const request = buildRouterConfigRequest(
+      TARGET,
+      { kind: "meshName", deviceId: MESH_ID, displayName: "  Garage  " },
+      { meshConfigs: MESH_CONFIGS },
+    );
+    const map = request.wifiSetConfig!.wifiConfig.meshConfigs as Record<
+      string,
+      { displayName: string }
+    >;
+    expect(map[MESH_ID].displayName).toBe("Garage");
+  });
+
+  it("refuses an empty name before the account is touched", () => {
+    expect(() =>
+      buildRouterConfigRequest(
+        TARGET,
+        { kind: "meshName", deviceId: MESH_ID, displayName: "  " },
+        { meshConfigs: MESH_CONFIGS },
+      ),
+    ).toThrow(/meshNameEmpty/);
+  });
+
+  it("refuses a node the router did not report", () => {
+    expect(() =>
+      buildRouterConfigRequest(
+        TARGET,
+        { kind: "meshName", deviceId: "Router-000000000000000000000000", displayName: "X" },
+        { meshConfigs: MESH_CONFIGS },
+      ),
+    ).toThrow(/does not know this mesh node/);
   });
 });
 
@@ -276,40 +377,58 @@ describe("readCurrentSubnet", () => {
   });
 });
 
-describe("readCurrentNetworks", () => {
+describe("readRouterConfigContext", () => {
   const codec = {
     encodeRequest: () => new Uint8Array([1]),
-    decodeResponse: () => ({ wifiGetConfig: { wifiConfig: { networks: ROUTER_NETWORKS } } }),
+    decodeResponse: () => ({
+      wifiGetConfig: { wifiConfig: { networks: ROUTER_NETWORKS, meshConfigs: MESH_CONFIGS } },
+    }),
+  };
+  const counting = () => {
+    let sent = 0;
+    return {
+      gateway: async () => {
+        sent += 1;
+        return new Uint8Array();
+      },
+      count: () => sent,
+    };
   };
 
-  it("reads the router for a subnet change", async () => {
-    let sent = 0;
-    const networks = await readCurrentNetworks(
+  it("reads the networks for a subnet change", async () => {
+    const { gateway, count } = counting();
+    const context = await readRouterConfigContext(
       { kind: "subnet", subnet: "192.168.2.1/24", password: "hunter2hunter2" },
       codec,
       TARGET,
-      async () => {
-        sent += 1;
-        return new Uint8Array();
-      },
+      gateway,
     );
-    expect(sent).toBe(1);
-    expect(networks).toHaveLength(2);
+    expect(count()).toBe(1);
+    expect(context.networks).toHaveLength(2);
+  });
+
+  it("reads the mesh map for a mesh rename", async () => {
+    const { gateway, count } = counting();
+    const context = await readRouterConfigContext(
+      { kind: "meshName", deviceId: MESH_ID, displayName: "Garage" },
+      codec,
+      TARGET,
+      gateway,
+    );
+    expect(count()).toBe(1);
+    expect(context.meshConfigs).toHaveProperty(MESH_ID);
   });
 
   it("spends no round trip on an update that does not need the current config", async () => {
-    let sent = 0;
-    const networks = await readCurrentNetworks(
+    const { gateway, count } = counting();
+    const context = await readRouterConfigContext(
       { kind: "customDns", nameservers: ["1.1.1.1"] },
       codec,
       TARGET,
-      async () => {
-        sent += 1;
-        return new Uint8Array();
-      },
+      gateway,
     );
-    expect(sent).toBe(0);
-    expect(networks).toEqual([]);
+    expect(count()).toBe(0);
+    expect(context).toEqual({});
   });
 });
 

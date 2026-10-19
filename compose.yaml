@@ -22,8 +22,12 @@ services:
       - historian-data:/data
     environment:
       HISTORIAN_DATA_DIR: /data
-      # Mac LAN identity so "This device" and pause-self-protect survive Docker
-      # Desktop's port publish (the container otherwise sees the VM's NICs).
+      # Mac LAN identity so "This device", pause-self-protect and per-device usage
+      # survive Docker Desktop's port publish (the container otherwise sees the
+      # VM's NICs). Without it the recorder cannot find its own row, and its
+      # polling of the dish and router is counted as that device's data.
+      # The address below is an example: put this machine's own in, or leave both
+      # commented — a wrong one blames a device that is not yours.
       # HOST_LAN_IP: 192.168.1.45
       # HOST_MAC: aa:bb:cc:dd:ee:ff
     restart: unless-stopped

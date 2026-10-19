@@ -207,34 +207,19 @@ describe("a shared allowance", () => {
 describe("resolveGroupMembers", () => {
   it("given: a member on a reissued id, should: follow it rather than shrink the group", () => {
     const resolved = resolveGroupMembers([group()], {
-      keys: [TABLET, LAPTOP],
       resolveKey: (key) => (key === CONSOLE ? LAPTOP : key),
     });
     expect(resolved[0].memberKeys).toEqual([TABLET, LAPTOP]);
   });
 
   it("given: two members merged onto one key, should: count the device once", () => {
-    const resolved = resolveGroupMembers([group()], {
-      keys: [TABLET],
-      resolveKey: () => TABLET,
-    });
+    const resolved = resolveGroupMembers([group()], { resolveKey: () => TABLET });
     expect(resolved[0].memberKeys).toEqual([TABLET]);
   });
 
-  it("given: an empty roster, should: drop nobody", () => {
-    const resolved = resolveGroupMembers([group()], { keys: [], resolveKey: (key) => key });
+  it("given: members nothing is being counted for, should: keep every one of them", () => {
+    const resolved = resolveGroupMembers([group()], { resolveKey: (key) => key });
     expect(resolved[0].memberKeys).toEqual([TABLET, CONSOLE]);
-  });
-
-  it("given: every member gone from the roster, should: drop the group rather than keep a ghost", () => {
-    expect(resolveGroupMembers([group()], { keys: [LAPTOP], resolveKey: (key) => key })).toEqual(
-      [],
-    );
-  });
-
-  it("given: one member left, should: keep the group rather than silently unmeter it", () => {
-    const resolved = resolveGroupMembers([group()], { keys: [TABLET], resolveKey: (key) => key });
-    expect(resolved[0].memberKeys).toEqual([TABLET]);
   });
 });
 

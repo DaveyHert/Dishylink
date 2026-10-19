@@ -2,24 +2,27 @@
 // each one. Held apart from the chart so the panels can build their tab strip
 // and read labels without importing the chart itself.
 
+import type { TFunction } from "i18next";
 import type { EnergyRange } from "../../hooks/useEnergyHistory";
 
-export const RANGE_TABS: { label: string; value: EnergyRange }[] = [
-  { label: "1H", value: "1h" },
-  { label: "6H", value: "6h" },
-  { label: "12H", value: "12h" },
-  { label: "Today", value: "today" },
-  { label: "Day", value: "day" },
-  { label: "Week", value: "week" },
-  { label: "Month", value: "month" },
-];
+export function rangeTabs(t: TFunction): { label: string; value: EnergyRange }[] {
+  return [
+    { label: t("ranges.1h"), value: "1h" },
+    { label: t("ranges.6h"), value: "6h" },
+    { label: t("ranges.12h"), value: "12h" },
+    { label: t("ranges.today"), value: "today" },
+    { label: t("ranges.day"), value: "day" },
+    { label: t("ranges.week"), value: "week" },
+    { label: t("ranges.month"), value: "month" },
+  ];
+}
 
 /** Clock time for sub-day ranges, date for day/week, month name for month. */
-export function bucketLabel(epochSeconds: number, range: EnergyRange): string {
+export function bucketLabel(epochSeconds: number, range: EnergyRange, locale: string): string {
   const date = new Date(epochSeconds * 1000);
-  if (range === "month") return date.toLocaleDateString([], { month: "short" }); // Jul
+  if (range === "month") return date.toLocaleDateString(locale, { month: "short" }); // Jul
   if (range === "day" || range === "week") {
-    return date.toLocaleDateString([], { month: "numeric", day: "numeric" });
+    return date.toLocaleDateString(locale, { month: "numeric", day: "numeric" });
   }
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return date.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
 }

@@ -6,6 +6,7 @@
 // stopping, since a window may run into the next day.
 
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import NumberFlow from "@number-flow/react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -96,12 +97,14 @@ function StepColumn({
   onDown,
   onCommit,
 }: {
-  unit: string;
+  unit: "hour" | "minute";
   value: number;
   onUp: () => void;
   onDown: () => void;
   onCommit: (typed: number) => void;
 }) {
+  const { t } = useTranslation();
+  const unitName = unit === "hour" ? t("time.hourUnit") : t("time.minuteUnit");
   const [typing, setTyping] = useState(false);
   const [draft, setDraft] = useState("");
   const field = useRef<HTMLInputElement>(null);
@@ -117,7 +120,7 @@ function StepColumn({
       <button
         type='button'
         onClick={onUp}
-        aria-label={`Increase ${unit}`}
+        aria-label={t("time.increase", { unit: unitName })}
         className={stepButton}
         tabIndex={typing ? -1 : 0}
       >
@@ -149,7 +152,7 @@ function StepColumn({
             setTyping(true);
             requestAnimationFrame(() => field.current?.select());
           }}
-          title='Click to type'
+          title={t("time.clickToType")}
           className='grid w-11 cursor-text place-items-center rounded-md py-0.5 transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_10%,transparent)]'
         >
           <NumberFlow value={value} format={{ minimumIntegerDigits: 2 }} className={digits} />
@@ -158,7 +161,7 @@ function StepColumn({
       <button
         type='button'
         onClick={onDown}
-        aria-label={`Decrease ${unit}`}
+        aria-label={t("time.decrease", { unit: unitName })}
         className={stepButton}
         tabIndex={typing ? -1 : 0}
       >

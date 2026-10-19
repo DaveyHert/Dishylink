@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "@/index.css";
+import "@/i18n";
 import App from "@/App";
 
 document.documentElement.dataset.host = "extension";
@@ -10,12 +11,15 @@ import { setSelfDeviceHost } from "@/lib/selfDeviceHost";
 import { bindNotifications, setNotificationHost } from "@/lib/notifications";
 import { setBadgeModeHost } from "@/lib/badgeMode";
 import { extensionBadgeModeHost } from "../../lib/badgeModeHost";
+import { setLocaleHost } from "@/lib/locale";
+import { extensionLocaleHost } from "../../lib/localeHost";
 import { setDishHost } from "@core/dishClient";
 import { setSatelliteHost } from "@/lib/satellites";
 import { extensionApiTransport } from "../../lib/apiTransport";
 import { extensionCloudSignIn, extensionCloudTransport } from "../../lib/cloudTransport";
 import { extensionNotificationHost } from "../../lib/notificationHost";
 import { startClientSampler } from "../../lib/clientSampler";
+import { reportSelfTraffic } from "../../lib/selfTrafficReporter";
 import { loadSelfDeviceClientId, storeSelfDeviceClientId } from "../../lib/selfDevice";
 import {
   dishHandleUrl,
@@ -40,7 +44,11 @@ setCloudHost({ transport: extensionCloudTransport, signIn: extensionCloudSignIn 
 
 // Chrome extensions cannot resolve the viewer's LAN IP or MAC, so the device this
 // runs on is whichever roster entry the user named.
-setSelfDeviceHost({ read: loadSelfDeviceClientId, write: storeSelfDeviceClientId });
+setSelfDeviceHost({
+  read: loadSelfDeviceClientId,
+  write: storeSelfDeviceClientId,
+  namingCorrectsUsage: true,
+});
 
 // The background worker posts OS notifications for alerts the user is not looking
 // at — its alarm fires with no dashboard open. So the extension declares itself an
@@ -51,6 +59,10 @@ setSelfDeviceHost({ read: loadSelfDeviceClientId, write: storeSelfDeviceClientId
 setNotificationHost(extensionNotificationHost);
 
 setBadgeModeHost(extensionBadgeModeHost);
+
+// The worker posts toasts with no dashboard open, so it is told which language
+// this page uses.
+setLocaleHost(extensionLocaleHost);
 
 // Where the router is, when 192.168.1.1 is wrong for this kit. Unlike the desktop
 // app, which resolves an origin per request in its main process, the extension
@@ -99,7 +111,11 @@ function startSampler(): void {
 // afterwards, and a client loaded against the default would keep dialling it.
 loadRouterAddress()
   .then(() => {
-    setDishHost({ dishHandleUrl: dishHandleUrl(), routerHandleUrl: routerHandleUrl() });
+    setDishHost({
+      dishHandleUrl: dishHandleUrl(),
+      routerHandleUrl: routerHandleUrl(),
+      onBytes: reportSelfTraffic,
+    });
     startSampler();
     return bindNotifications();
   })

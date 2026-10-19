@@ -17,7 +17,7 @@ import {
   type Registry,
 } from "@bufbuild/protobuf";
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { grpcWebUnaryCall } from "./grpcWeb";
+import { grpcWebUnaryCall, type GrpcWebCallBytes } from "./grpcWeb";
 
 // Same Device service on both boxes; the schema protoset is identical. The
 // defaults are the dev/Electron same-origin proxy paths; a host that reaches the
@@ -29,6 +29,9 @@ interface DishHost {
   dishHandleUrl?: string;
   routerHandleUrl?: string;
   protosetUrl?: string;
+  /** What every client's calls cost on the wire. Set by hosts that reach the LAN
+   *  boxes directly; hosts behind a proxy count at the proxy instead. */
+  onBytes?: (bytes: GrpcWebCallBytes) => void;
 }
 
 let dishHost: DishHost = {};
@@ -190,6 +193,8 @@ export interface DishEventJson {
   reason?: string;
   startTimestampNs?: string;
   durationNs?: string;
+  /** Only on the router's CLIENT_SWITCHING_BAND events. */
+  clientSwitchingBandMetadata?: { clientId?: number; fromBand?: string; toBand?: string };
 }
 
 export interface DishHistoryJson {
@@ -411,11 +416,28 @@ export interface WifiClientJson {
   downloadMb?: number;
   rxStats?: WifiClientStatsJson;
   txStats?: WifiClientStatsJson;
+  /** Sent as `true` where the router counts the client and omitted where it does
+   *  not, so absent means no. The only thing telling a device that has moved no
+   *  bytes yet from a wired one, which carries empty stats blocks and no flag. */
+  rxStatsValid?: boolean;
+  txStatsValid?: boolean;
+}
+
+/** Whether the router keeps byte counters for this client at all. False for a
+ *  wired one, whose usage therefore cannot be metered on this firmware. */
+export function clientHasCounters(client: WifiClientJson): boolean {
+  return (
+    client.rxStatsValid === true ||
+    client.txStatsValid === true ||
+    client.rxStats?.bytes !== undefined ||
+    client.txStats?.bytes !== undefined
+  );
 }
 
 interface DishResponseJson {
   dishGetStatus?: DishStatusJson;
   dishGetHistory?: DishHistoryJson;
+  wifiGetHistory?: { eventLog?: { events?: unknown[] } };
   getDeviceInfo?: { deviceInfo?: DishDeviceInfoJson };
   getLocation?: DishLocationJson;
   dishGetObstructionMap?: DishObstructionMapJson;
@@ -479,6 +501,9 @@ function encodeOneofRequest(fieldNumber: number, subMessageBytes: number[] = [])
 // ---------- client ----------
 
 export class DishClient {
+  /** Overrides the host-wide reporter for this client alone. */
+  onBytes?: (bytes: GrpcWebCallBytes) => void;
+
   private constructor(
     private readonly handleUrl: string,
     private readonly requestSchema: DescMessage,
@@ -526,6 +551,7 @@ export class DishClient {
       this.handleUrl,
       encodeOneofRequest(fieldNumber, subMessageBytes),
       abortSignal,
+      { onBytes: this.onBytes ?? dishHost.onBytes },
     );
     const responseMessage = fromBinary(this.responseSchema, responseBytes);
     return toJson(this.responseSchema, responseMessage, {
@@ -545,6 +571,12 @@ export class DishClient {
 
   async getHistory(abortSignal?: AbortSignal): Promise<DishHistoryJson> {
     return (await this.call(REQUEST_FIELD.getHistory, abortSignal)).dishGetHistory ?? {};
+  }
+
+  /** The router's event log: the same get_history request, answered by the
+   *  router as wifi_get_history. Meaningful on the ROUTER target. */
+  async getWifiHistory(abortSignal?: AbortSignal): Promise<{ eventLog?: { events?: unknown[] } }> {
+    return (await this.call(REQUEST_FIELD.getHistory, abortSignal)).wifiGetHistory ?? {};
   }
 
   async getDeviceInfo(abortSignal?: AbortSignal): Promise<DishDeviceInfoJson> {
