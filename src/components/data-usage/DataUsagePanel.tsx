@@ -16,6 +16,7 @@ import { Explainer } from "../ui/explainer";
 import { FigureRow } from "../ui/figure-row";
 import { DeviceUsageList } from "./DeviceUsageList";
 import { CloudDataUsage } from "./CloudDataUsage";
+import { useTimeLocale } from "../../hooks/useTimeLocale";
 
 type UsageSource = "local" | "cloud";
 
@@ -26,13 +27,14 @@ function withUnit(gigabytes: number): string {
 }
 
 function UsageBars({ buckets, range }: { buckets: UsageBucket[]; range: EnergyRange }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const timeLocale = useTimeLocale();
   const totalOf = (bucket: UsageBucket) => (bucket.downGB ?? 0) + (bucket.upGB ?? 0);
   const maxTotalGB = Math.max(...buckets.map(totalOf), 1e-9);
   const columns: RangeBarColumn[] = buckets.map((bucket) => {
     const missing = bucket.downGB === null || bucket.upGB === null;
     const total = totalOf(bucket);
-    const when = bucketLabel(bucket.t, range, i18n.language);
+    const when = bucketLabel(bucket.t, range, timeLocale);
     return {
       key: bucket.t,
       label: when,

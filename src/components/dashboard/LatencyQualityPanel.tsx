@@ -19,6 +19,7 @@ import { Callout } from "../ui/callout";
 import { Explainer } from "../ui/explainer";
 import { FigureRow, type Figure } from "../ui/figure-row";
 import type { EnergyRange } from "../../hooks/useEnergyHistory";
+import { useTimeLocale } from "../../hooks/useTimeLocale";
 
 function figure(label: string, value: number | null | undefined, unit: string): Figure {
   if (value === null || value === undefined) return { label, value: "—", unit: "" };
@@ -67,7 +68,8 @@ function bucketTitle(
 }
 
 export function LatencyQualityPanel() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const timeLocale = useTimeLocale();
   const [range, setRange] = useState<EnergyRange>("1h");
   const { data, loading, unavailable } = useLatencyHistory(range, true);
 
@@ -76,8 +78,8 @@ export function LatencyQualityPanel() {
   const columns: RangeBarColumn[] = data
     ? data.buckets.map((bucket) => ({
         key: bucket.t,
-        label: bucketLabel(bucket.t, range, i18n.language),
-        title: bucketTitle(bucket, range, t, i18n.language),
+        label: bucketLabel(bucket.t, range, timeLocale),
+        title: bucketTitle(bucket, range, t, timeLocale),
         bar:
           bucket.p95 === null ? (
             <div

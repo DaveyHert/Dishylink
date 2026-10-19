@@ -3,6 +3,7 @@ import { cleanup, render } from "vitest-browser-react";
 import { page } from "vitest/browser";
 import { AppSettingsTab } from "./AppSettingsTab";
 import { setLocale } from "../../lib/locale";
+import { readTimeFormat } from "../../lib/timeFormat";
 
 afterEach(cleanup);
 
@@ -32,5 +33,18 @@ describe("AppSettingsTab", () => {
     render(<AppSettingsTab clients={[]} />);
     await expect.element(page.getByText("Français", { exact: true })).toBeInTheDocument();
     await expect.element(page.getByText("Barre d'outils", { exact: true })).toBeInTheDocument();
+  });
+
+  test("the time format starts on Automatic and switches the app to a 24-hour clock", async () => {
+    render(<AppSettingsTab clients={[]} />);
+    await expect
+      .element(page.getByText("How times are shown across the app", { exact: true }))
+      .toBeInTheDocument();
+
+    await page.getByText("Automatic", { exact: true }).click();
+    await page.getByRole("option", { name: "24-hour" }).click();
+
+    expect(readTimeFormat()).toBe("24h");
+    await expect.element(page.getByText("24-hour", { exact: true })).toBeInTheDocument();
   });
 });

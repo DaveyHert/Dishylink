@@ -17,10 +17,10 @@ export function localMinutesToUtcMinutes(localMinutes: number): number {
   return date.getUTCHours() * 60 + date.getUTCMinutes();
 }
 
-/** Local minutes-after-midnight → "1:00 AM", for display. */
-export function formatClock12(minutes: number): string {
-  const hour24 = Math.floor(minutes / 60);
-  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
-  const meridiem = hour24 >= 12 ? "PM" : "AM";
-  return `${hour12}:${String(minutes % 60).padStart(2, "0")} ${meridiem}`;
+/** Local minutes-after-midnight → "1:00 AM" or "01:00", as `locale` writes it. */
+export function formatLocalMinutes(minutes: number, locale: string): string {
+  return new Date(2024, 0, 1, Math.floor(minutes / 60), minutes % 60).toLocaleTimeString(locale, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }

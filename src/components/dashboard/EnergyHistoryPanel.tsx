@@ -14,6 +14,7 @@ import { RangeBars, type RangeBarColumn } from "../shared/RangeBarChart";
 import { rangeTabs, bucketLabel } from "../shared/rangeTabs";
 import { SegmentedControl } from "../ui/segmented-control";
 import { Callout } from "../ui/callout";
+import { useTimeLocale } from "../../hooks/useTimeLocale";
 
 /** Slot the historian only caught part of: its total is real but understates the period. */
 function isPartial(bucket: EnergyBucket): boolean {
@@ -37,12 +38,13 @@ function bucketTitle(bucket: EnergyBucket, range: EnergyRange, t: TFunction, loc
 }
 
 function EnergyBars({ buckets, range }: { buckets: EnergyBucket[]; range: EnergyRange }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const timeLocale = useTimeLocale();
   const maxKWh = Math.max(...buckets.map((bucket) => bucket.kWh ?? 0), 1e-9);
   const columns: RangeBarColumn[] = buckets.map((bucket) => ({
     key: bucket.t,
-    label: bucketLabel(bucket.t, range, i18n.language),
-    title: bucketTitle(bucket, range, t, i18n.language),
+    label: bucketLabel(bucket.t, range, timeLocale),
+    title: bucketTitle(bucket, range, t, timeLocale),
     bar:
       bucket.kWh === null ? (
         // An empty slot, not a zero one: a faint full-height wash marks the

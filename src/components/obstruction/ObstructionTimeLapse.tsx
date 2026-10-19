@@ -5,6 +5,7 @@
 // green one is the live map rather than a stored frame.
 
 import { useTranslation } from "react-i18next";
+import { useTimeLocale } from "../../hooks/useTimeLocale";
 import type { ObstructionSnapshot } from "../../lib/obstructionSnapshots";
 
 export function ObstructionTimeLapse({
@@ -20,7 +21,8 @@ export function ObstructionTimeLapse({
   stale?: boolean;
   onScrub: (index: number | null) => void;
 }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const timeLocale = useTimeLocale();
   const isViewingHistory = scrubIndex !== null && scrubIndex < snapshots.length;
   const sliderValue = scrubIndex ?? snapshots.length;
 
@@ -82,7 +84,7 @@ export function ObstructionTimeLapse({
       >
         {isViewingHistory ? (
           <span className='tabular-nums text-muted-foreground'>
-            {new Date(snapshots[scrubIndex].takenAtMs).toLocaleTimeString(i18n.language, {
+            {new Date(snapshots[scrubIndex].takenAtMs).toLocaleTimeString(timeLocale, {
               hour: "2-digit",
               minute: "2-digit",
             })}

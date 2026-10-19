@@ -8,6 +8,7 @@ import { Button } from "../../ui/button";
 import { SegmentedControl } from "../../ui/segmented-control";
 import { Calendar } from "../../ui/calendar";
 import { TimeOfDayField } from "../../ui/time-of-day-field";
+import { useTimeLocale } from "../../../hooks/useTimeLocale";
 import { weekdayNames } from "./allowanceTerms";
 import { clockLabel, daysLabel, repeatTerms, runLabel, type ScheduleDraft } from "./scheduleTerms";
 
@@ -25,7 +26,8 @@ export function ScheduleWindows({
   max?: number;
   compact?: boolean;
 }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const timeLocale = useTimeLocale();
   const shown = max === undefined ? schedule.windows : schedule.windows.slice(0, max);
   const rest = schedule.windows.length - shown.length;
   return (
@@ -52,7 +54,7 @@ export function ScheduleWindows({
           <span
             className={compact ? "text-foreground" : "text-[15px] font-semibold text-foreground"}
           >
-            {daysLabel(window, t, i18n.language)}
+            {daysLabel(window, t, timeLocale)}
           </span>
           <span
             className={
@@ -61,8 +63,8 @@ export function ScheduleWindows({
                 : "text-[13px] tabular-nums text-muted-foreground"
             }
           >
-            {clockLabel(window.startMinute, t, i18n.language)} –{" "}
-            {clockLabel(window.endMinute, t, i18n.language)}
+            {clockLabel(window.startMinute, t, timeLocale)} –{" "}
+            {clockLabel(window.endMinute, t, timeLocale)}
           </span>
         </div>
       ))}

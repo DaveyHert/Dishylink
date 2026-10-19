@@ -6,6 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useTimeLocale } from "../../hooks/useTimeLocale";
 import { AnimatePresence, motion } from "motion/react";
 import { Minimize2, Pause, Play } from "lucide-react";
 import type {
@@ -67,7 +68,8 @@ export function SatelliteView({
   onClearLocation,
   onClose,
 }: SatelliteViewProps) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const timeLocale = useTimeLocale();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   // State, not a ref: everything below is pushed INTO the scene by an effect, and
   // an effect that cannot name the scene as a dependency cannot know to push
@@ -470,7 +472,7 @@ export function SatelliteView({
           {viewingHistory && scrubIndex !== null && (
             <p className='m-0 pb-1 text-center text-[11.5px] font-medium text-muted-foreground'>
               {t("satellite.viewingAsOf", {
-                when: new Date(snapshots[scrubIndex].takenAtMs).toLocaleString(i18n.language),
+                when: new Date(snapshots[scrubIndex].takenAtMs).toLocaleString(timeLocale),
               })}
             </p>
           )}

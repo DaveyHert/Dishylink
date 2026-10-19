@@ -9,6 +9,7 @@ import { formatBytes, formatDateTime } from "../../../lib/format";
 import { vendorForMac, vendorLabel } from "../../../lib/macVendor";
 import { DeviceTypeIcon } from "../../../assets/icons/DeviceTypeIcon";
 import { useNow } from "../../../hooks/useNow";
+import { useTimeLocale } from "../../../hooks/useTimeLocale";
 import type { Rule, RuleMember } from "../../../hooks/useRules";
 import { Button } from "../../ui/button";
 import { Callout } from "../../ui/callout";
@@ -80,7 +81,8 @@ export function RuleStatus({
   onEdit: () => void;
   onClose: () => void;
 }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const timeLocale = useTimeLocale();
   const macByKey = new Map(
     candidates.map((candidate) => [candidate.clientKey, candidate.macAddress]),
   );
@@ -133,7 +135,7 @@ export function RuleStatus({
                   : ""}
             </DialogDescription>
             <div className='text-[11.5px] text-muted-foreground'>
-              {t("rules.created", { when: formatDateTime(rule.createdMs, i18n.language) })}
+              {t("rules.created", { when: formatDateTime(rule.createdMs, timeLocale) })}
             </div>
           </div>
         </div>
@@ -196,7 +198,7 @@ export function RuleStatus({
             />
             <Stat
               label={t("rules.pausesAt")}
-              value={leftMs > 0 ? endsAtLabel(leftMs, nowMs, i18n.language) : t("rules.now")}
+              value={leftMs > 0 ? endsAtLabel(leftMs, nowMs, timeLocale) : t("rules.now")}
             />
             <Stat label={t("rules.setFor")} value={formatDuration(rule.countdownMs!)} />
           </RuleStats>

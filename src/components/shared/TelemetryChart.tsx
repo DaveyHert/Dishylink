@@ -2,7 +2,6 @@
 // outage bands, crosshair + tooltip. Samples are bucketed per pixel.
 
 import { useMemo, useRef, useState, useEffect, useCallback, useId } from "react";
-import { useTranslation } from "react-i18next";
 import { outageEventKind, type TelemetrySample, type OutageEvent } from "@core/telemetry";
 import { formatClockTime } from "../../lib/format";
 import {
@@ -18,6 +17,7 @@ import {
   type PlotFrame,
 } from "./chartMarks";
 import { useNow } from "../../hooks/useNow";
+import { useTimeLocale } from "../../hooks/useTimeLocale";
 import { telemetryBuckets, type BucketPoint } from "./telemetryBuckets";
 
 export interface ChartSeries {
@@ -137,7 +137,7 @@ export function TelemetryChart({
   headroom = 1.08,
   windowEndMs: windowEndOverrideMs,
 }: TelemetryChartProps) {
-  const { i18n } = useTranslation();
+  const timeLocale = useTimeLocale();
   const [containerRef, containerWidth] = useElementWidth();
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const washGradientId = useId();
@@ -312,7 +312,7 @@ export function TelemetryChart({
         <PlotTimeAxis
           y={height - 6}
           ticks={xTickTimes.map((tickTime) => ({
-            label: formatClockTime(tickTime, i18n.language).slice(0, 5),
+            label: formatClockTime(tickTime, timeLocale).slice(0, 5),
             x: xForTime(tickTime),
           }))}
         />
@@ -375,7 +375,7 @@ export function TelemetryChart({
           }}
         >
           <div className='mb-[5px] text-[10px] tracking-[0.05em] text-muted-foreground'>
-            {formatClockTime(hoveredBucket.timestampMs, i18n.language)}
+            {formatClockTime(hoveredBucket.timestampMs, timeLocale)}
           </div>
           {series.map((chartSeries, seriesIndex) => (
             <div

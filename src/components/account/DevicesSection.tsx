@@ -4,6 +4,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
+import { useTimeLocale } from "../../hooks/useTimeLocale";
 import {
   connectionLabel,
   formatUptime,
@@ -79,7 +80,8 @@ function fieldsFor(
 }
 
 function DeviceDetail({ item }: { item: DeviceItem }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const timeLocale = useTimeLocale();
   return (
     <div className='rounded-xl border border-border/70 p-4 bg-background/30'>
       <div className='mb-3 flex items-center gap-2.5'>
@@ -91,7 +93,7 @@ function DeviceDetail({ item }: { item: DeviceItem }) {
         </span>
       </div>
       <div className='grid grid-cols-2 gap-4 max-[520px]:grid-cols-1'>
-        {fieldsFor(item, t, i18n.language).map((field) => (
+        {fieldsFor(item, t, timeLocale).map((field) => (
           <Field key={field.label} label={field.label}>
             {field.mono ? <span className='mono-value break-all'>{field.value}</span> : field.value}
           </Field>

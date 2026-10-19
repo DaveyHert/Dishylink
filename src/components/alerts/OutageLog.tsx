@@ -20,6 +20,7 @@ import {
 import { EmptyState } from "../ui/empty-state";
 import { InfoDot } from "../shared/InfoDot";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
+import { useTimeLocale } from "../../hooks/useTimeLocale";
 import { EventDetailModal } from "./EventDetailModal";
 import { EventKindMark } from "./EventKindMark";
 import { eventDetailKind } from "./eventDetail";
@@ -39,7 +40,8 @@ export function OutageLog({
   /** Opens a device's details in the network panel; absent where there is none. */
   onOpenDevice?: (entryKey: string) => void;
 }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const timeLocale = useTimeLocale();
   const [openRow, setOpenRow] = useState<Row | null>(null);
   const rows = useMemo<Row[]>(() => {
     const { byEvent, unclaimed } = assignReports(reports, outageEvents);
@@ -79,7 +81,7 @@ export function OutageLog({
             {rows.map((row) => {
               const { event } = row;
               const meta = outageEventMeta(event.cause, t);
-              const time = formatClockTimeShort(event.startMs, i18n.language);
+              const time = formatClockTimeShort(event.startMs, timeLocale);
               // The row's button is stretched underneath its content rather than
               // wrapping it: the info dot is focusable, and a focusable element
               // inside a button is invalid and unreachable to a screen reader.
@@ -89,7 +91,7 @@ export function OutageLog({
                   key={`${event.startMs}-${canonicalCause(event.cause)}`}
                 >
                   <button
-                    aria-label={`${formatDateTime(event.startMs, i18n.language)} ${meta.label}`}
+                    aria-label={`${formatDateTime(event.startMs, timeLocale)} ${meta.label}`}
                     className='absolute inset-0 cursor-pointer hover:bg-[color-mix(in_srgb,var(--ink)_4%,var(--surface))]'
                     onClick={() => setOpenRow(row)}
                     type='button'
@@ -111,7 +113,7 @@ export function OutageLog({
                       arrowClassName='bg-popover fill-popover'
                       className='rounded-md bg-popover px-[11px] py-[6px] font-mono text-[11px] text-foreground shadow-[0_8px_28px_rgba(0,0,0,0.35)]'
                     >
-                      {formatDate(event.startMs, i18n.language)}
+                      {formatDate(event.startMs, timeLocale)}
                     </TooltipContent>
                   </Tooltip>
                   <span className='pointer-events-none relative flex min-w-0 items-center gap-2'>

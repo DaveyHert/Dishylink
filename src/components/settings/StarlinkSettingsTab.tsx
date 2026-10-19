@@ -30,7 +30,12 @@ import {
   selectItemClass,
   triggerClass,
 } from "./settingsChrome";
-import { formatClock12, localMinutesToUtcMinutes, utcMinutesToLocalMinutes } from "./sleepSchedule";
+import {
+  formatLocalMinutes,
+  localMinutesToUtcMinutes,
+  utcMinutesToLocalMinutes,
+} from "./sleepSchedule";
+import { useTimeLocale } from "../../hooks/useTimeLocale";
 import { TimePicker } from "./TimePicker";
 import { UPDATE_WINDOWS, updateWindowFor } from "./updateWindow";
 import type { TranslationKey } from "../../i18n";
@@ -105,6 +110,7 @@ export function StarlinkSettingsTab({
   onCopyDiagnostics: () => Promise<"copied" | "failed">;
 }) {
   const { t } = useTranslation();
+  const timeLocale = useTimeLocale();
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const config = settings.config;
 
@@ -157,8 +163,8 @@ export function StarlinkSettingsTab({
             caption={
               sleepEnabled
                 ? t("settings.sleepScheduleOn", {
-                    sleep: formatClock12(sleepStartLocal),
-                    wake: formatClock12(wakeLocal),
+                    sleep: formatLocalMinutes(sleepStartLocal, timeLocale),
+                    wake: formatLocalMinutes(wakeLocal, timeLocale),
                   })
                 : t("settings.sleepScheduleOff")
             }

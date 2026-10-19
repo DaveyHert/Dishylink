@@ -14,6 +14,7 @@ import { Badge } from "../ui/badge";
 import { Callout } from "../ui/callout";
 import { formatEventDuration } from "../../lib/format";
 import { DataRow, SectionHeading } from "../network/DataRow";
+import { useTimeLocale } from "../../hooks/useTimeLocale";
 import { BandSwitchBands, BandSwitchDevice } from "./BandSwitchDetail";
 import {
   eventDetailKind,
@@ -40,7 +41,8 @@ export function EventDetailModal({
   onClose: () => void;
   onOpenDevice?: (entryKey: string) => void;
 }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const timeLocale = useTimeLocale();
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const meta = outageEventMeta(event.cause, t);
   const kind = eventDetailKind(event, report);
@@ -78,7 +80,7 @@ export function EventDetailModal({
           </span>
         </div>
         <div className='mt-1 text-[13px] font-medium text-muted-foreground'>
-          {eventDetailSpan(event, t, i18n.language)}
+          {eventDetailSpan(event, t, timeLocale)}
           {report && ` · ${t(`eventDetail.${report.source}`)}`}
         </div>
         {event.bandSwitch && <BandSwitchBands bandSwitch={event.bandSwitch} />}
@@ -88,7 +90,7 @@ export function EventDetailModal({
         )}
 
         {event.bandSwitch ? null : report ? (
-          reportSections(report, t, i18n.language).map((section) => (
+          reportSections(report, t, timeLocale).map((section) => (
             <section key={section.title}>
               <SectionHeading title={section.title} />
               {section.rows.map((row) => (
@@ -123,7 +125,7 @@ export function EventDetailModal({
             </button>
             <button
               className={actionButton("subtle")}
-              onClick={() => void copy(eventDetailText(event, report, t, i18n.language))}
+              onClick={() => void copy(eventDetailText(event, report, t, timeLocale))}
             >
               {copyLabel(t("eventDetail.copyText"))}
             </button>

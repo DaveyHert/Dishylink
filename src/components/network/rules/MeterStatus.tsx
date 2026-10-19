@@ -8,6 +8,7 @@ import { countdownLeftMs } from "@core/dataMeter";
 import { scheduleActive } from "@core/schedule";
 import type { DataMeter } from "../../../hooks/useDataMeter";
 import { useNow } from "../../../hooks/useNow";
+import { useTimeLocale } from "../../../hooks/useTimeLocale";
 import { formatBytes, formatDateTime } from "../../../lib/format";
 import { Button } from "../../ui/button";
 import { Callout } from "../../ui/callout";
@@ -146,7 +147,8 @@ export function MeterStatus({
   onEdit: () => void;
   onClose: () => void;
 }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
+  const timeLocale = useTimeLocale();
   // A countdown is watched as it runs; an allowance only ever reads in hours.
   const nowMs = useNow(meter.rule?.countdownMs === undefined ? 60_000 : 1_000);
   const rule = meter.rule;
@@ -191,7 +193,7 @@ export function MeterStatus({
           {rule.groupName ? t("rules.sharedWithOthers", { name: deviceName }) : deviceName}
         </DialogDescription>
         <div className='text-[11.5px] text-muted-foreground'>
-          {t("rules.created", { when: formatDateTime(rule.createdMs, i18n.language) })}
+          {t("rules.created", { when: formatDateTime(rule.createdMs, timeLocale) })}
         </div>
       </DialogHeader>
 
@@ -309,7 +311,7 @@ export function MeterStatus({
               value={
                 timing
                   ? leftMs > 0
-                    ? endsAtLabel(leftMs, nowMs, i18n.language)
+                    ? endsAtLabel(leftMs, nowMs, timeLocale)
                     : t("rules.now")
                   : (timeLeft(rule.periodEndMs, nowMs, t) ?? t("rules.never"))
               }

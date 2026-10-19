@@ -32,6 +32,14 @@ import {
   type SupportedLocale,
 } from "../../lib/locale";
 import { selfDeviceHost } from "../../lib/selfDeviceHost";
+import {
+  readTimeFormat,
+  setTimeFormat,
+  subscribeToTimeFormat,
+  TIME_FORMATS,
+  type TimeFormat,
+} from "../../lib/timeFormat";
+import type { TranslationKey } from "@core/i18n/resources";
 import { badgeModeHost, DEFAULT_BADGE_MODE, type BadgeMode } from "../../lib/badgeMode";
 import { displayName, isClientDevice } from "../network/networkFormat";
 import type { WifiClientJson } from "@core/dishClient";
@@ -154,6 +162,38 @@ function LanguageRow() {
           {SUPPORTED_LOCALES.map((option) => (
             <SelectItem key={option.code} value={option.code} className={selectItemClass}>
               {option.nativeLabel}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </SettingRow>
+  );
+}
+
+const TIME_FORMAT_LABEL = {
+  auto: "settings.timeFormatAuto",
+  "12h": "settings.timeFormat12h",
+  "24h": "settings.timeFormat24h",
+} as const satisfies Record<TimeFormat, TranslationKey>;
+
+function TimeFormatRow() {
+  const { t } = useTranslation();
+  const format = useSyncExternalStore(subscribeToTimeFormat, readTimeFormat);
+
+  return (
+    <SettingRow
+      title={t("settings.timeFormat")}
+      caption={t("settings.timeFormatDesc")}
+      info={t("settings.timeFormatInfo")}
+    >
+      <Select value={format} onValueChange={(value) => setTimeFormat(value as TimeFormat)}>
+        <SelectTrigger className={triggerClass} style={{ width: 138 }}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent className={selectContentClass}>
+          {TIME_FORMATS.map((option) => (
+            <SelectItem key={option} value={option} className={selectItemClass}>
+              {t(TIME_FORMAT_LABEL[option])}
             </SelectItem>
           ))}
         </SelectContent>
@@ -333,6 +373,7 @@ export function AppSettingsTab({ clients }: { clients: WifiClientJson[] }) {
   return (
     <>
       <LanguageRow />
+      <TimeFormatRow />
 
       <SettingRow title={t("settings.appToolbar")} caption={t("settings.appToolbarDesc")}>
         <Select
