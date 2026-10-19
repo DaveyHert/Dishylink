@@ -110,3 +110,31 @@ describe("EventStore.upsert", () => {
     expect(store.upsert(rows)).toBe(0);
   });
 });
+
+describe("EventStore band-switch details", () => {
+  const switched = (startMs: number, withDetails: boolean): StoredEvent =>
+    event(startMs, {
+      durationMs: 0,
+      cause: "EVENT_REASON_CLIENT_SWITCHING_BAND",
+      severity: "advisory",
+      ...(withDetails
+        ? { bandSwitch: { clientId: 42, fromBand: "RF_2GHZ", toBand: "RF_5GHZ" } }
+        : {}),
+    });
+
+  it("gives a band switch stored without its device the details when they arrive", () => {
+    const store = new EventStore(file);
+    const startMs = Date.now() - 60_000;
+    store.upsert([switched(startMs, false)]);
+
+    expect(store.upsert([switched(startMs, true)])).toBe(1);
+    expect(store.all()).toEqual([switched(startMs, true)]);
+  });
+
+  it("does not rewrite a band switch that already has its details", () => {
+    const store = new EventStore(file);
+    const startMs = Date.now() - 60_000;
+    store.upsert([switched(startMs, true)]);
+    expect(store.upsert([switched(startMs, true)])).toBe(0);
+  });
+});

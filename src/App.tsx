@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { useDishTelemetry } from "./hooks/useDishTelemetry";
 import { useLanPresence } from "./hooks/useLanPresence";
@@ -52,6 +52,14 @@ export default function App() {
     openSkyView,
   } = usePanelRouting();
   const [windowMinutes, setWindowMinutes] = useState(15);
+  const [networkDeviceKey, setNetworkDeviceKey] = useState<string | null>(null);
+  const openNetworkDevice = useCallback(
+    (entryKey: string) => {
+      setNetworkDeviceKey(entryKey);
+      setOpenPanel("network");
+    },
+    [setOpenPanel],
+  );
   const notificationsOn = useSyncExternalStore(subscribeToNotifications, readNotificationsOn);
   const notificationsBlockedReason = useSyncExternalStore(
     subscribeToNotifications,
@@ -159,6 +167,7 @@ export default function App() {
               samples={samples}
               onOpenSatelliteView={openSkyView}
               onExpandTerminal={() => setOpenPanel("terminal")}
+              onOpenDevice={openNetworkDevice}
             />
           </motion.div>
         )}
@@ -220,7 +229,11 @@ export default function App() {
         <NetworkPanel
           network={routerNetwork}
           unreachable={routerUnreachable}
-          onClose={() => setOpenPanel(null)}
+          initialSelectedKey={networkDeviceKey}
+          onClose={() => {
+            setNetworkDeviceKey(null);
+            setOpenPanel(null);
+          }}
         />
       )}
       {/* Settings modal */}

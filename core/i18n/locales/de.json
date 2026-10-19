@@ -1217,6 +1217,7 @@
     "copyText": "Text kopieren",
     "copied": "Kopiert",
     "copyFailed": "Kopieren fehlgeschlagen",
+    "bandSwitchTo": "zu",
     "textHeader": "Dishylink-Ausfallbericht: {{label}}",
     "starlinkOutage": "Verbindungsausfall",
     "dishUnreachable": "Antenne nicht erreichbar"
@@ -1295,7 +1296,7 @@
     },
     "CLIENT_SWITCHING_BAND": {
       "label": "Gerät hat das WLAN-Band gewechselt",
-      "tip": "Ein verbundenes Gerät ist zwischen dem 2,4-GHz- und dem 5-GHz-Band gewechselt. Das ist normal, wenn Geräte ihre Verbindung für die beste WLAN-Leistung optimieren."
+      "tip": "Ein Gerät hat das WLAN-Band gewechselt. Das ist normal, wenn Geräte ihre WLAN-Leistung optimieren, kann aber eine kurze Unterbrechung verursachen."
     },
     "ETH_NO_LINK": {
       "label": "Ethernet-Kabelverbindung zur Antenne getrennt",

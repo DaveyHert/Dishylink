@@ -13,6 +13,7 @@ import { actionButton } from "../ui/action-button";
 import { Badge } from "../ui/badge";
 import { formatEventDuration } from "../../lib/format";
 import { DataRow, SectionHeading } from "../network/DataRow";
+import { BandSwitchBands, BandSwitchDevice } from "./BandSwitchDetail";
 import {
   eventDetailKind,
   eventDetailSpan,
@@ -31,10 +32,12 @@ export function EventDetailModal({
   event,
   report,
   onClose,
+  onOpenDevice,
 }: {
   event: OutageEvent;
   report: OutageReport | null;
   onClose: () => void;
+  onOpenDevice?: (entryKey: string) => void;
 }) {
   const { t, i18n } = useTranslation();
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
@@ -77,9 +80,13 @@ export function EventDetailModal({
           {eventDetailSpan(event, t, i18n.language)}
           {report && ` · ${t(`eventDetail.${report.source}`)}`}
         </div>
+        {event.bandSwitch && <BandSwitchBands bandSwitch={event.bandSwitch} />}
         {meta.tip && <p className='mt-3 text-[13px] leading-normal text-foreground'>{meta.tip}</p>}
+        {event.bandSwitch && (
+          <BandSwitchDevice bandSwitch={event.bandSwitch} onOpenDevice={onOpenDevice} />
+        )}
 
-        {report ? (
+        {event.bandSwitch ? null : report ? (
           reportSections(report, t, i18n.language).map((section) => (
             <section key={section.title}>
               <SectionHeading title={section.title} />

@@ -151,3 +151,54 @@ describe("ClientTotalsCore self-traffic", () => {
     expect(total.txBytes).toBe(2_000);
   });
 });
+
+describe("ClientTotalsCore IP address", () => {
+  it("keeps the latest address the router reported and serves it with the totals", () => {
+    const core = new ClientTotalsCore();
+    const liveKeys = core.notePoll([{ clientId: CLIENT_ID, macAddress: MAC }]);
+    core.observe(
+      CLIENT_ID,
+      MAC,
+      0,
+      0,
+      T0,
+      undefined,
+      liveKeys,
+      undefined,
+      undefined,
+      "192.168.1.20",
+    );
+    core.observe(
+      CLIENT_ID,
+      MAC,
+      10,
+      0,
+      T0 + 1_000,
+      undefined,
+      liveKeys,
+      undefined,
+      undefined,
+      "192.168.1.186",
+    );
+    expect(core.totals()[0]).toMatchObject({ clientId: CLIENT_ID, ipAddress: "192.168.1.186" });
+  });
+
+  it("keeps the last known address when a poll arrives without one", () => {
+    const core = new ClientTotalsCore();
+    const liveKeys = core.notePoll([{ clientId: CLIENT_ID, macAddress: MAC }]);
+    core.observe(
+      CLIENT_ID,
+      MAC,
+      0,
+      0,
+      T0,
+      undefined,
+      liveKeys,
+      undefined,
+      undefined,
+      "192.168.1.20",
+    );
+    core.observe(CLIENT_ID, MAC, 10, 0, T0 + 1_000, undefined, liveKeys);
+    expect(core.totals()[0].ipAddress).toBe("192.168.1.20");
+  });
+});

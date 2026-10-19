@@ -193,6 +193,8 @@ export interface DishEventJson {
   reason?: string;
   startTimestampNs?: string;
   durationNs?: string;
+  /** Only on the router's CLIENT_SWITCHING_BAND events. */
+  clientSwitchingBandMetadata?: { clientId?: number; fromBand?: string; toBand?: string };
 }
 
 export interface DishHistoryJson {
@@ -435,6 +437,7 @@ export function clientHasCounters(client: WifiClientJson): boolean {
 interface DishResponseJson {
   dishGetStatus?: DishStatusJson;
   dishGetHistory?: DishHistoryJson;
+  wifiGetHistory?: { eventLog?: { events?: unknown[] } };
   getDeviceInfo?: { deviceInfo?: DishDeviceInfoJson };
   getLocation?: DishLocationJson;
   dishGetObstructionMap?: DishObstructionMapJson;
@@ -568,6 +571,12 @@ export class DishClient {
 
   async getHistory(abortSignal?: AbortSignal): Promise<DishHistoryJson> {
     return (await this.call(REQUEST_FIELD.getHistory, abortSignal)).dishGetHistory ?? {};
+  }
+
+  /** The router's event log: the same get_history request, answered by the
+   *  router as wifi_get_history. Meaningful on the ROUTER target. */
+  async getWifiHistory(abortSignal?: AbortSignal): Promise<{ eventLog?: { events?: unknown[] } }> {
+    return (await this.call(REQUEST_FIELD.getHistory, abortSignal)).wifiGetHistory ?? {};
   }
 
   async getDeviceInfo(abortSignal?: AbortSignal): Promise<DishDeviceInfoJson> {

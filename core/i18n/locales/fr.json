@@ -1237,6 +1237,7 @@
     "copyText": "Copier le texte",
     "copied": "Copié",
     "copyFailed": "Échec de la copie",
+    "bandSwitchTo": "vers",
     "textHeader": "Rapport de panne Dishylink : {{label}}",
     "starlinkOutage": "Panne de liaison",
     "dishUnreachable": "Antenne injoignable"
@@ -1321,7 +1322,7 @@
     },
     "CLIENT_SWITCHING_BAND": {
       "label": "Un appareil a changé de bande Wi-Fi",
-      "tip": "Un appareil connecté est passé entre les bandes 2,4 GHz et 5 GHz. C'est normal quand les appareils optimisent leur connexion pour les meilleures performances Wi-Fi."
+      "tip": "Un appareil a changé de bande Wi-Fi. C'est normal quand les appareils optimisent leurs performances Wi-Fi, mais cela peut provoquer une brève interruption."
     },
     "ETH_NO_LINK": {
       "label": "Liaison Ethernet vers l'antenne déconnectée",

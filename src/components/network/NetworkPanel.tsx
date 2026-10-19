@@ -48,15 +48,19 @@ import type { MemberCandidate } from "./rules/allowanceTerms";
 export function NetworkPanel({
   network,
   unreachable,
+  initialSelectedKey = null,
   onClose,
 }: {
   network: RouterNetwork;
   /** Why the router is silent, when it is. Null while it is answering. */
   unreachable: RouterUnreachable | null;
+  /** A device to open on, as its `clientEntryKey`: set when another surface
+   *  (an event's detail) links to a device. */
+  initialSelectedKey?: string | null;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(initialSelectedKey);
 
   return (
     <DetailsModal

@@ -868,6 +868,7 @@ async function getClientReadings(): Promise<ClientReading[]> {
         totalsLiveKeys,
         client.captiveClientId,
         isHost ? takePendingSelfTraffic() : undefined,
+        client.ipAddress,
       );
     }
 

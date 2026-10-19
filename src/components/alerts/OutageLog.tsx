@@ -25,9 +25,12 @@ interface Row {
 export function OutageLog({
   outageEvents,
   reports,
+  onOpenDevice,
 }: {
   outageEvents: OutageEvent[];
   reports: OutageReport[];
+  /** Opens a device's details in the network panel; absent where there is none. */
+  onOpenDevice?: (entryKey: string) => void;
 }) {
   const { t, i18n } = useTranslation();
   const [openRow, setOpenRow] = useState<Row | null>(null);
@@ -112,6 +115,13 @@ export function OutageLog({
           event={openRow.event}
           report={openRow.report}
           onClose={() => setOpenRow(null)}
+          onOpenDevice={
+            onOpenDevice &&
+            ((entryKey) => {
+              setOpenRow(null);
+              onOpenDevice(entryKey);
+            })
+          }
         />
       )}
     </div>

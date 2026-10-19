@@ -66,6 +66,8 @@ interface DashboardViewProps {
   samples: TelemetrySample[];
   onOpenSatelliteView: () => void;
   onExpandTerminal: () => void;
+  /** Opens the network panel on one device, from an event that names it. */
+  onOpenDevice: (entryKey: string) => void;
 }
 
 export function DashboardView({
@@ -90,6 +92,7 @@ export function DashboardView({
   samples,
   onOpenSatelliteView,
   onExpandTerminal,
+  onOpenDevice,
 }: DashboardViewProps) {
   const { t } = useTranslation();
   const [openDetailId, setOpenDetailId] = useState<string | null>(null);
@@ -314,7 +317,11 @@ export function DashboardView({
         </SectionCard>
 
         {/* Outage log */}
-        <OutageLog outageEvents={[...outageEvents, ...thermalEvents]} reports={reports} />
+        <OutageLog
+          outageEvents={[...outageEvents, ...thermalEvents]}
+          reports={reports}
+          onOpenDevice={onOpenDevice}
+        />
 
         {/* Terminal card */}
         {status ? (

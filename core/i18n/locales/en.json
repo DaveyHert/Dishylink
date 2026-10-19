@@ -1193,6 +1193,7 @@
     "copyText": "Copy text",
     "copied": "Copied",
     "copyFailed": "Copy failed",
+    "bandSwitchTo": "to",
     "textHeader": "Dishylink outage report: {{label}}",
     "starlinkOutage": "Link outage",
     "dishUnreachable": "Dish unreachable"
@@ -1265,7 +1266,7 @@
     },
     "CLIENT_SWITCHING_BAND": {
       "label": "Device switched WiFi band",
-      "tip": "A connected device moved between the 2.4 GHz and 5 GHz bands. This is normal when devices are optimizing their connection for best WiFi performance."
+      "tip": "A device switched Wi-Fi bands. This is normal when devices are optimizing their Wi-Fi performance, but may cause a brief interruption."
     },
     "ETH_NO_LINK": {
       "label": "Ethernet cable link to dish disconnected",

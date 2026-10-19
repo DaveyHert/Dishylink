@@ -1237,6 +1237,7 @@
     "copyText": "Copiar texto",
     "copied": "Copiado",
     "copyFailed": "Falha ao copiar",
+    "bandSwitchTo": "para",
     "textHeader": "Relatório de interrupção do Dishylink: {{label}}",
     "starlinkOutage": "Interrupção do enlace",
     "dishUnreachable": "Antena sem resposta"
@@ -1321,7 +1322,7 @@
     },
     "CLIENT_SWITCHING_BAND": {
       "label": "Dispositivo trocou de banda Wi-Fi",
-      "tip": "Um dispositivo conectado mudou entre as bandas de 2,4 GHz e 5 GHz. Isso é normal quando os dispositivos otimizam a conexão para o melhor desempenho do Wi-Fi."
+      "tip": "Um dispositivo mudou de banda Wi-Fi. Isso é normal quando os dispositivos otimizam o desempenho do Wi-Fi, mas pode causar uma breve interrupção."
     },
     "ETH_NO_LINK": {
       "label": "Link do cabo Ethernet com a antena desconectado",

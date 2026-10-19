@@ -32,6 +32,15 @@ export interface OutageEvent {
   durationMs: number;
   cause: string;
   severity: "advisory" | "warning" | "critical";
+  /** Which device moved between which Wi-Fi bands, on the router's band-switch
+   *  events. Band values are the router's RF_* codes. */
+  bandSwitch?: BandSwitch;
+}
+
+export interface BandSwitch {
+  clientId: number;
+  fromBand: string;
+  toBand: string;
 }
 
 /**
@@ -242,17 +251,29 @@ export function decodeHistoryWindow(
  *  (Unix-epoch timestamps, an EventReason `reason`, an EventSeverity). Cause is
  *  stored raw; humanized only at display via outageEventMeta. */
 function decodeEventLog(events: DishEventJson[]): OutageEvent[] {
-  return events.map((event) => ({
-    startMs: unixNsToMs(event.startTimestampNs ?? "0"),
-    durationMs: Number(BigInt(event.durationNs ?? "0") / 1_000_000n),
-    cause: event.reason ?? "",
-    severity:
-      event.severity === "EVENT_SEVERITY_CRITICAL"
-        ? "critical"
-        : event.severity === "EVENT_SEVERITY_WARNING"
-          ? "warning"
-          : "advisory",
-  }));
+  return events.map((event) => {
+    const decoded: OutageEvent = {
+      startMs: unixNsToMs(event.startTimestampNs ?? "0"),
+      durationMs: Number(BigInt(event.durationNs ?? "0") / 1_000_000n),
+      cause: event.reason ?? "",
+      severity:
+        event.severity === "EVENT_SEVERITY_CRITICAL"
+          ? "critical"
+          : event.severity === "EVENT_SEVERITY_WARNING"
+            ? "warning"
+            : "advisory",
+    };
+    const bandSwitch = decodeBandSwitch(event.clientSwitchingBandMetadata);
+    if (bandSwitch) decoded.bandSwitch = bandSwitch;
+    return decoded;
+  });
+}
+
+function decodeBandSwitch(
+  metadata: DishEventJson["clientSwitchingBandMetadata"],
+): BandSwitch | undefined {
+  if (metadata?.clientId === undefined || !metadata.fromBand || !metadata.toBand) return undefined;
+  return { clientId: metadata.clientId, fromBand: metadata.fromBand, toBand: metadata.toBand };
 }
 
 export function decodeOutageEvents(history: DishHistoryJson): OutageEvent[] {
