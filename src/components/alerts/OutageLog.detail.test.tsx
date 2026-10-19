@@ -222,3 +222,41 @@ test("the detail follows the chosen language", async () => {
   expect(bodyText()).toContain("Fünf Minuten vor dem Ausfall");
   expect(bodyText()).toContain("JSON kopieren");
 });
+
+test("hovering an event's time shows its date, and clicking the time opens the event", async () => {
+  const startMs = new Date(2026, 7, 22, 2, 57).getTime();
+  const booting: OutageEvent = {
+    startMs,
+    durationMs: 71_000,
+    cause: "EVENT_REASON_OUTAGE_BOOTING",
+    severity: "advisory",
+  };
+  render(<OutageLog outageEvents={[booting]} reports={[]} />);
+  const time = page.getByText(/2:57/);
+
+  await time.hover();
+  await expect.poll(bodyText).toContain("Aug 22, 2026");
+
+  await time.click();
+  await expect.poll(bodyText).toContain("Event details");
+});
+
+test("the row names the full date for a screen reader", async () => {
+  const startMs = new Date(2026, 7, 22, 2, 57).getTime();
+  render(
+    <OutageLog
+      outageEvents={[
+        {
+          startMs,
+          durationMs: 0,
+          cause: "EVENT_REASON_CLIENT_SWITCHING_BAND",
+          severity: "advisory",
+        },
+      ]}
+      reports={[]}
+    />,
+  );
+  await expect
+    .element(page.getByRole("button", { name: /Aug 22, 2026 · 2:57/ }))
+    .toBeInTheDocument();
+});
