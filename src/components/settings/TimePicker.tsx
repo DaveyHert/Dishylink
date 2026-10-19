@@ -69,6 +69,7 @@ export function TimePicker({
   onChange: (minutes: number) => void;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation();
   const timeLocale = useTimeLocale();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(minutes);
@@ -98,7 +99,7 @@ export function TimePicker({
             )}
             onClick={() => openWith(false)}
           >
-            Cancel
+            {t("common.cancel")}
           </button>
           <button
             type='button'
@@ -108,7 +109,7 @@ export function TimePicker({
               setOpen(false);
             }}
           >
-            Set
+            {t("time.setTime")}
           </button>
         </div>
       </PopoverContent>

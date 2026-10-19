@@ -1329,6 +1329,7 @@
     "increase": "Increase {{unit}}",
     "decrease": "Decrease {{unit}}",
     "clickToType": "Click to type",
+    "setTime": "Set",
     "uptimeDays": "{{days}}d {{hours}}h {{minutes}}m",
     "uptimeDaysHours": "{{days}}d {{hours}}h",
     "uptimeHours": "{{hours}}h {{minutes}}m",

@@ -1386,6 +1386,7 @@
     "increase": "Augmenter {{unit}}",
     "decrease": "Diminuer {{unit}}",
     "clickToType": "Cliquer pour saisir",
+    "setTime": "Valider",
     "uptimeDays": "{{days}} j {{hours}} h {{minutes}} min",
     "uptimeDaysHours": "{{days}} j {{hours}} h",
     "uptimeHours": "{{hours}} h {{minutes}} min",

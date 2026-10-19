@@ -1386,6 +1386,7 @@
     "increase": "Aumentar {{unit}}",
     "decrease": "Reducir {{unit}}",
     "clickToType": "Haz clic para escribir",
+    "setTime": "Aplicar",
     "uptimeDays": "{{days}} d {{hours}} h {{minutes}} min",
     "uptimeDaysHours": "{{days}} d {{hours}} h",
     "uptimeHours": "{{hours}} h {{minutes}} min",
