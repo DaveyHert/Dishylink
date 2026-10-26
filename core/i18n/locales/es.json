@@ -436,7 +436,11 @@
     "contactMe": "Contáctame",
     "sectionLegal": "Legal",
     "privacyPolicy": "Política de privacidad",
-    "disclaimer": "Aviso legal"
+    "disclaimer": "Aviso legal",
+    "sectionMaker": "Del mismo creador",
+    "new": "Nuevo",
+    "jobmate": "Acabamos de lanzar Jobmate para arreglar el roto proceso de búsqueda de empleo. ¡Pruébalo!",
+    "jobmateTagline": "Tu copiloto con IA para una búsqueda de empleo más rápida e inteligente"
   },
   "prompts": {
     "dismiss": "Descartar",
@@ -447,6 +451,23 @@
     "rateOn": "Valorar en {{store}}",
     "donationTitle": "Dishylink es gratis, y siempre lo será.",
     "donationBody": "Lo creé en mi tiempo libre porque no existía nada parecido. Tu aportación, puntual o periódica, ayuda mucho a mantenerlo y actualizarlo. ¡Apoya el proyecto si puedes!"
+  },
+  "whatsNew": {
+    "title": "Novedades de Dishylink {{version}}",
+    "languagesTitle": "Soporte multilingüe.",
+    "languagesBody": "Dishylink ya está disponible en inglés, español, francés, alemán y portugués. Cámbialo en Configuración › Aplicación.",
+    "reportsTitle": "Informes post mortem de cortes.",
+    "reportsBody": "Cuando termina un corte, el registrador de historial resume los cinco minutos anteriores: latencia, velocidad, la causa que indica la propia antena y cualquier sobrecalentamiento o derretimiento de nieve. Ábrelo haciendo clic en el corte en el registro de eventos y cópialo para compartirlo.",
+    "timeFormatTitle": "Soporte para el formato de 24 horas.",
+    "timeFormatBody": "Elige 12 o 24 horas en Configuración › Aplicación, o déjalo en Automático para seguir tu idioma.",
+    "eventLogTitle": "Mejoras en el registro de eventos.",
+    "eventLogBody": "Pasa el cursor sobre una hora para ver su fecha. Los cambios de banda ahora muestran el dispositivo y entre qué bandas se movió.",
+    "fixesTitle": "Correcciones:",
+    "factoryResetBody": "Restablecer la antena de fábrica en Configuración › Starlink vuelve a funcionar.",
+    "chartsBody": "El movimiento errático de los gráficos ya es estable: los gráficos ya no redibujan sus puntos anteriores cada segundo.",
+    "releaseNotes": "Notas completas de la versión",
+    "watch": "Ver Jobmate en acción",
+    "gotIt": "Entendido"
   },
   "rules": {
     "cycleDaily": "Diario",

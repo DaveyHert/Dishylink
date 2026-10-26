@@ -57,6 +57,7 @@ import {
   hideThroughputWidget,
 } from "./throughputWidget";
 import { startUpdateChecks, updateState, onUpdateStateChanged } from "./updater";
+import { allowYoutubeEmbeds } from "./youtubeEmbed";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const rendererRoot = join(here, "../dist");
@@ -755,6 +756,7 @@ void app.whenReady().then(async () => {
   // signed in and its own limits unenforceable.
   startCloud(rendererRoot, devServerUrl ? resolve(process.cwd(), ".starlink-cookie") : undefined);
   registerCloudHandlers();
+  allowYoutubeEmbeds();
   // A dev server runs its own recorder; a second collector here would double-poll
   // the dish.
   if (!devServerUrl) {

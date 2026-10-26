@@ -436,7 +436,11 @@
     "contactMe": "Me contacter",
     "sectionLegal": "Mentions légales",
     "privacyPolicy": "Politique de confidentialité",
-    "disclaimer": "Avertissement"
+    "disclaimer": "Avertissement",
+    "sectionMaker": "Du même créateur",
+    "new": "Nouveau",
+    "jobmate": "Nous venons de lancer Jobmate pour réparer une recherche d'emploi qui ne fonctionne plus. Essayez-le !",
+    "jobmateTagline": "Votre copilote IA pour une recherche d'emploi plus rapide et plus intelligente"
   },
   "prompts": {
     "dismiss": "Ignorer",
@@ -447,6 +451,23 @@
     "rateOn": "Noter sur {{store}}",
     "donationTitle": "Dishylink est gratuit, et le restera toujours.",
     "donationBody": "Je l'ai créé sur mon temps libre, parce que rien de tel n'existait. Votre contribution, ponctuelle ou récurrente, aide beaucoup à le maintenir et à le mettre à jour. Soutenez le projet si vous le pouvez !"
+  },
+  "whatsNew": {
+    "title": "Nouveautés de Dishylink {{version}}",
+    "languagesTitle": "Prise en charge multilingue.",
+    "languagesBody": "Dishylink est désormais disponible en anglais, espagnol, français, allemand et portugais. Changez de langue dans Paramètres › Application.",
+    "reportsTitle": "Rapports post-mortem des pannes.",
+    "reportsBody": "À la fin d'une panne, l'enregistreur d'historique résume les cinq minutes qui l'ont précédée : latence, débit, la cause indiquée par l'antenne elle-même, et toute surchauffe ou fonte de la neige. Ouvrez-le en cliquant sur la panne dans le journal des événements, et copiez-le pour le partager.",
+    "timeFormatTitle": "Prise en charge du format 24 heures.",
+    "timeFormatBody": "Choisissez 12 heures ou 24 heures dans Paramètres › Application, ou laissez Automatique pour suivre votre langue.",
+    "eventLogTitle": "Améliorations du journal des événements.",
+    "eventLogBody": "Survolez une heure pour voir sa date. Les changements de bande indiquent désormais l'appareil et les bandes entre lesquelles il est passé.",
+    "fixesTitle": "Corrections :",
+    "factoryResetBody": "La réinitialisation d'usine de l'antenne dans Paramètres › Starlink fonctionne de nouveau.",
+    "chartsBody": "Les mouvements erratiques des graphiques sont désormais stabilisés : les graphiques ne redessinent plus leurs anciens points chaque seconde.",
+    "releaseNotes": "Notes de version complètes",
+    "watch": "Voir Jobmate en action",
+    "gotIt": "Compris"
   },
   "rules": {
     "cycleDaily": "Quotidien",

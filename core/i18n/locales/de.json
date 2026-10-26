@@ -429,7 +429,11 @@
     "contactMe": "Kontakt aufnehmen",
     "sectionLegal": "Rechtliches",
     "privacyPolicy": "Datenschutzerklärung",
-    "disclaimer": "Haftungsausschluss"
+    "disclaimer": "Haftungsausschluss",
+    "sectionMaker": "Vom selben Entwickler",
+    "new": "Neu",
+    "jobmate": "Wir haben gerade Jobmate gestartet, um den kaputten Bewerbungsprozess zu reparieren. Jetzt ausprobieren!",
+    "jobmateTagline": "Ihr KI-Copilot für eine schnellere, smartere Jobsuche"
   },
   "prompts": {
     "dismiss": "Ausblenden",
@@ -440,6 +444,23 @@
     "rateOn": "Auf {{store}} bewerten",
     "donationTitle": "Dishylink ist kostenlos und wird es immer bleiben.",
     "donationBody": "Ich habe es in meiner Freizeit gebaut, weil es nichts Vergleichbares gab. Ihr einmaliger oder regelmäßiger Beitrag hilft sehr, es zu pflegen und aktuell zu halten. Bitte unterstützen Sie das Projekt, wenn Sie können!"
+  },
+  "whatsNew": {
+    "title": "Neu in Dishylink {{version}}",
+    "languagesTitle": "Mehrsprachige Unterstützung.",
+    "languagesBody": "Dishylink gibt es jetzt auf Englisch, Spanisch, Französisch, Deutsch und Portugiesisch. Ändern Sie die Sprache unter Einstellungen › App.",
+    "reportsTitle": "Post-Mortem-Berichte zu Ausfällen.",
+    "reportsBody": "Wenn ein Ausfall endet, fasst der Verlaufsrekorder die fünf Minuten davor zusammen: Latenz, Durchsatz, die von der Antenne selbst gemeldete Ursache sowie Überhitzung oder Schneeschmelze. Öffnen Sie den Bericht per Klick auf den Ausfall im Ereignisprotokoll, und kopieren Sie ihn zum Teilen.",
+    "timeFormatTitle": "Unterstützung für das 24-Stunden-Format.",
+    "timeFormatBody": "Wählen Sie 12 oder 24 Stunden unter Einstellungen › App, oder lassen Sie Automatisch eingestellt, um Ihrer Sprache zu folgen.",
+    "eventLogTitle": "Verbessertes Ereignisprotokoll.",
+    "eventLogBody": "Fahren Sie mit der Maus über eine Uhrzeit, um ihr Datum zu sehen. Bandwechsel zeigen jetzt das Gerät und zwischen welchen Bändern es gewechselt hat.",
+    "fixesTitle": "Fehlerbehebungen:",
+    "factoryResetBody": "Der Werksreset der Antenne unter Einstellungen › Starlink funktioniert wieder.",
+    "chartsBody": "Unruhige Diagrammbewegungen sind jetzt stabil: Diagramme zeichnen ihre älteren Punkte nicht mehr jede Sekunde neu.",
+    "releaseNotes": "Vollständige Versionshinweise",
+    "watch": "Jobmate in Aktion sehen",
+    "gotIt": "Verstanden"
   },
   "rules": {
     "cycleDaily": "Täglich",

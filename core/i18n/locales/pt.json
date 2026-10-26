@@ -436,7 +436,11 @@
     "contactMe": "Fale comigo",
     "sectionLegal": "Jurídico",
     "privacyPolicy": "Política de Privacidade",
-    "disclaimer": "Aviso legal"
+    "disclaimer": "Aviso legal",
+    "sectionMaker": "Do mesmo criador",
+    "new": "Novo",
+    "jobmate": "Acabamos de lançar o Jobmate para consertar o processo quebrado de busca de emprego. Experimente!",
+    "jobmateTagline": "Seu copiloto com IA para uma busca de emprego mais rápida e inteligente"
   },
   "prompts": {
     "dismiss": "Dispensar",
@@ -447,6 +451,23 @@
     "rateOn": "Avaliar na {{store}}",
     "donationTitle": "O Dishylink é gratuito, e sempre será.",
     "donationBody": "Eu o construí no meu tempo livre, porque nada parecido existia. Sua contribuição única ou recorrente ajuda muito a mantê-lo atualizado. Apoie o projeto se puder!"
+  },
+  "whatsNew": {
+    "title": "Novidades do Dishylink {{version}}",
+    "languagesTitle": "Suporte a vários idiomas.",
+    "languagesBody": "O Dishylink agora está disponível em inglês, espanhol, francês, alemão e português. Altere em Configurações › Aplicativo.",
+    "reportsTitle": "Relatórios post-mortem de interrupções.",
+    "reportsBody": "Quando uma interrupção termina, o gravador de histórico resume os cinco minutos anteriores: latência, taxa, a causa informada pela própria antena e qualquer superaquecimento ou derretimento de neve. Abra o relatório clicando na interrupção no registro de eventos e copie-o para compartilhar.",
+    "timeFormatTitle": "Suporte ao formato de 24 horas.",
+    "timeFormatBody": "Escolha 12 ou 24 horas em Configurações › Aplicativo, ou deixe em Automático para seguir o seu idioma.",
+    "eventLogTitle": "Melhorias no registro de eventos.",
+    "eventLogBody": "Passe o cursor sobre um horário para ver a data. As trocas de banda agora mostram o dispositivo e entre quais bandas ele mudou.",
+    "fixesTitle": "Correções:",
+    "factoryResetBody": "A redefinição de fábrica da antena em Configurações › Starlink voltou a funcionar.",
+    "chartsBody": "O movimento irregular dos gráficos agora está estável: os gráficos não redesenham mais seus pontos antigos a cada segundo.",
+    "releaseNotes": "Notas completas da versão",
+    "watch": "Veja o Jobmate em ação",
+    "gotIt": "Entendi"
   },
   "rules": {
     "cycleDaily": "Diário",

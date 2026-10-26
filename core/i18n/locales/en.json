@@ -429,7 +429,11 @@
     "contactMe": "Contact me",
     "sectionLegal": "Legal",
     "privacyPolicy": "Privacy Policy",
-    "disclaimer": "Disclaimer"
+    "disclaimer": "Disclaimer",
+    "sectionMaker": "From the maker",
+    "new": "New",
+    "jobmate": "We just launched Jobmate to fix the broken job hunting process. Try it!",
+    "jobmateTagline": "Your AI copilot for a faster, smarter job search"
   },
   "prompts": {
     "dismiss": "Dismiss",
@@ -440,6 +444,23 @@
     "rateOn": "Rate on {{store}}",
     "donationTitle": "Dishylink is free, and always will be.",
     "donationBody": "I built it in my free time, because nothing like it existed. Your one-off or recurring contribution does a lot to keep it maintained and updated. Please show the project some support if you can!"
+  },
+  "whatsNew": {
+    "title": "What’s new in Dishylink {{version}}",
+    "languagesTitle": "Multi-language support.",
+    "languagesBody": "Dishylink now comes in English, Spanish, French, German and Portuguese. Change it in Settings › App.",
+    "reportsTitle": "Outage post-mortem reports.",
+    "reportsBody": "When an outage ends, the history recorder writes up the five minutes before it: latency, throughput, the dish's own cause, and any heat or snow melt. Open it by clicking the outage in the event log, and copy it to share.",
+    "timeFormatTitle": "24-hour time format support.",
+    "timeFormatBody": "Choose 12-hour or 24-hour in Settings › App, or leave it on Automatic to follow your language.",
+    "eventLogTitle": "Event log improvements.",
+    "eventLogBody": "Hover a time to see its date. Band switches now show the device and which bands it moved between.",
+    "fixesTitle": "Fixes:",
+    "factoryResetBody": "Dish factory reset in Settings › Starlink works again.",
+    "chartsBody": "Erratic chart movement is now stable: charts no longer redraw their older points every second.",
+    "releaseNotes": "Full release notes",
+    "watch": "See Jobmate in action",
+    "gotIt": "Got it"
   },
   "rules": {
     "cycleDaily": "Daily",
