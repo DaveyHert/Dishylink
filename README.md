@@ -33,6 +33,8 @@ only to Starlink.
 | <img src="docs/platforms/windows.svg" alt="" width="16" align="top"> **Windows** 10+         | `EXE`     | Universal              |                                       [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest]                                        |
 | <img src="docs/platforms/windows.svg" alt="" width="16" align="top"> **Windows** 10+         | `EXE`     | `x64`                  |                                       [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest]                                        |
 | <img src="docs/platforms/windows.svg" alt="" width="16" align="top"> **Windows** 10+         | `EXE`     | `arm64`                |                                       [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest]                                        |
+| **Linux** (Ubuntu / Debian)                                                                  | `.deb`    | `x64` (`amd64`)        |                                       [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest]                                        |
+| **Linux** (Ubuntu / Debian)                                                                  | `.deb`    | `arm64`                |                                       [<img src="docs/platforms/download.svg" alt="Download" width="16">][latest]                                        |
 | <img src="landing/public/browsers/chrome.svg" alt="" width="16" align="top"> **Chrome** 144+ | Extension | Any                    | [<img src="docs/platforms/download.svg" alt="Download" width="16">](https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna) |
 | <img src="landing/public/browsers/edge.svg" alt="" width="16" align="top"> **Edge**          | Extension | Any                    | [<img src="docs/platforms/download.svg" alt="Download" width="16">](https://microsoftedge.microsoft.com/addons/detail/pknccegejhlgmeiojalenedmkbcaimdo)  |
 | <img src="landing/public/browsers/firefox.svg" alt="" width="16" align="top"> **Firefox**    | Extension | Any                    |                     [<img src="docs/platforms/download.svg" alt="Download" width="16">](https://addons.mozilla.org/addon/dishylink/)                     |
@@ -200,7 +202,7 @@ npm run lint:fix        # eslint with --fix
 
 A fresh desktop build opens with no history by design: it fills up as it runs.
 
-### Desktop app (Mac, Windows)
+### Desktop app (Mac, Windows, Linux)
 
 - Lives in the tray / menu bar and **keeps recording after its window is
   closed**; it quits only from the tray's Quit.
@@ -213,6 +215,10 @@ A fresh desktop build opens with no history by design: it fills up as it runs.
 - Native OS notifications for alerts when the window isn't in front, throttled
   so a flapping link can't spam.
 - Auto-updates, and remembers its window position across runs and displays.
+
+On Ubuntu and Debian, install the matching amd64 or arm64 `.deb` package from
+[GitHub Releases](https://github.com/DaveyHert/dishylink/releases). Build details
+and manual build steps are in [LINUX-BUILD.md](LINUX-BUILD.md).
 
 ### Browser extension (Chrome, Edge, Firefox)
 

@@ -53,6 +53,10 @@ export default defineConfig(({ command }) => ({
       "@core": path.resolve(__dirname, "./core"),
     },
   },
+  // Browser-mode tests can trigger a Vite reload if react-dom/client is first
+  // discovered while parallel test files are importing. Pre-bundle it so that
+  // the reload cannot interrupt a test module fetch.
+  optimizeDeps: { include: ["react-dom/client"] },
   // satellite.js' wasm/pthreads build spawns Web Workers; Vite bundles workers
   // as iife by default, which can't do the top-level await that build uses.
   // Emit workers as ES modules so the production build succeeds.
