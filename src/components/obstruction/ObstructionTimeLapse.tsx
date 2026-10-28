@@ -4,6 +4,8 @@
 // has; one tick per snapshot makes the slidable points visible, and the final
 // green one is the live map rather than a stored frame.
 
+import { useTranslation } from "react-i18next";
+import { useTimeLocale } from "../../hooks/useTimeLocale";
 import type { ObstructionSnapshot } from "../../lib/obstructionSnapshots";
 
 export function ObstructionTimeLapse({
@@ -19,6 +21,8 @@ export function ObstructionTimeLapse({
   stale?: boolean;
   onScrub: (index: number | null) => void;
 }) {
+  const { t } = useTranslation();
+  const timeLocale = useTimeLocale();
   const isViewingHistory = scrubIndex !== null && scrubIndex < snapshots.length;
   const sliderValue = scrubIndex ?? snapshots.length;
 
@@ -28,7 +32,7 @@ export function ObstructionTimeLapse({
         className='text-[11.5px] font-medium text-muted-foreground'
         style={{ whiteSpace: "nowrap" }}
       >
-        Obstruction time-lapse
+        {t("obstruction.timeLapse")}
       </span>
       <div className='relative flex h-[22px] flex-1 items-center'>
         <div
@@ -65,7 +69,7 @@ export function ObstructionTimeLapse({
             const next = Number(changeEvent.target.value);
             onScrub(next >= snapshots.length ? null : next);
           }}
-          aria-label='Obstruction time-lapse'
+          aria-label={t("obstruction.timeLapse")}
         />
       </div>
       {/* Fixed width, not min: the label swaps between "LIVE" and a timestamp,
@@ -80,16 +84,20 @@ export function ObstructionTimeLapse({
       >
         {isViewingHistory ? (
           <span className='tabular-nums text-muted-foreground'>
-            {new Date(snapshots[scrubIndex].takenAtMs).toLocaleTimeString([], {
+            {new Date(snapshots[scrubIndex].takenAtMs).toLocaleTimeString(timeLocale, {
               hour: "2-digit",
               minute: "2-digit",
             })}
           </span>
         ) : stale ? (
-          <span className='font-semibold tracking-wide text-status-critical'>OFFLINE</span>
+          <span className='font-semibold tracking-wide uppercase text-status-critical'>
+            {t("obstruction.offline")}
+          </span>
         ) : (
           <>
-            <span className='font-semibold tracking-wide text-status-good'>LIVE</span>
+            <span className='font-semibold tracking-wide uppercase text-status-good'>
+              {t("obstruction.live")}
+            </span>
             {/* The one moving thing in the row — a live pulse, not just a word. */}
             <span
               className='size-1.5 animate-pulse rounded-full bg-status-good'

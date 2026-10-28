@@ -9,6 +9,7 @@
 // recorder actually holds.
 
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import type { TelemetrySample } from "@core/telemetry";
 import type { ChartSeries } from "../shared/TelemetryChart";
 import { binLatencies } from "../../lib/latencyBins";
@@ -20,6 +21,7 @@ export function LatencyHistogram({
   samples: TelemetrySample[];
   series: ChartSeries[];
 }) {
+  const { t } = useTranslation();
   const panels = useMemo(
     () =>
       series
@@ -51,10 +53,13 @@ export function LatencyHistogram({
         <div
           key={chartSeries.id}
           className='mt-2'
-          aria-label={`${chartSeries.label} latency distribution, peak ${maxPct.toFixed(1)}% of samples in one bin`}
+          aria-label={t("metrics.histogramAria", {
+            label: chartSeries.label,
+            percent: maxPct.toFixed(1),
+          })}
         >
           <div className='text-[11px] font-medium font-mono tabular-nums text-muted-foreground'>
-            {maxPct.toFixed(1)}% max
+            {t("metrics.histogramMax", { percent: maxPct.toFixed(1) })}
           </div>
           <div className='mt-1 flex h-[85px]  items-end gap-[1px]' aria-hidden='true'>
             {bins.map((pct, binIndex) => (

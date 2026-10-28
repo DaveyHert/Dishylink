@@ -59,6 +59,9 @@ import { foldSamplesToLatencyMinutes } from "../core/latencyBuckets.ts";
 import { summarizeLatency } from "../core/latencySummary.ts";
 import { ThermalStore } from "./thermalStore.mts";
 import { EventStore } from "./eventStore.mts";
+import { PostmortemStore } from "./postmortemStore.mts";
+import { buildOutageReport, BEFORE_WINDOW_MS, isOutageSourceKey } from "../core/postmortem.ts";
+import { THERMAL_ALERT_KEYS } from "../core/alertDefinitions.ts";
 import { ClientStore, type ClientReading } from "./clientStore.mts";
 import { ClientWindow } from "./clientWindow.mts";
 import { resolveRows, foldMinuteCollisions } from "../core/clientHistory.ts";
@@ -87,7 +90,7 @@ import { parseScheduleParam } from "../core/schedule.ts";
 import { CONNECT_ACCOUNT_ADVICE, dataLimitAlertSpec } from "../core/dataMeterAlert.ts";
 import { ThroughputTracker } from "../core/throughputTracker.ts";
 import { usageKey } from "../core/clientUsage.ts";
-import { AlertStore } from "./alertStore.mts";
+import { AlertStore, type AlertEpisode } from "./alertStore.mts";
 import { AlertEngine, type AlertObservation, type AlertTransition } from "../core/alertEngine.ts";
 import { ObstructionStore, packCells } from "./obstructionStore.mts";
 
@@ -126,6 +129,7 @@ const CLIENT_TOTALS_FILE = join(DATA_DIR, "client-totals.json");
 const METERS_FILE = join(DATA_DIR, "meters.json");
 const DEVICE_GROUPS_FILE = join(DATA_DIR, "device-groups.json");
 const ALERTS_FILE = join(DATA_DIR, "alerts.ndjson");
+const POSTMORTEM_FILE = join(DATA_DIR, "postmortems.ndjson");
 const OBSTRUCTION_FILE = join(DATA_DIR, "obstruction.ndjson");
 const LOCK_FILE = join(DATA_DIR, "historian.lock");
 const PORT = Number(process.env.HISTORIAN_PORT ?? 8088);
@@ -185,7 +189,6 @@ const routerOrigins = createRouterOrigins(
  * firmware answers with Unimplemented — so these booleans are the whole signal,
  * and they only exist while they are set. Nobody records them but us.
  */
-const THERMAL_ALERT_KEYS = ["thermalThrottle", "thermalShutdown", "powerSupplyThermalThrottle"];
 const SAMPLE_WINDOW_MS = 6 * 3_600_000;
 const SNAPSHOT_EVERY_MS = 60_000;
 /** A debugging aid, not a store — nothing should ever need more than the most
@@ -866,6 +869,7 @@ async function getClientReadings(): Promise<ClientReading[]> {
         totalsLiveKeys,
         client.captiveClientId,
         isHost ? takePendingSelfTraffic() : undefined,
+        client.ipAddress,
       );
     }
 
@@ -921,6 +925,7 @@ const obstructionStore = new ObstructionStore(OBSTRUCTION_FILE);
 const clientStore = new ClientStore(CLIENTS_FILE);
 const clientWindow = new ClientWindow(CLIENT_SAMPLES_FILE);
 const alertStore = new AlertStore(ALERTS_FILE);
+const postmortemStore = new PostmortemStore(POSTMORTEM_FILE);
 
 /**
  * Decides what changed; this file only writes it down and passes it on. Seeded
@@ -1022,13 +1027,20 @@ export function setLiveThroughputEnabled(enabled: boolean): void {
 }
 
 /** Persist a cycle's transitions, then hand them to whoever is listening. */
-function recordAlertTransitions(transitions: AlertTransition[]): void {
+export function recordAlertTransitions(transitions: AlertTransition[]): void {
   if (transitions.length === 0) return;
   for (const transition of transitions) {
     const { source, key, atMs, kind, spec } = transition;
+    // `close` hands back the episode it closed: an outage can start before the
+    // alert log's 48 h window, and `all()` only serves that window.
+    let closedEpisode: AlertEpisode | null = null;
     if (kind === "fired")
-      alertStore.open(source, key, atMs, { label: spec.firing, severity: spec.severity });
-    else alertStore.close(source, key, atMs);
+      alertStore.open(source, key, atMs, {
+        label: spec.firing,
+        labelVars: spec.vars,
+        severity: spec.severity,
+      });
+    else closedEpisode = alertStore.close(source, key, atMs);
     // The service's diary. It runs unattended under launchd with no window and
     // no operator, so "did it see the outage?" is answerable only from what it
     // wrote down. Every transition is logged, not a chosen few, so an
@@ -1041,6 +1053,32 @@ function recordAlertTransitions(transitions: AlertTransition[]): void {
     if (source === "dish" && THERMAL_ALERT_KEYS.includes(key)) {
       if (kind === "fired") thermalStore.open(key, atMs);
       else thermalStore.close(key, atMs);
+    }
+    // The 1 s samples that answer "the five minutes before the drop" age out
+    // within hours, so the report is written the moment the outage ends.
+    if (closedEpisode && source === "system" && isOutageSourceKey(key)) {
+      const beforeStartSec = Math.floor((closedEpisode.startMs - BEFORE_WINDOW_MS) / 60_000) * 60;
+      const beforeEndSec = Math.floor(closedEpisode.startMs / 60_000) * 60;
+      const added = postmortemStore.add(
+        buildOutageReport({
+          source: key,
+          startMs: closedEpisode.startMs,
+          endMs: atMs,
+          generatedAtMs: Date.now(),
+          dishEvents: eventStore.all(),
+          samples: latestSamples,
+          minuteBuckets: store.readRange(beforeStartSec, beforeEndSec),
+          dishAlerts: alertStore
+            .all()
+            .filter((episode) => episode.source === "dish")
+            .map((episode) => ({
+              alertKey: episode.key,
+              startMs: episode.startMs,
+              endMs: episode.endMs,
+            })),
+        }),
+      );
+      if (added) console.log(`[historian] outage report written for ${key}`);
     }
   }
   for (const listener of alertListeners) listener(transitions);
@@ -1867,6 +1905,13 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
   if (url.pathname === "/api/outages") {
     response.setHeader("Content-Type", "application/json");
     response.end(JSON.stringify({ events: eventStore.all() }));
+    return;
+  }
+  // Auto-generated post-mortems for ended outages. Each report is the shareable
+  // artifact itself: self-contained, frozen at generation, newest first.
+  if (url.pathname === "/api/outages/reports") {
+    response.setHeader("Content-Type", "application/json");
+    response.end(JSON.stringify({ reports: postmortemStore.all() }));
     return;
   }
   if (url.pathname === "/api/obstruction/snapshots") {

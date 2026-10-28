@@ -6,6 +6,7 @@
 // or city-level IP lookup.
 
 import { useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import type { ObserverLocation } from "../../lib/satellites";
 import {
   requestBrowserLocation,
@@ -31,6 +32,7 @@ export function LocationSetup({
 }: {
   onLocationSaved: (location: ObserverLocation) => void;
 }) {
+  const { t } = useTranslation();
   const [coordinateText, setCoordinateText] = useState("");
   const [errorText, setErrorText] = useState<string | null>(null);
   const [busySource, setBusySource] = useState<"device" | "ip" | null>(null);
@@ -38,7 +40,7 @@ export function LocationSetup({
   const submitPasted = () => {
     const parsedLocation = parseCoordinateText(coordinateText);
     if (!parsedLocation) {
-      setErrorText("Couldn't read that — paste as “6.5244, 3.3792” (latitude, longitude).");
+      setErrorText(t("satellite.coordinatesUnreadable"));
       return;
     }
     onLocationSaved(parsedLocation);
@@ -49,11 +51,7 @@ export function LocationSetup({
     setErrorText(null);
     requestBrowserLocation()
       .then(onLocationSaved)
-      .catch(() =>
-        setErrorText(
-          "This device can't resolve its position (desktop Macs need Location Services enabled for the browser, and Wi-Fi positioning may not cover your area). Try the IP option or paste coordinates.",
-        ),
-      )
+      .catch(() => setErrorText(t("satellite.deviceLocationFailed")))
       .finally(() => setBusySource(null));
   };
 
@@ -62,7 +60,7 @@ export function LocationSetup({
     setErrorText(null);
     requestIpLocation()
       .then(onLocationSaved)
-      .catch(() => setErrorText("IP lookup failed — paste coordinates instead."))
+      .catch(() => setErrorText(t("satellite.ipLocationFailed")))
       .finally(() => setBusySource(null));
   };
 
@@ -72,9 +70,7 @@ export function LocationSetup({
     // behind it has to be pushed out of focus rather than read through.
     <div className='mt-3 flex flex-col gap-2.5 rounded-lg border border-[#8b97a824] bg-[#00000073] px-[13px] py-3 backdrop-blur-xl'>
       <p className='text-[12.5px] leading-[1.5] text-ink-secondary'>
-        To show the satellites passing over you, we need to know where your dish is. Tip: long-press
-        your home in Google Maps, or open the iPhone <strong>Compass</strong> app, and paste what it
-        shows.
+        <Trans i18nKey='satellite.locationHelp' components={{ strong: <strong /> }} />
       </p>
       <div className='flex gap-2'>
         <input
@@ -86,11 +82,11 @@ export function LocationSetup({
           onKeyDown={(keyEvent) => {
             if (keyEvent.key === "Enter") submitPasted();
           }}
-          aria-label='Latitude, longitude'
+          aria-label={t("satellite.coordinatesField")}
           className='min-w-0 flex-1 rounded-full border border-[color-mix(in_srgb,var(--ink)_18%,transparent)] bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] px-3.5 py-[7px] font-mono text-[12px] text-foreground placeholder:text-ink-secondary focus:border-[color-mix(in_srgb,var(--ink)_40%,transparent)] focus:outline-none'
         />
         <button onClick={submitPasted} className={saveButton}>
-          Save
+          {t("common.save")}
         </button>
       </div>
       <div className='flex flex-wrap gap-x-5 gap-y-2'>
@@ -100,11 +96,11 @@ export function LocationSetup({
           className={sourceButton}
         >
           <GpsIcon />
-          {busySource === "device" ? "Locating…" : "Use this device location"}
+          {busySource === "device" ? t("satellite.locating") : t("satellite.useDeviceLocation")}
         </button>
         <button onClick={useIpLocation} disabled={busySource !== null} className={sourceButton}>
           <MapPinIcon />
-          {busySource === "ip" ? "Looking up…" : "Approximate from IP"}
+          {busySource === "ip" ? t("satellite.lookingUp") : t("satellite.approximateFromIp")}
         </button>
       </div>
       {errorText && <div className='text-[12px] text-status-critical'>{errorText}</div>}

@@ -3,6 +3,7 @@
 // choice, because a rule can hold both and the stricter one decides.
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useCloudUsage } from "../../../hooks/useCloudAccount";
 import { removeDeviceRule, restartRule, saveDeviceRule } from "../../../hooks/useDataMeter";
 import { useDeviceGroups } from "../../../hooks/useDeviceGroups";
@@ -66,6 +67,7 @@ function RuleForm({
   onCancel: () => void;
   onSaved: () => void;
 }) {
+  const { t } = useTranslation();
   const groups = useDeviceGroups();
   // A cycle written from a slow clock still lands on the right boundaries; only
   // a custom cycle reads this at all, and it reads a date.
@@ -120,7 +122,7 @@ function RuleForm({
       }
       onSaved();
     } catch {
-      setError("The recorder refused the change.");
+      setError(t("rules.recorderRefused"));
     } finally {
       setPending(null);
     }
@@ -145,7 +147,7 @@ function RuleForm({
       else await removeDeviceRule(rule.memberKeys[0]);
       onSaved();
     } catch {
-      setError("The recorder refused the change.");
+      setError(t("rules.recorderRefused"));
     } finally {
       setPending(null);
     }
@@ -157,7 +159,7 @@ function RuleForm({
         <div className='flex items-start justify-between gap-3'>
           <div className='space-y-1'>
             <DialogTitle className='flex items-center gap-1.5 text-[19px] leading-snug'>
-              {rule ? "Edit rule" : "New rule"}
+              {rule ? t("rules.editRule") : t("rules.newRule")}
               <RuleModesInfo />
             </DialogTitle>
           </div>
@@ -167,12 +169,12 @@ function RuleForm({
 
       <div className='space-y-5 border-t border-border/60 py-5'>
         <label className='block space-y-1.5'>
-          <span className='text-[12px] font-medium text-foreground'>Name</span>
+          <span className='text-[12px] font-medium text-foreground'>{t("rules.name")}</span>
           <Input
             value={name}
-            placeholder='Kids devices'
+            placeholder={t("rules.namePlaceholder")}
             disabled={!named}
-            title={named ? undefined : "Named after the device it covers"}
+            title={named ? undefined : t("rules.namedAfterDevice")}
             onChange={(event) => setName(event.target.value)}
           />
         </label>
@@ -194,8 +196,8 @@ function RuleForm({
         />
 
         <SwitchRow
-          title='Auto-pause'
-          detail={autoPauseDetail(allowance.autoPause, rules.mode, members.length > 1)}
+          title={t("rules.autoPause")}
+          detail={autoPauseDetail(allowance.autoPause, rules.mode, members.length > 1, t)}
           checked={allowance.autoPause}
           onChange={allowance.setAutoPause}
         />
@@ -204,14 +206,11 @@ function RuleForm({
           rules={rules}
           allowance={allowance}
           timetable={timetable}
-          capDetail='Cap the data these devices use, on top of their hours.'
+          capDetail={t("rules.capDetailGroup")}
         />
 
         {!groups.loading && !groups.pauseEnforceable && allowance.autoPause && (
-          <Callout tone='error'>
-            Connect your Starlink account for Dishylink to pause a device on its own. Until then
-            this rule is watched and announced, but nothing is paused.
-          </Callout>
+          <Callout tone='error'>{t("rules.connectToPauseRule")}</Callout>
         )}
         {error && <Callout tone='error'>{error}</Callout>}
       </div>
@@ -227,7 +226,7 @@ function RuleForm({
                 disabled={busy}
                 onClick={startOver}
               >
-                Start over
+                {t("rules.startOver")}
               </Button>
               <Button
                 variant='ghost'
@@ -237,9 +236,9 @@ function RuleForm({
                 onClick={() => void deleteRule()}
               >
                 {pending === "delete" ? (
-                  <SpinLoader variant='segment' size={14} label='Deleting' />
+                  <SpinLoader variant='segment' size={14} label={t("rules.deleting")} />
                 ) : (
-                  "Delete rule"
+                  t("rules.deleteRule")
                 )}
               </Button>
             </>
@@ -247,15 +246,15 @@ function RuleForm({
         </div>
         <div className='flex gap-2'>
           <Button variant='outline' className='cursor-pointer' onClick={onCancel}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button className='cursor-pointer' disabled={busy || !ready} onClick={() => void save()}>
             {pending === "save" ? (
-              <SpinLoader variant='segment' size={16} label='Saving' />
+              <SpinLoader variant='segment' size={16} label={t("common.saving")} />
             ) : rule ? (
-              "Save rule"
+              t("rules.saveRule")
             ) : (
-              "Create rule"
+              t("rules.createRuleButton")
             )}
           </Button>
         </div>

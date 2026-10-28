@@ -1,4 +1,5 @@
 import "./devMeasureGuard.ts";
+import "./i18n";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
@@ -9,6 +10,7 @@ import { bindNotifications } from "./lib/notifications.ts";
 import { setRecorderInProcess } from "./lib/apiHost.ts";
 import { setRouterAddressHost } from "./lib/routerAddressHost.ts";
 import { setSelfDeviceHost } from "./lib/selfDeviceHost.ts";
+import { setLocaleHost } from "./lib/locale.ts";
 
 // The Electron preload exposes window.dishlink. Marking the root lets the desktop
 // build reserve space for the macOS traffic lights and make its top bar draggable,
@@ -28,6 +30,9 @@ if (desktop) {
   // Only a build serving its own /api has the recorder in this process, where it
   // cannot be down while this window is asking — see recorderRunsInHostProcess.
   void desktop.recorderInProcess().then(setRecorderInProcess);
+  // Main posts notifications and builds the tray menu with no window open, so it
+  // is told which language this window uses.
+  if (desktop.setLocale) setLocaleHost({ write: desktop.setLocale });
   // Main owns where the router is dialled, because the recorder there dials it
   // with no window open. Only in a build that serves itself, though: a dev-server
   // page's /router/* calls are carried by Vite, not by main, so main's copy of the

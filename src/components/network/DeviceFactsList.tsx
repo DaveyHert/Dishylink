@@ -5,6 +5,7 @@
 // cap and spreads every row out. A short list needs neither and renders plain.
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { motion } from "motion/react";
 import { DataRow } from "./DataRow";
 import type { DeviceFact } from "./deviceFacts";
@@ -13,6 +14,7 @@ const SCROLLABLE_AFTER_ROWS = 8;
 const COLLAPSED_PX = 280;
 
 export function DeviceFactsList({ facts }: { facts: DeviceFact[] }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
   const rows = facts.map((fact) => (
@@ -38,7 +40,7 @@ export function DeviceFactsList({ facts }: { facts: DeviceFact[] }) {
         onClick={() => setExpanded((open) => !open)}
         aria-expanded={expanded}
       >
-        {expanded ? "Collapse" : "View full details"}
+        {expanded ? t("network.collapse") : t("network.viewFullDetails")}
         <span
           className={`text-[14px] leading-none transition-transform ${expanded ? "-rotate-90" : "rotate-90"}`}
           aria-hidden='true'

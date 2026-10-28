@@ -203,19 +203,19 @@ describe("subnetRefusal", () => {
   });
 
   it("refuses a subnet outside the presets", () => {
-    expect(subnetRefusal("172.16.0.1/24", "hunter2hunter2")).toMatch(/unsupported/);
+    expect(subnetRefusal("172.16.0.1/24", "hunter2hunter2")).toBe("unsupportedSubnet");
   });
 
   it("refuses a passphrase no device could reconnect with", () => {
-    expect(subnetRefusal("192.168.2.1/24", "short")).toMatch(/8 to 63 characters/);
+    expect(subnetRefusal("192.168.2.1/24", "short")).toBe("passwordLength");
   });
 
   it("refuses an empty passphrase, which is what the masked value would become", () => {
-    expect(subnetRefusal("192.168.2.1/24", "")).toMatch(/8 to 63 characters/);
+    expect(subnetRefusal("192.168.2.1/24", "")).toBe("passwordLength");
   });
 
   it("refuses a passphrase past WPA2's ceiling", () => {
-    expect(subnetRefusal("192.168.2.1/24", "x".repeat(64))).toMatch(/8 to 63 characters/);
+    expect(subnetRefusal("192.168.2.1/24", "x".repeat(64))).toBe("passwordLength");
     expect(subnetRefusal("192.168.2.1/24", "x".repeat(63))).toBeNull();
   });
 });
@@ -238,7 +238,7 @@ describe("buildRouterConfigRequest for a subnet", () => {
         { kind: "subnet", subnet: "192.168.2.1/24", password: "hunter2hunter2" },
         { networks: [] },
       ),
-    ).toThrow(/no networks/);
+    ).toThrow(/routerNoNetworks/);
   });
 
   it("refuses a bad passphrase before the account is touched", () => {
@@ -248,7 +248,7 @@ describe("buildRouterConfigRequest for a subnet", () => {
         { kind: "subnet", subnet: "192.168.2.1/24", password: "short" },
         { networks: ROUTER_NETWORKS },
       ),
-    ).toThrow(/8 to 63 characters/);
+    ).toThrow(/passwordLength/);
   });
 });
 
@@ -276,7 +276,7 @@ describe("meshNameRefusal", () => {
   });
 
   it("refuses a name that is empty once trimmed", () => {
-    expect(meshNameRefusal("   ")).toBe("Name cannot be empty");
+    expect(meshNameRefusal("   ")).toBe("errors.meshNameEmpty");
   });
 });
 
@@ -337,7 +337,7 @@ describe("buildRouterConfigRequest for a mesh node name", () => {
         { kind: "meshName", deviceId: MESH_ID, displayName: "  " },
         { meshConfigs: MESH_CONFIGS },
       ),
-    ).toThrow(/empty/);
+    ).toThrow(/meshNameEmpty/);
   });
 
   it("refuses a node the router did not report", () => {

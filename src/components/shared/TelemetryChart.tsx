@@ -17,6 +17,8 @@ import {
   type PlotFrame,
 } from "./chartMarks";
 import { useNow } from "../../hooks/useNow";
+import { useTimeLocale } from "../../hooks/useTimeLocale";
+import { telemetryBuckets, type BucketPoint } from "./telemetryBuckets";
 
 export interface ChartSeries {
   id: string;
@@ -54,13 +56,6 @@ interface TelemetryChartProps {
    *  right edge — steps with the figure rather than sliding every second. Left
    *  unset, the window ends on the ticking clock as before. */
   windowEndMs?: number;
-}
-
-interface BucketPoint {
-  timestampMs: number;
-  values: (number | null)[];
-  /** No samples at all between the previous bucket and this one. */
-  hasGapBefore: boolean;
 }
 
 const PLOT_MARGIN = { top: 8, right: 12, bottom: 22, left: 46 };
@@ -142,6 +137,7 @@ export function TelemetryChart({
   headroom = 1.08,
   windowEndMs: windowEndOverrideMs,
 }: TelemetryChartProps) {
+  const timeLocale = useTimeLocale();
   const [containerRef, containerWidth] = useElementWidth();
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const washGradientId = useId();
@@ -161,57 +157,10 @@ export function TelemetryChart({
   const windowEndMs = windowEndOverrideMs ?? tickingNowMs;
   const windowStartMs = windowEndMs - windowMinutes * 60_000;
 
-  const { buckets, bucketSpanMs } = useMemo<{
-    buckets: BucketPoint[];
-    bucketSpanMs: number;
-  }>(() => {
-    // Half-open [start, end): with a frozen end, samples past the boundary would
-    // otherwise clamp into the last bucket and creep its mean every second,
-    // defeating the freeze. On the live clock nothing is newer than now, so this
-    // excludes only a sample landing exactly on it — no effect on those charts.
-    const visibleSamples = samples.filter(
-      (sample) => sample.timestampMs >= windowStartMs && sample.timestampMs < windowEndMs,
-    );
-    if (visibleSamples.length === 0) return { buckets: [], bucketSpanMs: 0 };
-    const bucketCount = Math.min(Math.max(Math.floor(plotWidth / 2), 30), visibleSamples.length);
-    const bucketSpanMs = (windowEndMs - windowStartMs) / bucketCount;
-    const grouped: TelemetrySample[][] = Array.from({ length: bucketCount }, () => []);
-    for (const sample of visibleSamples) {
-      const bucketIndex = Math.min(
-        Math.floor((sample.timestampMs - windowStartMs) / bucketSpanMs),
-        bucketCount - 1,
-      );
-      grouped[bucketIndex].push(sample);
-    }
-    const populated = grouped
-      .map((bucketSamples, bucketIndex) => {
-        if (bucketSamples.length === 0) return null;
-        return {
-          timestampMs: windowStartMs + (bucketIndex + 0.5) * bucketSpanMs,
-          values: series.map((chartSeries) => {
-            const seriesValues = bucketSamples
-              .map(chartSeries.getValue)
-              .filter((value): value is number => value !== null && Number.isFinite(value));
-            if (seriesValues.length === 0) return null;
-            if (chartSeries.bucketReduce === "max") return Math.max(...seriesValues);
-            if (chartSeries.bucketReduce === "min") return Math.min(...seriesValues);
-            return seriesValues.reduce((sum, value) => sum + value, 0) / seriesValues.length;
-          }),
-          hasGapBefore: false,
-        };
-      })
-      .filter((bucket): bucket is BucketPoint => bucket !== null);
-
-    // Empty buckets are dropped above, so a hole shows up as two neighbours
-    // further apart than one bucket. Anything wider than that — and wider than
-    // a dropped sample or two — is time we never measured.
-    const gapThresholdMs = Math.max(bucketSpanMs * 1.5, minGapMs);
-    for (let index = 1; index < populated.length; index++) {
-      populated[index].hasGapBefore =
-        populated[index].timestampMs - populated[index - 1].timestampMs > gapThresholdMs;
-    }
-    return { buckets: populated, bucketSpanMs };
-  }, [samples, series, windowStartMs, windowEndMs, plotWidth, minGapMs]);
+  const { buckets, bucketSpanMs, gapRegions } = useMemo(
+    () => telemetryBuckets(samples, series, windowStartMs, windowEndMs, plotWidth, minGapMs),
+    [samples, series, windowStartMs, windowEndMs, plotWidth, minGapMs],
+  );
 
   // Ceiling and gridlines come out of ONE derivation: the ceiling is a whole
   // number of tick steps, so the top gridline is always the ceiling. Choosing
@@ -290,41 +239,6 @@ export function TelemetryChart({
       .join("");
   }, [areaWash, buckets, baselineY, xForTime, yForValue]);
 
-  /**
-   * Stretches of the window with no readings at all, named rather than drawn
-   * through. Includes a hole at the left edge when the record starts partway
-   * into the window: the chart shows six hours because you asked for six hours,
-   * not because six hours were measured.
-   */
-  const gapRegions = useMemo(() => {
-    // Nothing at all in the window — a dish that has been silent longer than the
-    // window is wide. The whole span is unmeasured, and saying so is the entire
-    // content of the chart at that point.
-    if (buckets.length === 0) return [{ startMs: windowStartMs, endMs: windowEndMs }];
-    const gapThresholdMs = Math.max(bucketSpanMs * 1.5, minGapMs);
-    const regions: { startMs: number; endMs: number }[] = [];
-    if (buckets[0].timestampMs - windowStartMs > gapThresholdMs) {
-      regions.push({ startMs: windowStartMs, endMs: buckets[0].timestampMs });
-    }
-    for (let index = 1; index < buckets.length; index++) {
-      if (buckets[index].hasGapBefore) {
-        regions.push({
-          startMs: buckets[index - 1].timestampMs,
-          endMs: buckets[index].timestampMs,
-        });
-      }
-    }
-    // A hole at the right edge: readings stopped partway through the window and
-    // have not resumed — the outage that is still going on. It gets the same
-    // treatment as one in the middle, since it is the same fact about the same
-    // window.
-    const newestMs = buckets[buckets.length - 1].timestampMs;
-    if (windowEndMs - newestMs > gapThresholdMs) {
-      regions.push({ startMs: newestMs, endMs: windowEndMs });
-    }
-    return regions;
-  }, [buckets, bucketSpanMs, windowStartMs, windowEndMs, minGapMs]);
-
   const xTickTimes = [0.25, 0.5, 0.75].map(
     (fraction) => windowStartMs + (windowEndMs - windowStartMs) * fraction,
   );
@@ -398,7 +312,7 @@ export function TelemetryChart({
         <PlotTimeAxis
           y={height - 6}
           ticks={xTickTimes.map((tickTime) => ({
-            label: formatClockTime(tickTime).slice(0, 5),
+            label: formatClockTime(tickTime, timeLocale).slice(0, 5),
             x: xForTime(tickTime),
           }))}
         />
@@ -461,7 +375,7 @@ export function TelemetryChart({
           }}
         >
           <div className='mb-[5px] text-[10px] tracking-[0.05em] text-muted-foreground'>
-            {formatClockTime(hoveredBucket.timestampMs)}
+            {formatClockTime(hoveredBucket.timestampMs, timeLocale)}
           </div>
           {series.map((chartSeries, seriesIndex) => (
             <div

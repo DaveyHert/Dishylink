@@ -17,6 +17,7 @@ import {
 } from "@core/dishClient";
 import type { ThroughputRates } from "@core/throughputTracker";
 import type { TelemetrySample } from "@core/telemetry";
+import i18n from "../i18n";
 import { usageKey, type ClientUsageTotal } from "@core/clientUsage";
 import { apiRequest } from "../lib/apiHost";
 import { subscribeCloudSession } from "../lib/cloudHost";
@@ -519,11 +520,9 @@ export function useRouterNetwork(active: boolean): RouterNetwork {
         // sign-in can fix. Connecting one bumps `cloudSession` and re-runs this.
         if (error instanceof CloudNotConnectedError) {
           window.clearInterval(timerId);
-          setAccountRosterError("Connect your Starlink account first.");
+          setAccountRosterError(i18n.t("errors.connectAccountFirst"));
         } else {
-          setAccountRosterError(
-            "Couldn't reach your Starlink account. Check this device's internet connection.",
-          );
+          setAccountRosterError(i18n.t("errors.accountUnreachableCheckInternet"));
         }
       } finally {
         inFlight = false;

@@ -5,6 +5,11 @@
 import { describe, expect, it } from "vitest";
 import { dataLimitAlertSpec } from "./dataMeterAlert";
 import type { MeterRule } from "./dataMeter";
+import { createI18n } from "./i18n/resources";
+import type { AlertSpec } from "./alertDefinitions";
+
+const { t } = createI18n("en");
+const firing = (spec: AlertSpec) => t(spec.firing, spec.vars);
 
 const GB = 1_000_000_000;
 const NOW = new Date(2026, 7, 12, 15, 30, 0).getTime();
@@ -33,7 +38,7 @@ describe("dataLimitAlertSpec", () => {
   });
 
   it("given: an allowance, should: name the figure it reached", () => {
-    expect(dataLimitAlertSpec(rule(), "iPhone").firing).toBe(
+    expect(firing(dataLimitAlertSpec(rule(), "iPhone"))).toBe(
       "iPhone reached its 50.0 GB data allowance",
     );
   });
@@ -42,8 +47,8 @@ describe("dataLimitAlertSpec", () => {
     // A timer measures no bytes. The allowance on the rule is whatever the form
     // last carried, and quoting it describes a limit the timer never had.
     const spec = dataLimitAlertSpec(rule({ countdownMs: 5_400_000 }), "iPhone");
-    expect(spec.firing).toBe("iPhone reached the end of its 1h 30m timer");
-    expect(spec.firing).not.toMatch(/GB|TB|allowance/);
+    expect(firing(spec)).toBe("iPhone reached the end of its 1h 30m timer");
+    expect(firing(spec)).not.toMatch(/GB|TB|allowance/);
   });
 
   it("given: a shared allowance, should: file under the group and speak for all of it", () => {
@@ -51,7 +56,7 @@ describe("dataLimitAlertSpec", () => {
       groupName: "Kids",
     });
     expect(spec.key).toBe("dataLimit:group:kids");
-    expect(spec.firing).toBe("Kids reached their 50.0 GB data allowance");
+    expect(firing(spec)).toBe("Kids reached their 50.0 GB data allowance");
   });
 
   it("given: a group countdown, should: file under the group even without a shared allowance", () => {
@@ -61,13 +66,13 @@ describe("dataLimitAlertSpec", () => {
       groupName: "Kids",
     });
     expect(spec.key).toBe("dataLimit:group:kids");
-    expect(spec.firing).toBe("Kids reached the end of their 1h timer");
+    expect(firing(spec)).toBe("Kids reached the end of their 1h timer");
   });
 
   it("given: a group down to one device, should: name the device rather than a plural", () => {
     const spec = dataLimitAlertSpec(rule({ groupId: "kids", sharedAllowance: true }), "iPhone");
     // Still filed under the group, so it closes the episode the recorder opened.
     expect(spec.key).toBe("dataLimit:group:kids");
-    expect(spec.firing).toBe("iPhone reached its 50.0 GB data allowance");
+    expect(firing(spec)).toBe("iPhone reached its 50.0 GB data allowance");
   });
 });

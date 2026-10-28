@@ -5,8 +5,10 @@
 // reachability check.
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import type { TranslationKey } from "@core/i18n/resources";
 import { SettingRow } from "./settingsChrome";
 import { normalizeIpAddress } from "@core/ipAddress";
 import {
@@ -16,12 +18,14 @@ import {
 } from "../../lib/routerAddressHost";
 import { addressSavable, saveArgument } from "./routerAddressDraft";
 
-const REFUSAL_MESSAGE: Record<Extract<RouterAddressWriteResult, { ok: false }>["reason"], string> =
-  {
-    invalid: "That isn't an IP address this app can reach. Use the numeric address, not a name.",
-    denied: "Permission to reach that address was declined, so it wasn't saved.",
-    unsupported: "This browser can't be granted access to that address. Use an IPv4 address.",
-  };
+const REFUSAL_MESSAGE: Record<
+  Extract<RouterAddressWriteResult, { ok: false }>["reason"],
+  TranslationKey
+> = {
+  invalid: "routerAddress.refusedInvalid",
+  denied: "routerAddress.refusedDenied",
+  unsupported: "routerAddress.refusedUnsupported",
+};
 
 export function RouterAddressRow({
   addresses,
@@ -30,6 +34,7 @@ export function RouterAddressRow({
   addresses: RouterAddress;
   onChanged: (next: RouterAddress) => void;
 }) {
+  const { t } = useTranslation();
   const stored = addresses.router;
   const fallback = addresses.routerDefault;
   const [draft, setDraft] = useState(stored ?? "");
@@ -66,15 +71,15 @@ export function RouterAddressRow({
   return (
     <>
       <SettingRow
-        title='Router IP address'
-        info={`Dishylink looks for your router at this address. Change it only if the router's subnet was moved in the Starlink app, or your kit is in bypass mode behind a third-party router. Clearing the box returns to ${fallback}.`}
+        title={t("routerAddress.title")}
+        info={t("routerAddress.tip", { fallback })}
         infoSeverity='warn'
-        caption={`Default is ${fallback}`}
+        caption={t("routerAddress.defaultIs", { fallback })}
         note={
           refused ? (
-            <span className='text-destructive'>{REFUSAL_MESSAGE[refused]}</span>
+            <span className='text-destructive'>{t(REFUSAL_MESSAGE[refused])}</span>
           ) : stored ? (
-            `Dishylink is using ${stored}. Clear the box to go back to ${fallback}.`
+            t("routerAddress.using", { stored, fallback })
           ) : undefined
         }
       >
@@ -88,7 +93,7 @@ export function RouterAddressRow({
           spellCheck={false}
           autoComplete='off'
           inputMode='numeric'
-          aria-label='Router IP address'
+          aria-label={t("routerAddress.title")}
           aria-invalid={trimmed !== "" && normalizeIpAddress(trimmed) === null}
           className='h-8 w-[168px] font-mono text-[12px] tabular-nums'
         />
@@ -98,7 +103,7 @@ export function RouterAddressRow({
           disabled={!addressSavable(draft, stored) || saving}
           onClick={save}
         >
-          {saving ? "Saving…" : "Save"}
+          {saving ? t("common.savingEllipsis") : t("common.save")}
         </Button>
       </SettingRow>
     </>

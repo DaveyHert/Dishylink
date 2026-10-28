@@ -30,6 +30,7 @@ import { restoredRule, type MeterRule } from "@core/dataMeter";
 import type { DevicePause } from "@core/devicePause";
 import type { DeviceGroup } from "@core/deviceGroup";
 import type { AlertSeverity } from "@core/alertDefinitions";
+import type { OutageReport } from "@core/postmortem";
 
 /** One device's aggregated throughput for a closed minute — the row /api/clients
  *  serves as `history` behind the 6-hour chart. Recorded once a minute by the
@@ -88,8 +89,11 @@ export interface AlertEpisode {
   startMs: number;
   /** null while the flag is still set. */
   endMs: number | null;
-  /** What was announced. Absent where the wording is a constant the UI looks up. */
+  /** What was announced: a catalog key the UI resolves in its own language, or
+   *  (on rows written by older builds) the English sentence itself. */
   label?: string;
+  /** Interpolation values for `label`, on alerts whose wording names a subject. */
+  labelVars?: Record<string, string | number>;
   severity?: AlertSeverity;
 }
 
@@ -159,6 +163,11 @@ export interface HistoryStore {
   putSamples(samples: TelemetrySample[], nowMs?: number): Promise<void>;
   /** Raw samples from the last `minutes`, oldest first — the main charts' backfill. */
   readSamples(minutes: number, nowMs?: number): Promise<TelemetrySample[]>;
+  /** Keep an outage report. A report already held under the same id stands:
+   *  an episode closes once, and the first report is the one frozen at its close. */
+  putReport(report: OutageReport, nowMs?: number): Promise<void>;
+  /** Reports within their retention window, newest first. */
+  readReports(nowMs?: number): Promise<OutageReport[]>;
 }
 
 const OBSTRUCTION_RETENTION_MS = 7 * 24 * 3_600_000;
@@ -177,6 +186,10 @@ const CLIENT_SAMPLE_RETENTION_MS = 20 * 60_000;
 // The dish's raw 1 Hz window, six hours deep — the span the main charts request
 // to backfill on reload (/api/samples?minutes=360).
 const SAMPLE_RETENTION_MS = 6 * 3_600_000;
+
+// A report is small and self-contained, so it outlives the 48 h events window
+// it was generated beside: an outage is still worth reading up on a week later.
+const REPORT_RETENTION_MS = 30 * 24 * 3_600_000;
 
 /** The episodes a batch of transitions produces, against what is already on
  *  record. Pure, so both stores persist the same thing. An open that is already
@@ -200,6 +213,7 @@ function episodesForTransitions(
           startMs: transition.atMs,
           endMs: null,
           label: transition.spec.firing,
+          labelVars: transition.spec.vars,
           severity: transition.spec.severity,
         });
     } else if (open) {
@@ -234,8 +248,9 @@ export async function applyDrain(
 // --- IndexedDB (service worker) ---
 
 const DB_NAME = "dishylink-history";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const MINUTES = "minutes";
+const REPORTS = "reports";
 const MONTHS = "months";
 const META = "meta";
 const OUTAGES = "outages";
@@ -303,6 +318,7 @@ function openDatabase(name: string): Promise<IDBDatabase> {
       // historian's server-side EnergyStore, whose per-minute detail is capped
       // to the current year with older months folded in the same shape.
       if (!db.objectStoreNames.contains(MONTHS)) db.createObjectStore(MONTHS, { keyPath: "month" });
+      if (!db.objectStoreNames.contains(REPORTS)) db.createObjectStore(REPORTS, { keyPath: "id" });
     };
     open.onsuccess = () => resolve(open.result);
     open.onerror = () => reject(open.error);
@@ -578,6 +594,24 @@ export class IndexedDbHistory implements HistoryStore {
     );
     return rows.sort((a, b) => a.timestampMs - b.timestampMs);
   }
+
+  async putReport(report: OutageReport, nowMs: number = Date.now()): Promise<void> {
+    const tx = this.db.transaction(REPORTS, "readwrite");
+    const store = tx.objectStore(REPORTS);
+    const existing = await request<OutageReport | undefined>(store.get(report.id));
+    if (!existing) store.put(report);
+    const cutoff = nowMs - REPORT_RETENTION_MS;
+    const all = await request<OutageReport[]>(store.getAll());
+    for (const stale of all) if (stale.endMs < cutoff) store.delete(stale.id);
+    await transactionDone(tx);
+  }
+
+  async readReports(nowMs: number = Date.now()): Promise<OutageReport[]> {
+    const tx = this.db.transaction(REPORTS, "readonly");
+    const all = await request<OutageReport[]>(tx.objectStore(REPORTS).getAll());
+    const cutoff = nowMs - REPORT_RETENTION_MS;
+    return all.filter((report) => report.endMs >= cutoff).sort((a, b) => b.endMs - a.endMs);
+  }
 }
 
 /** Drop the storage-only `id` prefix from a stored client row. */
@@ -598,6 +632,7 @@ export class InMemoryHistory implements HistoryStore {
   private readonly clientMinutes = new Map<string, ClientMinuteRow>();
   private readonly clientSamples = new Map<string, ClientSampleRow>();
   private readonly samples = new Map<number, TelemetrySample>();
+  private readonly reports = new Map<string, OutageReport>();
   private totalsSnapshot: TotalsSnapshot | null = null;
   private meterRules: MeterRule[] = [];
   private devicePauses: DevicePause[] = [];
@@ -768,5 +803,18 @@ export class InMemoryHistory implements HistoryStore {
     return [...this.samples.values()]
       .filter((s) => s.timestampMs >= floor)
       .sort((a, b) => a.timestampMs - b.timestampMs);
+  }
+
+  async putReport(report: OutageReport, nowMs: number = Date.now()): Promise<void> {
+    if (!this.reports.has(report.id)) this.reports.set(report.id, report);
+    const cutoff = nowMs - REPORT_RETENTION_MS;
+    for (const [id, stale] of this.reports) if (stale.endMs < cutoff) this.reports.delete(id);
+  }
+
+  async readReports(nowMs: number = Date.now()): Promise<OutageReport[]> {
+    const cutoff = nowMs - REPORT_RETENTION_MS;
+    return [...this.reports.values()]
+      .filter((report) => report.endMs >= cutoff)
+      .sort((a, b) => b.endMs - a.endMs);
   }
 }

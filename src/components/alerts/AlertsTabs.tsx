@@ -2,6 +2,7 @@
 // deliberately kept from speaking for each other: Active is what is firing now,
 // History is what is over, Status is what every check currently says.
 
+import { useTranslation } from "react-i18next";
 import type { AlertHistoryEntry, DeviceAlerts } from "../../hooks/useDeviceAlerts";
 import type { AlertSource, AlertState } from "@core/alertDefinitions";
 import { EmptyState } from "../ui/empty-state";
@@ -23,6 +24,7 @@ export function ActiveTab({
   history: AlertHistoryEntry[];
   firstSeen: Map<string, number>;
 }) {
+  const { t } = useTranslation();
   // Live alerts are bare booleans — the device sends no timestamp. The real
   // onset lives in the historian's still-open episode ("started 2h ago"); with
   // no episode (recorder down, or a client-raised alert) fall back to when this
@@ -33,7 +35,8 @@ export function ActiveTab({
   // Active is a feed of alerts, not a report on the hardware. Empty means there
   // is nothing to tell you — what the devices' checks currently say is Status's
   // job, and claiming it here would be this tab speaking for that one.
-  if (active.length === 0) return <EmptyState className='px-4 py-8'>No active alerts.</EmptyState>;
+  if (active.length === 0)
+    return <EmptyState className='px-4 py-8'>{t("alerts.noActive")}</EmptyState>;
   return (
     <>
       {active.map((a) => {
@@ -41,17 +44,19 @@ export function ActiveTab({
         const startedMs = openedAt.get(id);
         const seenMs = firstSeen.get(id);
         const when = startedMs
-          ? ` · started ${relativeTime(startedMs)}`
+          ? t("alerts.startedAgo", { when: relativeTime(startedMs, t) })
           : seenMs
-            ? ` · seen ${relativeTime(seenMs)}`
-            : "";
+            ? t("alerts.seenAgo", { when: relativeTime(seenMs, t) })
+            : null;
         return (
           <AlertRow
             key={id}
             color={SEVERITY_COLOR[a.severity]}
-            title={a.firing}
-            advice={a.advice}
-            meta={`${deviceLabel(a.source)} · ${SEVERITY_LABEL[a.severity]}${when}`}
+            title={t(a.firing, a.vars)}
+            advice={a.advice && t(a.advice)}
+            meta={[deviceLabel(a.source, t), t(SEVERITY_LABEL[a.severity]), when]
+              .filter(Boolean)
+              .join(" · ")}
           />
         );
       })}
@@ -66,18 +71,15 @@ export function HistoryTab({
   history: AlertHistoryEntry[];
   historianUp: boolean | null;
 }) {
+  const { t } = useTranslation();
   // History is what is over. An episode that is still open is the live state —
   // it belongs in Active, and showing it here too would list the same alert
   // twice at once. Only cleared episodes are history, newest first.
   const past = history.filter((e) => e.endMs !== null);
   if (historianUp === false)
-    return (
-      <EmptyState className='px-4 py-8'>
-        History unavailable — the recorder isn’t running. Live alerts are unaffected.
-      </EmptyState>
-    );
+    return <EmptyState className='px-4 py-8'>{t("alerts.historyUnavailable")}</EmptyState>;
   if (past.length === 0)
-    return <EmptyState className='px-4 py-8'>No alerts cleared in the last 30 days.</EmptyState>;
+    return <EmptyState className='px-4 py-8'>{t("alerts.noneCleared")}</EmptyState>;
   return (
     <>
       {past.map((e) => (
@@ -85,7 +87,13 @@ export function HistoryTab({
           key={`${e.source}:${e.key}:${e.startMs}`}
           color={SEVERITY_COLOR[e.severity]}
           title={e.label}
-          meta={`${deviceLabel(e.source)} · lasted ${formatSpan(e.startMs, e.endMs!)} · cleared ${relativeTime(e.endMs!)}`}
+          meta={[
+            deviceLabel(e.source, t),
+            t("alerts.lastedCleared", {
+              span: formatSpan(e.startMs, e.endMs!, t),
+              when: relativeTime(e.endMs!, t),
+            }),
+          ].join(" · ")}
         />
       ))}
     </>
@@ -103,13 +111,14 @@ export function StatusTab({
   dishReachable: boolean;
   routerReachable: boolean | null;
 }) {
-  const groups: { source: AlertSource; label: string; live: boolean }[] = [
-    { source: "dish", label: "Dish", live: dishReachable },
-    { source: "router", label: "Router", live: routerReachable !== false },
+  const { t } = useTranslation();
+  const groups: { source: AlertSource; live: boolean }[] = [
+    { source: "dish", live: dishReachable },
+    { source: "router", live: routerReachable !== false },
   ];
   return (
     <>
-      {groups.map(({ source, label, live }) => {
+      {groups.map(({ source, live }) => {
         const checks = statusList
           .filter((a) => a.source === source)
           .sort((a, b) => Number(b.active) - Number(a.active));
@@ -117,12 +126,10 @@ export function StatusTab({
         return (
           <div key={source}>
             <p className='sticky top-0 z-10 flex items-center justify-between gap-2 bg-page px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted'>
-              <span>{label}</span>
+              <span>{deviceLabel(source, t)}</span>
               {/* Never let a stale snapshot read as a live all-clear. */}
               {!live && (
-                <span className='normal-case tracking-normal'>
-                  Starlink offline · last known status
-                </span>
+                <span className='normal-case tracking-normal'>{t("alerts.offlineLastKnown")}</span>
               )}
             </p>
             {checks.map((c) => (
@@ -141,7 +148,9 @@ export function StatusTab({
                         : "var(--status-good)",
                   }}
                 />
-                <span className='truncate text-[14px] text-ink'>{c.active ? c.firing : c.ok}</span>
+                <span className='truncate text-[14px] text-ink'>
+                  {c.active ? t(c.firing, c.vars) : t(c.ok, c.vars)}
+                </span>
               </div>
             ))}
           </div>

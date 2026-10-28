@@ -37,7 +37,9 @@
 // as itself rather than run through the rows above, which would accuse a
 // neighbouring device of holding an address the router was never on.
 
+import type { TFunction } from "i18next";
 import { ROUTER_LAN_ADDRESS } from "@core/dishClient";
+import type { TranslationKey } from "@core/i18n/resources";
 import type { RouterPresence } from "@core/routerPresence";
 
 export type RouterUnreachableCause =
@@ -130,44 +132,21 @@ function suggestedAlternative(routerAddress: string): string {
   );
 }
 
-function messagesFor(routerAddress: string): Record<RouterUnreachableCause, string> {
-  return {
-    addressTaken:
-      `Another device on this network is using ${routerAddress}, the address the Starlink ` +
-      `router answers on, so the router is hidden behind it. To fix it, connect to your ` +
-      `Starlink WiFi, give the other router a different address (like ` +
-      `${suggestedAlternative(routerAddress)}), or point Dishylink's router address at wherever ` +
-      `your Starlink router actually is.`,
-    configuredAddressSilent:
-      `Nothing answered at ${routerAddress}, the address Dishylink is set to use, but the dish ` +
-      `reports your Starlink router is running. It is most likely at a different address. ` +
-      `Check that setting, or clear it to go back to the default.`,
-    differentNetwork:
-      `Your Starlink router is running, but this device isn't on the network ${routerAddress} ` +
-      `belongs to. Connect to your Starlink WiFi, or if the router's subnet was changed, point ` +
-      `Dishylink's router address at where it is now.`,
-    bypassed:
-      `Bypass mode is on, so the Starlink router is switched off and a third-party router runs ` +
-      `your network. WiFi, the client list and the router's own settings all come from it, so ` +
-      `there's nothing to show here. Everything on the dish is unaffected.`,
-    noRouter:
-      `The dish isn't reporting a Starlink router, so this kit either doesn't have one or it's ` +
-      `powered off. WiFi and connected devices come from the router, so there's nothing to show ` +
-      `here. Everything on the dish is unaffected.`,
-    unknown:
-      `Couldn't reach the Starlink router at ${routerAddress}. Another device may be using ` +
-      `that address, the router may be in bypass mode or on a different network, or it may be ` +
-      `at an address other than the one Dishylink is set to use.`,
-    checking:
-      `Couldn't reach the Starlink router at ${routerAddress}. Working out why; most short ` +
-      `silences are the router restarting.`,
-  };
-}
+const MESSAGE_KEY: Record<RouterUnreachableCause, TranslationKey> = {
+  addressTaken: "routerDiagnosis.addressTaken",
+  configuredAddressSilent: "routerDiagnosis.configuredAddressSilent",
+  differentNetwork: "routerDiagnosis.differentNetwork",
+  bypassed: "routerDiagnosis.bypassed",
+  noRouter: "routerDiagnosis.noRouter",
+  unknown: "routerDiagnosis.unknown",
+  checking: "routerDiagnosis.checking",
+};
 
 /** Name the most likely reason the router is silent, erring towards `unknown`
  *  rather than towards a confident answer the signals do not support. */
 export function diagnoseRouterUnreachable(
   signals: RouterUnreachableSignals,
+  t: TFunction,
   routerAddress: string = ROUTER_LAN_ADDRESS,
 ): RouterUnreachable {
   const { presence, onRouterSubnet, addressConfigured, silencePersisted } = signals;
@@ -188,5 +167,11 @@ export function diagnoseRouterUnreachable(
     // from, and that is the one thing our own address settles.
     cause = onRouterSubnet ? "addressTaken" : "differentNetwork";
   }
-  return { cause, message: messagesFor(routerAddress)[cause] };
+  return {
+    cause,
+    message: t(MESSAGE_KEY[cause], {
+      address: routerAddress,
+      alternative: suggestedAlternative(routerAddress),
+    }),
+  };
 }

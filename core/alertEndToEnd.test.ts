@@ -9,8 +9,10 @@ import { describe, expect, it } from "vitest";
 import { AlertEngine } from "./alertEngine";
 import { NotificationThrottle, describeTransition } from "./alertNotification";
 import { OUTAGE_SAMPLE_RUN, isStarlinkOutage } from "./telemetry";
+import { createI18n } from "./i18n/resources";
 
 const START = 1_700_000_000_000;
+const { t } = createI18n("en");
 const POLL_MS = 5_000;
 
 /** Stands in for a host: engine, throttle, and whatever it would have shown. */
@@ -33,7 +35,7 @@ function recorder(alreadyFiring: { source: "dish" | "router" | "system"; key: st
       // What the recorder writes down: every transition, notifiable or not.
       recorded.push(`${transition.kind}:${transition.source}:${transition.key}`);
       // What reaches the user: only the notifiable ones, only past the throttle.
-      const notification = describeTransition(transition);
+      const notification = describeTransition(transition, t);
       if (notification && throttle.allow(notification.key, transition.atMs))
         shown.push(notification.body);
     }
@@ -113,7 +115,7 @@ describe("a Starlink outage while the dish itself is fine", () => {
       dish: { alerts: {}, atMs },
       system: { alerts: { starlinkOutage: isStarlinkOutage(samples) }, atMs },
     })) {
-      const notification = describeTransition(transition);
+      const notification = describeTransition(transition, t);
       if (notification) host.shown.push(notification.body);
     }
   }

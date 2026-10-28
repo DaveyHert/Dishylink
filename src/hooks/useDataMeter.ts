@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { announcementSubject, type MeterCycle, type MeterRule } from "@core/dataMeter";
 import type { PauseState } from "@core/devicePause";
 import { formatScheduleParam, type Schedule } from "@core/schedule";
+import i18n from "../i18n";
 import { apiRequest } from "../lib/apiHost";
 import {
   meterIndicatorForDevice,
@@ -129,7 +130,7 @@ export function useDataMeter(clientKey: string | null): DataMeter {
       setPauseEnforceable(body.pauseEnforceable === true);
       setError(null);
     } catch {
-      setError("The recorder isn’t answering, so data limits can’t be read or changed.");
+      setError(i18n.t("errors.recorderNotAnsweringLimits"));
     } finally {
       setLoading(false);
     }
@@ -155,7 +156,7 @@ export function useDataMeter(clientKey: string | null): DataMeter {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         setError(null);
       } catch {
-        setError("The recorder refused the change.");
+        setError(i18n.t("rules.recorderRefused"));
       } finally {
         await load();
       }

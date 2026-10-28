@@ -11,6 +11,7 @@
 // machine that bypassed it.
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { RouterPresence } from "@core/routerPresence";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,10 +26,8 @@ import {
 } from "@/components/ui/dialog";
 import { SlideToConfirm } from "@/components/ui/slide-to-confirm";
 import { SpinLoader } from "../loaders/SpinLoader";
+import { errorText } from "../../lib/errorText";
 import { SettingRow } from "./settingsChrome";
-
-const BYPASS_TIP =
-  "Advanced feature that disables the Starlink router completely, so the dish serves a third-party router instead. The Starlink WiFi goes off and the client list, custom DNS and subnet stop working. Most users should leave this off.";
 
 /** The dish names the role within seconds of a flip, so a wait that outlasts this
  *  is one the dish is not going to end. */
@@ -59,6 +58,7 @@ export function BypassSection({
   onSave: (enabled: boolean) => Promise<void>;
   onReload: () => void;
 }) {
+  const { t } = useTranslation();
   // The value the open dialog is offering, captured when it opened. The account
   // can catch up while the dialog sits there, and reading the state fresh on
   // accept would send the opposite of the change the dialog named.
@@ -104,9 +104,7 @@ export function BypassSection({
   // `assumed` outlives the wait so the row keeps offering the way back.
   else if (settling && assumed === true && !accountAnswering) {
     setSettling(false);
-    setNote(
-      "Sent. This device can't reach your Starlink account now, so nothing here can confirm it.",
-    );
+    setNote(t("bypass.sentUnconfirmable"));
   }
 
   useEffect(() => {
@@ -114,13 +112,13 @@ export function BypassSection({
     const giveUp = setTimeout(() => {
       setAssumed(null);
       setSettling(false);
-      setNote("Couldn't confirm the change from here. Reopen this panel to check again.");
+      setNote(t("bypass.couldNotConfirm"));
       // Asked once on the way out rather than polled throughout: the account is
       // the only thing left to ask, and it is the slowest of the three.
       onReload();
     }, SETTLE_TIMEOUT_MS);
     return () => clearTimeout(giveUp);
-  }, [settling, onReload]);
+  }, [settling, onReload, t]);
 
   const caption = disabled
     ? // A router answering locally settles it: bypass is off, and this row is
@@ -128,13 +126,13 @@ export function BypassSection({
       // when the router is silent can bypass be the reason, and then the way
       // back is what the caption has to name.
       bypassed === false
-      ? "Connect your Starlink account to use this"
-      : "Connect this device to the internet and sign in your account to use"
+      ? t("advanced.connectAccountToUse")
+      : t("bypass.connectInternetAndSignIn")
     : bypassed === null
-      ? "Couldn't tell whether the router is bypassed"
+      ? t("bypass.unknownState")
       : bypassed
-        ? "The Starlink router is disabled; a third-party router runs the network"
-        : "The Starlink router is running your network";
+        ? t("bypass.onCaption")
+        : t("bypass.offCaption");
 
   const applyBypass = async (value: boolean) => {
     // Batched with the flag below, so the slider never sees both go false and
@@ -148,15 +146,11 @@ export function BypassSection({
       // Deliberately "sent", not "applied": a write that takes effect can kill
       // its own reply, and a reply that arrives cleanly is only ever ACCEPTED,
       // which the router also returns for changes it goes on to discard.
-      setNote(
-        value
-          ? "Sent. The Starlink WiFi is going down; waiting for the account to confirm."
-          : "Sent! The router is coming back up; waiting for confirmation…",
-      );
+      setNote(value ? t("bypass.sentOn") : t("bypass.sentOff"));
       setAssumed(value);
       setSettling(true);
     } catch (saveError) {
-      setError((saveError as Error).message);
+      setError(errorText(saveError));
     } finally {
       setSaving(false);
     }
@@ -165,8 +159,8 @@ export function BypassSection({
   return (
     <>
       <SettingRow
-        title='Bypass mode'
-        info={BYPASS_TIP}
+        title={t("bypass.title")}
+        info={t("bypass.tip")}
         infoSeverity='danger'
         caption={caption}
         note={
@@ -181,18 +175,20 @@ export function BypassSection({
         }
       >
         {settling ? (
-          <SpinLoader size={15} label={assumed ? "Turning bypass on" : "Turning bypass off"} />
+          <SpinLoader size={15} label={assumed ? t("bypass.turningOn") : t("bypass.turningOff")} />
         ) : (
           bypassed !== null && (
-            <Badge tone={bypassed ? "critical" : "neutral"}>{bypassed ? "On" : "Off"}</Badge>
+            <Badge tone={bypassed ? "critical" : "neutral"}>
+              {bypassed ? t("common.on") : t("common.off")}
+            </Badge>
           )
         )}
       </SettingRow>
 
       <div className='flex flex-col gap-2.5 pb-2'>
         <SlideToConfirm
-          label={shown ? "Slide to turn on bypass mode" : "Slide to turn off bypass mode"}
-          busyLabel={saving ? "Sending…" : "Confirm to continue"}
+          label={shown ? t("bypass.slideOn") : t("bypass.slideOff")}
+          busyLabel={saving ? t("common.sending") : t("common.confirmContinue")}
           direction={shown ? "right" : "left"}
           tone={shown ? "danger" : "default"}
           // A flip is unresolved until the dish or the account says otherwise, and
@@ -206,10 +202,10 @@ export function BypassSection({
             weight instead, which is what it is separately severable for. */}
         <Callout tone='info' icon='warning' iconSeverity={bypassed === false ? "danger" : "normal"}>
           {bypassed === false
-            ? "Bypass mode will completely disable the Starlink router and its WiFi. Only a third-party router wired to the dish stays online. You can turn it back off from here as long as this device has access to the internet."
+            ? t("bypass.explainOff")
             : bypassed
-              ? "Bypass is on, so the Starlink router is disabled and a third-party router runs your network. Turning bypass off brings the Starlink router and its WiFi back."
-              : "Can't tell whether bypass is on. Turning it off is the safe direction either way: it brings the Starlink router and its WiFi back, and changes nothing if bypass was already off."}
+              ? t("bypass.explainOn")
+              : t("bypass.explainUnknown")}
         </Callout>
       </div>
 
@@ -220,11 +216,9 @@ export function BypassSection({
           overlayClassName='bg-black/30 backdrop-blur-[2px]'
         >
           <DialogHeader>
-            <DialogTitle className='text-[19px] leading-snug'>Are you sure?</DialogTitle>
+            <DialogTitle className='text-[19px] leading-snug'>{t("common.areYouSure")}</DialogTitle>
             <DialogDescription className='text-[13.5px] leading-relaxed'>
-              {offered
-                ? "The Starlink router and its WiFi will switch off. Only devices behind a third-party router wired to the dish stay online. You can turn bypass back off from here as long as this device still has internet — if nothing else provides it, you will need another device on mobile data."
-                : "The Starlink router and its WiFi come back on. Devices connected through a third-party router may need to reconnect."}
+              {offered ? t("bypass.confirmOn") : t("bypass.confirmOff")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className='mt-2 gap-2'>
@@ -234,7 +228,7 @@ export function BypassSection({
               disabled={saving}
               onClick={() => setOffered(null)}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               variant={offered ? "destructive" : "default"}
@@ -242,7 +236,7 @@ export function BypassSection({
               disabled={saving}
               onClick={() => offered !== null && void applyBypass(offered)}
             >
-              {saving ? "Sending…" : offered ? "Turn on" : "Turn off"}
+              {saving ? t("common.sending") : offered ? t("bypass.turnOn") : t("bypass.turnOff")}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -8,18 +8,19 @@ interface ToolbarRailProps {
   items: ToolbarItem[];
   activeId: string | null;
   onSelect: (id: ToolbarItemId) => void;
+  navLabel: string;
 }
 
 const COLLAPSED = 64;
 const OPEN = 214;
 const spring = { type: "spring" as const, stiffness: 420, damping: 34 };
 
-export function ToolbarRail({ items, activeId, onSelect }: ToolbarRailProps) {
+export function ToolbarRail({ items, activeId, onSelect, navLabel }: ToolbarRailProps) {
   const [open, setOpen] = useState(false);
 
   return (
     <motion.nav
-      aria-label='Dashboard sections'
+      aria-label={navLabel}
       onHoverStart={() => setOpen(true)}
       onHoverEnd={() => setOpen(false)}
       initial={{ opacity: 0, x: -16, y: "-50%" }}

@@ -13,6 +13,7 @@
 // Exact values are enforced by details-modal.test.tsx. @keyframes rise lives in index.css.
 
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
@@ -44,6 +45,7 @@ interface DetailsModalProps extends VariantProps<typeof panel> {
 }
 
 export function DetailsModal({ title, onClose, children, size, onBack }: DetailsModalProps) {
+  const { t } = useTranslation();
   return (
     <DialogPrimitive.Root open onOpenChange={(open) => !open && onClose()}>
       <DialogPrimitive.Portal>
@@ -70,7 +72,7 @@ export function DetailsModal({ title, onClose, children, size, onBack }: Details
                 <button
                   className='-mr-0.5 inline-flex h-7 w-7 flex-none cursor-pointer items-center justify-center rounded-[999px] border-0 bg-none p-0 text-ink-secondary [transition:background_120ms_ease,color_120ms_ease] hover:bg-[color-mix(in_srgb,var(--ink)_8%,var(--surface))] hover:text-ink'
                   onClick={onBack}
-                  aria-label='Back'
+                  aria-label={t("common.back")}
                   type='button'
                 >
                   <ChevronLeftIcon />
@@ -83,7 +85,7 @@ export function DetailsModal({ title, onClose, children, size, onBack }: Details
                 {title}
               </DialogPrimitive.Title>
               <DialogPrimitive.Close
-                aria-label='Close'
+                aria-label={t("common.close")}
                 className='ml-auto inline-flex h-[30px] w-[30px] cursor-pointer items-center justify-center rounded-[999px] border-0 bg-[color-mix(in_srgb,var(--ink)_6%,var(--surface))] text-[13px] text-ink-secondary hover:text-ink'
               >
                 ✕

@@ -46,9 +46,11 @@ import {
   NotificationThrottle,
   notificationsRequested,
   notificationsProblem,
-  NOTIFICATIONS_ON_CONFIRMATION,
+  notificationsOnConfirmation,
   type NotificationState,
 } from "../core/alertNotification";
+import { isSupportedLocale } from "../core/i18n/locale";
+import { t, setLocale, onLocaleChanged } from "./i18n";
 import {
   NOTIFICATION_STATE_CHANNEL,
   MENUBAR_THROUGHPUT_CHANNEL,
@@ -254,7 +256,7 @@ function createWindow(): void {
     ...(restoredBounds ? { x: savedBounds.x, y: savedBounds.y } : {}),
     minWidth: 800,
     minHeight: 700,
-    title: "Dishylink — Starlink Companion Desktop App (Unofficial)",
+    title: t("desktop.windowTitle"),
     titleBarStyle: "hiddenInset",
     show: false,
     // Matches index.css's dark --page. Electron's own default is white, which the
@@ -494,8 +496,8 @@ function menuTemplate(): MenuItemConstructorOptions[] {
             id: THROUGHPUT_ITEM_ID,
             label:
               process.platform === "darwin"
-                ? "Show Throughput in Menu Bar"
-                : "Show Throughput in Taskbar",
+                ? t("desktop.showThroughputMenuBar")
+                : t("desktop.showThroughputTaskbar"),
             type: "checkbox" as const,
             checked: preferences().menuBarThroughput,
             click: (item: MenuItem) => setPreference("menuBarThroughput", item.checked),
@@ -506,7 +508,7 @@ function menuTemplate(): MenuItemConstructorOptions[] {
       ? [
           {
             id: HIDE_ICON_ITEM_ID,
-            label: "Hide Menu Bar Icon",
+            label: t("desktop.hideMenuBarIcon"),
             type: "checkbox" as const,
             checked: preferences().hideTrayIcon,
             visible: preferences().menuBarThroughput,
@@ -704,8 +706,8 @@ function registerCloudHandlers(): void {
  *  a binary it can't verify. */
 function undeliverableReason(): string {
   return app.isPackaged
-    ? "macOS isn’t delivering notifications — allow Dishylink under System Settings ▸ Notifications."
-    : "Native notifications need the installed Dishylink app; a dev run can’t post them.";
+    ? t("desktop.notificationsUndeliverable")
+    : t("desktop.notificationsDevRun");
 }
 
 /** The one notification answer every surface renders: stored request + channel as last
@@ -820,7 +822,7 @@ function startAlertNotifications(): void {
     // Only an explicit yes; an unseeded preference is unknown, not consent.
     if (preferences().notifications !== true) return;
     for (const transition of transitions) {
-      const notification = describeTransition(transition);
+      const notification = describeTransition(transition, t);
       if (!notification) continue;
       // Stamped from the reading, so a flapping link is rate-limited by device time.
       if (!throttle.allow(notification.key, transition.atMs)) continue;
@@ -839,6 +841,11 @@ function registerHostHandlers(): void {
   // from the host's own interfaces, plus the roster entry a window on the router's
   // network has since matched to them.
   ipcMain.handle("get-self-identity", () => hostIdentity());
+  // The window reports the interface language it uses; main follows, so the tray
+  // menu and the notifications it posts with no window open read the same way.
+  ipcMain.on("set-locale", (_event, locale: unknown) => {
+    if (isSupportedLocale(locale)) setLocale(locale);
+  });
   // Written whenever the window resolves this machine on a roster read over the LAN.
   ipcMain.handle("remember-self-device", (_event, clientId: unknown) => {
     if (typeof clientId === "number") rememberSelfDevice(clientId);
@@ -949,6 +956,7 @@ void app.whenReady().then(async () => {
   // signed in and its own limits unenforceable.
   startCloud(rendererRoot, devServerUrl ? resolve(process.cwd(), ".starlink-cookie") : undefined);
   registerCloudHandlers();
+  allowYoutubeEmbeds();
   // A dev server runs its own recorder; a second collector here would double-poll
   // the dish.
   if (!devServerUrl) {

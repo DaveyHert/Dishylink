@@ -12,6 +12,7 @@
 // chrome. Colours come from the app's CSS tokens via arbitrary values.
 
 import { Fragment, forwardRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import type { DeviceAlerts } from "../../hooks/useDeviceAlerts";
@@ -36,14 +37,15 @@ const BTN_RESET = "cursor-pointer appearance-none border-0 bg-transparent p-0 te
  *  the unlock gesture browsers require, and it proves the volume immediately
  *  instead of during the next outage. */
 function SoundToggle({ soundOn, onToggle }: { soundOn: boolean; onToggle: () => void }) {
+  const { t } = useTranslation();
   return (
     <button
       className={cn(BTN_RESET, "flex items-center transition-colors")}
       // Not green: that's the online indicator's color, and this is a
       // preference, not a health state. Ink when on, dimmed when muted.
       style={{ color: soundOn ? "var(--ink)" : "var(--ink-muted)" }}
-      aria-label={soundOn ? "Mute alert sounds" : "Unmute alert sounds"}
-      title={soundOn ? "Alert sounds on — click to mute" : "Alert sounds muted — click to unmute"}
+      aria-label={soundOn ? t("notifications.muteSounds") : t("notifications.unmuteSounds")}
+      title={soundOn ? t("notifications.soundsOnTitle") : t("notifications.soundsMutedTitle")}
       onClick={onToggle}
     >
       <SpeakerIcon on={soundOn} />
@@ -63,15 +65,15 @@ const AlertsBellTrigger = forwardRef<
   HTMLButtonElement,
   { count: number; color: string; muted: boolean } & React.ComponentPropsWithoutRef<"button">
 >(function AlertsBellTrigger({ count, color, muted, ...triggerProps }, ref) {
+  const { t } = useTranslation();
+  const title =
+    count > 0 ? t("notifications.activeCount", { count }) : t("notifications.allHealthy");
   return (
     <button
       ref={ref}
       className='relative inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border-0 bg-card text-ink-secondary transition-colors duration-[120ms] hover:text-ink'
-      aria-label='Alerts and notifications'
-      title={
-        (count > 0 ? `${count} active alert${count === 1 ? "" : "s"}` : "Alerts — all healthy") +
-        (muted ? " · sounds muted" : "")
-      }
+      aria-label={t("notifications.alertsAndNotifications")}
+      title={`${title}${muted ? ` · ${t("notifications.soundsMuted")}` : ""}`}
       style={count > 0 ? { color } : undefined}
       {...triggerProps}
     >
@@ -99,6 +101,7 @@ export function AlertsMenu({
   notificationsBlockedReason: string | null;
   onToggleNotifications: () => void;
 }) {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<AlertsTab>("active");
   // Lifted to the menu so the bell's tooltip and the panel's speaker toggle
   // report the same muted state.
@@ -130,7 +133,7 @@ export function AlertsMenu({
         className='w-[380px] overflow-hidden rounded-xl border border-solid border-hairline dark:bg-card p-0 text-ink shadow-[0_12px_40px_rgba(0,0,0,0.45)]'
       >
         <div className='flex items-center justify-between px-4 py-2'>
-          <span className='text-[15px] font-semibold text-ink'>Alerts</span>
+          <span className='text-[15px] font-semibold text-ink'>{t("notifications.alerts")}</span>
           <span className='flex items-center gap-3.5'>
             <SoundToggle soundOn={soundOn} onToggle={toggleSound} />
             {notificationsSupported() && (
@@ -139,7 +142,7 @@ export function AlertsMenu({
                 style={{ color: notificationsOn ? "var(--status-good)" : "var(--ink-muted)" }}
                 onClick={onToggleNotifications}
               >
-                {notificationsOn ? "Notifications on" : "Enable notifications"}
+                {notificationsOn ? t("notifications.on") : t("notifications.enable")}
               </button>
             )}
           </span>
@@ -170,7 +173,7 @@ export function AlertsMenu({
                 )}
                 style={tab === key ? { borderBottomColor: "var(--ink)" } : undefined}
               >
-                {label}
+                {t(label)}
                 {key === "active" && activeCount > 0 && (
                   <span
                     className='flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white'

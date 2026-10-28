@@ -3,9 +3,11 @@
 // so the row, the node detail and the device detail all read a device the same
 // way rather than each deriving its own label.
 
+import type { TFunction } from "i18next";
 import { throughputMbps, type WifiClientJson } from "@core/dishClient";
 import { usageKey } from "@core/clientUsage";
-import { vendorForMac } from "../../lib/macVendor";
+import type { TranslationKey } from "@core/i18n/resources";
+import { vendorForMac, vendorLabel } from "../../lib/macVendor";
 import type { ThroughputRates } from "@core/throughputTracker";
 
 /** Silence past this reads as idle. Live polling shows noDataIdleS bouncing
@@ -32,6 +34,7 @@ export function pauseSettleTimeoutMs(rosterRefreshMs: number): number {
   return Math.max(20_000, rosterRefreshMs * 2 + 5_000);
 }
 
+/** Band names are units and proper nouns, the same in every language. */
 export function bandLabel(client: WifiClientJson): string {
   const iface = client.iface ?? "";
   if (iface === "ETH") return "Ethernet";
@@ -45,28 +48,29 @@ export function bandLabel(client: WifiClientJson): string {
 }
 
 /** Radio-band code → readable name for the temperature readout. */
-export function radioBandLabel(band: string): string {
+export function radioBandLabel(band: string, t: TFunction): string {
   if (band === "RF_2GHZ") return "2.4 GHz";
   if (band === "RF_5GHZ") return "5 GHz";
-  if (band === "RF_5GHZ_HIGH") return "5 GHz high";
+  if (band === "RF_5GHZ_HIGH") return t("network.band5GhzHigh");
   return band;
 }
 
 export interface SignalQuality {
-  label: string;
+  /** Catalog key for the bucket's name, resolved where it is shown. */
+  label: TranslationKey;
   bars: number;
   colorVar: string;
 }
 
 /** Signal quality bucket from dBm (wifi). Ethernet has no RSSI. */
 export function signalQuality(client: WifiClientJson): SignalQuality | null {
-  if (client.iface === "ETH") return { label: "wired", bars: 4, colorVar: "--status-good" };
+  if (client.iface === "ETH") return { label: "network.wired", bars: 4, colorVar: "--status-good" };
   const dbm = client.signalStrength;
   if (dbm === undefined || dbm === 0) return null;
-  if (dbm > -55) return { label: "excellent", bars: 4, colorVar: "--status-good" };
-  if (dbm > -67) return { label: "good", bars: 3, colorVar: "--status-good" };
-  if (dbm > -75) return { label: "fair", bars: 2, colorVar: "--chart-warm" };
-  return { label: "weak", bars: 1, colorVar: "--status-critical" };
+  if (dbm > -55) return { label: "network.signalExcellent", bars: 4, colorVar: "--status-good" };
+  if (dbm > -67) return { label: "network.signalGood", bars: 3, colorVar: "--status-good" };
+  if (dbm > -75) return { label: "network.signalFair", bars: 2, colorVar: "--chart-warm" };
+  return { label: "network.signalWeak", bars: 1, colorVar: "--status-critical" };
 }
 
 /** Combined live rate for sorting. Reads the tracker's byte-delta rate where the
@@ -103,19 +107,23 @@ export function isClientDevice(client: WifiClientJson): boolean {
   return !client.role || client.role === "CLIENT";
 }
 
-export function displayName(client: WifiClientJson): string {
+export function displayName(client: WifiClientJson, t: TFunction): string {
   return (
-    client.givenName || client.name || client.ipAddress || client.macAddress || "Unnamed device"
+    client.givenName ||
+    client.name ||
+    client.ipAddress ||
+    client.macAddress ||
+    t("network.unnamedDevice")
   );
 }
 
 /** Subtitle line: hostname and/or derived vendor, de-duplicated. */
-export function deviceSubtitle(client: WifiClientJson): string {
+export function deviceSubtitle(client: WifiClientJson, t: TFunction): string {
   const parts: string[] = [];
   if (client.name && client.name !== client.givenName) parts.push(client.name);
-  const vendor = vendorForMac(client.macAddress);
+  const vendor = vendorLabel(vendorForMac(client.macAddress), t);
   // "Private" is a meaningful subtitle, not a missing brand — a device behind a
   // randomized MAC. Show it like the official app does rather than hiding it.
   if (vendor && !parts.includes(vendor)) parts.push(vendor);
-  return parts.join(" · ") || "unknown device";
+  return parts.join(" · ") || t("network.unknownDevice");
 }

@@ -6,6 +6,7 @@
 //    elevation band, dish plate + orange needle at the ACTUAL elevation
 // Their needle orange is #ffac30. Size ratios are verbatim from their code.
 
+import { useTranslation } from "react-i18next";
 import { type AlignmentReading } from "./alignmentMath";
 import {
   CompassLabels,
@@ -61,6 +62,7 @@ function berryFor(inSpec: boolean, isValid: boolean): "good" | "bad" | "unknown"
 }
 
 export function RotationInstrument({ reading }: { reading: AlignmentReading }) {
+  const { t } = useTranslation();
   const center = SIZE / 2;
   const ringRadius = 0.45 * SIZE;
   const dishWidth = SIZE / 8;
@@ -79,7 +81,10 @@ export function RotationInstrument({ reading }: { reading: AlignmentReading }) {
   }
 
   return (
-    <InstrumentFrame label='Rotation' berry={berryFor(reading.isAligned, reading.isValid)}>
+    <InstrumentFrame
+      label={t("alignment.rotation")}
+      berry={berryFor(reading.isAligned, reading.isValid)}
+    >
       <DialDots cx={center} cy={center} radius={ringRadius} anglesDeg={ringDots} />
       <CompassLabels cx={center} cy={center} radius={ringRadius} fontSize={SIZE / 20} />
       {/* wedge: desired azimuth ± tolerance (their thetaCenter = desired − 90) */}
@@ -107,6 +112,7 @@ export function RotationInstrument({ reading }: { reading: AlignmentReading }) {
 }
 
 export function TiltInstrument({ reading }: { reading: AlignmentReading }) {
+  const { t } = useTranslation();
   const pivot = SIZE / 6;
   const arcRadius = 0.77 * SIZE;
   const dishLength = SIZE / 4;
@@ -117,7 +123,10 @@ export function TiltInstrument({ reading }: { reading: AlignmentReading }) {
   for (let dotIndex = 0; dotIndex < 19; dotIndex++) arcDots.push(dotIndex * 5);
 
   return (
-    <InstrumentFrame label='Tilt' berry={berryFor(reading.isElevationValid, reading.isValid)}>
+    <InstrumentFrame
+      label={t("alignment.tilt")}
+      berry={berryFor(reading.isElevationValid, reading.isValid)}
+    >
       {/* their y-up coordinate system: translate(0, size) scale(1, -1) */}
       <g transform={`translate(0, ${SIZE}) scale(1, -1)`}>
         <DialDots cx={pivot} cy={pivot} radius={arcRadius} anglesDeg={arcDots} />

@@ -138,7 +138,7 @@ describe("AlertEngine", () => {
   it("carries wording and severity on every transition", () => {
     const engine = new AlertEngine();
     const [transition] = engine.update(bothAnswered({ thermalShutdown: true }));
-    expect(transition?.spec.firing).toBe("Dish shut itself down to cool off");
+    expect(transition?.spec.firing).toBe("alerts.dish.thermalShutdown.firing");
     expect(transition?.spec.severity).toBe("critical");
     expect(transition?.spec.notify).toBe(true);
   });

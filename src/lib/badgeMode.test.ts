@@ -3,7 +3,7 @@ import type { AlertState } from "@core/alertDefinitions";
 import { badgeAlerts, isBadgeMode } from "./badgeMode";
 
 function alert(source: AlertState["source"], key: string): AlertState {
-  return { source, key, active: true, ok: "", firing: "", severity: "warning" } as AlertState;
+  return { source, key, active: true, severity: "warning" } as unknown as AlertState;
 }
 
 const DISH_FAULT = alert("dish", "thermalShutdown");

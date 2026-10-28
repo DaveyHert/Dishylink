@@ -2,12 +2,13 @@
 // and its throughput charts.
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { throughputMbps, type WifiClientJson } from "@core/dishClient";
 import { usageKey, type ClientUsageTotal } from "@core/clientUsage";
 import type { TelemetrySample } from "@core/telemetry";
 import type { ThroughputRates } from "@core/throughputTracker";
 import { classifyDevice } from "../../lib/deviceKind";
-import { vendorForMac } from "../../lib/macVendor";
+import { vendorForMac, vendorLabel } from "../../lib/macVendor";
 import { DeviceTypeIcon } from "../../assets/icons/DeviceTypeIcon";
 import { Badge } from "../ui/badge";
 import { DeviceFactsList } from "./DeviceFactsList";
@@ -31,6 +32,7 @@ import {
   setRouterClientPaused,
 } from "../../lib/routerClientUpdate";
 import { AccountRequiredNotice } from "../shared/AccountRequiredNotice";
+import { errorText } from "../../lib/errorText";
 import { useCloudAccount } from "../../hooks/useCloudAccount";
 import {
   Dialog,
@@ -89,6 +91,7 @@ export function DeviceDetail({
   viewerIdentified: boolean;
   onRename: (clientId: number, givenName: string) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [editingMeter, setEditingMeter] = useState(false);
   const [pendingPaused, setPendingPaused] = useState<boolean | null>(null);
@@ -127,14 +130,12 @@ export function DeviceDetail({
     if (pendingPaused === null) return;
     const timer = window.setTimeout(() => {
       setPendingPaused(null);
-      setPauseError(
-        new Error("The router has not applied this yet. Give it a moment, then try again."),
-      );
+      setPauseError(new Error(t("network.routerNotApplied")));
     }, pauseSettleTimeoutMs(rosterRefreshMs));
     return () => {
       window.clearTimeout(timer);
     };
-  }, [pendingPaused, rosterRefreshMs]);
+  }, [pendingPaused, rosterRefreshMs, t]);
 
   const applyPaused = async (next: boolean) => {
     if (client.clientId === undefined || pauseBusy || !showPauseControl) return;
@@ -149,7 +150,7 @@ export function DeviceDetail({
   };
 
   const quality = signalQuality(client);
-  const name = displayName(client);
+  const name = displayName(client, t);
   // Byte-delta rate, so the headline number matches a speed test instead of the
   // router's 60-second average of it. Falls back until the second reading lands.
   const liveRate =
@@ -164,9 +165,10 @@ export function DeviceDetail({
   const facts = buildDeviceFacts({
     client,
     quality,
-    vendor: vendorForMac(client.macAddress),
+    vendor: vendorLabel(vendorForMac(client.macAddress), t),
     upstreamName,
     total,
+    t,
   });
 
   return (
@@ -188,7 +190,7 @@ export function DeviceDetail({
               {!editing && <RenameButton onClick={() => setEditing(true)} />}
             </div>
             <div className='text-[11.5px] font-medium text-muted-foreground'>
-              {deviceRowSubtitle(client, isThisDevice)}
+              {deviceRowSubtitle(client, isThisDevice, t)}
             </div>
           </div>
         </div>
@@ -205,7 +207,11 @@ export function DeviceDetail({
               {client.clientId}
             </span>
           )}
-          {paused && <Badge className='mt-1'>{heldByRule ? "Paused · limit" : "Paused"}</Badge>}
+          {paused && (
+            <Badge className='mt-1'>
+              {heldByRule ? t("network.pausedByLimit") : t("network.paused")}
+            </Badge>
+          )}
         </div>
         <div className='flex items-center justify-end gap-1.5'>
           {showMeterControl && client.macAddress && (
@@ -214,7 +220,7 @@ export function DeviceDetail({
                 <Button
                   variant='ghost'
                   size='sm'
-                  aria-label='Data limit'
+                  aria-label={t("network.dataLimit")}
                   className='cursor-pointer px-2'
                   onClick={() => setEditingMeter(true)}
                 >
@@ -224,7 +230,7 @@ export function DeviceDetail({
                   />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side='top'>Data limit</TooltipContent>
+              <TooltipContent side='top'>{t("network.dataLimit")}</TooltipContent>
             </Tooltip>
           )}
           {showPauseControl && (
@@ -242,12 +248,12 @@ export function DeviceDetail({
                 <SpinLoader
                   variant='segment'
                   size={16}
-                  label={pendingPaused ? "Pausing" : "Unpausing"}
+                  label={pendingPaused ? t("network.pausing") : t("network.unpausing")}
                 />
               ) : paused ? (
-                "Unpause"
+                t("network.unpause")
               ) : (
-                "Pause"
+                t("network.pause")
               )}
             </Button>
           )}
@@ -263,10 +269,11 @@ export function DeviceDetail({
           overlayClassName='bg-black/30 backdrop-blur-[2px]'
         >
           <DialogHeader>
-            <DialogTitle className='text-[19px] leading-snug'>Pause “{name}”?</DialogTitle>
+            <DialogTitle className='text-[19px] leading-snug'>
+              {t("network.pauseConfirmTitle", { name })}
+            </DialogTitle>
             <DialogDescription className='text-[13.5px] leading-relaxed'>
-              This will pause internet access for this device. It stays connected to your network,
-              and you can unpause it at any time.
+              {t("network.pauseConfirmBody")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className='mt-2 gap-2'>
@@ -275,7 +282,7 @@ export function DeviceDetail({
               className='cursor-pointer sm:min-w-28'
               onClick={() => setConfirmingPause(false)}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               className='cursor-pointer sm:min-w-28'
@@ -284,7 +291,7 @@ export function DeviceDetail({
                 void applyPaused(true);
               }}
             >
-              Pause
+              {t("network.pause")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -295,7 +302,7 @@ export function DeviceDetail({
           {pauseError instanceof AccountRequiredError ? (
             <AccountRequiredNotice />
           ) : (
-            pauseError.message
+            errorText(pauseError)
           )}
         </div>
       )}

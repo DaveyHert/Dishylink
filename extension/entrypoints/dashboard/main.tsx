@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "@/index.css";
+import "@/i18n";
 import App from "@/App";
 
 document.documentElement.dataset.host = "extension";
@@ -10,6 +11,8 @@ import { setSelfDeviceHost } from "@/lib/selfDeviceHost";
 import { bindNotifications, setNotificationHost } from "@/lib/notifications";
 import { setBadgeModeHost } from "@/lib/badgeMode";
 import { extensionBadgeModeHost } from "../../lib/badgeModeHost";
+import { setLocaleHost } from "@/lib/locale";
+import { extensionLocaleHost } from "../../lib/localeHost";
 import { setDishHost } from "@core/dishClient";
 import { setSatelliteHost } from "@/lib/satellites";
 import { extensionApiTransport } from "../../lib/apiTransport";
@@ -56,6 +59,10 @@ setSelfDeviceHost({
 setNotificationHost(extensionNotificationHost);
 
 setBadgeModeHost(extensionBadgeModeHost);
+
+// The worker posts toasts with no dashboard open, so it is told which language
+// this page uses.
+setLocaleHost(extensionLocaleHost);
 
 // Where the router is, when 192.168.1.1 is wrong for this kit. Unlike the desktop
 // app, which resolves an origin per request in its main process, the extension
