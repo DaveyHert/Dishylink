@@ -278,7 +278,20 @@ function openLoginWindow(parent?: BrowserWindow): Promise<{ ok: boolean; message
       modal: Boolean(parent),
       title: t("desktop.signInTitle"),
       autoHideMenuBar: true,
-      webPreferences: { partition: LOGIN_PARTITION },
+      webPreferences: {
+        partition: LOGIN_PARTITION,
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+      },
+    });
+    // Prevent the login window from opening popups or navigating outside
+    // starlink.com — the OAuth flow stays entirely on that domain.
+    win.setWindowOpenHandler(() => ({ action: "deny" }));
+    win.webContents.on("will-navigate", (event: { preventDefault(): void }, url: string) => {
+      if (!/^https:\/\/(\w[\w-]*\.)*starlink\.com(\/|$)/i.test(url)) {
+        event.preventDefault();
+      }
     });
     // macOS draws a modal child window as a sheet: attached to the parent, and
     // with no title bar of its own, so it carries no close button — `isClosable()`
