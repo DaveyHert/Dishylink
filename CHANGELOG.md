@@ -2,6 +2,31 @@
 
 All notable changes to Dishylink are documented here.
 
+## [1.3.1] - 2026-11-02
+
+### Fixed
+
+- Dishylink no longer slows down on busy networks. The events list only draws
+  what's on screen and stops redrawing every second, so a log with hundreds of
+  WiFi band switches costs nothing while it sits there.
+- Staying signed in to Starlink works again. Starlink now sends its sign-in
+  token in pieces; Dishylink kept only one of them and was signed out on the
+  next launch. It now keeps every piece and saves each renewal.
+
+### Alignment
+
+- The Tilt dial marks the dish's ideal tilt with a dashed line, which the tilt
+  recommendation counts towards. (#86)
+
+### Also changed
+
+- The browser extension is now listed as "Dishylink: Starlink Desktop App
+  (Unofficial)".
+- The update notice in the Support menu opens dishylink.com, where you pick the
+  right download for your computer.
+- The README explains how to open the Mac app the first time, since it isn't
+  signed with an Apple Developer ID yet.
+
 ## [1.3.0] - 2026-10-23
 
 ### Languages

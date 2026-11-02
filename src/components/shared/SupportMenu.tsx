@@ -262,7 +262,7 @@ export function SupportMenu() {
                 <span className='size-1 rounded-full bg-red-500 shadow-[0_0_4px_1.5px_rgba(239,68,68,0.85)]' />
               </div>
               <MenuLink
-                href={SUPPORT_LINKS.latestRelease}
+                href={SUPPORT_LINKS.downloadPage}
                 icon={DownloadIcon}
                 iconClassName='text-status-good'
               >

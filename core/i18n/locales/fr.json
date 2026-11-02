@@ -729,7 +729,7 @@
     "currentTilt": "Inclinaison actuelle",
     "currentTiltHint": "L'inclinaison actuelle (angle d'inclinaison) est l'angle physique du plateau de l'antenne par rapport à l'horizontale. À plat c'est 0°, et plus le plateau est redressé, plus bas il vise.",
     "tiltRecommendation": "Inclinaison recommandée",
-    "tiltRecommendationHint": "De combien réorienter l'antenne vers le haut ou le bas, et dans quel sens. Vers le bas signifie que l'antenne vise trop haut ; redressez le plateau pour la faire descendre.",
+    "tiltRecommendationHint": "De combien réorienter l'antenne vers le haut ou le bas, et dans quel sens. Vers le bas signifie que l'antenne vise trop haut ; redressez le plateau pour la faire descendre. Elle compte jusqu'à la ligne pointillée du cadran Inclinaison, l'idéal de l'antenne, qui peut se trouver près du bord de la zone grise plutôt qu'en son centre.",
     "boresightElevation": "Élévation de visée",
     "boresightElevationHint": "L'élévation de visée est la hauteur au-dessus de l'horizon vers laquelle l'antenne pointe réellement, où 0° est au niveau de l'horizon et 90° droit au-dessus.",
     "targetElevation": "Élévation cible",
@@ -741,7 +741,7 @@
     "actuationState": "État d'actionnement",
     "actuationStateHint": "Ce que font les moteurs de l'antenne en ce moment — inactifs, ou en train de se déplacer vers une nouvelle position.",
     "howToRead": "Comment lire ceci",
-    "howToReadBody": "La zone grise montre la direction de pointage souhaitée ± tolérance. Le plateau de l'antenne et l'aiguille orange montrent où l'antenne pointe réellement. Si l'aiguille est dans la zone grise, l'antenne est alignée. Si elle est en dehors, ajustez l'antenne vers la zone grise. Les valeurs se mettent à jour en direct toutes les 2 s",
+    "howToReadBody": "La zone grise montre la direction de pointage souhaitée ± tolérance. Le plateau de l'antenne et l'aiguille orange montrent où l'antenne pointe réellement. Sur le cadran Inclinaison, la fine ligne pointillée marque l'inclinaison idéale de l'antenne. Si l'aiguille est dans la zone grise, l'antenne est alignée. Si elle est en dehors, ajustez l'antenne vers la zone grise. Les valeurs se mettent à jour en direct toutes les 2 s",
     "rotation": "Rotation",
     "tilt": "Inclinaison",
     "state": {

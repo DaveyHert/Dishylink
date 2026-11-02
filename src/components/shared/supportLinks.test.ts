@@ -15,7 +15,7 @@ describe("support menu links", () => {
       githubSponsors: "https://github.com/sponsors/daveyhert",
       buyMeACoffee: "https://buymeacoffee.com/daveyhert",
       patreon: "https://www.patreon.com/DaveyHert",
-      latestRelease: "https://github.com/DaveyHert/dishylink/releases/latest",
+      downloadPage: "https://dishylink.com/#get",
       releaseNotes: "https://github.com/DaveyHert/dishylink/blob/master/CHANGELOG.md",
       reportIssue: "https://github.com/DaveyHert/dishylink/issues/new?labels=bug",
       requestFeature: "https://buymeacoffee.com/daveyhert/e/591024",

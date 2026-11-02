@@ -45,3 +45,16 @@ test("an existing row keeps its DOM node when a newer event is prepended", async
   const reused = after.filter((row) => row.dataset.mark !== undefined);
   expect(reused, "both prior rows should be the same DOM nodes, not rebuilt").toHaveLength(2);
 });
+
+// A busy network logs thousands of events. Building a row for each one, every
+// second, is what made 1.3 crawl on a band-switch-heavy connection, so the log
+// must build only a window of rows however long it runs.
+test("a long log builds only the rows in view, and still counts them all", async () => {
+  const many = Array.from({ length: 2000 }, (_, i) => ev(1_000_000 + i * 60_000, "obstructed"));
+  render(<Harness initial={many} bind={() => {}} />);
+  await tick();
+
+  expect(rows().length).toBeGreaterThan(0);
+  expect(rows().length, "only the visible window should be built").toBeLessThan(40);
+  expect(document.body.textContent).toContain("2000 events");
+});

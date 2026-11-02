@@ -719,7 +719,7 @@
     "currentTilt": "Aktuelle Neigung",
     "currentTiltHint": "Die aktuelle Neigung (Neigungswinkel) ist der physische Winkel der Antennenplatte gegenüber der Waagerechten. Flach ist 0°, und je steiler die Platte, desto tiefer zielt sie.",
     "tiltRecommendation": "Neigungsempfehlung",
-    "tiltRecommendationHint": "Wie weit die Antenne nach oben oder unten neu auszurichten ist, und in welche Richtung. Runter heißt, die Antenne zielt zu hoch; stellen Sie die Platte steiler, um sie zu senken.",
+    "tiltRecommendationHint": "Wie weit die Antenne nach oben oder unten neu auszurichten ist, und in welche Richtung. Runter heißt, die Antenne zielt zu hoch; stellen Sie die Platte steiler, um sie zu senken. Sie zählt bis zur gestrichelten Linie auf der Skala Neigung, dem Ideal der Antenne, das auch nahe am Rand des Keils statt in seiner Mitte liegen kann.",
     "boresightElevation": "Zielachsen-Elevation",
     "boresightElevationHint": "Die Zielachsen-Elevation ist, wie weit über dem Horizont die Antenne tatsächlich zeigt, wobei 0° waagerecht zum Horizont und 90° senkrecht nach oben ist.",
     "targetElevation": "Ziel-Elevation",
@@ -731,7 +731,7 @@
     "actuationState": "Stellzustand",
     "actuationStateHint": "Was die Motoren der Antenne gerade tun – ruhen, oder sich aktiv in eine neue Position bewegen.",
     "howToRead": "So lesen Sie das",
-    "howToReadBody": "Der Keil zeigt die gewünschte Ausrichtung ± Toleranz. Die Antennenplatte und die orangefarbene Nadel zeigen, wohin die Antenne tatsächlich zeigt. Liegt die Nadel im Keil, ist die Antenne ausgerichtet. Liegt sie außerhalb, drehen Sie die Antenne zum Keil hin. Die Werte aktualisieren sich live alle 2 s",
+    "howToReadBody": "Der Keil zeigt die gewünschte Ausrichtung ± Toleranz. Die Antennenplatte und die orangefarbene Nadel zeigen, wohin die Antenne tatsächlich zeigt. Auf der Skala Neigung markiert die blasse gestrichelte Linie die ideale Neigung der Antenne. Liegt die Nadel im Keil, ist die Antenne ausgerichtet. Liegt sie außerhalb, drehen Sie die Antenne zum Keil hin. Die Werte aktualisieren sich live alle 2 s",
     "rotation": "Drehung",
     "tilt": "Neigung",
     "state": {

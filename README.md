@@ -42,6 +42,18 @@ only to Starlink.
 Not sure which to pick? On Windows, take Universal. On macOS, take `arm64` for
 Apple silicon (M1 and later) or `x64` for Intel.
 
+> **macOS: first launch**
+>
+> The Mac build isn't signed with an Apple Developer ID yet, so macOS blocks it
+> the first time you open it. To allow it:
+>
+> 1. Open Dishylink once and close the warning.
+> 2. Go to **System Settings › Privacy & Security**.
+> 3. Scroll to **Security** and click **Open Anyway** next to the Dishylink
+>    message.
+>
+> You only need to do this once.
+
 ## Features
 
 ### What it shows
@@ -152,7 +164,7 @@ They don't talk to each other or share a runtime: each independently polls the
 dish/router and records its own history. Packaging:
 
 ```bash
-npm run pack:mac        # signed Mac build
+npm run pack:mac        # Mac build, ad-hoc signed (no Developer ID)
 npm run pack:win        # Windows build
 npm run build:extension # Chromium extension bundle
 npm run build:extension:firefox

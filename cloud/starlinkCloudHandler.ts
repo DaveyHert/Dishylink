@@ -135,6 +135,59 @@ export interface CloudHandlerOptions {
  *  a session missing it is definitely not usable. */
 const SSO_COOKIE_RE = /Starlink\.Com\.Sso=/;
 
+/** Every Set-Cookie on a response. A browser's fetch hides them (the extension
+ *  leans on the browser's own jar instead), so there this is always empty. */
+function setCookiesOf(response: Response): string[] {
+  const headers = response.headers as Headers & { getSetCookie?: () => string[] };
+  if (typeof headers.getSetCookie === "function") return headers.getSetCookie();
+  const single = headers.get("set-cookie");
+  return single ? [single] : [];
+}
+
+function isExpiredCookie(attributes: readonly string[], nowMs: number): boolean {
+  let expiresMs: number | null = null;
+  for (const attribute of attributes) {
+    const separator = attribute.indexOf("=");
+    if (separator < 0) continue;
+    const key = attribute.slice(0, separator).trim().toLowerCase();
+    const value = attribute.slice(separator + 1).trim();
+    // Max-Age outranks Expires when both are set.
+    if (key === "max-age") return Number(value) <= 0;
+    if (key === "expires") expiresMs = Date.parse(value);
+  }
+  return expiresMs !== null && Number.isFinite(expiresMs) && expiresMs <= nowMs;
+}
+
+/**
+ * Apply a response's Set-Cookies to a Cookie header the way a browser's jar would:
+ * same name replaces, a new name is added, an expired one is removed. Starlink
+ * splits a token too large for one cookie into a `chunks-N` marker plus
+ * `…C1`…`CN` pieces, all re-sent on every refresh; keeping only the marker pairs
+ * it with stale pieces, which the account API rejects.
+ */
+export function mergeSetCookies(
+  cookieHeader: string,
+  setCookies: readonly string[],
+  nowMs: number = Date.now(),
+): string {
+  if (setCookies.length === 0) return cookieHeader;
+  const jar = new Map<string, string>();
+  for (const part of cookieHeader.split(";")) {
+    const separator = part.indexOf("=");
+    if (separator <= 0) continue;
+    jar.set(part.slice(0, separator).trim(), part.slice(separator + 1).trim());
+  }
+  for (const line of setCookies) {
+    const [pair, ...attributes] = line.split(";");
+    const separator = pair.indexOf("=");
+    if (separator <= 0) continue;
+    const name = pair.slice(0, separator).trim();
+    if (isExpiredCookie(attributes, nowMs)) jar.delete(name);
+    else jar.set(name, pair.slice(separator + 1).trim());
+  }
+  return [...jar].map(([name, value]) => `${name}=${value}`).join("; ");
+}
+
 /** Answered wherever a router has to be named, so every surface says the same
  *  waitable thing rather than reporting an outage. */
 const NO_CONTROLLER: CloudResult = {
@@ -282,10 +335,17 @@ export function createCloudHandler(options: CloudHandlerOptions = {}) {
         forgetSession();
         throw new SessionExpiredError();
       }
-      const setCookie = authResponse.headers.get("set-cookie") ?? "";
-      const match = setCookie.match(/Starlink\.Com\.Access\.V1=([^;]+)/);
-      const withoutOld = base.replace(/Starlink\.Com\.Access\.V1=[^;]*;?/g, "").trim();
-      cachedCookie = match ? `Starlink.Com.Access.V1=${match[1]};${withoutOld}` : base;
+      const merged = mergeSetCookies(base, setCookiesOf(authResponse));
+      // Persisted so the next launch starts from what Starlink last issued. A
+      // store that can't be written still leaves this session working from memory.
+      if (merged !== base) {
+        try {
+          writeCookie(merged);
+        } catch {
+          // keep going on the in-memory copy
+        }
+      }
+      cachedCookie = merged;
       cachedAt = Date.now();
       return cachedCookie;
     })();

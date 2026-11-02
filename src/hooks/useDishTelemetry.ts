@@ -15,6 +15,7 @@ import { apiRequest } from "../lib/apiHost";
 import {
   TelemetryAccumulator,
   decodeOutageEvents,
+  sameOutageEvents,
   readRouterLatencyMs,
   readRouterPingSuccessPercent,
   type TelemetrySample,
@@ -160,7 +161,8 @@ export function useDishTelemetry(): DishTelemetry {
         const history = await client.getHistory(AbortSignal.timeout(4_000));
         if (disposed) return;
         setSamples([...accumulatorRef.current.ingest(history, Date.now(), routerReadings)]);
-        setOutageEvents(decodeOutageEvents(history));
+        const events = decodeOutageEvents(history);
+        setOutageEvents((previous) => (sameOutageEvents(previous, events) ? previous : events));
       } catch {
         // status polling owns the connection indicator
       } finally {

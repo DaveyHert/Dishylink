@@ -729,7 +729,7 @@
     "currentTilt": "Inclinação atual",
     "currentTiltHint": "A inclinação atual (ângulo de inclinação) é o ângulo físico do prato da antena em relação à horizontal. Plano é 0°, e quanto mais íngreme o prato, mais baixo ele mira.",
     "tiltRecommendation": "Inclinação recomendada",
-    "tiltRecommendationHint": "Quanto reapontar a antena para cima ou para baixo, e em que direção. Para baixo significa que a antena está mirando alto demais; incline mais o prato para baixá-la.",
+    "tiltRecommendationHint": "Quanto reapontar a antena para cima ou para baixo, e em que direção. Para baixo significa que a antena está mirando alto demais; incline mais o prato para baixá-la. Ela conta até a linha tracejada do mostrador Inclinação, o ideal da antena, que pode ficar perto da borda da cunha em vez de no centro.",
     "boresightElevation": "Elevação do eixo de apontamento",
     "boresightElevationHint": "A elevação do eixo de apontamento é o quanto acima do horizonte a antena está realmente apontando, onde 0° é no nível do horizonte e 90° é diretamente para cima.",
     "targetElevation": "Elevação alvo",
@@ -741,7 +741,7 @@
     "actuationState": "Estado de atuação",
     "actuationStateHint": "O que os motores da antena estão fazendo agora — ociosos, ou se movendo ativamente para uma nova posição.",
     "howToRead": "Como ler isto",
-    "howToReadBody": "A cunha mostra a direção de apontamento desejada ± tolerância. O prato da antena e a agulha laranja mostram para onde a antena está realmente apontando. Se a agulha está dentro da cunha, a antena está alinhada. Se está fora, ajuste a antena em direção à cunha. Os valores são atualizados ao vivo a cada 2 s",
+    "howToReadBody": "A cunha mostra a direção de apontamento desejada ± tolerância. O prato da antena e a agulha laranja mostram para onde a antena está realmente apontando. No mostrador Inclinação, a linha tracejada tênue marca a inclinação ideal da antena. Se a agulha está dentro da cunha, a antena está alinhada. Se está fora, ajuste a antena em direção à cunha. Os valores são atualizados ao vivo a cada 2 s",
     "rotation": "Rotação",
     "tilt": "Inclinação",
     "state": {

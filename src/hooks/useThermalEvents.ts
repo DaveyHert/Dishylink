@@ -77,8 +77,10 @@ export function useThermalEvents(): OutageEvent[] {
   // and grows while it runs. Taken from the ticking clock so it actually advances
   // on screen; read straight from Date.now() it would sit at whatever it was when
   // something unrelated last caused a render. Durations show seconds, so it ticks
-  // every second.
+  // every second — but only while an episode runs: a finished list taking the
+  // clock would hand the events log a new list every second for nothing.
   const nowMs = useNow();
+  const clockMs = episodes.some((episode) => episode.endMs === null) ? nowMs : 0;
 
   return useMemo(() => {
     return episodes.flatMap((episode) => {
@@ -89,11 +91,11 @@ export function useThermalEvents(): OutageEvent[] {
       return [
         {
           startMs: episode.startMs,
-          durationMs: (episode.endMs ?? nowMs) - episode.startMs,
+          durationMs: (episode.endMs ?? clockMs) - episode.startMs,
           cause: isOngoing ? t("events.ongoing", { label }) : label,
           severity: spec.severity,
         },
       ];
     });
-  }, [episodes, nowMs, t]);
+  }, [episodes, clockMs, t]);
 }

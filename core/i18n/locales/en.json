@@ -719,7 +719,7 @@
     "currentTilt": "Current tilt",
     "currentTiltHint": "Current tilt (tilt angle) is the physical angle of the dish plate off flat. Flat is 0°, and the steeper the plate the lower it aims.",
     "tiltRecommendation": "Tilt recommendation",
-    "tiltRecommendationHint": "How far to re-aim the dish up or down, and which way. Down means the dish is aiming too high; steepen the plate to bring it down.",
+    "tiltRecommendationHint": "How far to re-aim the dish up or down, and which way. Down means the dish is aiming too high; steepen the plate to bring it down. It counts towards the dashed line on the Tilt dial, the dish’s ideal, which can sit near the edge of the wedge rather than in its middle.",
     "boresightElevation": "Boresight elevation",
     "boresightElevationHint": "Boresight elevation is how far above the horizon the dish is actually pointing, where 0° is level with the horizon and 90° is straight up.",
     "targetElevation": "Target elevation",
@@ -731,7 +731,7 @@
     "actuationState": "Actuation state",
     "actuationStateHint": "What the dish’s motors are doing right now — idle, or actively moving to a new position.",
     "howToRead": "How to read this",
-    "howToReadBody": "The wedge shows the desired pointing direction ± tolerance. The dish plate and orange needle show where the dish is actually pointing. If the needle is inside the wedge, the dish is aligned. If it’s outside, adjust the dish toward the wedge. Values update live every 2s",
+    "howToReadBody": "The wedge shows the desired pointing direction ± tolerance. The dish plate and orange needle show where the dish is actually pointing. On the Tilt dial, the faint dashed line marks the dish’s ideal tilt. If the needle is inside the wedge, the dish is aligned. If it’s outside, adjust the dish toward the wedge. Values update live every 2s",
     "rotation": "Rotation",
     "tilt": "Tilt",
     "state": {

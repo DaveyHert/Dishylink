@@ -71,6 +71,9 @@ export interface AlignmentReading {
   maxTargetElevationDeg: number;
   /** The dish's own target elevation, exactly as it reports it. */
   desiredElevationDeg: number;
+  /** False when the dish sent no target (proto3 drops a zero), in which case
+   *  desiredElevationDeg stands in with the current elevation and marks nothing. */
+  desiredElevationReported: boolean;
   /** Great-circle angle between where the dish points and where it wants to
    *  point — the single figure Starlink support quotes as "boresight error". */
   boresightErrorDeg: number;
@@ -164,6 +167,7 @@ export function computeAlignment(status: DishStatusJson): AlignmentReading {
 
   return {
     desiredElevationDeg: desiredElevation,
+    desiredElevationReported: desiredElevationRaw !== undefined && desiredElevationRaw !== 0,
     boresightErrorDeg: angularSeparationDeg(
       currentAzimuth,
       currentElevation,

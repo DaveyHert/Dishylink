@@ -241,3 +241,26 @@ describe("computeAlignment band ceiling", () => {
     expect(computeAlignment(roaming).upperElevationLimitDeg).toBe(90);
   });
 });
+
+// Issue #86: a dish inside its band but 7° steep of its ideal. The wedge spans
+// the whole band while the recommendation counts to the ideal, which sits near
+// the band's lower edge — so the dial needs the ideal marked.
+describe("computeAlignment target elevation", () => {
+  it("marks the dish's ideal inside the band, away from the band's middle", () => {
+    const reading = computeAlignment(statusAt(2.2, 70.1, { desiredBoresightElevationDeg: 63.1 }));
+    expect(reading.isElevationValid).toBe(true);
+    expect(reading.desiredElevationReported).toBe(true);
+    expect(reading.desiredElevationDeg).toBeCloseTo(63.1);
+    expect(reading.lowerElevationLimitDeg).toBeCloseTo(58.1);
+    expect(reading.elevationErrorDeg).toBeCloseTo(7.0);
+    const bandMiddle = (reading.upperElevationLimitDeg + reading.lowerElevationLimitDeg) / 2;
+    expect(Math.abs(bandMiddle - reading.desiredElevationDeg)).toBeGreaterThan(5);
+  });
+
+  it("marks nothing when the dish sends no target", () => {
+    const silent = statusAt(0, 70, { desiredBoresightElevationDeg: undefined });
+    expect(computeAlignment(silent).desiredElevationReported).toBe(false);
+    const zero = statusAt(0, 70, { desiredBoresightElevationDeg: 0 });
+    expect(computeAlignment(zero).desiredElevationReported).toBe(false);
+  });
+});

@@ -5,7 +5,7 @@
 // hard "not connected".
 
 import { describe, expect, it, vi } from "vitest";
-import { createCloudHandler } from "./starlinkCloudHandler";
+import { createCloudHandler, mergeSetCookies } from "./starlinkCloudHandler";
 import { GrpcWebError } from "../core/grpcWeb";
 
 const AUTH_URL = "https://api.starlink.com/auth-rp/auth/user";
@@ -985,5 +985,124 @@ describe("router reads over the gateway", () => {
 
     await expect(handler.handle("/cloud/router-clients")).resolves.toMatchObject({ status: 428 });
     expect(read).toBe(false);
+  });
+});
+
+// Since late September Starlink's access token is too large for one cookie: a
+// refresh sets a `chunks-2` marker plus two pieces. Keeping only the marker paired
+// it with the pieces saved at sign-in, and every launch after they expired came
+// back 401 — signed out, though the sign-in itself was still good.
+const LATER = "expires=Tue, 02 Nov 2027 07:35:01 GMT; path=/; secure; samesite=lax; httponly";
+const FRESH_CHUNKS = [
+  `Starlink.Com.Access.V1=chunks-2; ${LATER}`,
+  `Starlink.Com.Access.V1C1=new-piece-1; ${LATER}`,
+  `Starlink.Com.Access.V1C2=new-piece-2; ${LATER}`,
+];
+const NOW = Date.parse("2026-11-02T08:00:00Z");
+
+describe("mergeSetCookies", () => {
+  it("replaces a chunked token's marker and pieces together", () => {
+    const stale =
+      "Starlink.Com.Sso=sso; Starlink.Com.Access.V1=chunks-2; " +
+      "Starlink.Com.Access.V1C1=old-piece-1; Starlink.Com.Access.V1C2=old-piece-2";
+    expect(mergeSetCookies(stale, FRESH_CHUNKS, NOW)).toBe(
+      "Starlink.Com.Sso=sso; Starlink.Com.Access.V1=chunks-2; " +
+        "Starlink.Com.Access.V1C1=new-piece-1; Starlink.Com.Access.V1C2=new-piece-2",
+    );
+  });
+
+  it("adds the pieces to a session saved before the token was chunked", () => {
+    const merged = mergeSetCookies(SESSION, FRESH_CHUNKS, NOW);
+    expect(merged).toContain("Starlink.Com.Sso=sso-value");
+    expect(merged).toContain("Starlink.Com.Access.V1=chunks-2");
+    expect(merged).toContain("Starlink.Com.Access.V1C1=new-piece-1");
+    expect(merged).toContain("Starlink.Com.Access.V1C2=new-piece-2");
+    expect(merged).not.toContain("old-token");
+  });
+
+  it("still takes a token that arrives whole", () => {
+    expect(mergeSetCookies(SESSION, [`Starlink.Com.Access.V1=fresh; ${LATER}`], NOW)).toBe(
+      "Starlink.Com.Sso=sso-value; Starlink.Com.Access.V1=fresh",
+    );
+  });
+
+  it("drops a cookie the server expires", () => {
+    const session = "a=1; b=2; c=3";
+    const merged = mergeSetCookies(
+      session,
+      ["a=; Max-Age=0", "b=gone; expires=Thu, 01 Jan 1970 00:00:00 GMT"],
+      NOW,
+    );
+    expect(merged).toBe("c=3");
+  });
+
+  it("lets Max-Age outrank Expires", () => {
+    const merged = mergeSetCookies(
+      "",
+      ["kept=1; Max-Age=3600; expires=Thu, 01 Jan 1970 00:00:00 GMT"],
+      NOW,
+    );
+    expect(merged).toBe("kept=1");
+  });
+
+  it("leaves the session as it was when nothing is set", () => {
+    expect(mergeSetCookies(SESSION, [], NOW)).toBe(SESSION);
+  });
+});
+
+describe("createCloudHandler token refresh keeps every cookie Starlink sets", () => {
+  it("sends the fresh pieces to the account API and saves them", async () => {
+    let stored =
+      "Starlink.Com.Sso=sso; Starlink.Com.Access.V1=chunks-2; " +
+      "Starlink.Com.Access.V1C1=old-piece-1; Starlink.Com.Access.V1C2=old-piece-2";
+    const saved: string[] = [];
+    const sentToAccount: string[] = [];
+    const net = backend();
+    const doFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const response = await net.doFetch(input, init);
+      const headers = init?.headers as Record<string, string> | undefined;
+      if (String(input) === AUTH_URL && !headers?.accept) {
+        return {
+          ...response,
+          headers: { get: () => null, getSetCookie: () => FRESH_CHUNKS },
+        } as unknown as Response;
+      }
+      if (String(input).includes("/webagg/")) sentToAccount.push(headers?.cookie ?? "");
+      return response;
+    }) as typeof fetch;
+    const handler = createCloudHandler({
+      fetch: doFetch,
+      readCookie: () => stored,
+      writeCookie: (cookie) => {
+        stored = cookie;
+        saved.push(cookie);
+      },
+      retryDelayMs: 0,
+    });
+
+    const result = await handler.handle("/cloud/account");
+
+    expect(result.status).toBe(200);
+    expect(sentToAccount.length).toBeGreaterThan(0);
+    for (const cookie of sentToAccount) {
+      expect(cookie).toContain("Starlink.Com.Access.V1C1=new-piece-1");
+      expect(cookie).toContain("Starlink.Com.Access.V1C2=new-piece-2");
+      expect(cookie).not.toContain("old-piece");
+    }
+    expect(saved).toHaveLength(1);
+    expect(stored).toContain("new-piece-2");
+  });
+
+  it("saves nothing when a refresh sets no cookies, as in the extension", async () => {
+    const saved: string[] = [];
+    const handler = createCloudHandler({
+      fetch: backend().doFetch,
+      readCookie: () => SESSION,
+      writeCookie: (cookie) => saved.push(cookie),
+      retryDelayMs: 0,
+    });
+
+    expect((await handler.handle("/cloud/account")).status).toBe(200);
+    expect(saved).toHaveLength(0);
   });
 });

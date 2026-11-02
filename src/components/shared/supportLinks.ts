@@ -12,7 +12,7 @@ export const SUPPORT_LINKS = {
   githubSponsors: "https://github.com/sponsors/daveyhert",
   buyMeACoffee: "https://buymeacoffee.com/daveyhert",
   patreon: "https://www.patreon.com/DaveyHert",
-  latestRelease: `${REPO}/releases/latest`,
+  downloadPage: "https://dishylink.com/#get",
   releaseNotes: `${REPO}/blob/master/CHANGELOG.md`,
   reportIssue: `${REPO}/issues/new?labels=bug`,
   requestFeature: "https://buymeacoffee.com/daveyhert/e/591024",

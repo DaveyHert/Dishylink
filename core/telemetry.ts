@@ -43,6 +43,26 @@ export interface BandSwitch {
   toBand: string;
 }
 
+/** Whether two event lists hold the same events in the same order. The dish's
+ *  history is decoded afresh on every poll, so a caller keeps its old list when
+ *  nothing changed instead of redrawing everything that reads it. */
+export function sameOutageEvents(a: readonly OutageEvent[], b: readonly OutageEvent[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  return a.every((x, i) => {
+    const y = b[i];
+    return (
+      x.startMs === y.startMs &&
+      x.durationMs === y.durationMs &&
+      x.cause === y.cause &&
+      x.severity === y.severity &&
+      x.bandSwitch?.clientId === y.bandSwitch?.clientId &&
+      x.bandSwitch?.fromBand === y.bandSwitch?.fromBand &&
+      x.bandSwitch?.toBand === y.bandSwitch?.toBand
+    );
+  });
+}
+
 /**
  * The `outages[]` timestamps use the GPS epoch (1980-01-06, no leap seconds);
  * `eventLog` uses the Unix epoch. Offset = Unix seconds at GPS epoch minus

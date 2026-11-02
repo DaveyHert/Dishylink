@@ -3,7 +3,8 @@
 //    desired ± tolerance, white dish rect + ORANGE needle both rotated to the
 //    ACTUAL azimuth
 //  - Tilt     = their `Ad`: y-flipped quarter arc, wedge spanning the valid
-//    elevation band, dish plate + orange needle at the ACTUAL elevation
+//    elevation band, dish plate + orange needle at the ACTUAL elevation, plus a
+//    dashed target ray of our own (see TiltInstrument)
 // Their needle orange is #ffac30. Size ratios are verbatim from their code.
 
 import { useTranslation } from "react-i18next";
@@ -12,6 +13,7 @@ import {
   CompassLabels,
   DialDots,
   DishPointer,
+  TargetRay,
   ToleranceWedge,
 } from "../../assets/icons/AlignmentDial";
 
@@ -139,6 +141,16 @@ export function TiltInstrument({ reading }: { reading: AlignmentReading }) {
             centerDeg={(reading.upperElevationLimitDeg + reading.lowerElevationLimitDeg) / 2}
             spanDeg={reading.upperElevationLimitDeg - reading.lowerElevationLimitDeg}
             inSpec={reading.isElevationValid}
+          />
+        )}
+        {/* Not in their dial: the dish's ideal elevation inside the band, which
+            the tilt recommendation counts towards. */}
+        {reading.isValid && reading.desiredElevationReported && (
+          <TargetRay
+            cx={pivot}
+            cy={pivot}
+            radius={0.98 * arcRadius}
+            angleDeg={reading.desiredElevationDeg}
           />
         )}
         {/* dish plate + orange needle at the ACTUAL elevation */}

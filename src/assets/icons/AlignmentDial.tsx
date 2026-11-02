@@ -110,6 +110,25 @@ export function ToleranceWedge({
   );
 }
 
+/** The dish's ideal reading as a dashed ray. A band wedge alone reads as "aim for
+ *  the middle", which is wrong whenever the target sits near one of its edges. */
+export function TargetRay({ cx, cy, radius, angleDeg }: RingProps & { angleDeg: number }) {
+  const angleRad = angleDeg * DEG_TO_RAD;
+  return (
+    <line
+      x1={cx}
+      y1={cy}
+      x2={cx + radius * Math.cos(angleRad)}
+      y2={cy + radius * Math.sin(angleRad)}
+      stroke='var(--ink-secondary)'
+      strokeWidth={1}
+      strokeDasharray='4 4'
+      strokeLinecap='round'
+      opacity={0.4}
+    />
+  );
+}
+
 interface DishPointerProps {
   /** Pivot the plate turns about. */
   cx: number;

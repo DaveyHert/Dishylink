@@ -729,7 +729,7 @@
     "currentTilt": "Inclinación actual",
     "currentTiltHint": "La inclinación actual (ángulo de inclinación) es el ángulo físico del plato de la antena respecto a la horizontal. Plano es 0°, y cuanto más empinado el plato, más bajo apunta.",
     "tiltRecommendation": "Inclinación recomendada",
-    "tiltRecommendationHint": "Cuánto reorientar la antena hacia arriba o hacia abajo, y en qué sentido. Abajo significa que la antena apunta demasiado alto; empina el plato para bajarla.",
+    "tiltRecommendationHint": "Cuánto reorientar la antena hacia arriba o hacia abajo, y en qué sentido. Abajo significa que la antena apunta demasiado alto; empina el plato para bajarla. Cuenta hacia la línea discontinua del dial de Inclinación, el ideal de la antena, que puede quedar cerca del borde de la cuña en lugar de en su centro.",
     "boresightElevation": "Elevación del eje de puntería",
     "boresightElevationHint": "La elevación del eje de puntería es cuánto por encima del horizonte apunta realmente la antena, donde 0° es a ras del horizonte y 90° es justo arriba.",
     "targetElevation": "Elevación objetivo",
@@ -741,7 +741,7 @@
     "actuationState": "Estado de actuación",
     "actuationStateHint": "Qué están haciendo ahora mismo los motores de la antena: inactivos, o moviéndose activamente a una nueva posición.",
     "howToRead": "Cómo leer esto",
-    "howToReadBody": "La cuña muestra la dirección de puntería deseada ± tolerancia. El plato de la antena y la aguja naranja muestran hacia dónde apunta realmente la antena. Si la aguja está dentro de la cuña, la antena está alineada. Si está fuera, ajusta la antena hacia la cuña. Los valores se actualizan en vivo cada 2 s",
+    "howToReadBody": "La cuña muestra la dirección de puntería deseada ± tolerancia. El plato de la antena y la aguja naranja muestran hacia dónde apunta realmente la antena. En el dial de Inclinación, la tenue línea discontinua marca la inclinación ideal de la antena. Si la aguja está dentro de la cuña, la antena está alineada. Si está fuera, ajusta la antena hacia la cuña. Los valores se actualizan en vivo cada 2 s",
     "rotation": "Rotación",
     "tilt": "Inclinación",
     "state": {

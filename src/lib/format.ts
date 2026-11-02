@@ -67,25 +67,44 @@ export function formatEventDuration(durationMs: number, t: TFunction): string {
     : t("time.spanHours", { count: hours });
 }
 
+// toLocaleTimeString builds a new Intl formatter on every call, which is among
+// the slowest things a page does; a list formatting a time per row pays it once
+// per row per render. So each locale and style builds its formatter once.
+const formatters = new Map<string, Intl.DateTimeFormat>();
+
+function dateTimeFormat(
+  locale: string,
+  style: string,
+  options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  const key = `${locale}|${style}`;
+  let formatter = formatters.get(key);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale, options);
+    formatters.set(key, formatter);
+  }
+  return formatter;
+}
+
 export function formatClockTime(timestampMs: number, locale: string): string {
-  return new Date(timestampMs).toLocaleTimeString(locale, {
+  return dateTimeFormat(locale, "clock", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
-  });
+  }).format(timestampMs);
 }
 
 /** Hour and minute only, no seconds ("5:48 PM"), as the official app shows event times. */
 export function formatClockTimeShort(timestampMs: number, locale: string): string {
-  return new Date(timestampMs).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" });
+  return dateTimeFormat(locale, "clockShort", { hour: "numeric", minute: "2-digit" }).format(
+    timestampMs,
+  );
 }
 
 export function formatDate(timestampMs: number, locale: string): string {
-  return new Date(timestampMs).toLocaleDateString(locale, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return dateTimeFormat(locale, "date", { day: "numeric", month: "short", year: "numeric" }).format(
+    timestampMs,
+  );
 }
 
 export function formatDateTime(timestampMs: number, locale: string): string {

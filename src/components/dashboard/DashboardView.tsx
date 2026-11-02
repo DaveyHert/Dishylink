@@ -119,6 +119,12 @@ export function DashboardView({
       }),
     [status, livePowerW, powerWindowEndMs, recentPingSuccessPercent, outageEvents, t],
   );
+  // One list for as long as the events hold still, so the log can skip the
+  // dashboard's every-second redraw.
+  const logEvents = useMemo(
+    () => [...outageEvents, ...thermalEvents],
+    [outageEvents, thermalEvents],
+  );
 
   const openDetail = openDetailId ? statDetails[openDetailId] : null;
   const detailModal = openDetail && (
@@ -317,11 +323,7 @@ export function DashboardView({
         </SectionCard>
 
         {/* Outage log */}
-        <OutageLog
-          outageEvents={[...outageEvents, ...thermalEvents]}
-          reports={reports}
-          onOpenDevice={onOpenDevice}
-        />
+        <OutageLog outageEvents={logEvents} reports={reports} onOpenDevice={onOpenDevice} />
 
         {/* Terminal card */}
         {status ? (

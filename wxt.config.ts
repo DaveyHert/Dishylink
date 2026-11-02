@@ -43,7 +43,7 @@ export default defineConfig({
     optimizeDeps: { entries: ["extension/entrypoints/**/*.html"] },
   }),
   manifest: ({ manifestVersion }) => ({
-    name: "Dishylink",
+    name: "Dishylink: Starlink Desktop App (Unofficial)",
     description:
       "Monitor your Starlink's performance and health. Live telemetry, speed test, obstruction map, alignment, alerts, per-device usage.",
     // A background service worker fetching 192.168.100.1 hit a Chromium Local
