@@ -151,7 +151,7 @@ test("given: a device the recorder merged onto a newer id, should: offer it once
   await openNewRule();
 
   await vi.waitFor(() => expect(pickerRows("Nanoleaf")).toHaveLength(1));
-  expect(pickerRows("Nanoleaf")[0].textContent).toContain("ACTIVE NOW");
+  expect(pickerRows("Nanoleaf")[0].textContent).toContain("Active now");
 });
 
 // The other half of the same note: the card has to ask for the device's rules

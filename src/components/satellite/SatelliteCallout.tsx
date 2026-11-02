@@ -6,6 +6,7 @@
 // after it knows where the satellite actually is on screen.
 
 import { forwardRef } from "react";
+import { useTranslation } from "react-i18next";
 import type { SatelliteSky } from "../../lib/satellites";
 import { Badge } from "../ui/badge";
 
@@ -18,6 +19,7 @@ export const SatelliteCallout = forwardRef<
   HTMLDivElement,
   { selected: SelectedSatellite | null; onClose: () => void }
 >(function SatelliteCallout({ selected, onClose }, ref) {
+  const { t } = useTranslation();
   return (
     <div
       ref={ref}
@@ -40,7 +42,7 @@ export const SatelliteCallout = forwardRef<
             {/\[DTC\]/.test(selected.sky.name) && <Badge variant='tag'>DTC</Badge>}
             <button
               className='ml-auto cursor-pointer border-0 bg-transparent pl-1 text-[15px] leading-none text-muted-foreground hover:text-foreground'
-              aria-label='Close satellite details'
+              aria-label={t("satellite.closeDetails")}
               onClick={onClose}
             >
               ×
@@ -51,19 +53,19 @@ export const SatelliteCallout = forwardRef<
             <span>{selected.sky.hardwareVersion ?? "Unknown"}</span>
             <span>NORAD</span>
             <span>{selected.sky.noradId ?? "Unknown"}</span>
-            <span>elevation</span>
+            <span>{t("satellite.elevation")}</span>
             <span>{selected.sky.elevationDeg.toFixed(1)}°</span>
-            <span>azimuth</span>
+            <span>{t("satellite.azimuth")}</span>
             <span>{((selected.sky.azimuthDeg + 360) % 360).toFixed(1)}°</span>
-            <span>altitude</span>
+            <span>{t("satellite.altitude")}</span>
             <span>
               {selected.sky.altitudeKm !== undefined
                 ? `${selected.sky.altitudeKm.toFixed(0)} km`
                 : "—"}
             </span>
-            <span>distance</span>
+            <span>{t("satellite.distance")}</span>
             <span>{selected.sky.rangeKm.toFixed(0)} km</span>
-            <span>speed</span>
+            <span>{t("satellite.speed")}</span>
             <span>
               {selected.sky.speedKmS !== undefined
                 ? `${selected.sky.speedKmS.toFixed(1)} km/s`

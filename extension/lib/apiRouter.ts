@@ -35,10 +35,7 @@ import { NO_METER_HOST, type MeterHost } from "./meterHost";
 import { retireMeterAlert, retireProjectedOut } from "./meterEnforcement";
 import { resolveRows, foldMinuteCollisions } from "@core/clientHistory";
 import type { ClientSampleRow, HistoryStore } from "./history";
-
-// The alert keys the dish raises for heat; /api/thermal is the alert log narrowed
-// to these. Matches the historian's THERMAL_ALERT_KEYS.
-const THERMAL_ALERT_KEYS = ["thermalThrottle", "thermalShutdown", "powerSupplyThermalThrottle"];
+import { THERMAL_ALERT_KEYS } from "@core/alertDefinitions";
 
 export interface ApiReply {
   status: number;
@@ -65,6 +62,10 @@ export async function routeApiRequest(
 
   if (url.pathname === "/api/outages") {
     return { status: 200, body: { events: await store.readOutages(now.getTime()) } };
+  }
+
+  if (url.pathname === "/api/outages/reports") {
+    return { status: 200, body: { reports: await store.readReports(now.getTime()) } };
   }
 
   if (url.pathname === "/api/radio") {

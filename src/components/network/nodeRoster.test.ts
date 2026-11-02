@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { WifiClientJson, WifiNetworkConfigJson } from "@core/dishClient";
-import { buildNodeRoster } from "./nodeRoster";
+import { createI18n } from "@core/i18n/resources";
+import { buildNodeRoster as build } from "./nodeRoster";
+
+const { t } = createI18n("en");
+const buildNodeRoster = (clients: WifiClientJson[], wifiConfig: WifiNetworkConfigJson | null) =>
+  build(clients, wifiConfig, t);
 
 const CONTROLLER = "Router-010000000000000001B31340";
 const NODE = "Router-01000000000000000049375B";

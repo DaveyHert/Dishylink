@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { MeterCycle } from "@core/dataMeter";
 import type { DeviceGroup, GroupAllowanceMode } from "@core/deviceGroup";
 import { formatScheduleParam, type Schedule } from "@core/schedule";
+import i18n from "../i18n";
 import { apiRequest } from "../lib/apiHost";
 import { cycleParams, refreshMeterIndicators } from "./useDataMeter";
 
@@ -52,7 +53,7 @@ export function useDeviceGroups(): DeviceGroups {
       setPauseEnforceable(body.pauseEnforceable === true);
       setError(null);
     } catch {
-      setError("The recorder isn’t answering, so groups can’t be read or changed.");
+      setError(i18n.t("errors.recorderNotAnsweringGroups"));
     } finally {
       setLoading(false);
     }
@@ -78,7 +79,7 @@ export function useDeviceGroups(): DeviceGroups {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         setError(null);
       } catch {
-        setError("The recorder refused the change.");
+        setError(i18n.t("rules.recorderRefused"));
       } finally {
         // A group write is what sets its members' rules, and nothing polling
         // those knows it happened.

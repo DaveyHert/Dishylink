@@ -2,19 +2,15 @@
 // weekday evenings and longer weekends are two rows of one rule, not two rules.
 
 import { Plus, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Schedule } from "@core/schedule";
 import { Button } from "../../ui/button";
 import { SegmentedControl } from "../../ui/segmented-control";
 import { Calendar } from "../../ui/calendar";
 import { TimeOfDayField } from "../../ui/time-of-day-field";
-import {
-  clockLabel,
-  daysLabel,
-  repeatTerms,
-  runLabel,
-  WEEKDAY_LABELS,
-  type ScheduleDraft,
-} from "./scheduleTerms";
+import { useTimeLocale } from "../../../hooks/useTimeLocale";
+import { weekdayNames } from "./allowanceTerms";
+import { clockLabel, daysLabel, repeatTerms, runLabel, type ScheduleDraft } from "./scheduleTerms";
 
 /** A schedule's hours, read back rather than edited: the mode it opens the
  *  device on, and each window it names. Shared by every card that shows a
@@ -30,6 +26,8 @@ export function ScheduleWindows({
   max?: number;
   compact?: boolean;
 }) {
+  const { t } = useTranslation();
+  const timeLocale = useTimeLocale();
   const shown = max === undefined ? schedule.windows : schedule.windows.slice(0, max);
   const rest = schedule.windows.length - shown.length;
   return (
@@ -41,8 +39,8 @@ export function ScheduleWindows({
             : "text-[11px] tracking-wide text-muted-foreground uppercase"
         }
       >
-        <span>{schedule.mode === "allow" ? "Online" : "Offline"}</span>
-        {compact && <span>Hours</span>}
+        <span>{schedule.mode === "allow" ? t("rules.online") : t("rules.offline")}</span>
+        {compact && <span>{t("rules.hoursHeading")}</span>}
       </div>
       {shown.map((window, index) => (
         <div
@@ -56,7 +54,7 @@ export function ScheduleWindows({
           <span
             className={compact ? "text-foreground" : "text-[15px] font-semibold text-foreground"}
           >
-            {daysLabel(window)}
+            {daysLabel(window, t, timeLocale)}
           </span>
           <span
             className={
@@ -65,34 +63,39 @@ export function ScheduleWindows({
                 : "text-[13px] tabular-nums text-muted-foreground"
             }
           >
-            {clockLabel(window.startMinute)} – {clockLabel(window.endMinute)}
+            {clockLabel(window.startMinute, t, timeLocale)} –{" "}
+            {clockLabel(window.endMinute, t, timeLocale)}
           </span>
         </div>
       ))}
-      {rest > 0 && <div className='text-[12px] text-muted-foreground'>and {rest} more</div>}
+      {rest > 0 && (
+        <div className='text-[12px] text-muted-foreground'>
+          {t("rules.andMore", { count: rest })}
+        </div>
+      )}
     </>
   );
 }
 
 export function ScheduleFields({ draft }: { draft: ScheduleDraft }) {
+  const { t, i18n } = useTranslation();
+  const weekdayLabels = weekdayNames(i18n.language, "short");
   return (
     <div className='space-y-3'>
       <div className='flex items-center justify-between gap-3'>
         <div>
-          <div className='text-[13px] font-medium text-foreground'>Schedule</div>
+          <div className='text-[13px] font-medium text-foreground'>{t("rules.schedule")}</div>
           <div className='text-[12px] text-muted-foreground'>
-            {draft.mode === "allow"
-              ? "Online during these times, paused the rest of the days."
-              : "Paused during these times, online otherwise."}
+            {draft.mode === "allow" ? t("rules.allowDetail") : t("rules.blockDetail")}
           </div>
         </div>
         <SegmentedControl
-          label='What the schedule does'
+          label={t("rules.whatScheduleDoes")}
           value={draft.mode}
           onChange={draft.setMode}
           options={[
-            { value: "allow", label: "Online" },
-            { value: "block", label: "Offline" },
+            { value: "allow", label: t("rules.online") },
+            { value: "block", label: t("rules.offline") },
           ]}
         />
       </div>
@@ -108,9 +111,9 @@ export function ScheduleFields({ draft }: { draft: ScheduleDraft }) {
             <div className='flex items-center gap-0.5 text-[12px]'>
               {(
                 [
-                  ["weekly", "Every week"],
-                  ["range", "Date range"],
-                  ["once", "One-off"],
+                  ["weekly", t("rules.everyWeek")],
+                  ["range", t("rules.dateRange")],
+                  ["once", t("rules.oneOff")],
                 ] as const
               ).map(([repeat, repeatLabel]) => (
                 <button
@@ -131,13 +134,13 @@ export function ScheduleFields({ draft }: { draft: ScheduleDraft }) {
             <div className='flex min-w-0 items-center gap-2'>
               {window.repeat !== "weekly" && (
                 <span className='truncate text-[12px] text-muted-foreground'>
-                  {runLabel(window) ?? "Pick a date"}
+                  {runLabel(window, t, i18n.language) ?? t("rules.pickADate")}
                 </span>
               )}
               <button
                 type='button'
                 onClick={() => draft.removeWindow(index)}
-                aria-label='Remove this schedule'
+                aria-label={t("rules.removeSchedule")}
                 className='grid size-6 shrink-0 cursor-pointer place-items-center rounded-md text-muted-foreground transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_10%,transparent)] hover:text-foreground'
               >
                 <X className='size-3.5' />
@@ -147,11 +150,11 @@ export function ScheduleFields({ draft }: { draft: ScheduleDraft }) {
 
           {window.repeat === "weekly" ? (
             <div className='flex justify-center gap-1'>
-              {WEEKDAY_LABELS.map((label, weekday) => {
+              {weekdayLabels.map((label, weekday) => {
                 const picked = window.weekdays.includes(weekday);
                 return (
                   <button
-                    key={label}
+                    key={weekday}
                     type='button'
                     onClick={() => draft.toggleWeekday(index, weekday)}
                     className={`cursor-pointer rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors ${
@@ -176,21 +179,19 @@ export function ScheduleFields({ draft }: { draft: ScheduleDraft }) {
 
           <div className='flex flex-wrap items-center gap-x-5 gap-y-3'>
             <TimeOfDayField
-              label='From'
+              label={t("rules.from")}
               value={window.startMinute}
               onChange={(startMinute) => draft.updateWindow(index, { startMinute })}
             />
             <TimeOfDayField
-              label='To'
+              label={t("rules.to")}
               value={window.endMinute}
               onChange={(endMinute) => draft.updateWindow(index, { endMinute })}
             />
           </div>
 
           {window.endMinute <= window.startMinute && (
-            <p className='text-[11.5px] text-muted-foreground'>
-              Runs past midnight into the next day.
-            </p>
+            <p className='text-[11.5px] text-muted-foreground'>{t("rules.pastMidnight")}</p>
           )}
         </div>
       ))}
@@ -202,7 +203,7 @@ export function ScheduleFields({ draft }: { draft: ScheduleDraft }) {
         onClick={draft.addWindow}
       >
         <Plus className='size-3.5' />
-        {draft.windows.length === 0 ? "Set a schedule" : "Add another time"}
+        {draft.windows.length === 0 ? t("rules.setSchedule") : t("rules.addAnotherTime")}
       </Button>
     </div>
   );

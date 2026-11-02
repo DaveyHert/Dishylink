@@ -6,6 +6,7 @@
 // costs a request, and there is nothing to explain while the router answers.
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ROUTER_LAN_ADDRESS, type DishStatusJson } from "@core/dishClient";
 import { routerPresence } from "@core/routerPresence";
 import { resolveSelfIdentity, type SelfIdentity } from "../lib/selfIdentity";
@@ -46,6 +47,7 @@ export function useRouterUnreachable(
   /** null until resolved, and again once the router comes back: an address read
    *  during one outage is no longer evidence during the next, which may well be
    *  on a different network. */
+  const { t } = useTranslation();
   const [identity, setIdentity] = useState<SelfIdentity | null>(null);
   /** Timed rather than counted in polls, so it does not shift with the poll
    *  interval. */
@@ -96,9 +98,10 @@ export function useRouterUnreachable(
       unreachable
         ? diagnoseRouterUnreachable(
             { presence, onRouterSubnet, addressConfigured, silencePersisted },
+            t,
             routerAddress,
           )
         : null,
-    [unreachable, silencePersisted, presence, onRouterSubnet, addressConfigured, routerAddress],
+    [unreachable, silencePersisted, presence, onRouterSubnet, addressConfigured, routerAddress, t],
   );
 }

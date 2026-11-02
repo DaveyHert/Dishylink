@@ -1,4 +1,4 @@
-// Picking a time of day: two steppers and an AM/PM pair.
+// Picking a time of day: two steppers, and an AM/PM pair on a 12-hour clock.
 //
 // The value is minutes from local midnight throughout, which is what a
 // ScheduleWindow stores, so nothing here builds a Date to hand back. Wrapping is
@@ -6,9 +6,11 @@
 // stopping, since a window may run into the next day.
 
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import NumberFlow from "@number-flow/react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { use24HourClock } from "../../hooks/useTimeLocale";
 
 const MINUTES_PER_DAY = 1440;
 const CONTROL_SURFACE = "bg-[color-mix(in_srgb,var(--ink)_10%,transparent)]";
@@ -27,6 +29,7 @@ export function TimeOfDayField({
   value: number;
   onChange: (minutes: number) => void;
 }) {
+  const twentyFourHour = use24HourClock();
   const hour24 = Math.floor(value / 60);
   const minute = value % 60;
   const isPm = hour24 >= 12;
@@ -43,8 +46,13 @@ export function TimeOfDayField({
           unit='hour'
           onUp={() => shift(60)}
           onDown={() => shift(-60)}
-          value={hour12}
+          value={twentyFourHour ? hour24 : hour12}
           onCommit={(typed) => {
+            if (twentyFourHour) {
+              if (typed < 0 || typed > 23) return;
+              onChange(typed * 60 + minute);
+              return;
+            }
             if (typed < 1 || typed > 12) return;
             const next24 = isPm ? (typed === 12 ? 12 : typed + 12) : typed === 12 ? 0 : typed;
             onChange(next24 * 60 + minute);
@@ -63,26 +71,28 @@ export function TimeOfDayField({
             onChange(hour24 * 60 + typed);
           }}
         />
-        <div className='ml-1 flex flex-col gap-1'>
-          {(["AM", "PM"] as const).map((period) => {
-            const active = period === "PM" ? isPm : !isPm;
-            return (
-              <button
-                key={period}
-                type='button'
-                onClick={() => !active && shift(12 * 60)}
-                className={cn(
-                  "rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase transition-colors",
-                  active
-                    ? `${CONTROL_SURFACE} text-foreground`
-                    : "cursor-pointer text-muted-foreground/70 hover:bg-[color-mix(in_srgb,var(--ink)_10%,transparent)] hover:text-foreground",
-                )}
-              >
-                {period}
-              </button>
-            );
-          })}
-        </div>
+        {!twentyFourHour && (
+          <div className='ml-1 flex flex-col gap-1'>
+            {(["AM", "PM"] as const).map((period) => {
+              const active = period === "PM" ? isPm : !isPm;
+              return (
+                <button
+                  key={period}
+                  type='button'
+                  onClick={() => !active && shift(12 * 60)}
+                  className={cn(
+                    "rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase transition-colors",
+                    active
+                      ? `${CONTROL_SURFACE} text-foreground`
+                      : "cursor-pointer text-muted-foreground/70 hover:bg-[color-mix(in_srgb,var(--ink)_10%,transparent)] hover:text-foreground",
+                  )}
+                >
+                  {period}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -96,12 +106,14 @@ function StepColumn({
   onDown,
   onCommit,
 }: {
-  unit: string;
+  unit: "hour" | "minute";
   value: number;
   onUp: () => void;
   onDown: () => void;
   onCommit: (typed: number) => void;
 }) {
+  const { t } = useTranslation();
+  const unitName = unit === "hour" ? t("time.hourUnit") : t("time.minuteUnit");
   const [typing, setTyping] = useState(false);
   const [draft, setDraft] = useState("");
   const field = useRef<HTMLInputElement>(null);
@@ -117,7 +129,7 @@ function StepColumn({
       <button
         type='button'
         onClick={onUp}
-        aria-label={`Increase ${unit}`}
+        aria-label={t("time.increase", { unit: unitName })}
         className={stepButton}
         tabIndex={typing ? -1 : 0}
       >
@@ -149,7 +161,7 @@ function StepColumn({
             setTyping(true);
             requestAnimationFrame(() => field.current?.select());
           }}
-          title='Click to type'
+          title={t("time.clickToType")}
           className='grid w-11 cursor-text place-items-center rounded-md py-0.5 transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_10%,transparent)]'
         >
           <NumberFlow value={value} format={{ minimumIntegerDigits: 2 }} className={digits} />
@@ -158,7 +170,7 @@ function StepColumn({
       <button
         type='button'
         onClick={onDown}
-        aria-label={`Decrease ${unit}`}
+        aria-label={t("time.decrease", { unit: unitName })}
         className={stepButton}
         tabIndex={typing ? -1 : 0}
       >

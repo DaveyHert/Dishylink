@@ -10,6 +10,7 @@
 // from the Electron main process, chrome.notifications from the extension's
 // background worker, the web Notification API in a tab.
 
+import type { TFunction } from "i18next";
 import type { AlertSeverity } from "./alertDefinitions";
 import type { AlertTransition } from "./alertEngine";
 
@@ -85,15 +86,14 @@ export function notificationsProblem(state: NotificationState): string | null {
 /** The notification sent when the user switches them on: proof the channel works,
  *  and on macOS what raises the permission prompt. Shared so the tray and the
  *  alerts panel confirm in the same words. */
-export const NOTIFICATIONS_ON_CONFIRMATION = {
-  title: "Notifications on",
-  body: "Dishylink will alert you about Starlink outages.",
-};
+export function notificationsOnConfirmation(t: TFunction): { title: string; body: string } {
+  return { title: t("notifications.enabledTitle"), body: t("notifications.enabledBody") };
+}
 
-function deviceName(source: AlertTransition["source"]): string {
-  if (source === "dish") return "Dish";
-  if (source === "router") return "Router";
-  return "Dishylink";
+function deviceName(source: AlertTransition["source"], t: TFunction): string {
+  if (source === "dish") return t("alerts.deviceDish");
+  if (source === "router") return t("alerts.deviceRouter");
+  return t("alerts.deviceApp");
 }
 
 /**
@@ -101,16 +101,23 @@ function deviceName(source: AlertTransition["source"]): string {
  * interrupting them for. `notify` on the definition is the whole test, so no
  * alert can be watched without also being notifiable, and no host can quietly
  * decide to announce something the others stay silent about.
+ *
+ * Worded with the host's own `t`: each host runs its own catalog instance.
  */
-export function describeTransition(transition: AlertTransition): AlertNotification | null {
+export function describeTransition(
+  transition: AlertTransition,
+  t: TFunction,
+): AlertNotification | null {
   if (!transition.spec.notify) return null;
   const cleared = transition.kind === "cleared";
   if (cleared && transition.spec.notifyClear === false) return null;
-  const device = deviceName(transition.source);
+  const device = deviceName(transition.source, t);
   return {
     key: `alert-${transition.source}:${transition.key}${cleared ? "-cleared" : ""}`,
-    title: cleared ? `${device} alert cleared` : `${device} alert`,
-    body: cleared ? transition.spec.ok : transition.spec.firing,
+    title: cleared ? t("alerts.clearedTitle", { device }) : t("alerts.firingTitle", { device }),
+    body: cleared
+      ? t(transition.spec.ok, transition.spec.vars)
+      : t(transition.spec.firing, transition.spec.vars),
     severity: transition.spec.severity,
     cleared,
   };

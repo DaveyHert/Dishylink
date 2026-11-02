@@ -11,25 +11,34 @@
 // host needs it: the wording and the `notify` flag decide what each of them puts
 // in front of the user, and keeping them somewhere only the browser could read
 // is what tied alerting to an open window.
+//
+// The wording itself is a catalog key, resolved with the host's own t() at the
+// moment it reaches a person, so the same alert reads in the user's language on
+// the desktop, in the extension and in a tab alike.
+
+import type { TranslationKey } from "./i18n/resources";
 
 export type AlertSeverity = "critical" | "warning" | "advisory";
 
 export interface AlertSpec {
   key: string;
   /** Shown when the flag is false — phrased as the good news, like the app. */
-  ok: string;
+  ok: TranslationKey;
   /**
    * Shown when the flag is true. Plain language: what is wrong, in the user's
    * terms — the condition only. It is the alert's one message, used verbatim
    * live and in history, so the same event never reads two different ways.
    */
-  firing: string;
+  firing: TranslationKey;
   /**
    * What to do about it, if there is anything. Kept out of `firing` so the
    * message stays a statement of fact: an instruction is useful next to a live
    * alert and noise against one that cleared an hour ago. Surfaced on the ⓘ.
    */
-  advice?: string;
+  advice?: TranslationKey;
+  /** Interpolation values for `ok`/`firing`, on the few alerts whose wording
+   *  names a subject (a data limit names the device and the allowance). */
+  vars?: Record<string, string | number>;
   severity: AlertSeverity;
   /** Worth interrupting someone with a desktop notification. */
   notify?: boolean;
@@ -39,137 +48,144 @@ export interface AlertSpec {
   notifyClear?: boolean;
 }
 
+/** The dish's heat flags, which the event log and the outage reports read as
+ *  thermal episodes. */
+export const THERMAL_ALERT_KEYS: readonly string[] = [
+  "thermalThrottle",
+  "thermalShutdown",
+  "powerSupplyThermalThrottle",
+];
+
 /** Alerts on the dish's get_status. Order is roughly by how much it matters. */
 export const DISH_ALERTS: AlertSpec[] = [
   {
     key: "dishWaterDetected",
-    ok: "No water inside the dish",
-    firing: "Water detected inside the dish",
+    ok: "alerts.dish.dishWaterDetected.ok",
+    firing: "alerts.dish.dishWaterDetected.firing",
     severity: "critical",
     notify: true,
   },
   {
     key: "routerWaterDetected",
-    ok: "No water inside the router",
-    firing: "Water detected inside the router",
+    ok: "alerts.dish.routerWaterDetected.ok",
+    firing: "alerts.dish.routerWaterDetected.firing",
     severity: "critical",
     notify: true,
   },
   {
     key: "thermalShutdown",
-    ok: "Not overheated",
-    firing: "Dish shut itself down to cool off",
+    ok: "alerts.dish.thermalShutdown.ok",
+    firing: "alerts.dish.thermalShutdown.firing",
     severity: "critical",
     notify: true,
   },
   {
     key: "noEthernetLink",
-    ok: "Ethernet connected",
-    firing: "No Ethernet link to the router",
+    ok: "alerts.dish.noEthernetLink.ok",
+    firing: "alerts.dish.noEthernetLink.firing",
     severity: "critical",
     notify: true,
   },
   {
     key: "motorsStuck",
-    ok: "Motors healthy",
-    firing: "Motors are stuck — the dish cannot aim itself",
+    ok: "alerts.dish.motorsStuck.ok",
+    firing: "alerts.dish.motorsStuck.firing",
     severity: "critical",
     notify: true,
   },
   {
     key: "thermalThrottle",
-    ok: "Normal temperature",
-    firing: "Dish is hot and is limiting speed to cool down",
+    ok: "alerts.dish.thermalThrottle.ok",
+    firing: "alerts.dish.thermalThrottle.firing",
     severity: "warning",
     notify: true,
   },
   {
     key: "powerSupplyThermalThrottle",
-    ok: "Power supply temperature normal",
-    firing: "Power supply is hot and is limiting power",
+    ok: "alerts.dish.powerSupplyThermalThrottle.ok",
+    firing: "alerts.dish.powerSupplyThermalThrottle.firing",
     severity: "warning",
     notify: true,
   },
   {
     key: "slowEthernetSpeeds",
-    ok: "Normal Ethernet speeds to router",
-    firing: "Slow Ethernet link to the router",
+    ok: "alerts.dish.slowEthernetSpeeds.ok",
+    firing: "alerts.dish.slowEthernetSpeeds.firing",
     severity: "warning",
     notify: true,
   },
   {
     key: "slowEthernetSpeeds100",
-    ok: "Ethernet running at full speed",
-    firing: "Ethernet is capped at 100 Mbps",
-    advice: "Check the cable between the dish and the router.",
+    ok: "alerts.dish.slowEthernetSpeeds100.ok",
+    firing: "alerts.dish.slowEthernetSpeeds100.firing",
+    advice: "alerts.dish.slowEthernetSpeeds100.advice",
     severity: "warning",
   },
   {
     key: "upsuRouterPortSlow",
-    ok: "Power supply port normal",
-    firing: "Power supply's router port is running slow",
+    ok: "alerts.dish.upsuRouterPortSlow.ok",
+    firing: "alerts.dish.upsuRouterPortSlow.firing",
     severity: "warning",
   },
   {
     key: "mastNotNearVertical",
-    ok: "Mast is near vertical",
-    firing: "Mast is not near vertical",
+    ok: "alerts.dish.mastNotNearVertical.ok",
+    firing: "alerts.dish.mastNotNearVertical.firing",
     severity: "warning",
   },
   {
     key: "lowMotorCurrent",
-    ok: "Motor current normal",
-    firing: "Low motor current",
+    ok: "alerts.dish.lowMotorCurrent.ok",
+    firing: "alerts.dish.lowMotorCurrent.firing",
     severity: "warning",
   },
   {
     key: "lowerSignalThanPredicted",
-    ok: "Signal as predicted",
-    firing: "Weather interference",
-    advice:
-      "Heavy rain, snow, or thick cloud is weakening the signal below what the dish predicted — it clears when the weather does. If skies are clear, check the dish's view of the sky for new obstructions.",
+    ok: "alerts.dish.lowerSignalThanPredicted.ok",
+    firing: "alerts.dish.lowerSignalThanPredicted.firing",
+    advice: "alerts.dish.lowerSignalThanPredicted.advice",
     severity: "warning",
   },
   {
     key: "dbfTelemStale",
-    ok: "Telemetry current",
-    firing: "Dish telemetry has gone stale",
+    ok: "alerts.dish.dbfTelemStale.ok",
+    firing: "alerts.dish.dbfTelemStale.firing",
     severity: "warning",
   },
   {
     key: "unexpectedLocation",
-    ok: "At service location",
-    firing: "Dish is away from its registered service location",
+    ok: "alerts.dish.unexpectedLocation.ok",
+    firing: "alerts.dish.unexpectedLocation.firing",
     severity: "warning",
   },
   {
     key: "obstructionMapReset",
-    ok: "Obstruction map intact",
-    firing: "Obstruction map was reset — it is remapping the sky",
+    ok: "alerts.dish.obstructionMapReset.ok",
+    firing: "alerts.dish.obstructionMapReset.firing",
     severity: "advisory",
   },
   {
     key: "roaming",
-    ok: "Not roaming",
-    firing: "Roaming — away from your registered address",
+    ok: "alerts.dish.roaming.ok",
+    firing: "alerts.dish.roaming.firing",
     severity: "advisory",
   },
   {
     key: "isHeating",
-    ok: "Not heating",
-    firing: "Heating itself to melt snow or ice",
+    ok: "alerts.dish.isHeating.ok",
+    firing: "alerts.dish.isHeating.firing",
     severity: "advisory",
   },
   {
     key: "isPowerSaveIdle",
-    ok: "Not sleeping",
-    firing: "Sleeping to save power",
+    ok: "alerts.dish.isPowerSaveIdle.ok",
+    firing: "alerts.dish.isPowerSaveIdle.firing",
     severity: "advisory",
   },
   {
     key: "installPending",
-    ok: "Starlink software update install completed",
-    firing: "Starlink software update install pending",
+    ok: "alerts.dish.installPending.ok",
+    firing: "alerts.dish.installPending.firing",
     severity: "advisory",
   },
 ];
@@ -178,138 +194,138 @@ export const DISH_ALERTS: AlertSpec[] = [
 export const ROUTER_ALERTS: AlertSpec[] = [
   {
     key: "poeFuseBlown",
-    ok: "Power supply fuse intact",
-    firing: "Power supply fuse has blown",
+    ok: "alerts.router.poeFuseBlown.ok",
+    firing: "alerts.router.poeFuseBlown.firing",
     severity: "critical",
     notify: true,
   },
   {
     key: "poeVinOvervoltage",
-    ok: "Power input normal",
-    firing: "Power supply input voltage is too high",
+    ok: "alerts.router.poeVinOvervoltage.ok",
+    firing: "alerts.router.poeVinOvervoltage.firing",
     severity: "critical",
     notify: true,
   },
   {
     key: "poeVinUndervoltage",
-    ok: "Power input steady",
-    firing: "Power supply input voltage is too low",
+    ok: "alerts.router.poeVinUndervoltage.ok",
+    firing: "alerts.router.poeVinUndervoltage.firing",
     severity: "critical",
     notify: true,
   },
   {
     key: "poeRouterOvercurrent",
-    ok: "Router current normal",
-    firing: "Router is drawing too much current",
+    ok: "alerts.router.poeRouterOvercurrent.ok",
+    firing: "alerts.router.poeRouterOvercurrent.firing",
     severity: "critical",
     notify: true,
   },
   {
     key: "poeOnDishUnreachable",
-    ok: "Dish reachable over power supply",
-    firing: "Cannot reach the dish through the power supply",
+    ok: "alerts.router.poeOnDishUnreachable.ok",
+    firing: "alerts.router.poeOnDishUnreachable.firing",
     severity: "critical",
     notify: true,
   },
   {
     key: "ethSwitchError",
-    ok: "Ethernet switch healthy",
-    firing: "Ethernet switch error",
+    ok: "alerts.router.ethSwitchError.ok",
+    firing: "alerts.router.ethSwitchError.firing",
     severity: "critical",
     notify: true,
   },
   {
     key: "wanEthPoorConnection",
-    ok: "Good connection to the dish",
-    firing: "Poor Ethernet connection to the dish",
+    ok: "alerts.router.wanEthPoorConnection.ok",
+    firing: "alerts.router.wanEthPoorConnection.firing",
     severity: "warning",
     notify: true,
   },
   {
     key: "highCablePingDropRate",
-    ok: "Cable link clean",
-    firing: "Cable is dropping pings",
-    advice: "Check the Starlink cable and its connections at both ends.",
+    ok: "alerts.router.highCablePingDropRate.ok",
+    firing: "alerts.router.highCablePingDropRate.firing",
+    advice: "alerts.router.highCablePingDropRate.advice",
     severity: "warning",
     notify: true,
   },
   {
     key: "thermalThrottle",
-    ok: "Router temperature normal",
-    firing: "Router is hot and is slowing Wi-Fi to cool down",
+    ok: "alerts.router.thermalThrottle.ok",
+    firing: "alerts.router.thermalThrottle.firing",
     severity: "warning",
     notify: true,
   },
   {
     key: "meshUnreliableBackhaul",
-    ok: "Mesh link reliable",
-    firing: "Mesh nodes have an unreliable link to the router",
+    ok: "alerts.router.meshUnreliableBackhaul.ok",
+    firing: "alerts.router.meshUnreliableBackhaul.firing",
     severity: "warning",
   },
   {
     key: "meshTopologyChangingOften",
-    ok: "Mesh layout stable",
-    firing: "Mesh nodes keep switching how they connect",
+    ok: "alerts.router.meshTopologyChangingOften.ok",
+    firing: "alerts.router.meshTopologyChangingOften.firing",
     severity: "warning",
   },
   {
     key: "lanEthSlowLink10",
-    ok: "LAN ports at full speed",
-    firing: "A LAN port is stuck at 10 Mbps",
+    ok: "alerts.router.lanEthSlowLink10.ok",
+    firing: "alerts.router.lanEthSlowLink10.firing",
     severity: "warning",
   },
   {
     key: "lanEthSlowLink100",
-    ok: "LAN ports not capped",
-    firing: "A LAN port is capped at 100 Mbps",
+    ok: "alerts.router.lanEthSlowLink100.ok",
+    firing: "alerts.router.lanEthSlowLink100.firing",
     severity: "warning",
   },
   {
     key: "wiredMeshNotUsingWanIface",
-    ok: "Wired mesh on the right port",
-    firing: "Wired mesh node is not using its WAN port",
+    ok: "alerts.router.wiredMeshNotUsingWanIface.ok",
+    firing: "alerts.router.wiredMeshNotUsingWanIface.firing",
     severity: "warning",
   },
   {
     key: "poeOffCurrentNominal",
-    ok: "Power supply output normal",
-    firing: "Power supply is off but still drawing current",
+    ok: "alerts.router.poeOffCurrentNominal.ok",
+    firing: "alerts.router.poeOffCurrentNominal.firing",
     severity: "warning",
   },
   {
     key: "radiusMissingProcess",
-    ok: "Access control running",
-    firing: "Access-control process is missing",
+    ok: "alerts.router.radiusMissingProcess.ok",
+    firing: "alerts.router.radiusMissingProcess.firing",
     severity: "warning",
   },
   {
     key: "installPending",
-    ok: "Router software update install completed",
-    firing: "Router software update install pending",
+    ok: "alerts.router.installPending.ok",
+    firing: "alerts.router.installPending.firing",
     severity: "advisory",
   },
   {
     key: "freshlyFused",
-    ok: "Router configured",
-    firing: "Router is freshly fused and not yet set up",
+    ok: "alerts.router.freshlyFused.ok",
+    firing: "alerts.router.freshlyFused.firing",
     severity: "advisory",
   },
   {
     key: "sandboxDisabled",
-    ok: "Sandbox available",
-    firing: "Sandbox mode is disabled",
+    ok: "alerts.router.sandboxDisabled.ok",
+    firing: "alerts.router.sandboxDisabled.firing",
     severity: "advisory",
   },
   {
     key: "onlyOverflightBlocked",
-    ok: "Service unrestricted",
-    firing: "Only overflight service is blocked",
+    ok: "alerts.router.onlyOverflightBlocked.ok",
+    firing: "alerts.router.onlyOverflightBlocked.firing",
     severity: "advisory",
   },
   {
     key: "offlineNetworksDisabled",
-    ok: "Offline networks available",
-    firing: "Offline networks are disabled",
+    ok: "alerts.router.offlineNetworksDisabled.ok",
+    firing: "alerts.router.offlineNetworksDisabled.firing",
     severity: "advisory",
   },
 ];
@@ -342,17 +358,16 @@ export interface AlertState extends AlertSpec {
 export const SYSTEM_ALERTS = {
   dishUnreachable: {
     key: "dishUnreachable",
-    ok: "Dish is answering",
-    firing: "Dish isn’t answering",
-    advice:
-      "Check that the dish has power and that its cable to the router is seated at both ends.",
+    ok: "alerts.system.dishUnreachable.ok",
+    firing: "alerts.system.dishUnreachable.firing",
+    advice: "alerts.system.dishUnreachable.advice",
     severity: "critical",
     notify: true,
   },
   routerUnreachable: {
     key: "routerUnreachable",
-    ok: "Router is answering",
-    firing: "Router isn’t answering",
+    ok: "alerts.system.routerUnreachable.ok",
+    firing: "alerts.system.routerUnreachable.firing",
     severity: "warning",
     notify: true,
   },
@@ -363,10 +378,9 @@ export const SYSTEM_ALERTS = {
   // payload; something has to watch the drop rate and say so.
   starlinkOutage: {
     key: "starlinkOutage",
-    ok: "Pings to the Starlink network are succeeding again",
-    firing: "The dish is reachable, but pings to the Starlink network are failing",
-    advice:
-      "Nothing on your side is wrong. Heavy weather or a gap in satellite coverage will clear on its own.",
+    ok: "alerts.system.starlinkOutage.ok",
+    firing: "alerts.system.starlinkOutage.firing",
+    advice: "alerts.system.starlinkOutage.advice",
     severity: "critical",
     notify: true,
   },
@@ -375,8 +389,8 @@ export const SYSTEM_ALERTS = {
   // "nothing happened". Never fires live — historianDown covers the present.
   recorderOff: {
     key: "recorderOff",
-    ok: "Recording ran continuously",
-    firing: "Recording was off — anything in this gap went unrecorded",
+    ok: "alerts.system.recorderOff.ok",
+    firing: "alerts.system.recorderOff.firing",
     severity: "advisory",
   },
   // The historian being down is itself an alert: recording has silently stopped.
@@ -384,8 +398,8 @@ export const SYSTEM_ALERTS = {
   // the desktop app runs it in-process, where its absence means the app is gone.
   historianDown: {
     key: "historianDown",
-    ok: "History recorder running",
-    firing: "History recorder is down — live alerts still work, but nothing is being recorded",
+    ok: "alerts.system.historianDown.ok",
+    firing: "alerts.system.historianDown.firing",
     severity: "warning",
     notify: true,
   },

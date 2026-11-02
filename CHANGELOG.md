@@ -2,6 +2,50 @@
 
 All notable changes to Dishylink are documented here.
 
+## [1.3.0] - 2026-10-23
+
+### Languages
+
+- Dishylink now comes in English, Spanish, French, German and Portuguese.
+  Choose one in Settings › App; it reaches notifications and the menu bar too.
+  (#72)
+
+### Outage post-mortem reports
+
+- When an outage ends, the history recorder writes up the five minutes before
+  it: latency, throughput, snow melt, the dish's own cause, and any heat
+  touching the outage. Open it by clicking the outage in the event log, and
+  copy it as text or JSON to share. Reports are kept for 30 days. (#28)
+
+### Time format
+
+- Settings › App has a time format choice: Automatic, 12-hour or 24-hour.
+  Automatic follows your language. The choice applies to every time in the
+  app. (#84)
+
+### Event log
+
+- Hovering an event's time shows its date. (#36)
+- A band switch shows the device and the bands it left and joined. Clicking
+  the device opens it in the network panel. (#80)
+- Each event's dot carries the same Outage, Degraded or Info rating as its
+  details, and rows line up whatever the width of each time. A ping, downlink
+  or unknown interruption shorter than eight seconds is rated Degraded. (#82)
+
+### Also added
+
+- After an update, Dishylink shows what's new once in a release note.
+
+### Fixed
+
+- Dish factory reset in Settings › Starlink works again. It was answered with
+  "Unimplemented" by the dish. (#83)
+- Erratic chart movement is now stable: charts no longer redraw their older
+  points every second. (#69)
+- A router address saved in Settings reaches the router diagnosis without a
+  reload. (#79)
+- The latency caption stays on one line at narrower widths. (#53)
+
 ## [1.2.0] - 2026-09-18
 
 ### Device usage

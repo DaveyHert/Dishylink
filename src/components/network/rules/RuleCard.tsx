@@ -4,9 +4,11 @@
 
 import { CalendarClock, Gauge, Timer } from "lucide-react";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { formatBytes } from "../../../lib/format";
 import { useNow } from "../../../hooks/useNow";
 import type { Rule } from "../../../hooks/useRules";
+import type { TranslationKey } from "@core/i18n/resources";
 import { cn } from "@/lib/utils";
 import { cycleLabel, formatDuration, timeLeft } from "./allowanceTerms";
 import {
@@ -22,10 +24,10 @@ import { ScheduleWindows } from "./scheduleFields";
 
 /** Keyed to what is actually holding the device, not to what the rule is about:
  *  a rule with a bedtime can still be paused for running out of bytes. */
-const PAUSED_BECAUSE: Record<RuleMeasure, string> = {
-  schedule: "Paused, outside its schedule",
-  timer: "Paused, time is up",
-  allowance: "Paused, limit reached",
+const PAUSED_BECAUSE: Record<RuleMeasure, TranslationKey> = {
+  schedule: "rules.pausedSchedule",
+  timer: "rules.pausedTimer",
+  allowance: "rules.pausedLimit",
 };
 
 export function RuleCard({
@@ -40,6 +42,7 @@ export function RuleCard({
   /** The rule's own menu, so the card never decides what can be done to it. */
   action?: ReactNode;
 }) {
+  const { t } = useTranslation();
   const measure = leadingMeasure(rule);
   const nowMs = useNow(measure === "timer" ? 1_000 : 60_000);
   const leftMs =
@@ -63,7 +66,12 @@ export function RuleCard({
   // A rule is only paused when it is holding every device it names. One member
   // out of bytes leaves the rest online, and the rule running.
   const allPaused = rule.pausedCount > 0 && rule.pausedCount === rule.memberCount;
-  const capLabel = `${formatBytes(rule.allocationBytes)}${perDevice ? " each" : shared ? " shared" : ""}`;
+  const bytes = formatBytes(rule.allocationBytes);
+  const capLabel = perDevice
+    ? t("rules.capEach", { bytes })
+    : shared
+      ? t("rules.capShared", { bytes })
+      : bytes;
 
   return (
     <div
@@ -92,8 +100,10 @@ export function RuleCard({
             <span>
               <span className='block text-[15px] font-semibold text-foreground'>{rule.name}</span>
               <span className='block text-[11.5px] text-muted-foreground'>
-                {rule.memberKeys.length} device{rule.memberKeys.length === 1 ? "" : "s"}
-                {perDevice && capped && <> · {formatBytes(rule.capacityBytes)} in total</>}
+                {t("network.deviceCount", { count: rule.memberKeys.length })}
+                {perDevice && capped && (
+                  <> · {t("rules.inTotal", { bytes: formatBytes(rule.capacityBytes) })}</>
+                )}
               </span>
             </span>
           </div>
@@ -111,7 +121,9 @@ export function RuleCard({
                   <span className='font-medium tabular-nums text-foreground'>
                     {formatBytes(rule.usageBytes)}
                   </span>
-                  <span className='text-muted-foreground'>of {capLabel}</span>
+                  <span className='text-muted-foreground'>
+                    {t("rules.ofCap", { cap: capLabel })}
+                  </span>
                 </div>
                 <Bar spent={spent} tone={meterTone(spent, allPaused)} />
               </div>
@@ -124,7 +136,7 @@ export function RuleCard({
                 {formatDuration(leftMs)}
               </span>
               <span className='text-[12px] text-muted-foreground'>
-                of {formatDuration(rule.countdownMs ?? 0)}
+                {t("rules.ofCap", { cap: formatDuration(rule.countdownMs ?? 0) })}
               </span>
             </div>
             <Bar
@@ -139,7 +151,7 @@ export function RuleCard({
                 {formatBytes(rule.usageBytes)}
               </span>
               <span className='text-[12px] text-muted-foreground'>
-                {capped ? `Limit: ${capLabel}` : "No cap"}
+                {capped ? t("rules.limitCap", { cap: capLabel }) : t("rules.noCap")}
               </span>
             </div>
             {capped && <Bar spent={spent} tone={meterTone(spent, allPaused)} />}
@@ -164,12 +176,12 @@ export function RuleCard({
               )}
             />
             {allPaused
-              ? PAUSED_BECAUSE[pauseCause(rule)]
+              ? t(PAUSED_BECAUSE[pauseCause(rule)])
               : rule.pausedCount > 0
-                ? `Active · ${rule.pausedCount} of ${rule.memberCount} paused`
+                ? t("rules.activePartial", { paused: rule.pausedCount, total: rule.memberCount })
                 : dormant
-                  ? "Not scheduled today"
-                  : "Active"}
+                  ? t("rules.notScheduledToday")
+                  : t("rules.active")}
           </span>
           <RuleNote rule={rule} measure={measure} nowMs={nowMs} spent={spent} dormant={dormant} />
         </div>
@@ -192,12 +204,17 @@ function RuleNote({
   spent: number;
   dormant: boolean;
 }) {
+  const { t } = useTranslation();
   if (measure === "schedule") {
-    const turns = rule.windowEndMs ? timeLeft(rule.windowEndMs, nowMs) : null;
+    const turns = rule.windowEndMs ? timeLeft(rule.windowEndMs, nowMs, t) : null;
     if (!turns) return null;
     return (
       <span className='text-muted-foreground'>
-        {dormant ? "Resumes" : rule.windowBlocked ? "Opens" : "Closes"} in {turns}
+        {dormant
+          ? t("rules.resumesIn", { time: turns })
+          : rule.windowBlocked
+            ? t("rules.opensIn", { time: turns })
+            : t("rules.closesIn", { time: turns })}
       </span>
     );
   }
@@ -205,13 +222,13 @@ function RuleNote({
   if (rule.allocationBytes > 0 && spent >= NEARING_LIMIT)
     return (
       <span className='rounded-full bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] px-2 py-0.5 font-medium text-[var(--accent)]'>
-        {Math.round(spent * 100)}% used
+        {t("rules.percentUsed", { percent: Math.round(spent * 100) })}
       </span>
     );
-  const resets = timeLeft(rule.periodEndMs, nowMs);
+  const resets = timeLeft(rule.periodEndMs, nowMs, t);
   return (
     <span className='text-muted-foreground'>
-      {resets ? `Resets in ${resets}` : cycleLabel(rule.cycle)}
+      {resets ? t("rules.resetsIn", { time: resets }) : cycleLabel(rule.cycle, t)}
     </span>
   );
 }

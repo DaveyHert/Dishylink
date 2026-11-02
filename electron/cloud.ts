@@ -18,6 +18,7 @@ import {
 import { join } from "node:path";
 import { createCloudHandler } from "../cloud/starlinkCloudHandler";
 import { resilientFetch } from "../cloud/resilientFetch";
+import { t } from "./i18n";
 import { DishClient, DISH_LAN_HANDLE_URL, ROUTER_LAN_HANDLE_URL } from "../core/dishClient";
 import type { DishConfigJson } from "../core/dishClient";
 import { prepareDishConfigUpdate } from "../core/dishConfigUpdate";
@@ -259,7 +260,7 @@ async function verifyPartitionSession(): Promise<{ status: number; message?: str
  * connected, or when the user closes the window.
  */
 export async function signIn(parent?: BrowserWindow): Promise<{ ok: boolean; message?: string }> {
-  if (!handler) return { ok: false, message: "Cloud not started." };
+  if (!handler) return { ok: false, message: "errors.cloudNotStarted" };
   // Reconnecting an account whose login is still live needs no window: the session
   // is already in the jar, so showing starlink.com would only flash the site up and
   // tear it down again.
@@ -275,7 +276,7 @@ function openLoginWindow(parent?: BrowserWindow): Promise<{ ok: boolean; message
       height: 800,
       parent,
       modal: Boolean(parent),
-      title: "Sign in to Starlink",
+      title: t("desktop.signInTitle"),
       autoHideMenuBar: true,
       webPreferences: { partition: LOGIN_PARTITION },
     });

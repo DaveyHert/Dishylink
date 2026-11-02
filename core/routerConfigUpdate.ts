@@ -12,6 +12,8 @@
 // from the account.
 
 import type { WifiNetworkConfigJson } from "./dishClient";
+import { LocalizedError } from "./i18n/errors";
+import type { TranslationKey } from "./i18n/resources";
 import { normalizeIpAddress } from "./ipAddress";
 
 /** The most the router's own app offers: one primary and three backups. */
@@ -35,8 +37,8 @@ export type SubnetPreset = (typeof SUBNET_PRESETS)[number];
 
 /** WPA2-PSK's own bounds. Rejecting here is kinder than letting the router take
  *  a passphrase no device can then use to reconnect. */
-const MIN_PASSPHRASE = 8;
-const MAX_PASSPHRASE = 63;
+export const MIN_PASSPHRASE = 8;
+export const MAX_PASSPHRASE = 63;
 
 /** The router's address once `subnet` applies — the app has to follow it there. */
 export function routerAddressForSubnet(subnet: string): string {
@@ -146,15 +148,19 @@ export function buildSubnetNetworks(
 }
 
 /** Why a subnet change cannot be sent, or null when it can. */
-export function subnetRefusal(subnet: string, password: string): string | null {
-  if (!isSubnetPreset(subnet)) return "unsupported subnet";
-  if (password.length < MIN_PASSPHRASE || password.length > MAX_PASSPHRASE)
-    return `Password must contain ${MIN_PASSPHRASE} to ${MAX_PASSPHRASE} characters`;
+/** Why a subnet write would be refused, as a code the UI words in the user's
+ *  language: the subnet is not one the router offers, or the passphrase is
+ *  outside the length the router accepts. */
+export type SubnetRefusal = "unsupportedSubnet" | "passwordLength";
+
+export function subnetRefusal(subnet: string, password: string): SubnetRefusal | null {
+  if (!isSubnetPreset(subnet)) return "unsupportedSubnet";
+  if (password.length < MIN_PASSPHRASE || password.length > MAX_PASSPHRASE) return "passwordLength";
   return null;
 }
 
-export function meshNameRefusal(displayName: string): string | null {
-  return displayName.trim() === "" ? "Name cannot be empty" : null;
+export function meshNameRefusal(displayName: string): TranslationKey | null {
+  return displayName.trim() === "" ? "errors.meshNameEmpty" : null;
 }
 
 export function buildMeshConfigs(
@@ -257,7 +263,7 @@ export function buildRouterConfigRequest(
     const refusal = subnetRefusal(update.subnet, update.password);
     if (refusal) throw new Error(refusal);
     const networks = context.networks ?? [];
-    if (networks.length === 0) throw new Error("router reported no networks to change");
+    if (networks.length === 0) throw new LocalizedError("errors.routerNoNetworks");
     return {
       targetId,
       wifiSetConfig: {
@@ -270,7 +276,7 @@ export function buildRouterConfigRequest(
   }
   if (update.kind === "meshName") {
     const refusal = meshNameRefusal(update.displayName);
-    if (refusal) throw new Error(refusal);
+    if (refusal) throw new LocalizedError(refusal);
     return {
       targetId,
       wifiSetConfig: {

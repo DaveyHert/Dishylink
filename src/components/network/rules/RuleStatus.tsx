@@ -3,11 +3,13 @@
 // carry the whole allowance is measured against nothing.
 
 import { CalendarClock, Gauge, Timer, Wifi } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { classifyDevice } from "../../../lib/deviceKind";
 import { formatBytes, formatDateTime } from "../../../lib/format";
-import { vendorForMac } from "../../../lib/macVendor";
+import { vendorForMac, vendorLabel } from "../../../lib/macVendor";
 import { DeviceTypeIcon } from "../../../assets/icons/DeviceTypeIcon";
 import { useNow } from "../../../hooks/useNow";
+import { useTimeLocale } from "../../../hooks/useTimeLocale";
 import type { Rule, RuleMember } from "../../../hooks/useRules";
 import { Button } from "../../ui/button";
 import { Callout } from "../../ui/callout";
@@ -21,7 +23,8 @@ import { ScheduleWindows } from "./scheduleFields";
 /** Device-type icon plus vendor, as the Network tab draws a device — a rule's
  *  own record carries no MAC, so this reads it off the candidate roster instead. */
 function MemberIdentity({ member, macAddress }: { member: RuleMember; macAddress?: string }) {
-  const vendor = vendorForMac(macAddress);
+  const { t } = useTranslation();
+  const vendor = vendorLabel(vendorForMac(macAddress), t);
   return (
     <span className='flex min-w-0 flex-col gap-px'>
       <span className='flex min-w-0 items-center gap-1.5'>
@@ -78,6 +81,8 @@ export function RuleStatus({
   onEdit: () => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
+  const timeLocale = useTimeLocale();
   const macByKey = new Map(
     candidates.map((candidate) => [candidate.clientKey, candidate.macAddress]),
   );
@@ -96,6 +101,15 @@ export function RuleStatus({
   const oneMeter = !perDevice && capped;
   const spent = capped ? Math.min(1, rule.usageBytes / rule.allocationBytes) : 0;
   const held = rule.members.filter((member) => member.holding);
+  const deviceCount = t("network.deviceCount", { count: rule.memberKeys.length });
+  const allocation = formatBytes(rule.allocationBytes);
+  const ofAllocation = t("rules.ofCap", {
+    cap: perDevice
+      ? t("rules.capEach", { bytes: allocation })
+      : pooled
+        ? t("rules.capShared", { bytes: allocation })
+        : allocation,
+  });
 
   return (
     <>
@@ -113,15 +127,15 @@ export function RuleStatus({
           <div className='space-y-0.5'>
             <DialogTitle className='text-[19px] leading-snug'>{rule.name}</DialogTitle>
             <DialogDescription className='text-[13px]'>
-              {rule.memberKeys.length} device{rule.memberKeys.length === 1 ? "" : "s"}
+              {deviceCount}
               {capped && pooled
-                ? " · sharing one allowance"
+                ? ` · ${t("rules.sharingOneAllowance")}`
                 : capped && perDevice
-                  ? " · one allowance each"
+                  ? ` · ${t("rules.oneAllowanceEach")}`
                   : ""}
             </DialogDescription>
             <div className='text-[11.5px] text-muted-foreground'>
-              Created {formatDateTime(rule.createdMs)}
+              {t("rules.created", { when: formatDateTime(rule.createdMs, timeLocale) })}
             </div>
           </div>
         </div>
@@ -135,7 +149,7 @@ export function RuleStatus({
                 {formatDuration(leftMs)}
               </span>
               <span className='text-[13px] text-muted-foreground'>
-                of {formatDuration(rule.countdownMs!)}
+                {t("rules.ofCap", { cap: formatDuration(rule.countdownMs!) })}
               </span>
             </div>
             <Bar
@@ -153,10 +167,7 @@ export function RuleStatus({
               <span className='text-[30px] leading-none font-bold tabular-nums text-foreground'>
                 {formatBytes(rule.usageBytes)}
               </span>
-              <span className='text-[13px] text-muted-foreground'>
-                of {formatBytes(rule.allocationBytes)}
-                {pooled ? " shared" : ""}
-              </span>
+              <span className='text-[13px] text-muted-foreground'>{ofAllocation}</span>
             </div>
             <Bar spent={spent} tone={meterTone(spent, allPaused)} />
           </div>
@@ -165,61 +176,64 @@ export function RuleStatus({
         {rule.paused && held.length > 0 && (
           <Callout tone='error'>
             {held.length === rule.memberCount && rule.memberCount > 1
-              ? "Every device on this rule is paused"
-              : `${held.map((member) => member.name).join(", ")} ${held.length === 1 ? "is" : "are"} paused`}
+              ? t("rules.everyDevicePaused")
+              : t("rules.devicesPaused", {
+                  names: held.map((member) => member.name).join(", "),
+                  count: held.length,
+                })}{" "}
             {rule.windowBlocked
-              ? " because it is outside the hours this rule allows."
+              ? t("rules.becauseSchedule")
               : timing
-                ? " because the timer is up."
-                : " because the limit was reached."}
+                ? t("rules.becauseTimer")
+                : t("rules.becauseLimit")}
           </Callout>
         )}
 
         {leading === "timer" ? (
           <RuleStats>
             <Stat
-              label='Time left'
+              label={t("rules.timeLeft")}
               value={formatDuration(leftMs)}
               tone={leftMs <= 0 ? "text-destructive" : undefined}
             />
-            <Stat label='Pauses at' value={leftMs > 0 ? endsAtLabel(leftMs, nowMs) : "now"} />
-            <Stat label='Set for' value={formatDuration(rule.countdownMs!)} />
+            <Stat
+              label={t("rules.pausesAt")}
+              value={leftMs > 0 ? endsAtLabel(leftMs, nowMs, timeLocale) : t("rules.now")}
+            />
+            <Stat label={t("rules.setFor")} value={formatDuration(rule.countdownMs!)} />
           </RuleStats>
         ) : leading === "schedule" ? (
           <RuleStats>
             <Stat
               label={
                 scheduleDormant(rule, nowMs)
-                  ? "Resumes in"
+                  ? t("rules.resumesInLabel")
                   : rule.windowBlocked
-                    ? "Opens in"
-                    : "Closes in"
+                    ? t("rules.opensInLabel")
+                    : t("rules.closesInLabel")
               }
-              value={rule.windowEndMs ? (timeLeft(rule.windowEndMs, nowMs) ?? "—") : "—"}
+              value={rule.windowEndMs ? (timeLeft(rule.windowEndMs, nowMs, t) ?? "—") : "—"}
             />
             <Stat
-              label='Right now'
+              label={t("rules.rightNow")}
               value={
                 scheduleDormant(rule, nowMs)
-                  ? "Not scheduled"
+                  ? t("rules.notScheduled")
                   : rule.windowBlocked
-                    ? "Paused"
-                    : "Online"
+                    ? t("rules.paused")
+                    : t("rules.online")
               }
             />
-            <Stat
-              label='Devices'
-              value={`${rule.memberKeys.length} device${rule.memberKeys.length === 1 ? "" : "s"}`}
-            />
+            <Stat label={t("rules.devices")} value={deviceCount} />
           </RuleStats>
         ) : (
           capped && (
             <RuleStats>
               <Stat
-                label={perDevice ? "Allowance" : "Remaining"}
+                label={perDevice ? t("rules.allowance") : t("rules.remaining")}
                 value={
                   perDevice
-                    ? `${formatBytes(rule.allocationBytes)} each`
+                    ? t("rules.capEach", { bytes: allocation })
                     : formatBytes(Math.max(0, rule.allocationBytes - rule.usageBytes))
                 }
                 tone={
@@ -228,8 +242,11 @@ export function RuleStatus({
                     : undefined
                 }
               />
-              <Stat label='Resets in' value={timeLeft(rule.periodEndMs, nowMs) ?? "never"} />
-              <Stat label='Cycle' value={cycleLabel(rule.cycle)} />
+              <Stat
+                label={t("rules.resetsInLabel")}
+                value={timeLeft(rule.periodEndMs, nowMs, t) ?? t("rules.never")}
+              />
+              <Stat label={t("rules.cycle")} value={cycleLabel(rule.cycle, t)} />
             </RuleStats>
           )
         )}
@@ -237,14 +254,13 @@ export function RuleStatus({
         {/* A rule that leads with its hours can still carry an allowance, and one
             that leads with a timer never does. */}
         {leading === "schedule" && capped && (
-          <Section label='Data allowance'>
+          <Section label={t("rules.dataAllowance")}>
             <div className='flex items-baseline justify-between gap-3'>
               <span className='text-[15px] font-semibold tabular-nums text-foreground'>
                 {formatBytes(rule.usageBytes)}
               </span>
               <span className='text-[13px] text-muted-foreground'>
-                of {formatBytes(rule.allocationBytes)}
-                {perDevice ? " each" : pooled ? " shared" : ""} · {cycleLabel(rule.cycle)}
+                {ofAllocation} · {cycleLabel(rule.cycle, t)}
               </span>
             </div>
             {!perDevice && <Bar spent={spent} tone={meterTone(spent, rule.paused)} />}
@@ -252,7 +268,7 @@ export function RuleStatus({
         )}
 
         {perDevice ? (
-          <Section label='Devices'>
+          <Section label={t("rules.devices")}>
             <div className='space-y-3'>
               {rule.members.map((member) => (
                 <MemberMeter
@@ -266,7 +282,7 @@ export function RuleStatus({
           </Section>
         ) : (
           (leading === "schedule" || rule.memberCount > 1) && (
-            <Section label='Devices'>
+            <Section label={t("rules.devices")}>
               <div className='space-y-1'>
                 {rule.members.map((member) => (
                   <div
@@ -284,19 +300,15 @@ export function RuleStatus({
           )
         )}
 
-        {!rule.autoPause && (
-          <Callout tone='info'>
-            Auto-pause is off, so this rule is watched and announced but nothing is paused.
-          </Callout>
-        )}
+        {!rule.autoPause && <Callout tone='info'>{t("rules.autoPauseOffRule")}</Callout>}
       </div>
 
       <DialogFooter className='flex-row items-center justify-end gap-2 border-t border-border/60 pt-4'>
         <Button variant='outline' className='cursor-pointer' onClick={onClose}>
-          Close
+          {t("common.close")}
         </Button>
         <Button className='cursor-pointer' onClick={onEdit}>
-          Edit rule
+          {t("rules.editRule")}
         </Button>
       </DialogFooter>
     </>

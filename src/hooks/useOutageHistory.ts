@@ -5,11 +5,8 @@
 // remember. The historian records each poll's view, so this reaches back weeks —
 // but only over the time the historian has been running.
 
-import { useEffect, useMemo, useState } from "react";
 import { canonicalCause, type OutageEvent } from "@core/telemetry";
-import { apiRequest } from "../lib/apiHost";
-
-const REFRESH_MS = 30_000;
+import { usePolledEndpoint } from "./usePolledEndpoint";
 
 /** Same outage from two sources: the dish restates it as its duration grows. Keyed
  *  on the canonical cause token so the live decode and a differently-labelled
@@ -32,28 +29,12 @@ export function mergeOutages(live: OutageEvent[], persisted: OutageEvent[]): Out
   return [...byKey.values()];
 }
 
+const NO_EVENTS: OutageEvent[] = [];
+
+function pickEvents(body: unknown): OutageEvent[] {
+  return (body as { events?: OutageEvent[] }).events ?? NO_EVENTS;
+}
+
 export function useOutageHistory(): OutageEvent[] {
-  const [events, setEvents] = useState<OutageEvent[]>([]);
-
-  useEffect(() => {
-    let disposed = false;
-    const load = async () => {
-      try {
-        const response = await apiRequest("/api/outages", { signal: AbortSignal.timeout(4_000) });
-        if (!response.ok) return;
-        const body = (await response.json()) as { events?: OutageEvent[] };
-        if (!disposed) setEvents(body.events ?? []);
-      } catch {
-        // historian down: the dish's own list still populates the log
-      }
-    };
-    load();
-    const timerId = window.setInterval(load, REFRESH_MS);
-    return () => {
-      disposed = true;
-      window.clearInterval(timerId);
-    };
-  }, []);
-
-  return useMemo(() => events, [events]);
+  return usePolledEndpoint("/api/outages", pickEvents, NO_EVENTS);
 }

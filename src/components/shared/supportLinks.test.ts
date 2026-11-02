@@ -16,13 +16,16 @@ describe("support menu links", () => {
       buyMeACoffee: "https://buymeacoffee.com/daveyhert",
       patreon: "https://www.patreon.com/DaveyHert",
       latestRelease: "https://github.com/DaveyHert/dishylink/releases/latest",
+      releaseNotes: "https://github.com/DaveyHert/dishylink/blob/master/CHANGELOG.md",
       reportIssue: "https://github.com/DaveyHert/dishylink/issues/new?labels=bug",
-      requestFeature: "https://github.com/DaveyHert/dishylink/issues/new?labels=enhancement",
+      requestFeature: "https://buymeacoffee.com/daveyhert/e/591024",
       contact: "mailto:hello@dishylink.com",
       x: "https://x.com/daveyhert",
       linkedin: "http://linkedin.com/in/daveyhert/",
       privacyPolicy: "https://github.com/DaveyHert/dishylink/blob/master/PRIVACY.md",
       disclaimer: "https://github.com/DaveyHert/dishylink/blob/master/DISCLAIMER.md",
+      jobmate: "https://usejobmate.com",
+      jobmateVideo: "https://youtu.be/BxpOIzJBlg8",
     });
   });
 });

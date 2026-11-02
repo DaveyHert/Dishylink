@@ -2,6 +2,7 @@
 // device's own card.
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { useDeviceGroups } from "../../../hooks/useDeviceGroups";
 import { refreshMeterIndicators, removeDeviceRule, restartRule } from "../../../hooks/useDataMeter";
@@ -19,6 +20,7 @@ import { MeterIcon } from "../../../assets/icons/MeterIcon";
 import type { MemberCandidate } from "./allowanceTerms";
 
 export function RulesTab({ candidates }: { candidates: MemberCandidate[] }) {
+  const { t } = useTranslation();
   const { rules, loading, error, reload } = useRules();
   const groups = useDeviceGroups();
   const [editing, setEditing] = useState<Rule | null>(null);
@@ -59,11 +61,9 @@ export function RulesTab({ candidates }: { candidates: MemberCandidate[] }) {
               gearColor={rules.length < 1 ? "var(--ink)" : "var(--accent)"}
               className='size-[15px] flex-none text-muted-foreground'
             />
-            Rules
+            {t("network.tabRules")}
           </h2>
-          <p className='text-[12px] text-muted-foreground'>
-            Manage data limits, schedules and timers, across the devices on your network.
-          </p>
+          <p className='text-[12px] text-muted-foreground'>{t("rules.description")}</p>
         </div>
         <Button
           size='sm'
@@ -71,7 +71,7 @@ export function RulesTab({ candidates }: { candidates: MemberCandidate[] }) {
           onClick={() => setCreating(true)}
         >
           <Plus className='size-3.5' />
-          New rule
+          {t("rules.newRule")}
         </Button>
       </div>
 
@@ -93,7 +93,7 @@ export function RulesTab({ candidates }: { candidates: MemberCandidate[] }) {
                   <PopoverTrigger asChild>
                     <button
                       type='button'
-                      aria-label={`Actions for ${rule.name}`}
+                      aria-label={t("rules.actionsFor", { name: rule.name })}
                       className='grid size-7 cursor-pointer place-items-center rounded-md text-muted-foreground transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_10%,transparent)] hover:text-foreground'
                     >
                       <MoreHorizontal className='size-4' />
@@ -109,21 +109,23 @@ export function RulesTab({ candidates }: { candidates: MemberCandidate[] }) {
                       onClick={() => setEditing(rule)}
                       className='w-full cursor-pointer rounded-md px-2.5 py-1.5 text-left text-[13px] transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_8%,transparent)]'
                     >
-                      Edit rule
+                      {t("rules.editRule")}
                     </button>
                     <button
                       type='button'
                       onClick={() => void restart(rule)}
                       className='w-full cursor-pointer rounded-md px-2.5 py-1.5 text-left text-[13px] transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_8%,transparent)]'
                     >
-                      {rule.countdownMs === undefined ? "Start cycle over" : "Restart timer"}
+                      {rule.countdownMs === undefined
+                        ? t("rules.startCycleOver")
+                        : t("rules.restartTimer")}
                     </button>
                     <button
                       type='button'
                       onClick={() => void removeRule(rule)}
                       className='w-full cursor-pointer rounded-md px-2.5 py-1.5 text-left text-[13px] text-destructive transition-colors hover:bg-[color-mix(in_srgb,var(--status-critical)_10%,transparent)]'
                     >
-                      Remove rule
+                      {t("rules.removeRule")}
                     </button>
                   </PopoverContent>
                 </Popover>
@@ -140,9 +142,9 @@ export function RulesTab({ candidates }: { candidates: MemberCandidate[] }) {
               <span className='mx-auto grid size-9 place-items-center rounded-full border border-border/70'>
                 <Plus className='size-4' />
               </span>
-              <span className='block text-[13px] font-medium'>Create a rule</span>
+              <span className='block text-[13px] font-medium'>{t("rules.createRule")}</span>
               <span className='block text-[11.5px] text-muted-foreground'>
-                Group devices and set their limits
+                {t("rules.createRuleHint")}
               </span>
             </span>
           </button>
@@ -150,9 +152,7 @@ export function RulesTab({ candidates }: { candidates: MemberCandidate[] }) {
       )}
 
       {!loading && rules.length === 0 && (
-        <EmptyState className='pt-1'>
-          No rules yet. A rule can cap data, run a timer, or schedule when its devices are online.
-        </EmptyState>
+        <EmptyState className='pt-1'>{t("rules.noRules")}</EmptyState>
       )}
 
       <Dialog open={shown !== null && editing === null} onOpenChange={() => setViewing(null)}>

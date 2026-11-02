@@ -46,12 +46,15 @@ describe("applyRouterConfigUpdate", () => {
         UPDATE,
         replying({ status: 502, body: { error: "device_call_failed", message: "socket hang up" } }),
       ),
-    ).rejects.toThrow("Starlink couldn't apply the change: socket hang up");
+    ).rejects.toMatchObject({
+      key: "errors.cloudCouldNotApply",
+      vars: { message: "socket hang up" },
+    });
   });
 
   it("falls back to the status when the body carries no message", async () => {
     await expect(
       applyRouterConfigUpdate(UPDATE, replying({ status: 503, body: {} })),
-    ).rejects.toThrow("HTTP 503");
+    ).rejects.toMatchObject({ vars: { message: "HTTP 503" } });
   });
 });

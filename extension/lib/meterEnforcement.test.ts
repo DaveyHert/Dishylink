@@ -4,6 +4,11 @@ import { createRule, type MeterRule } from "@core/dataMeter";
 import { InMemoryHistory } from "./history";
 import { runMeters } from "./meterEnforcement";
 import type { MeterHost } from "./meterHost";
+import { createI18n } from "@core/i18n/resources";
+import type { AlertSpec } from "@core/alertDefinitions";
+
+const { t } = createI18n("en");
+const firing = (spec: AlertSpec) => t(spec.firing, spec.vars);
 
 const GB = 1_000_000_000;
 const T0 = Date.UTC(2026, 7, 19, 12);
@@ -79,7 +84,7 @@ describe("runMeters", () => {
 
     expect(writes).toEqual([{ clientId: 111, paused: true }]);
     expect(alerts.map((alert) => alert.kind)).toEqual(["fired"]);
-    expect(alerts[0].spec.firing).toBe("Phone reached its 10.0 GB data allowance");
+    expect(firing(alerts[0].spec)).toBe("Phone reached its 10.0 GB data allowance");
     expect((await pauseFor(store))?.state).toBe("applied");
   });
 
@@ -139,10 +144,10 @@ describe("runMeters", () => {
     const pause = await pauseFor(store);
     expect(pause?.state).toBe("failed");
     expect(pause?.error).toBe("No Starlink account connected");
-    expect(alerts[0].spec.advice).toMatch(/Connect your Starlink account/);
+    expect(alerts[0].spec.advice).toBe("alerts.dataLimit.connectAdvice");
   });
 
-  it("records what it announced, so history does not read back as a raw key", async () => {
+  it("records the wording and its variables, so history reads back in any language", async () => {
     const store = await storeWith(ruleFor());
     const { host } = fakeHost();
 
@@ -150,7 +155,9 @@ describe("runMeters", () => {
 
     const [episode] = await store.readAlerts(T0 + 1_000);
     expect(episode!.key).toBe(`dataLimit:${KEY}`);
-    expect(episode!.label).toBe("Phone reached its 10.0 GB data allowance");
+    expect(t(episode!.label as AlertSpec["firing"], episode!.labelVars)).toBe(
+      "Phone reached its 10.0 GB data allowance",
+    );
     expect(episode!.severity).toBe("warning");
   });
 
@@ -463,7 +470,7 @@ describe("runMeters", () => {
     // One group, one announcement, named for the group rather than for whichever
     // member's reading happened to cross the sum.
     expect(alerts).toHaveLength(1);
-    expect(alerts[0].spec.firing).toBe("Kids reached their 10.0 GB data allowance");
+    expect(firing(alerts[0].spec)).toBe("Kids reached their 10.0 GB data allowance");
     expect(alerts[0].key).toBe("dataLimit:group:kids");
   });
 

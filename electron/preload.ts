@@ -29,6 +29,11 @@ contextBridge.exposeInMainWorld("dishlink", {
   openExternal: (url: string): void => {
     ipcRenderer.send("open-external", url);
   },
+  // The language this window settled on. Main words its tray menu and the
+  // notifications it posts with no window open, so it follows the window.
+  setLocale: (locale: string): void => {
+    ipcRenderer.send("set-locale", locale);
+  },
   selfIdentity: (): Promise<HostNetworkIdentity> => ipcRenderer.invoke("get-self-identity"),
   // The roster entry this machine matched over the LAN, kept by main so the
   // self-pause refusal there still knows this device off that network.

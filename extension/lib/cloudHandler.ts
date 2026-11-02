@@ -173,7 +173,8 @@ export async function handleCloudRequest(request: CloudRequest): Promise<CloudRe
         status: 409,
         body: {
           error: "self_device_unknown",
-          message: "Choose this device under Settings → App before pausing others.",
+          // A catalog key: the dashboard words it in the user's language.
+          message: "errors.selfDeviceUnknown",
         },
       };
     if (update.clientId === selfClientId)
@@ -181,7 +182,7 @@ export async function handleCloudRequest(request: CloudRequest): Promise<CloudRe
         status: 409,
         body: {
           error: "self_pause_refused",
-          message: "This is the device you are using, so it cannot be paused from here.",
+          message: "errors.selfPauseRefused",
         },
       };
     return cloudHandler.updateClient(update);

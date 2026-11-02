@@ -52,6 +52,7 @@ export interface ClientTotal {
   /** The (vendor-masked) MAC. Kept as re-anchoring evidence, never the key. */
   macAddress: string;
   name?: string;
+  ipAddress?: string;
   /** Authoritative cumulative bytes this billing month, across every reconnect. */
   rxBytes: number;
   txBytes: number;
@@ -67,6 +68,9 @@ export interface TotalState {
   clientId?: number;
   macAddress: string;
   name?: string;
+  /** Last IP address the router reported, so a device with no name can be
+   *  shown as the network list shows it, without a fresh roster request. */
+  ipAddress?: string;
   /** The router's per-client hash, when it sent one. Kept as re-anchoring
    *  evidence that outlives a MAC change: unlike the MAC it is not something the
    *  device rotates, and unlike clientId it is not reissued by this router on a
@@ -449,6 +453,7 @@ export class ClientTotalsCore {
     liveKeys: Set<string>,
     captiveClientId?: string,
     selfTraffic?: { receivedBytes: number; sentBytes: number },
+    ipAddress?: string,
   ): void {
     // An identity the user merged away routes into its survivor however often it
     // comes back. An adoption's alias does not: that one is inferred, and the old
@@ -512,6 +517,7 @@ export class ClientTotalsCore {
     state.lastPollMs = atMs;
     state.lastSeenMs = atMs;
     if (name) state.name = name;
+    if (ipAddress) state.ipAddress = ipAddress;
   }
 
   /**
@@ -832,6 +838,7 @@ export class ClientTotalsCore {
       clientId: s.clientId,
       macAddress: s.macAddress,
       name: s.name,
+      ipAddress: s.ipAddress,
       rxBytes: monthlyRx(s),
       txBytes: monthlyTx(s),
       sinceMs: s.sinceMs,

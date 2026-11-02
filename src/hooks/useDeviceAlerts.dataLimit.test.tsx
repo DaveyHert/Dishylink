@@ -6,6 +6,8 @@
 
 import { expect, describe, test, afterEach, vi } from "vitest";
 import { render, cleanup } from "vitest-browser-react";
+import { useTranslation } from "react-i18next";
+import "../i18n";
 import { setApiHost } from "../lib/apiHost";
 import { useDeviceAlerts } from "./useDeviceAlerts";
 
@@ -50,12 +52,13 @@ function stubRecorder(rules: unknown[]) {
 }
 
 function Probe() {
+  const { t } = useTranslation();
   const { active } = useDeviceAlerts(null, "online");
   return (
     <ul>
       {active.map((alert) => (
         <li key={`${alert.source}:${alert.key}`}>
-          {alert.key} — {alert.firing}
+          {alert.key} — {t(alert.firing, alert.vars)}
         </li>
       ))}
     </ul>

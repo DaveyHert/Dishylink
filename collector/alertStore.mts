@@ -40,8 +40,11 @@ export interface AlertEpisode {
   startMs: number;
   /** null while the flag is still set. */
   endMs: number | null;
-  /** What was announced. Absent where the wording is a constant the UI looks up. */
+  /** What was announced: a catalog key the UI resolves in its own language, or
+   *  (on rows written by older builds) the English sentence itself. */
   label?: string;
+  /** Interpolation values for `label`, on alerts whose wording names a subject. */
+  labelVars?: Record<string, string | number>;
   severity?: AlertSeverity;
 }
 
@@ -91,20 +94,30 @@ export class AlertStore {
     source: AlertSource,
     key: string,
     startMs: number,
-    announced?: { label: string; severity: AlertSeverity },
+    announced?: Pick<AlertEpisode, "label" | "labelVars" | "severity">,
   ): void {
     if (this.isOpen(source, key)) return;
     this.episodes.push({ source, key, startMs, endMs: null, ...announced });
     this.flush();
   }
 
-  close(source: AlertSource, key: string, endMs: number): void {
-    if (!this.isOpen(source, key)) return;
+  /**
+   * Close the open episode for (source, key) and return it. A caller that
+   * cares what just ended (the outage post-mortem) acts on this episode rather
+   * than re-searching `all()`: a long outage can have started outside the
+   * 48 h window `all()` serves, and closed episodes age out of it the moment
+   * they close.
+   */
+  close(source: AlertSource, key: string, endMs: number): AlertEpisode | null {
+    if (!this.isOpen(source, key)) return null;
+    let closed: AlertEpisode | null = null;
     for (const episode of this.episodes) {
       if (episode.source === source && episode.key === key && episode.endMs === null) {
         episode.endMs = endMs;
+        closed = episode;
       }
     }
     this.flush();
+    return closed;
   }
 }

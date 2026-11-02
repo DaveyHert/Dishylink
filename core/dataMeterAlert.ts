@@ -12,6 +12,7 @@
 // is a host that can assemble them differently.
 
 import type { AlertSpec } from "./alertDefinitions";
+import type { TranslationKey } from "./i18n/resources";
 import {
   announcementSubject,
   announcesAsGroup,
@@ -21,8 +22,7 @@ import {
 } from "./dataMeter";
 
 /** Offered as the advice on a rule that asked for a pause this host cannot send. */
-export const CONNECT_ACCOUNT_ADVICE =
-  "Connect your Starlink account to have Dishylink pause a device when it reaches its allowance.";
+export const CONNECT_ACCOUNT_ADVICE: TranslationKey = "alerts.dataLimit.connectAdvice";
 
 export function dataLimitAlertKey(clientKey: string): string {
   return `dataLimit:${clientKey}`;
@@ -33,7 +33,7 @@ export function dataLimitAlertSpec(
   deviceName: string,
   options: {
     /** Shown on the ⓘ; omitted when nothing is left for the user to do. */
-    advice?: string;
+    advice?: TranslationKey;
     /** The group's name, when the group covers more than this one device. Absent
      *  on a group down to a single member, which is just that device. */
     groupName?: string;
@@ -50,18 +50,24 @@ export function dataLimitAlertSpec(
     key: dataLimitAlertKey(announcementSubject(rule)),
     ok: timing
       ? asGroup
-        ? `${subject} have time left`
-        : `${subject} has time left`
+        ? "alerts.dataLimit.timeOkGroup"
+        : "alerts.dataLimit.timeOk"
       : asGroup
-        ? `${subject} are within their data allowance`
-        : `${subject} is within its data allowance`,
+        ? "alerts.dataLimit.allowanceOkGroup"
+        : "alerts.dataLimit.allowanceOk",
     firing: timing
       ? asGroup
-        ? `${subject} reached the end of their ${formatDuration(rule.countdownMs!)} timer`
-        : `${subject} reached the end of its ${formatDuration(rule.countdownMs!)} timer`
+        ? "alerts.dataLimit.timeFiringGroup"
+        : "alerts.dataLimit.timeFiring"
       : asGroup
-        ? `${subject} reached their ${formatAllowance(rule.allocationBytes)} data allowance`
-        : `${subject} reached its ${formatAllowance(rule.allocationBytes)} data allowance`,
+        ? "alerts.dataLimit.allowanceFiringGroup"
+        : "alerts.dataLimit.allowanceFiring",
+    vars: {
+      subject,
+      ...(timing
+        ? { duration: formatDuration(rule.countdownMs!) }
+        : { allowance: formatAllowance(rule.allocationBytes) }),
+    },
     advice: options.advice,
     severity: "warning",
     notify: true,

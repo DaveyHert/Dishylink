@@ -1,27 +1,38 @@
 // Series definitions for the dashboard charts, plus the builder that turns
 // raw telemetry into the Average/Current/energy config each stat-detail panel
 // needs. Kept out of App so the component just wires data to views.
+//
+// Every label comes out of the translation catalog, so the series are built
+// from the caller's `t` rather than held as constants. `t` from useTranslation
+// is stable until the language changes, so callers memoise on it and the chart
+// keeps its stable-series optimisation.
 
+import type { TFunction } from "i18next";
 import type { ChartSeries } from "../components/shared/TelemetryChart";
 import type { StatDetail } from "../components/dashboard/StatDetailPanel";
 import { readRouterLatencyMs, type TelemetrySample, type OutageEvent } from "@core/telemetry";
 import type { DishStatusJson } from "@core/dishClient";
 import { formatThroughput, formatThroughputLabel, formatThroughputTick } from "./format";
 
-export const THROUGHPUT_SERIES: ChartSeries[] = [
+export const throughputSeries = (t: TFunction): ChartSeries[] => [
   {
     id: "down",
-    label: "Download",
+    label: t("metrics.download"),
     colorVar: "--series-down",
     getValue: (sample) => sample.downlinkBps,
   },
-  { id: "up", label: "Upload", colorVar: "--series-up", getValue: (sample) => sample.uplinkBps },
+  {
+    id: "up",
+    label: t("metrics.upload"),
+    colorVar: "--series-up",
+    getValue: (sample) => sample.uplinkBps,
+  },
 ];
 
-export const LATENCY_SERIES: ChartSeries[] = [
+export const latencySeries = (t: TFunction): ChartSeries[] => [
   {
     id: "latency",
-    label: "Latency",
+    label: t("metrics.latency"),
     colorVar: "--chart-ink",
     getValue: (sample) => sample.latencyMs,
     bucketReduce: "max",
@@ -36,10 +47,10 @@ export const LATENCY_SERIES: ChartSeries[] = [
 // Averaged, NOT min-bucketed like the dish's series: the value is already a
 // five-minute mean, so min-bucketing would smear the window's worst moment
 // across five minutes of chart and call it an outage.
-export const ROUTER_PING_SUCCESS_SERIES: ChartSeries[] = [
+const routerPingSuccessSeries = (t: TFunction): ChartSeries[] => [
   {
     id: "router-ping-success",
-    label: "Router",
+    label: t("common.router"),
     colorVar: "--chart-warm",
     getValue: (sample) => sample.routerPingSuccessPercent,
   },
@@ -59,17 +70,17 @@ export const ROUTER_PING_SUCCESS_SERIES: ChartSeries[] = [
 // instantaneous float and keeps no ring. Time nobody was sampling — router
 // unplugged, laptop on another network, historian down — is gone for good, and
 // is drawn as the gap it is rather than a line pretending we measured.
-export const LATENCY_DETAIL_SERIES: ChartSeries[] = [
+const latencyDetailSeries = (t: TFunction): ChartSeries[] => [
   {
     id: "latency",
-    label: "Starlink",
+    label: t("common.starlink"),
     colorVar: "--chart-ink",
     getValue: (sample) => sample.latencyMs,
     bucketReduce: "max",
   },
   {
     id: "router-latency",
-    label: "Router",
+    label: t("common.router"),
     colorVar: "--chart-warm",
     getValue: (sample) => sample.routerLatencyMs,
   },
@@ -78,20 +89,20 @@ export const LATENCY_DETAIL_SERIES: ChartSeries[] = [
 // Drop rate inverted into the "% of pings answered" the app shows. Bucketed by
 // min so a dip survives being averaged into a window — a brief total loss is the
 // whole point of the chart.
-export const PING_SUCCESS_SERIES: ChartSeries[] = [
+const pingSuccessSeries = (t: TFunction): ChartSeries[] => [
   {
     id: "ping-success",
-    label: "Ping success",
+    label: t("metrics.pingSuccess"),
     colorVar: "--chart-ink",
     getValue: (sample) => (1 - sample.dropRate) * 100,
     bucketReduce: "min",
   },
 ];
 
-export const POWER_SERIES: ChartSeries[] = [
+export const powerSeries = (t: TFunction): ChartSeries[] => [
   {
     id: "power",
-    label: "Power draw",
+    label: t("metrics.powerDraw"),
     colorVar: "--chart-ink",
     getValue: (sample) => sample.powerW,
   },
@@ -136,6 +147,11 @@ export function energyKWh(samples: TelemetrySample[]): number {
   return wattMilliseconds / 3_600_000_000;
 }
 
+/** How much of a window was observed: none of it, effectively all of it, or
+ *  the minutes that were. The panel words it in the user's language. */
+export type WindowCoverage =
+  { kind: "none" } | { kind: "full" } | { kind: "partial"; coveredMinutes: number };
+
 /**
  * How much of the window was actually recorded.
  *
@@ -143,24 +159,21 @@ export function energyKWh(samples: TelemetrySample[]): number {
  * readings dropped. What survives is time the dish was actually observed,
  * wherever in the window it falls. The width from the first reading to the last
  * cannot tell a full window from one with a ten-minute hole in the middle —
- * both measure the same across. Phrased like the historian-backed note beside
- * it, so the two read alike.
+ * both measure the same across.
  */
-export function coverageNote(slice: TelemetrySample[], windowMinutes: number): string {
+export function windowCoverage(slice: TelemetrySample[], windowMinutes: number): WindowCoverage {
   // No readings in the window at all — the dish has been silent for longer than
   // the window is wide. Distinct from a thin window, which is a real if short
   // measurement and reports the minutes it has.
-  if (slice.length === 0) return "nothing recorded in this window";
+  if (slice.length === 0) return { kind: "none" };
   let coveredMs = 0;
   for (let index = 1; index < slice.length; index++) {
     const step = slice[index].timestampMs - slice[index - 1].timestampMs;
     if (step <= COVERAGE_GAP_MS) coveredMs += step;
   }
   const windowMs = windowMinutes * 60_000;
-  if (coveredMs >= windowMs * 0.95) return "over the selected window";
-  const coveredMinutes = coveredMs / 60_000;
-  const rounded = coveredMinutes >= 1 ? `${Math.round(coveredMinutes)} min` : "< 1 min";
-  return `recorded ${rounded} of this window`;
+  if (coveredMs >= windowMs * 0.95) return { kind: "full" };
+  return { kind: "partial", coveredMinutes: coveredMs / 60_000 };
 }
 
 export interface StatDetailInputs {
@@ -176,6 +189,7 @@ export interface StatDetailInputs {
    *  once by the caller so no surface has to remember that on its own. */
   recentPingSuccessPercent: number;
   outageEvents: OutageEvent[];
+  t: TFunction;
 }
 
 // Window-INDEPENDENT config for each detail panel. The panel owns its own time
@@ -188,68 +202,69 @@ export function buildStatDetails({
   powerWindowEndMs,
   recentPingSuccessPercent,
   outageEvents,
+  t,
 }: StatDetailInputs): Record<string, StatDetail> {
+  const throughput = throughputSeries(t);
   return {
     download: {
-      label: "Download",
+      label: t("metrics.download"),
       current: status?.downlinkThroughputBps ?? 0,
       formatBig: formatThroughput,
-      series: [THROUGHPUT_SERIES[0]],
+      series: [throughput[0]],
       formatValue: formatThroughputLabel,
       formatTick: formatThroughputTick,
-      explainer:
-        "Download throughput is the rate data arrives from the internet to your dish, in bits per second. It spikes while you're actively pulling data and idles near zero when nothing is downloading.",
+      explainerTitle: t("metrics.whatIsDownload"),
+      explainer: t("metrics.downloadExplainer"),
     },
     upload: {
-      label: "Upload",
+      label: t("metrics.upload"),
       current: status?.uplinkThroughputBps ?? 0,
       formatBig: formatThroughput,
-      series: [THROUGHPUT_SERIES[1]],
+      series: [throughput[1]],
       formatValue: formatThroughputLabel,
       formatTick: formatThroughputTick,
-      explainer:
-        "Upload throughput is the rate data leaves your dish for the internet. It's typically much lower than download and rises when you send large files, back up data, or make video calls.",
+      explainerTitle: t("metrics.whatIsUpload"),
+      explainer: t("metrics.uploadExplainer"),
     },
     latency: {
-      label: "Latency",
+      label: t("metrics.latency"),
       current: readRouterLatencyMs(status?.popPingLatencyMs) ?? 0,
       formatBig: (value) => ({ value: value.toFixed(0), unit: "ms" }),
-      series: LATENCY_DETAIL_SERIES,
+      series: latencyDetailSeries(t),
       formatValue: (value) => `${value.toFixed(0)} ms`,
-      explainer:
-        "The Starlink dish and router both send test pings to the internet many times per minute. Latency measures how long, in milliseconds, a request takes to go to the internet and back. High latency may impact your experience with online gaming, video calls, and web browsing. It may be caused by extreme weather or periods of high network usage.",
+      explainerTitle: t("metrics.whatIsLatency"),
+      explainer: t("metrics.latencyExplainer"),
       outageEvents,
       distribution: true,
     },
     pingSuccess: {
-      label: "Ping success",
+      label: t("metrics.pingSuccess"),
       current: recentPingSuccessPercent,
       formatBig: (value) => ({ value: value.toFixed(2), unit: "%" }),
-      series: PING_SUCCESS_SERIES,
+      series: pingSuccessSeries(t),
       formatValue: (value) => `${value.toFixed(2)} %`,
       formatTick: (value) => `${value.toFixed(0)}%`,
       maxValue: 100,
-      explainer:
-        "Starlink and the Starlink router both send test pings to the internet many times per minute. It is normal for a few pings to drop without your connection noticeably suffering. Sustained dips are what matter, and they line up with the outages marked on the chart.",
+      explainerTitle: t("metrics.whatIsPingSuccess"),
+      explainer: t("metrics.pingExplainer"),
       outageEvents,
-      modalTitle: "Starlink ping success",
+      modalTitle: t("metrics.starlinkPingSuccess"),
       secondaryChart: {
-        title: "Router ping success",
-        note: "the router's own pings to its point of presence, over a rolling five minutes",
+        title: t("metrics.routerPingSuccess"),
+        note: t("metrics.routerPingNote"),
         // Both absences look the same in the data, so the message claims neither.
-        emptyNote:
-          "nothing recorded in this window — the router wasn't answering, or nothing was running to record it",
-        series: ROUTER_PING_SUCCESS_SERIES,
+        emptyNote: t("metrics.routerPingEmpty"),
+        series: routerPingSuccessSeries(t),
       },
     },
     power: {
-      label: "Power draw",
+      label: t("metrics.powerDraw"),
       current: currentPowerW,
       formatBig: (value) => ({ value: value.toFixed(0), unit: "W" }),
-      series: POWER_SERIES,
+      series: powerSeries(t),
       formatValue: (value) => `${value.toFixed(0)} W`,
-      explainer:
-        "Power draw is how much electricity the Starlink terminal is using. It rises under heavy load and when the dish heats itself to melt snow or ice.",
+      explainerTitle: t("metrics.whatIsPowerDraw"),
+      explainer: t("metrics.powerExplainer"),
       showWindowEnergy: true,
       showEnergyHistory: true,
       chartWindowEndMs: powerWindowEndMs,

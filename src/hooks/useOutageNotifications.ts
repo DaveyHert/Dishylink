@@ -23,8 +23,10 @@ import { useEffect, useRef } from "react";
 import type { DishTelemetry } from "./useDishTelemetry";
 import { hostAnnouncesAlerts, sendNotification } from "../lib/notifications";
 import { isStarlinkOutage } from "@core/telemetry";
+import { useTranslation } from "react-i18next";
 
 export function useOutageNotifications(telemetry: DishTelemetry): void {
+  const { t } = useTranslation();
   const wasDroppingRef = useRef(false);
 
   // The rule for what counts as an outage lives in core, so this and the
@@ -35,17 +37,17 @@ export function useOutageNotifications(telemetry: DishTelemetry): void {
     if (isDropping && !wasDroppingRef.current) {
       sendNotification(
         "starlink-outage",
-        "Starlink outage in progress",
-        "The dish is powered and reachable, but pings to the Starlink network are failing.",
+        t("notifications.outageTitle"),
+        t("notifications.outageBody"),
       );
     }
     if (!isDropping && wasDroppingRef.current) {
       sendNotification(
         "recovered",
-        "Starlink connection restored",
-        "Pings to the Starlink network are succeeding again.",
+        t("notifications.restoredTitle"),
+        t("notifications.restoredBody"),
       );
     }
     wasDroppingRef.current = isDropping;
-  }, [telemetry.samples]);
+  }, [telemetry.samples, t]);
 }

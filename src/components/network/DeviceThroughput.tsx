@@ -5,8 +5,10 @@
 // upload line sits flat on the floor.
 
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { formatThroughputLabel, formatThroughputTick } from "../../lib/format";
-import { THROUGHPUT_SERIES } from "../../lib/statDetails";
+import { throughputSeries } from "../../lib/statDetails";
 import type { TelemetrySample } from "@core/telemetry";
 import { InfoDot } from "../shared/InfoDot";
 import { TelemetryChart, type ChartSeries } from "../shared/TelemetryChart";
@@ -15,12 +17,6 @@ import { useNow } from "../../hooks/useNow";
 import { SegmentedControl } from "../ui/segmented-control";
 import { SectionHeading } from "./DataRow";
 import { PER_DEVICE_GAP_MS, WINDOW_OPTIONS } from "./networkFormat";
-
-// Stable references so TelemetryChart's bucket-binning memo isn't invalidated
-// by a fresh array on every render (on top of the live window edge it already
-// recomputes for each tick).
-const DOWNLOAD_SERIES: ChartSeries[] = [THROUGHPUT_SERIES[0]];
-const UPLOAD_SERIES: ChartSeries[] = [THROUGHPUT_SERIES[1]];
 
 export function DeviceThroughput({
   history,
@@ -37,8 +33,16 @@ export function DeviceThroughput({
   historianAnswering: boolean | null;
   routerReachable: boolean | null;
 }) {
+  const { t } = useTranslation();
   const [windowMinutes, setWindowMinutes] = useState(15);
   const nowMs = useNow();
+  // One array per language so TelemetryChart's bucket-binning memo isn't
+  // invalidated by a fresh series on every render (on top of the live window
+  // edge it already recomputes for each tick).
+  const series = useMemo(() => {
+    const [down, up] = throughputSeries(t);
+    return { down: [down], up: [up] };
+  }, [t]);
   // The hook retains 6h per device; the charts draw one window of it.
   const chartHistory = useMemo(
     () => windowTail(history, windowMinutes, nowMs),
@@ -52,16 +56,14 @@ export function DeviceThroughput({
 
   return (
     <>
-      <SectionHeading title='Throughput'>
-        {!recordingStopped && (
-          <InfoDot tip='How much data this device is transferring right now. Stream a video and watch it jump.' />
-        )}
+      <SectionHeading title={t("metrics.throughput")}>
+        {!recordingStopped && <InfoDot tip={t("network.throughputTip")} />}
         {history.length >= 2 && (
           <SegmentedControl
             options={WINDOW_OPTIONS}
             value={String(windowMinutes)}
             onChange={(minutes) => setWindowMinutes(Number(minutes))}
-            label='Chart time window'
+            label={t("metrics.chartTimeWindow")}
             className='ml-auto'
           />
         )}
@@ -69,22 +71,22 @@ export function DeviceThroughput({
       {!canDrawCharts ? (
         <div className='text-[11.5px] font-medium text-muted-foreground py-3.5'>
           {history.length < 2
-            ? noHistoryMessage(historianAnswering, routerReachable)
-            : outsideWindowMessage(windowMinutes)}
+            ? noHistoryMessage(historianAnswering, routerReachable, t)
+            : outsideWindowMessage(windowMinutes, t)}
         </div>
       ) : (
         <>
           <DirectionChart
-            label='Download'
+            label={t("metrics.download")}
             liveBps={downMbps === null ? null : downMbps * 1_000_000}
-            series={DOWNLOAD_SERIES}
+            series={series.down}
             samples={chartHistory}
             windowMinutes={windowMinutes}
           />
           <DirectionChart
-            label='Upload'
+            label={t("metrics.upload")}
             liveBps={upMbps === null ? null : upMbps * 1_000_000}
-            series={UPLOAD_SERIES}
+            series={series.up}
             samples={chartHistory}
             windowMinutes={windowMinutes}
           />
@@ -94,33 +96,28 @@ export function DeviceThroughput({
   );
 }
 
-function outsideWindowMessage(windowMinutes: number): string {
+function outsideWindowMessage(windowMinutes: number, t: TFunction): string {
   const longestWindowMinutes = Number(WINDOW_OPTIONS[WINDOW_OPTIONS.length - 1].value);
-  const windowSpanLabel =
+  const span =
     windowMinutes < 60
-      ? `${windowMinutes} minutes`
-      : `${windowMinutes / 60} hour${windowMinutes === 60 ? "" : "s"}`;
+      ? t("time.minutesSpan", { count: windowMinutes })
+      : t("time.hoursSpan", { count: windowMinutes / 60 });
   return windowMinutes >= longestWindowMinutes
-    ? `Nothing recorded for this device in the last ${windowSpanLabel}.`
-    : `Nothing recorded for this device in the last ${windowSpanLabel}. Its earlier readings are kept, so a longer window still has them.`;
+    ? t("network.nothingRecorded", { span })
+    : t("network.nothingRecordedLonger", { span });
 }
 
 function noHistoryMessage(
   historianAnswering: boolean | null,
   routerReachable: boolean | null,
+  t: TFunction,
 ): string {
   const noRecorder = historianAnswering === false;
   const noRouter = routerReachable === false;
-  if (noRecorder && noRouter) {
-    return "No throughput history. The history recorder isn't running, and the router on your network can't be reached.";
-  }
-  if (noRecorder) {
-    return "No throughput history. The history recorder isn't running, so nothing is being recorded.";
-  }
-  if (noRouter) {
-    return "No throughput history. Per-device rates are read from the router on your network, which can't be reached right now.";
-  }
-  return "Collecting live throughput… charts fill in as the router is polled (every 5 s).";
+  if (noRecorder && noRouter) return t("network.noHistoryBoth");
+  if (noRecorder) return t("network.noHistoryRecorder");
+  if (noRouter) return t("network.noHistoryRouter");
+  return t("network.collectingLive");
 }
 
 function DirectionChart({

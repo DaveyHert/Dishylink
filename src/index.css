@@ -247,9 +247,13 @@ body {
 
 /* ---------- thin scrollbar (scrollbar pseudo-elements aren't Tailwind utilities) ---------- */
 
-.thin-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: var(--hairline) transparent;
+/* Firefox only: Chromium 121+ ignores every ::-webkit-scrollbar rule below once
+   scrollbar-width is set, and its own "thin" is far wider than 4px. */
+@supports not selector(::-webkit-scrollbar) {
+  .thin-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--hairline) transparent;
+  }
 }
 /* macOS keeps its overlay scrollbar width unless appearance is reset first. */
 .thin-scroll::-webkit-scrollbar {

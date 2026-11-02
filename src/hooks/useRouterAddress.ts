@@ -3,26 +3,59 @@
 // The value is the host's, not the window's: the desktop app's recorder dials
 // both boxes with no window open, so an address kept here alone would be
 // invisible to the thing that needs it most.
+//
+// One value per window, not per component: the router diagnosis reads it for
+// the whole session while the settings row that changes it comes and goes.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { routerAddressHost, type RouterAddress } from "../lib/routerAddressHost";
+
+let addresses: RouterAddress | null = null;
+let saves = 0;
+let reading: Promise<void> | null = null;
+const listeners = new Set<() => void>();
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function publish(next: RouterAddress): void {
+  addresses = next;
+  for (const listener of listeners) listener();
+}
 
 /** Null until the host answers, and forever on hosts that cannot offer the
  *  choice — which is what keeps the settings rows out of a plain browser tab. */
 export function useRouterAddressState(): [RouterAddress | null, (next: RouterAddress) => void] {
-  const [addresses, setAddresses] = useState<RouterAddress | null>(null);
   const host = routerAddressHost();
+  const current = useSyncExternalStore(
+    subscribe,
+    () => addresses,
+    () => null,
+  );
 
+  // Read on every mount, not once: another tab may have changed the stored
+  // address since this window last asked.
   useEffect(() => {
-    if (!host) return;
-    let active = true;
-    void host.read().then((value) => {
-      if (active) setAddresses(value);
-    });
-    return () => {
-      active = false;
-    };
+    if (!host || reading) return;
+    const savesAtStart = saves;
+    reading = host
+      .read()
+      .then((value) => {
+        // A save that landed while this read was in flight is the newer value.
+        if (saves === savesAtStart) publish(value);
+      })
+      .finally(() => {
+        reading = null;
+      });
   }, [host]);
 
-  return [host ? addresses : null, setAddresses];
+  const setAddresses = useCallback((next: RouterAddress) => {
+    saves += 1;
+    publish(next);
+  }, []);
+  return [host ? current : null, setAddresses];
 }

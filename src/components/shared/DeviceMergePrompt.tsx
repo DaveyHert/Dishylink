@@ -3,10 +3,11 @@
 // reply. The two entries render as side-by-side device cards; buttons report the
 // answer to the caller, which owns the merge.
 
+import { Trans, useTranslation } from "react-i18next";
 import type { MergeCandidate } from "@core/clientTotals";
 import { usageKey, type ClientUsageTotal } from "@core/clientUsage";
 import { formatBytes, formatRelativeTime } from "../../lib/format";
-import { vendorForMac } from "../../lib/macVendor";
+import { vendorForMac, vendorLabel } from "../../lib/macVendor";
 import { useOuiRegistry } from "../../hooks/useOuiRegistry";
 import { classifyDevice } from "../../lib/deviceKind";
 import { DeviceTypeIcon } from "../../assets/icons/DeviceTypeIcon";
@@ -24,6 +25,7 @@ export function DeviceMergePrompt({
   nowMs: number;
   onAnswer: (candidate: MergeCandidate, same: boolean) => void;
 }) {
+  const { t } = useTranslation();
   useOuiRegistry();
 
   // One question at a time. Answering removes the candidate upstream, so the next
@@ -32,7 +34,7 @@ export function DeviceMergePrompt({
   const [candidate] = candidates;
   if (!candidate) return null;
 
-  const byKey = new Map(totals.map((t) => [usageKey(t.clientId, t.macAddress), t]));
+  const byKey = new Map(totals.map((total) => [usageKey(total.clientId, total.macAddress), total]));
   const older = byKey.get(candidate.fromKey);
   const newer = byKey.get(candidate.toKey);
   // A candidate naming a row that is not in the list cannot be shown honestly.
@@ -48,19 +50,19 @@ export function DeviceMergePrompt({
       <div className='p-3 pl-3.5'>
         <div className='flex items-center gap-1.5'>
           <MergeIcon size={15} className='text-chart-warm' />
-          <span className='text-[14.5px] font-[650] text-foreground'>
-            Possible duplicate device
-          </span>
+          <span className='text-[14.5px] font-[650] text-foreground'>{t("merge.title")}</span>
           {candidates.length > 1 && (
             <span className='ml-auto text-[11px] text-muted-foreground'>
-              {candidates.length - 1} more to review
+              {t("merge.moreToReview", { count: candidates.length - 1 })}
             </span>
           )}
         </div>
         <div className='mt-1 text-[13.5px] leading-[1.55] text-ink-secondary'>
-          This device appears twice, both named{" "}
-          <span className='font-medium text-foreground'>{candidate.detail}</span>. This happens when
-          a device changes its Wi-Fi address and your router treats it as new.
+          <Trans
+            i18nKey='merge.explanation'
+            values={{ name: candidate.detail }}
+            components={{ name: <span className='font-medium text-foreground' /> }}
+          />
         </div>
 
         <div className='mt-2.5 flex items-stretch gap-2'>
@@ -78,10 +80,10 @@ export function DeviceMergePrompt({
             a total it does not produce. The history joins either way. */}
         <div className='mt-2.5 text-[13.5px] leading-[1.55] text-ink-secondary'>
           {candidate.foldsBytes
-            ? `Combining keeps one device with ${formatBytes(
-                candidate.resultRxBytes + candidate.resultTxBytes,
-              )} this month, and joins their usage history.`
-            : "These cover different months, so their usage history is joined but the monthly figures stay as they are."}
+            ? t("merge.combinesTotal", {
+                total: formatBytes(candidate.resultRxBytes + candidate.resultTxBytes),
+              })
+            : t("merge.differentMonths")}
         </div>
 
         <div className='mt-2.5 flex items-center gap-3'>
@@ -89,13 +91,13 @@ export function DeviceMergePrompt({
             className='cursor-pointer rounded-md border-0 bg-foreground px-2.5 py-1 text-[12px] font-semibold text-background'
             onClick={() => onAnswer(candidate, true)}
           >
-            Same device
+            {t("merge.sameDevice")}
           </button>
           <button
             className='cursor-pointer border-0 bg-transparent p-0 text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground'
             onClick={() => onAnswer(candidate, false)}
           >
-            Different devices
+            {t("merge.differentDevices")}
           </button>
         </div>
       </div>
@@ -115,16 +117,19 @@ export function DeviceMergePrompt({
 // the technical reason they split, but not what a person judges by — set apart by a
 // softer colour, not a smaller size.
 function MergeDeviceCard({ total, nowMs }: { total: ClientUsageTotal; nowMs: number }) {
-  const vendor = vendorForMac(total.macAddress);
-  const maker = vendor || "Private";
+  const { t } = useTranslation();
+  const vendor = vendorLabel(vendorForMac(total.macAddress), t);
+  const maker = vendor || t("devices.privateVendor");
   const name = total.name || vendor || total.macAddress;
   const kind = classifyDevice(name);
-  const routerId = total.clientId !== undefined ? String(total.clientId) : "unknown";
+  const routerId = total.clientId !== undefined ? String(total.clientId) : t("common.unknown");
   // Matches the usage row's threshold: a device the historian touched within two
   // minutes is here now, and "Active now" against the other's "2 days ago" is the
   // contrast that reads the direction of the merge.
   const isActive = nowMs - total.lastSeenMs < 120_000;
-  const seenLabel = isActive ? "Active now" : formatRelativeTime(total.lastSeenMs, nowMs);
+  const seenLabel = isActive
+    ? t("devices.activeNow")
+    : formatRelativeTime(total.lastSeenMs, t, nowMs);
 
   return (
     <div className='flex flex-1 items-center gap-3 rounded-md border border-border p-2.5'>
@@ -135,7 +140,7 @@ function MergeDeviceCard({ total, nowMs }: { total: ClientUsageTotal; nowMs: num
           {maker} · {seenLabel}
         </span>
         <span className='text-[11.5px] leading-[1.3] text-muted-foreground'>
-          Router ID: {routerId}
+          {t("devices.routerId", { id: routerId })}
         </span>
       </span>
       <span className='flex flex-none flex-col items-end'>

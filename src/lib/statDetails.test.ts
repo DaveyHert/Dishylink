@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { averageOf, coverageNote, energyKWh } from "./statDetails";
+import { averageOf, windowCoverage, energyKWh } from "./statDetails";
 import type { TelemetrySample } from "@core/telemetry";
 
 function sample(routerPingSuccessPercent: number | null): TelemetrySample {
@@ -33,7 +33,7 @@ describe("averageOf", () => {
   });
 });
 
-describe("coverageNote", () => {
+describe("windowCoverage", () => {
   const NOW = 1_784_400_000_000;
 
   /** `count` samples at 1 Hz ending `endMs`. */
@@ -51,35 +51,39 @@ describe("coverageNote", () => {
   }
 
   it("reports a fully recorded window as covered", () => {
-    expect(coverageNote(run(NOW, 901), 15)).toBe("over the selected window");
+    expect(windowCoverage(run(NOW, 901), 15)).toEqual({ kind: "full" });
   });
 
   it("counts a gap as missing rather than reporting the full span", () => {
     // 5 minutes, a 5-minute outage, 5 more minutes: 15 minutes wide, 10 recorded.
     const samples = [...run(NOW - 10 * 60_000, 300), ...run(NOW, 300)];
-    expect(coverageNote(samples, 15)).toBe("recorded 10 min of this window");
+    const coverage = windowCoverage(samples, 15);
+    expect(coverage.kind).toBe("partial");
+    expect(coverage.kind === "partial" && coverage.coveredMinutes).toBeCloseTo(10, 1);
   });
 
   it("counts a window that readings stopped partway through as partial", () => {
     // Recording ran 5 minutes then stopped; the rest of the window is an outage
     // still in progress. Span first-to-last is 5 min and so is the coverage.
-    expect(coverageNote(run(NOW - 10 * 60_000, 300), 15)).toBe("recorded 5 min of this window");
+    const coverage = windowCoverage(run(NOW - 10 * 60_000, 300), 15);
+    expect(coverage.kind).toBe("partial");
+    expect(coverage.kind === "partial" && coverage.coveredMinutes).toBeCloseTo(5, 1);
   });
 
   it("does not treat a few dropped 1 Hz readings as an outage", () => {
     const samples = run(NOW, 901);
     samples.splice(400, 2);
-    expect(coverageNote(samples, 15)).toBe("over the selected window");
+    expect(windowCoverage(samples, 15)).toEqual({ kind: "full" });
   });
 
   it("names an empty window as unrecorded rather than as a short session", () => {
     // A dish silent for longer than the window leaves nothing inside it. "not
     // enough data yet" would read as a session that just started.
-    expect(coverageNote([], 15)).toBe("nothing recorded in this window");
+    expect(windowCoverage([], 15)).toEqual({ kind: "none" });
   });
 
-  it("reports a lone reading as under a minute rather than as no data", () => {
-    expect(coverageNote(run(NOW, 1), 15)).toBe("recorded < 1 min of this window");
+  it("reports a lone reading as a sliver of coverage rather than as no data", () => {
+    expect(windowCoverage(run(NOW, 1), 15)).toEqual({ kind: "partial", coveredMinutes: 0 });
   });
 });
 

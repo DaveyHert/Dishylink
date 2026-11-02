@@ -9,6 +9,7 @@ export interface ClientUsageTotal {
   clientId?: number;
   macAddress: string;
   name?: string;
+  ipAddress?: string;
   /** Cumulative bytes this billing month, across every reconnect. */
   rxBytes: number;
   txBytes: number;

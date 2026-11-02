@@ -1,5 +1,6 @@
 import { cloudRequest, type CloudRequest, type CloudReply } from "./cloudHost";
 import { AccountRequiredError } from "./routerClientUpdate";
+import { LocalizedError } from "@core/i18n/errors";
 import type { RouterConfigUpdate } from "@core/routerConfigUpdate";
 
 export { AccountRequiredError };
@@ -28,11 +29,8 @@ export async function applyRouterConfigUpdate(
   // already words that case, so it stands on its own.
   if (reply.status === 504) throw new Error(message);
   if ((reply.body as { deviceUnreachable?: boolean })?.deviceUnreachable)
-    throw new DeviceUnreachableError(
-      "Starlink can't reach your router right now, so it couldn't pass the change on. " +
-        "This clears on its own, usually within 4 to 5 minutes. Try again then.",
-    );
-  throw new Error(`Starlink couldn't apply the change: ${message}`);
+    throw new DeviceUnreachableError("errors.routerUnreachableViaCloud");
+  throw new LocalizedError("errors.cloudCouldNotApply", { message });
 }
 
 export async function setMeshNodeName(deviceId: string, displayName: string): Promise<void> {

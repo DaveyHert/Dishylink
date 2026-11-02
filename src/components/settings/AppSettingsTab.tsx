@@ -8,6 +8,7 @@
 // the method is the whole gate; the host's `platform` only words the copy.
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useTranslation } from "react-i18next";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -23,7 +24,22 @@ import {
   subscribeToToolbarStyle,
   type ToolbarStyle,
 } from "../../lib/toolbarStyle";
+import {
+  readLocale,
+  setLocale,
+  subscribeToLocale,
+  SUPPORTED_LOCALES,
+  type SupportedLocale,
+} from "../../lib/locale";
 import { selfDeviceHost } from "../../lib/selfDeviceHost";
+import {
+  readTimeFormat,
+  setTimeFormat,
+  subscribeToTimeFormat,
+  TIME_FORMATS,
+  type TimeFormat,
+} from "../../lib/timeFormat";
+import type { TranslationKey } from "@core/i18n/resources";
 import { badgeModeHost, DEFAULT_BADGE_MODE, type BadgeMode } from "../../lib/badgeMode";
 import { displayName, isClientDevice } from "../network/networkFormat";
 import type { WifiClientJson } from "@core/dishClient";
@@ -127,9 +143,69 @@ function useTrayIconStyle(): [TrayIconStyle, (style: TrayIconStyle) => void] | n
 
 const NO_SELF_DEVICE = "none";
 
+/** Language selector row: switches UI locale dynamically. */
+function LanguageRow() {
+  const { t } = useTranslation();
+  const locale = useSyncExternalStore(subscribeToLocale, readLocale);
+
+  return (
+    <SettingRow
+      title={t("settings.language")}
+      caption={t("settings.languageDesc")}
+      info={t("settings.languageInfo")}
+    >
+      <Select value={locale} onValueChange={(value) => setLocale(value as SupportedLocale)}>
+        <SelectTrigger className={triggerClass} style={{ width: 138 }}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent className={selectContentClass}>
+          {SUPPORTED_LOCALES.map((option) => (
+            <SelectItem key={option.code} value={option.code} className={selectItemClass}>
+              {option.nativeLabel}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </SettingRow>
+  );
+}
+
+const TIME_FORMAT_LABEL = {
+  auto: "settings.timeFormatAuto",
+  "12h": "settings.timeFormat12h",
+  "24h": "settings.timeFormat24h",
+} as const satisfies Record<TimeFormat, TranslationKey>;
+
+function TimeFormatRow() {
+  const { t } = useTranslation();
+  const format = useSyncExternalStore(subscribeToTimeFormat, readTimeFormat);
+
+  return (
+    <SettingRow
+      title={t("settings.timeFormat")}
+      caption={t("settings.timeFormatDesc")}
+      info={t("settings.timeFormatInfo")}
+    >
+      <Select value={format} onValueChange={(value) => setTimeFormat(value as TimeFormat)}>
+        <SelectTrigger className={triggerClass} style={{ width: 138 }}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent className={selectContentClass}>
+          {TIME_FORMATS.map((option) => (
+            <SelectItem key={option} value={option} className={selectItemClass}>
+              {t(TIME_FORMAT_LABEL[option])}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </SettingRow>
+  );
+}
+
 /** Names one roster entry as the device the dashboard runs on, for hosts that
  *  cannot work it out. Pausing is withheld from whatever is named here. */
 function SelfDeviceRow({ clients }: { clients: WifiClientJson[] }) {
+  const { t } = useTranslation();
   const host = selfDeviceHost();
   const [clientId, setClientId] = useState<number | null>(null);
   const [saveFailed, setSaveFailed] = useState(false);
@@ -173,17 +249,17 @@ function SelfDeviceRow({ clients }: { clients: WifiClientJson[] }) {
 
   return (
     <SettingRow
-      title='Your device on this network'
-      info='The router lists every connected device the same way, so Dishylink cannot tell which one you are sitting at. Pick yours and it is marked "This device" in the network list, with no pause button of its own: pausing it would cut off the internet connection this dashboard needs to unpause it again, and you would have to undo it from another device or the Starlink app. Change or clear it here at any time.'
+      title={t("settings.yourDevice")}
+      info={t("settings.yourDeviceInfo")}
       infoSeverity='warn'
-      caption='Pick the computer you are using right now'
+      caption={t("settings.yourDeviceDesc")}
       note={
         saveFailed
-          ? "That could not be saved, so nothing changed. Try again."
+          ? t("settings.deviceSaveFailed")
           : clientId === null
-            ? "Until you pick one, no device can be paused."
+            ? t("settings.deviceNotSelected")
             : missing
-              ? "The device you picked is not connected right now. Pick it again when it is back."
+              ? t("settings.deviceMissing")
               : undefined
       }
     >
@@ -194,17 +270,21 @@ function SelfDeviceRow({ clients }: { clients: WifiClientJson[] }) {
         <SelectTrigger className={triggerClass} style={{ maxWidth: 178 }}>
           <SelectValue>
             <span className='truncate'>
-              {named ? displayName(named) : missing ? "Not connected" : "Choose…"}
+              {named
+                ? displayName(named, t)
+                : missing
+                  ? t("common.notConnected")
+                  : t("common.choose")}
             </span>
           </SelectValue>
         </SelectTrigger>
         <SelectContent className={selectContentClass}>
           <SelectItem value={NO_SELF_DEVICE} className={selectItemClass}>
-            None
+            {t("common.none")}
           </SelectItem>
           {devices.length === 0 && (
             <div className='px-2 py-1.5 text-xs text-muted-foreground'>
-              Waiting for the router to list your devices…
+              {t("common.waitingForDevices")}
             </div>
           )}
           {devices.map((device) => (
@@ -214,7 +294,7 @@ function SelfDeviceRow({ clients }: { clients: WifiClientJson[] }) {
               className={selectItemClass}
             >
               <span className='flex flex-col items-start gap-px'>
-                <span>{displayName(device)}</span>
+                <span>{displayName(device, t)}</span>
                 <span className='text-[10.5px] text-muted-foreground'>
                   {[device.macAddress, device.ipAddress].filter(Boolean).join(" · ")}
                 </span>
@@ -230,6 +310,7 @@ function SelfDeviceRow({ clients }: { clients: WifiClientJson[] }) {
 /** What the extension's toolbar badge counts. Absent on every other host, which
  *  is what keeps the row out of the desktop app and a plain browser tab. */
 function BadgeModeRow() {
+  const { t } = useTranslation();
   const host = badgeModeHost();
   const [mode, setMode] = useState<BadgeMode>(DEFAULT_BADGE_MODE);
 
@@ -254,9 +335,9 @@ function BadgeModeRow() {
 
   return (
     <SettingRow
-      title='Toolbar badge'
-      info='The count on the extension icon. Being away from your Starlink makes both devices unreachable, and the badge cannot tell that from a device that has actually failed — so "Device faults only" leaves both out. Alerts still reach the panel and your notifications either way.'
-      caption='What the count on the extension icon includes'
+      title={t("settings.toolbarBadge")}
+      info={t("settings.toolbarBadgeInfo")}
+      caption={t("settings.toolbarBadgeDesc")}
     >
       <Select value={mode} onValueChange={choose}>
         <SelectTrigger className={triggerClass} style={{ width: 158 }}>
@@ -264,13 +345,13 @@ function BadgeModeRow() {
         </SelectTrigger>
         <SelectContent className={selectContentClass}>
           <SelectItem value='all' className={selectItemClass}>
-            All alerts
+            {t("settings.badgeAll")}
           </SelectItem>
           <SelectItem value='faults' className={selectItemClass}>
-            Device faults only
+            {t("settings.badgeFaults")}
           </SelectItem>
           <SelectItem value='off' className={selectItemClass}>
-            No badge
+            {t("settings.badgeOff")}
           </SelectItem>
         </SelectContent>
       </Select>
@@ -279,17 +360,22 @@ function BadgeModeRow() {
 }
 
 export function AppSettingsTab({ clients }: { clients: WifiClientJson[] }) {
+  const { t } = useTranslation();
   const toolbarStyle = useSyncExternalStore(subscribeToToolbarStyle, readToolbarStyle);
   const menuBar = useMenuBarThroughput();
   const hideTrayIcon = useHideTrayIcon();
   const trayStyle = useTrayIconStyle();
   // The readout lives in the menu bar on macOS and the taskbar on Windows; name
   // whichever this host is. Only reached when the bridge is present, i.e. desktop.
-  const surface = window.dishlink?.platform === "win32" ? "taskbar" : "menu bar";
+  const surface =
+    window.dishlink?.platform === "win32" ? t("settings.taskbar") : t("settings.menuBar");
 
   return (
     <>
-      <SettingRow title='App toolbar' caption='Floating dock or a left rail for the section links'>
+      <LanguageRow />
+      <TimeFormatRow />
+
+      <SettingRow title={t("settings.appToolbar")} caption={t("settings.appToolbarDesc")}>
         <Select
           value={toolbarStyle}
           onValueChange={(value) => setToolbarStyle(value as ToolbarStyle)}
@@ -299,10 +385,10 @@ export function AppSettingsTab({ clients }: { clients: WifiClientJson[] }) {
           </SelectTrigger>
           <SelectContent className={selectContentClass}>
             <SelectItem value='dock' className={selectItemClass}>
-              Dock
+              {t("settings.dock")}
             </SelectItem>
             <SelectItem value='rail' className={selectItemClass}>
-              Left rail
+              {t("settings.rail")}
             </SelectItem>
           </SelectContent>
         </Select>
@@ -314,21 +400,24 @@ export function AppSettingsTab({ clients }: { clients: WifiClientJson[] }) {
 
       {menuBar && (
         <SettingRow
-          title={`Throughput in ${surface}`}
-          caption={`Show the live ↓/↑ rate in the ${surface}`}
+          title={t("settings.throughputIn", { surface })}
+          caption={t("settings.throughputInDesc", { surface })}
         >
           <Switch checked={menuBar[0]} onCheckedChange={menuBar[1]} />
         </SettingRow>
       )}
 
       {menuBar?.[0] && hideTrayIcon && (
-        <SettingRow title='Hide menu bar icon' caption='Show only the throughput readout, no icon'>
+        <SettingRow
+          title={t("settings.hideMenuBarIcon")}
+          caption={t("settings.hideMenuBarIconDesc")}
+        >
           <Switch checked={hideTrayIcon[0]} onCheckedChange={hideTrayIcon[1]} />
         </SettingRow>
       )}
 
       {trayStyle && !hideTrayIcon?.[0] && (
-        <SettingRow title='Menu bar icon' caption='How it looks in the menu bar'>
+        <SettingRow title={t("settings.menuBarIcon")} caption={t("settings.menuBarIconDesc")}>
           <Select
             value={trayStyle[0]}
             onValueChange={(value) => trayStyle[1](value as TrayIconStyle)}
@@ -338,13 +427,13 @@ export function AppSettingsTab({ clients }: { clients: WifiClientJson[] }) {
             </SelectTrigger>
             <SelectContent className={selectContentClass}>
               <SelectItem value='template' className={selectItemClass}>
-                Monochrome
+                {t("settings.monochrome")}
               </SelectItem>
               <SelectItem value='outline' className={selectItemClass}>
-                Outline
+                {t("settings.outline")}
               </SelectItem>
               <SelectItem value='original' className={selectItemClass}>
-                App icon
+                {t("settings.appIcon")}
               </SelectItem>
             </SelectContent>
           </Select>

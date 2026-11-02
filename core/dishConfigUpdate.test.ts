@@ -63,7 +63,7 @@ describe("prepareDishConfigUpdate", () => {
     } as unknown as DishClient;
 
     await expect(prepareDishConfigUpdate(dish, { powerSaveMode: false })).rejects.toThrow(
-      /identity is unavailable/,
+      /dishIdentityUnavailable/,
     );
   });
 

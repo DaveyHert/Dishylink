@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from "react";
 import { countdownStartMs, type MeterCycle } from "@core/dataMeter";
 import type { DeviceGroup, GroupAllowanceMode } from "@core/deviceGroup";
 import type { Schedule } from "@core/schedule";
+import i18n from "../i18n";
 import { apiRequest } from "../lib/apiHost";
 import type { MeterRuleView } from "./useDataMeter";
 
@@ -200,7 +201,7 @@ export function useRules(): Rules {
       setPauseEnforceable(meterBody.pauseEnforceable === true);
       setError(null);
     } catch {
-      setError("The recorder isn’t answering, so rules can’t be read or changed.");
+      setError(i18n.t("errors.recorderNotAnsweringRules"));
     } finally {
       setLoading(false);
     }

@@ -11,6 +11,7 @@ import { IndexedDbHistory } from "../lib/history";
 import { singleFlight } from "../lib/singleFlight";
 import { NOTIFICATIONS_ENABLED_KEY, type NotifyResult } from "../lib/notificationHost";
 import { BADGE_MODE_KEY, storedBadgeMode } from "../lib/badgeModeHost";
+import { workerT } from "../lib/i18n";
 import { badgeAlerts } from "@/lib/badgeMode";
 import { loadRouterAddress, watchRouterAddress } from "../lib/endpoints";
 
@@ -141,8 +142,9 @@ async function announceAlerts(transitions: AlertTransition[]): Promise<void> {
   if (!(await notificationsEnabled())) return;
   const throttle = new NotificationThrottle();
   const inFront = await dashboardIsForeground();
+  const t = await workerT();
   for (const transition of transitions) {
-    const notification = describeTransition(transition);
+    const notification = describeTransition(transition, t);
     if (!notification) continue;
     if (!throttle.allow(notification.key, transition.atMs)) continue;
     // Dashboard in front → it sounds its own chime (its useDeviceAlerts owns the

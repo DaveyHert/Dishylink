@@ -9,6 +9,7 @@
 // from the historian: this needs internet + the account session, nothing about
 // the local dish.
 
+import type { TFunction } from "i18next";
 import type { WifiClientJson, WifiNetworkConfigJson } from "@core/dishClient";
 import { cloudRequest, noteCloudSessionChanged } from "./cloudHost";
 
@@ -168,20 +169,25 @@ export function routerStatus(
 }
 
 /** Friendly dish name like the portal: "STARLINK 4C8BB9" (last 6 hex of the id). */
-export function dishDisplayName(terminal: CloudTerminal): string {
+export function dishDisplayName(terminal: CloudTerminal, t: TFunction): string {
   const tail = (terminal.userTerminalId ?? "").split("-").pop() ?? "";
   const hex = tail.slice(-6).toUpperCase();
-  return hex ? `STARLINK ${hex}` : (terminal.serialNumber ?? "Starlink dish");
+  return hex ? `STARLINK ${hex}` : (terminal.serialNumber ?? t("account.dishFallbackName"));
 }
 
 /** Friendly router name: the controller reads "Main Router", a repeater "MESH". */
 export function routerDisplayName(
   routerId: string | undefined,
   tel: RouterTelemetry | undefined,
+  t: TFunction,
 ): string {
   const hex = (routerId ?? "").slice(-12).replace(/^0+/, "").toUpperCase();
   const isMesh = tel?.isRepeater === true || (tel?.hops ?? 0) > 0;
-  const prefix = tel ? (isMesh ? "MESH" : "Main Router") : "Router";
+  const prefix = tel
+    ? isMesh
+      ? t("account.routerMesh")
+      : t("account.routerMain")
+    : t("account.routerGeneric");
   return hex ? `${prefix} ${hex}` : prefix;
 }
 
@@ -194,22 +200,22 @@ export function routerHardwareName(hw: string | undefined): string {
 }
 
 /** Hops → "Direct" / "Mesh (N hops)", the portal's "Connection to Starlink". */
-export function connectionLabel(hops: number | undefined): string {
-  if (!hops) return "Direct";
-  return `Mesh (${hops} hop${hops === 1 ? "" : "s"})`;
+export function connectionLabel(hops: number | undefined, t: TFunction): string {
+  if (!hops) return t("account.connectionDirect");
+  return t("account.connectionMesh", { count: hops });
 }
 
 /** Seconds → "11h 27m" / "4m 31s" / "88s". */
-export function formatUptime(seconds: number | undefined): string {
+export function formatUptime(seconds: number | undefined, t: TFunction): string {
   if (!seconds || seconds < 0) return "—";
   const d = Math.floor(seconds / 86400);
   const h = Math.floor((seconds % 86400) / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const s = Math.floor(seconds % 60);
-  if (d) return `${d}d ${h}h`;
-  if (h) return `${h}h ${m}m`;
-  if (m) return `${m}m ${s}s`;
-  return `${s}s`;
+  if (d) return t("time.uptimeDaysHours", { days: d, hours: h });
+  if (h) return t("time.uptimeHours", { hours: h, minutes: m });
+  if (m) return t("time.uptimeMinutes", { minutes: m, seconds: s });
+  return t("time.spanSeconds", { count: s });
 }
 
 export interface UsageSummaryLine {

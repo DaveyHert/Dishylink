@@ -2,6 +2,7 @@
 // Kept apart from the components that render them so fast refresh still works.
 
 import { useState } from "react";
+import type { TFunction } from "i18next";
 import { formatDuration, MAX_COUNTDOWN_MS, splitDuration, type MeterCycle } from "@core/dataMeter";
 import type { Schedule } from "@core/schedule";
 import type { ScheduleDraft } from "./scheduleTerms";
@@ -21,59 +22,69 @@ export function billingDayOf(cycles: { startDate: string }[] | undefined): numbe
   return Number.isFinite(day) && day >= 1 ? day : null;
 }
 
-export const CYCLE_OPTIONS: { label: string; value: MeterCycle["kind"] }[] = [
-  { label: "Daily", value: "daily" },
-  { label: "Weekly", value: "weekly" },
-  { label: "Monthly", value: "monthly" },
-  { label: "Starlink billing", value: "billing" },
-  { label: "One-off", value: "once" },
-];
+export function cycleOptions(t: TFunction): { label: string; value: MeterCycle["kind"] }[] {
+  return [
+    { label: t("rules.cycleDaily"), value: "daily" },
+    { label: t("rules.cycleWeekly"), value: "weekly" },
+    { label: t("rules.cycleMonthly"), value: "monthly" },
+    { label: t("rules.cycleBilling"), value: "billing" },
+    { label: t("rules.cycleOnce"), value: "once" },
+  ];
+}
 
-export const WEEKDAYS = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-];
+/** The seven weekday names in the user's language, Sunday first to match the
+ *  weekday numbers the rules store. */
+export function weekdayNames(locale: string, format: "long" | "short"): string[] {
+  // 7 January 2024 was a Sunday.
+  return Array.from({ length: 7 }, (_, offset) =>
+    new Date(2024, 0, 7 + offset).toLocaleDateString(locale, { weekday: format }),
+  );
+}
 
 /** "in 5 days" / "tomorrow" / "in 3 hours" — how long this cycle has left. */
-export function endsIn(endMs: number, nowMs: number): string | null {
+export function endsIn(endMs: number, nowMs: number, t: TFunction): string | null {
   if (!Number.isFinite(endMs)) return null;
   const hours = Math.max(0, Math.round((endMs - nowMs) / HOUR_MS));
-  if (hours < 1) return "ends within the hour";
-  if (hours < 24) return `ends in ${hours} hour${hours === 1 ? "" : "s"}`;
+  if (hours < 1) return t("rules.endsWithinHour");
+  if (hours < 24) return t("rules.endsInHours", { count: hours });
   const days = Math.round(hours / 24);
-  return days === 1 ? "ends tomorrow" : `ends in ${days} days`;
+  return days === 1 ? t("rules.endsTomorrow") : t("rules.endsInDays", { count: days });
 }
 
-export function timeLeft(endMs: number, nowMs: number): string | null {
+/** The same span as `endsIn`, worded for a cycle that resets rather than ends. */
+export function resetsIn(endMs: number, nowMs: number, t: TFunction): string | null {
+  if (!Number.isFinite(endMs)) return null;
+  const hours = Math.max(0, Math.round((endMs - nowMs) / HOUR_MS));
+  if (hours < 1) return t("rules.resetsWithinHour");
+  if (hours < 24) return t("rules.resetsInHours", { count: hours });
+  const days = Math.round(hours / 24);
+  return days === 1 ? t("rules.resetsTomorrow") : t("rules.resetsInDays", { count: days });
+}
+
+export function timeLeft(endMs: number, nowMs: number, t: TFunction): string | null {
   if (!Number.isFinite(endMs)) return null;
   const minutes = Math.max(0, Math.round((endMs - nowMs) / 60_000));
-  if (minutes < 1) return "under a minute";
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  if (minutes < 1) return t("rules.underAMinute");
+  if (minutes < 60) return t("time.minutesSpan", { count: minutes });
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"}`;
-  const days = Math.round(hours / 24);
-  return `${days} day${days === 1 ? "" : "s"}`;
+  if (hours < 24) return t("time.hoursSpan", { count: hours });
+  return t("time.daysSpan", { count: Math.round(hours / 24) });
 }
 
-export function cycleLabel(cycle: MeterCycle): string {
+export function cycleLabel(cycle: MeterCycle, t: TFunction): string {
   switch (cycle.kind) {
     case "daily":
-      return "Daily";
+      return t("rules.cycleDaily");
     case "weekly":
-      return "Weekly";
+      return t("rules.cycleWeekly");
     case "monthly":
-      return "Monthly";
+      return t("rules.cycleMonthly");
     case "custom":
-      return `Every ${cycle.days} days`;
+      return t("rules.cycleCustom", { count: cycle.days });
     case "billing":
-      return "Starlink billing";
+      return t("rules.cycleBilling");
     case "once":
-      return "One-off";
+      return t("rules.cycleOnce");
   }
 }
 
@@ -82,10 +93,10 @@ export function gigabytes(bytes: number): string {
   return (bytes / GB).toFixed(1).replace(/\.0$/, "");
 }
 
-export function ringReading(bytes: number): { value: string; unit: string } {
+export function ringReading(bytes: number, t: TFunction): { value: string; unit: string } {
   const megabytes = Math.round(bytes / 1e6);
-  if (megabytes < 1000) return { value: String(megabytes), unit: "MB USED" };
-  return { value: gigabytes(bytes), unit: "GB USED" };
+  if (megabytes < 1000) return { value: String(megabytes), unit: t("rules.ringMbUsed") };
+  return { value: gigabytes(bytes), unit: t("rules.ringGbUsed") };
 }
 
 export const CEILING_RUNGS_GB = [10, 25, 50, 100, 250, 500, 1000];
@@ -125,8 +136,8 @@ export function stepFor(ceiling: number): number {
 }
 
 /** The clock time a countdown running from now would reach. */
-export function endsAtLabel(remainingMs: number, nowMs: number): string {
-  return new Date(nowMs + remainingMs).toLocaleTimeString(undefined, {
+export function endsAtLabel(remainingMs: number, nowMs: number, locale: string): string {
+  return new Date(nowMs + remainingMs).toLocaleTimeString(locale, {
     hour: "numeric",
     minute: "2-digit",
   });
@@ -272,12 +283,18 @@ export function useAllowanceDraft(options: {
 export type RuleMode = "limit" | "timer" | "schedule";
 
 /** What auto-pause does as it is currently set. */
-export function autoPauseDetail(on: boolean, mode: RuleMode, several: boolean): string {
-  if (!on) return "Watches and announces, but never cuts anything off.";
-  const whose = several ? "their internet" : "this device’s internet";
-  if (mode === "timer") return `Cuts ${whose} when the time is up.`;
-  if (mode === "schedule") return `Cuts ${whose} outside the hours set below.`;
-  return `Cuts ${whose} until the cycle turns over.`;
+export function autoPauseDetail(
+  on: boolean,
+  mode: RuleMode,
+  several: boolean,
+  t: TFunction,
+): string {
+  if (!on) return t("rules.autoPauseOff");
+  if (mode === "timer")
+    return several ? t("rules.autoPauseTimerSeveral") : t("rules.autoPauseTimerOne");
+  if (mode === "schedule")
+    return several ? t("rules.autoPauseScheduleSeveral") : t("rules.autoPauseScheduleOne");
+  return several ? t("rules.autoPauseLimitSeveral") : t("rules.autoPauseLimitOne");
 }
 
 export interface RuleModeDraft {

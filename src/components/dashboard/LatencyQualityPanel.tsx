@@ -8,15 +8,18 @@
 // Owns its own time window (local state).
 
 import { useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { gradeColorVar } from "@core/latencySummary";
 import { useLatencyHistory, type LatencySummary } from "../../hooks/useLatencyHistory";
-import { RANGE_TABS, bucketLabel } from "../shared/rangeTabs";
+import { rangeTabs, bucketLabel } from "../shared/rangeTabs";
 import { RangeBars, type RangeBarColumn } from "../shared/RangeBarChart";
 import { SegmentedControl } from "../ui/segmented-control";
 import { Callout } from "../ui/callout";
 import { Explainer } from "../ui/explainer";
 import { FigureRow, type Figure } from "../ui/figure-row";
 import type { EnergyRange } from "../../hooks/useEnergyHistory";
+import { useTimeLocale } from "../../hooks/useTimeLocale";
 
 function figure(label: string, value: number | null | undefined, unit: string): Figure {
   if (value === null || value === undefined) return { label, value: "—", unit: "" };
@@ -31,29 +34,42 @@ function isPartial(bucket: LatencySummary["buckets"][number]): boolean {
   );
 }
 
-function bucketTitle(bucket: LatencySummary["buckets"][number], range: EnergyRange): string {
-  const when = bucketLabel(bucket.t, range);
+function bucketTitle(
+  bucket: LatencySummary["buckets"][number],
+  range: EnergyRange,
+  t: TFunction,
+  locale: string,
+): string {
+  const when = bucketLabel(bucket.t, range, locale);
   // No p95 means no latency reading landed. That is a dish outage if the recorder
   // was up (seconds recorded), and a gap in recording if it was not.
   if (bucket.p95 === null) {
     return bucket.sampledSeconds > 0
-      ? `${when} · service was down`
-      : `${when} · no data — the recorder wasn't running`;
+      ? t("latencyQuality.bucketServiceDown", { when })
+      : t("latencyQuality.bucketNoData", { when });
   }
   const parts = [
-    `p95 ${bucket.p95.toFixed(0)} ms`,
-    bucket.p99 !== null ? `p99 ${bucket.p99.toFixed(0)} ms` : null,
-    bucket.jitter !== null ? `jitter ${bucket.jitter.toFixed(0)} ms` : null,
-    bucket.dropPct !== null ? `loss ${bucket.dropPct.toFixed(1)}%` : null,
+    t("latencyQuality.p95Part", { ms: bucket.p95.toFixed(0) }),
+    bucket.p99 !== null ? t("latencyQuality.p99Part", { ms: bucket.p99.toFixed(0) }) : null,
+    bucket.jitter !== null
+      ? t("latencyQuality.jitterPart", { ms: bucket.jitter.toFixed(0) })
+      : null,
+    bucket.dropPct !== null
+      ? t("latencyQuality.lossPart", { percent: bucket.dropPct.toFixed(1) })
+      : null,
   ].filter(Boolean) as string[];
-  const total = parts.join(" · ");
-  if (!isPartial(bucket)) return `${when} · ${total}`;
-  const sampled = Math.round(bucket.sampledSeconds / 60);
-  const expected = Math.round(bucket.expectedSeconds / 60);
-  return `${when} · ${total} — only ${sampled} of ${expected} min recorded`;
+  const title = `${when} · ${parts.join(" · ")}`;
+  if (!isPartial(bucket)) return title;
+  return t("common.partialRecorded", {
+    title,
+    sampled: Math.round(bucket.sampledSeconds / 60),
+    expected: Math.round(bucket.expectedSeconds / 60),
+  });
 }
 
 export function LatencyQualityPanel() {
+  const { t } = useTranslation();
+  const timeLocale = useTimeLocale();
   const [range, setRange] = useState<EnergyRange>("1h");
   const { data, loading, unavailable } = useLatencyHistory(range, true);
 
@@ -62,8 +78,8 @@ export function LatencyQualityPanel() {
   const columns: RangeBarColumn[] = data
     ? data.buckets.map((bucket) => ({
         key: bucket.t,
-        label: bucketLabel(bucket.t, range),
-        title: bucketTitle(bucket, range),
+        label: bucketLabel(bucket.t, range, timeLocale),
+        title: bucketTitle(bucket, range, t, timeLocale),
         bar:
           bucket.p95 === null ? (
             <div
@@ -101,21 +117,20 @@ export function LatencyQualityPanel() {
         )}
       </div>
       <div className='mt-1 text-[12px] font-medium text-muted-foreground'>
-        Latency quality score
+        {t("latencyQuality.scoreLabel")}
       </div>
 
       <SegmentedControl
-        options={RANGE_TABS}
+        options={rangeTabs(t)}
         value={range}
         onChange={setRange}
-        label='Latency range'
+        label={t("latencyQuality.rangeLabel")}
         className='mt-3'
       />
 
       {unavailable ? (
         <Callout className='mt-3'>
-          Long-term latency needs the history recorder running. Start it with{" "}
-          <code>npm run historian</code> and it will build up day / week history from now on.
+          <Trans i18nKey='latencyQuality.needsRecorder' components={{ code: <code /> }} />
         </Callout>
       ) : (
         <>
@@ -124,23 +139,24 @@ export function LatencyQualityPanel() {
             figures={[
               figure("p95", dish?.p95, "ms"),
               figure("p99", dish?.p99, "ms"),
-              figure("Jitter", dish?.jitter, "ms"),
-              figure("Packet loss", dish?.dropPct, "%"),
+              figure(t("latencyQuality.jitter"), dish?.jitter, "ms"),
+              figure(t("latencyQuality.packetLoss"), dish?.dropPct, "%"),
               ...(dish?.spread !== null && dish?.spread !== undefined
-                ? [figure("p99 − p50", dish.spread, "ms")]
+                ? [figure(t("latencyQuality.spread"), dish.spread, "ms")]
                 : []),
             ]}
           />
 
           {data && (
             <div className='mt-1 text-[12px] font-medium text-muted-foreground'>
-              collected {coveragePct}% of this period
-              {coveragePct < 95 && " — figures cover only the time the recorder was running"}
+              {coveragePct < 95
+                ? t("latencyQuality.collectedPartial", { percent: coveragePct })
+                : t("latencyQuality.collected", { percent: coveragePct })}
             </div>
           )}
 
           <div className='mt-4'>
-            <h3 className='text-[14.5px] font-[650]'>p95 latency</h3>
+            <h3 className='text-[14.5px] font-[650]'>{t("latencyQuality.p95Heading")}</h3>
             <RangeBars
               columns={columns}
               range={range}
@@ -151,13 +167,7 @@ export function LatencyQualityPanel() {
         </>
       )}
 
-      <Explainer title='What is latency quality?'>
-        Latency quality summarizes the period as a single 0–100 score with a letter grade, weighing
-        typical latency, jitter, worst-case spikes, and packet loss together rather than just the
-        average. A connection that's mostly fast but occasionally stutters scores lower than one
-        that's a little slower but steady, since that unevenness is what you'd actually notice in a
-        game, a call, or a video stream.
-      </Explainer>
+      <Explainer title={t("latencyQuality.whatIs")}>{t("latencyQuality.explainer")}</Explainer>
     </div>
   );
 }

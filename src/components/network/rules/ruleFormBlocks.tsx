@@ -2,6 +2,7 @@
 // tab's — which differ only in the devices they open on and where they save.
 
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Switch } from "../../ui/switch";
 import { Dialog, DialogContent } from "../../ui/dialog";
 import { AllowanceFields } from "./allowanceFields";
@@ -77,13 +78,14 @@ export function MeasureFields({
   timetable: ScheduleDraft;
   capDetail: string;
 }) {
+  const { t } = useTranslation();
   if (rules.mode !== "schedule") return <AllowanceFields draft={allowance} />;
   return (
     <>
       <ScheduleFields draft={timetable} />
       <div className='space-y-4 border-t border-border/60 pt-4'>
         <SwitchRow
-          title='Data allowance'
+          title={t("rules.dataAllowance")}
           detail={capDetail}
           checked={rules.capping}
           onChange={rules.setCapping}

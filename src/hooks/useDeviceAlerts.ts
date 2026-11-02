@@ -17,7 +17,10 @@
 // on the definition in core/alertDefinitions.ts is, so every host agrees about it.
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import type { DishStatusJson } from "@core/dishClient";
+import type { TranslationKey } from "@core/i18n/resources";
 import { subscribeRouterStatus } from "../lib/routerStatusFeed";
 import type { DishConnectionState } from "./useDishTelemetry";
 import {
@@ -46,8 +49,10 @@ interface AlertEpisodeJson {
   key: string;
   startMs: number;
   endMs: number | null;
-  /** What was announced. Absent where the wording is a constant looked up below. */
+  /** What was announced: a catalog key, or on rows from older builds the English
+   *  sentence itself. Absent where the wording is a constant looked up below. */
   label?: string;
+  labelVars?: Record<string, string | number>;
   severity?: AlertSeverity;
 }
 
@@ -56,7 +61,8 @@ export interface AlertHistoryEntry {
   key: string;
   startMs: number;
   endMs: number | null;
-  /** Wording from the definitions, or a humanised raw key if the firmware added one we don't know. */
+  /** Wording from the definitions, in the user's language, or a humanised raw
+   *  key if the firmware added one we don't know. */
   label: string;
   severity: AlertState["severity"];
 }
@@ -160,6 +166,7 @@ export function useDeviceAlerts(
   // would mean the two disagree about the same fact for seconds at a time.
   // Flapping is a bug in whatever makes polls fail, not something to smooth over.
   const dishReachable = dishConnection !== "unreachable";
+  const { t, i18n } = useTranslation();
   // Collapsed to a string before the memo below: the status object is new every
   // poll, and reading it there would rebuild the alert list once a second.
   const presence = dishReachable ? routerPresence(dishStatus) : null;
@@ -295,8 +302,8 @@ export function useDeviceAlerts(
             alert.severity,
             false,
             `alert-${id}`,
-            alertTitle(alert.source, false),
-            alert.firing,
+            alertTitle(alert.source, false, t),
+            t(alert.firing, alert.vars),
           );
         }
       }
@@ -307,8 +314,8 @@ export function useDeviceAlerts(
             alert.severity,
             true,
             `alert-${id}-cleared`,
-            alertTitle(alert.source, true),
-            alert.ok,
+            alertTitle(alert.source, true, t),
+            t(alert.ok, alert.vars),
           );
         }
       }
@@ -316,7 +323,7 @@ export function useDeviceAlerts(
     previousActiveRef.current = current;
 
     firstSeenLog.observe(current.keys());
-  }, [active, firstSeenLog]);
+  }, [active, firstSeenLog, t]);
 
   const history = useMemo<AlertHistoryEntry[]>(() => {
     return episodes.map((episode) => {
@@ -326,18 +333,33 @@ export function useDeviceAlerts(
         key: episode.key,
         startMs: episode.startMs,
         endMs: episode.endMs,
-        // The alert's own message, verbatim — the same event reads the same way
-        // live and in history. Advice is a separate field and stays out of here.
-        label: episode.label ?? (spec ? spec.firing : humanizeKey(episode.key)),
+        // The alert's own message — the same event reads the same way live and
+        // in history. Resolved from the definition where one exists, so an
+        // episode recorded under another language still reads in this one; a
+        // stored label covers alerts with no static definition (a data limit
+        // names its device) and rows older builds wrote as English sentences.
+        // Advice is a separate field and stays out of here.
+        label: spec
+          ? t(spec.firing, spec.vars)
+          : episode.label
+            ? i18n.exists(episode.label)
+              ? t(episode.label as TranslationKey, episode.labelVars)
+              : episode.label
+            : humanizeKey(episode.key),
         severity: episode.severity ?? spec?.severity ?? "advisory",
       };
     });
-  }, [episodes]);
+  }, [episodes, t, i18n]);
 
   return { active, statusList, history, routerReachable, historianUp, dishReachable, firstSeen };
 }
 
-function alertTitle(source: AlertSource, cleared: boolean): string {
-  const device = source === "dish" ? "Dish" : source === "router" ? "Router" : "Dishylink";
-  return cleared ? `${device} alert cleared` : `${device} alert`;
+function alertTitle(source: AlertSource, cleared: boolean, t: TFunction): string {
+  const device =
+    source === "dish"
+      ? t("alerts.deviceDish")
+      : source === "router"
+        ? t("alerts.deviceRouter")
+        : t("alerts.deviceApp");
+  return cleared ? t("alerts.clearedTitle", { device }) : t("alerts.firingTitle", { device });
 }

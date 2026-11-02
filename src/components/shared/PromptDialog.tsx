@@ -1,14 +1,17 @@
 import { useRef, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Dialog as DialogPrimitive } from "radix-ui";
 
 interface PromptDialogProps {
   icon: ReactNode;
   title: string;
-  body: ReactNode;
+  body?: ReactNode;
   children?: ReactNode;
-  actions: ReactNode;
-  onLater: () => void;
-  onNever: () => void;
+  actions?: ReactNode;
+  /** Closing by ✕, Escape or the backdrop. */
+  onDismiss: () => void;
+  /** For an ask that can come back: offers "Maybe later" and "Don't ask again". */
+  deferral?: { onLater: () => void; onNever: () => void };
 }
 
 export function PromptDialog({
@@ -17,12 +20,13 @@ export function PromptDialog({
   body,
   children,
   actions,
-  onLater,
-  onNever,
+  onDismiss,
+  deferral,
 }: PromptDialogProps) {
+  const { t } = useTranslation();
   const content = useRef<HTMLDivElement>(null);
   return (
-    <DialogPrimitive.Root open onOpenChange={(open) => !open && onLater()}>
+    <DialogPrimitive.Root open onOpenChange={(open) => !open && onDismiss()}>
       <DialogPrimitive.Portal>
         {/* Outside Content: backdrop-filter re-resolves every frame its subtree moves. */}
         <div
@@ -38,7 +42,7 @@ export function PromptDialog({
               event.preventDefault();
               content.current?.focus();
             }}
-            className='relative w-[min(700px,100%)] overflow-hidden rounded-[28px] bg-card px-16 pt-16 pb-14 text-center [box-shadow:0_28px_90px_rgba(0,0,0,0.55)] outline-none animate-[rise_260ms_cubic-bezier(0.22,1,0.36,1)_both]'
+            className='relative flex max-h-[calc(100dvh-2.5rem)] w-[min(700px,100%)] flex-col overflow-hidden rounded-[28px] bg-card py-7 text-center [box-shadow:0_28px_90px_rgba(0,0,0,0.55)] outline-none animate-[rise_260ms_cubic-bezier(0.22,1,0.36,1)_both]'
           >
             <div
               aria-hidden
@@ -46,13 +50,16 @@ export function PromptDialog({
             />
 
             <DialogPrimitive.Close
-              aria-label='Dismiss'
-              className='absolute top-5 right-5 inline-flex size-8 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-[13px] text-ink-secondary/60 transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_8%,transparent)] hover:text-ink'
+              aria-label={t("prompts.dismiss")}
+              className='absolute top-5 right-5 z-10 inline-flex size-8 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-[13px] text-ink-secondary/60 transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_8%,transparent)] hover:text-ink'
             >
               ✕
             </DialogPrimitive.Close>
 
-            <div className='relative'>
+            {/* The scroller sits inside the frame's vertical padding, so its
+                scrollbar stops short of the rounded corners instead of running
+                straight through them. */}
+            <div className='thin-scroll relative min-h-0 overflow-y-auto px-16 pt-9 pb-7'>
               <div
                 aria-hidden
                 className='mx-auto mb-8 flex size-[88px] items-center justify-center rounded-[26px] bg-[color-mix(in_srgb,var(--accent)_16%,var(--surface))] text-(--accent) [&_svg]:size-[42px]'
@@ -63,30 +70,34 @@ export function PromptDialog({
               <DialogPrimitive.Title className='text-[27px] leading-[1.2] font-bold tracking-tight text-ink'>
                 {title}
               </DialogPrimitive.Title>
-              <p className='mx-auto mt-3.5 max-w-[440px] text-[14.5px] leading-relaxed text-ink-secondary'>
-                {body}
-              </p>
+              {body && (
+                <p className='mx-auto mt-3.5 max-w-[440px] text-[14.5px] leading-relaxed text-ink-secondary'>
+                  {body}
+                </p>
+              )}
 
               {children}
 
-              <div className='mt-9 flex flex-col items-center gap-2.5'>{actions}</div>
+              {actions && <div className='mt-9 flex flex-col items-center gap-2.5'>{actions}</div>}
 
-              <div className='mt-5 flex flex-col items-center gap-2'>
-                <button
-                  type='button'
-                  onClick={onLater}
-                  className='cursor-pointer border-0 bg-transparent text-[13px] text-ink-secondary/80 transition-colors hover:text-ink'
-                >
-                  Maybe later
-                </button>
-                <button
-                  type='button'
-                  onClick={onNever}
-                  className='cursor-pointer border-0 bg-transparent text-[12px] text-ink-secondary/45 transition-colors hover:text-ink-secondary'
-                >
-                  Don&rsquo;t ask again
-                </button>
-              </div>
+              {deferral && (
+                <div className='mt-5 flex flex-col items-center gap-2'>
+                  <button
+                    type='button'
+                    onClick={deferral.onLater}
+                    className='cursor-pointer border-0 bg-transparent text-[13px] text-ink-secondary/80 transition-colors hover:text-ink'
+                  >
+                    {t("prompts.maybeLater")}
+                  </button>
+                  <button
+                    type='button'
+                    onClick={deferral.onNever}
+                    className='cursor-pointer border-0 bg-transparent text-[12px] text-ink-secondary/45 transition-colors hover:text-ink-secondary'
+                  >
+                    {t("prompts.dontAskAgain")}
+                  </button>
+                </div>
+              )}
             </div>
           </DialogPrimitive.Content>
         </DialogPrimitive.Overlay>

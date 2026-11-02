@@ -13,6 +13,7 @@ import {
   decodeHistoryWindow,
   decodeOutageEvents,
   decodeRadioReadings,
+  decodeWifiHistoryEvents,
   isStarlinkOutage,
 } from "@core/telemetry";
 import {
@@ -28,7 +29,14 @@ import { loadSelfDeviceClientId } from "./selfDevice";
 import { runMeters } from "./meterEnforcement";
 import type { MeterHost } from "./meterHost";
 import { usageKey } from "@core/clientUsage";
-import { applyDrain, IndexedDbHistory, type ClientMinuteRow, type HistoryStore } from "./history";
+import {
+  applyDrain,
+  IndexedDbHistory,
+  type AlertEpisode,
+  type ClientMinuteRow,
+  type HistoryStore,
+} from "./history";
+import { recordOutageReports } from "./outageReports";
 import { packObstructionCells } from "./obstruction";
 import { dishHandleUrl, routerHandleUrl } from "./endpoints";
 
@@ -89,12 +97,12 @@ async function recordAlerts(
   store: HistoryStore,
   observation: AlertObservation,
   nowMs: number,
-): Promise<{ transitions: AlertTransition[]; active: AlertState[] }> {
+): Promise<{ transitions: AlertTransition[]; active: AlertState[]; open: AlertEpisode[] }> {
   const open = (await store.readAlerts(nowMs)).filter((episode) => episode.endMs === null);
   const engine = new AlertEngine(open.map((e) => ({ source: e.source, key: e.key })));
   const transitions = engine.update(observation);
   if (transitions.length > 0) await store.applyAlertTransitions(transitions, nowMs);
-  return { transitions, active: engine.activeAlerts() };
+  return { transitions, active: engine.activeAlerts(), open };
 }
 
 export async function drainOnce(host: MeterHost): Promise<DrainResult> {
@@ -165,7 +173,8 @@ export async function drainOnce(host: MeterHost): Promise<DrainResult> {
     ...(starlinkOutage === null ? {} : { system: { alerts: { starlinkOutage }, atMs: now } }),
   };
   await drainObstruction(store, client).catch(() => {});
-  const { transitions, active } = await recordAlerts(store, observation, now);
+  const { transitions, active, open } = await recordAlerts(store, observation, now);
+  await recordOutageReports(store, open, transitions, now).catch(() => {});
   // Run on the clock, not on the router's reply: a cycle rolls whether or not the
   // router answered, and a rule whose device is away still has to release the
   // pause it applied when the cycle turns over.
@@ -215,9 +224,10 @@ async function drainObstruction(store: HistoryStore, dish: DishClient): Promise<
   });
 }
 
-/** Poll the router's own feeds — radio temperatures, its clients, and its alert
- *  set, which is what comes back. Best-effort: get_radio_stats and get_status are
- *  the safe RPCs the historian already polls (never get_ping). A router that is
+/** Poll the router's own feeds — radio temperatures, its clients, its event log
+ *  (band switches, power cycles), and its alert set, which is what comes back.
+ *  Best-effort: get_radio_stats, get_status and get_history are the safe RPCs
+ *  the historian already polls (never get_ping). A router that is
  *  absent entirely (bypass mode, a third-party router) is reported as unanswered
  *  rather than as clear, the same as one that is merely unreachable. */
 async function readRouterAlerts(
@@ -227,14 +237,17 @@ async function readRouterAlerts(
     const router = chargeToSelf(await DishClient.load("router", { handleUrl: routerHandleUrl() }));
     // Settled, not all-or-nothing: one RPC faltering (an unreachable client poll)
     // must not drop the radio and status feeds that shared the round trip.
-    const [stats, status, clients] = await Promise.allSettled([
+    const [stats, status, clients, history] = await Promise.allSettled([
       router.getRadioStats(AbortSignal.timeout(DRAIN_TIMEOUT_MS)),
       router.getRouterStatus(AbortSignal.timeout(DRAIN_TIMEOUT_MS)),
       router.getWifiClients(AbortSignal.timeout(DRAIN_TIMEOUT_MS)),
+      router.getWifiHistory(AbortSignal.timeout(DRAIN_TIMEOUT_MS)),
     ]);
     const now = Date.now();
     if (stats.status === "fulfilled") await store.putRadio(decodeRadioReadings(stats.value), now);
     if (clients.status === "fulfilled") await recordClients(store, clients.value, now);
+    if (history.status === "fulfilled")
+      await store.putOutages(decodeWifiHistoryEvents(history.value), now);
     return {
       reading: {
         alerts: status.status === "fulfilled" ? (status.value.alerts ?? {}) : null,
@@ -321,6 +334,7 @@ async function recordClients(
       liveKeys,
       c.captiveClientId,
       c === selfRow ? selfTraffic : undefined,
+      c.ipAddress,
     );
   odometer.compact(now);
   await store.writeTotalsSnapshot(odometer.toSnapshot());

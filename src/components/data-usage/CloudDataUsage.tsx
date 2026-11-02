@@ -4,6 +4,7 @@
 // "Local session" tab, which is historian-recorded and honest about gaps.
 
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useCloudUsage } from "../../hooks/useCloudAccount";
 import { isUnlimited, formatAllowance, type UsageCycle } from "../../lib/starlinkCloud";
 import { formatGigabytes } from "../../lib/format";
@@ -20,18 +21,23 @@ function formatGB(gb: number): string {
   return `${value} ${unit}`;
 }
 
-function cycleMonthLabel(cycle: UsageCycle): string {
-  return new Date(cycle.startDate).toLocaleDateString([], { month: "short", timeZone: "UTC" });
+function cycleMonthLabel(cycle: UsageCycle, locale: string): string {
+  return new Date(cycle.startDate).toLocaleDateString(locale, { month: "short", timeZone: "UTC" });
 }
 
 function CycleBars({ cycle }: { cycle: UsageCycle }) {
+  const { i18n } = useTranslation();
   const start = new Date(cycle.startDate);
   const maxGB = Math.max(...cycle.dailyData.map((day) => day[0] ?? 0), 1e-9);
   const columns: RangeBarColumn[] = cycle.dailyData.map((day, index) => {
     const gb = day[0] ?? 0;
     const date = new Date(start);
     date.setUTCDate(start.getUTCDate() + index);
-    const when = date.toLocaleDateString([], { month: "numeric", day: "numeric", timeZone: "UTC" });
+    const when = date.toLocaleDateString(i18n.language, {
+      month: "numeric",
+      day: "numeric",
+      timeZone: "UTC",
+    });
     return {
       key: index,
       label: String(date.getUTCDate()),
@@ -58,6 +64,7 @@ function CycleBars({ cycle }: { cycle: UsageCycle }) {
 const NO_CYCLES: UsageCycle[] = [];
 
 export function CloudDataUsage({ active }: { active: boolean }) {
+  const { t, i18n } = useTranslation();
   const { data, status, reload } = useCloudUsage(active);
   // `content` is optional-chained too: this is unvalidated upstream JSON, and an
   // envelope without it would otherwise throw and take the whole panel down
@@ -76,8 +83,8 @@ export function CloudDataUsage({ active }: { active: boolean }) {
   const cycle = cycles[selectedIndex];
 
   const monthOptions = useMemo(
-    () => cycles.map((c, i) => ({ label: cycleMonthLabel(c), value: String(i) })),
-    [cycles],
+    () => cycles.map((c, i) => ({ label: cycleMonthLabel(c, i18n.language), value: String(i) })),
+    [cycles, i18n.language],
   );
 
   if (status === "not-connected") {
@@ -92,25 +99,27 @@ export function CloudDataUsage({ active }: { active: boolean }) {
   if (status === "error") {
     return (
       <Callout tone='error' className='mt-2.5'>
-        Couldn’t reach Starlink’s usage service. Check your internet and try again.
+        {t("cloudUsage.unreachable")}
       </Callout>
     );
   }
   if (status === "loading") {
-    return <Loading message='Loading Starlink billing data…' size={26} stacked />;
+    return <Loading message={t("cloudUsage.loading")} size={26} stacked />;
   }
   // Ready but nothing to draw — a service line whose first billing cycle hasn't
   // been reported yet. An empty state, not a pending one: a spinner here would
   // promise data that is not coming.
   if (!cycle) {
-    return (
-      <EmptyState className='mt-6'>
-        Starlink hasn’t reported a billing cycle for this service line yet.
-      </EmptyState>
-    );
+    return <EmptyState className='mt-6'>{t("cloudUsage.noCycle")}</EmptyState>;
   }
 
   const unlimited = isUnlimited(plan);
+  const cycleDate = (iso: string) =>
+    new Date(iso).toLocaleDateString(i18n.language, {
+      month: "short",
+      day: "numeric",
+      timeZone: "UTC",
+    });
 
   return (
     <div>
@@ -118,14 +127,14 @@ export function CloudDataUsage({ active }: { active: boolean }) {
         <div className='text-[34px] leading-[1.05] font-bold tracking-[-0.01em]'>
           {formatGB(cycle.totalAmountGB)}
           <span className='ml-[6px] align-baseline text-[13px] font-medium'>
-            {data?.content?.dataBuckets?.[0]?.name ?? "Data"}
+            {data?.content?.dataBuckets?.[0]?.name ?? t("cloudUsage.data")}
           </span>
         </div>
         <div className='mt-0.5 text-[12px] font-medium text-muted-foreground'>
-          <span className='mr-1 font-semibold'>Usage Limit:</span>
+          <span className='mr-1 font-semibold'>{t("cloudUsage.usageLimit")}</span>
           {unlimited
-            ? `${formatAllowance(plan?.usageLimitGB)} included (unlimited)`
-            : `of ${formatAllowance(plan?.usageLimitGB)} included`}
+            ? t("cloudUsage.includedUnlimited", { allowance: formatAllowance(plan?.usageLimitGB) })
+            : t("cloudUsage.ofIncluded", { allowance: formatAllowance(plan?.usageLimitGB) })}
         </div>
       </div>
 
@@ -134,31 +143,20 @@ export function CloudDataUsage({ active }: { active: boolean }) {
           options={monthOptions}
           value={String(selectedIndex)}
           onChange={(value) => setSelected(Number(value))}
-          label='Billing cycle month'
+          label={t("cloudUsage.cycleMonth")}
           className='mb-2.5'
         />
       )}
 
       <CycleBars cycle={cycle} />
       <div className='mt-1 text-[12px] font-medium'>
-        {new Date(cycle.startDate).toLocaleDateString([], {
-          month: "short",
-          day: "numeric",
-          timeZone: "UTC",
-        })}{" "}
-        –{" "}
-        {new Date(cycle.endDate).toLocaleDateString([], {
-          month: "short",
-          day: "numeric",
-          timeZone: "UTC",
-        })}{" "}
-        · billing cycle
+        {t("cloudUsage.cycleRange", {
+          start: cycleDate(cycle.startDate),
+          end: cycleDate(cycle.endDate),
+        })}
       </div>
 
-      <Explainer title='Where does this come from?'>
-        This is Starlink’s own billing meter, read from your account. It’s complete and counted in
-        UTC — the authoritative figure your statement uses.
-      </Explainer>
+      <Explainer title={t("cloudUsage.whereFrom")}>{t("cloudUsage.whereFromBody")}</Explainer>
     </div>
   );
 }

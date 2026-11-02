@@ -5,6 +5,7 @@
 // Pure, and separated because the ordering and the stable-key rule are the
 // substance — the picker itself is a map over the result.
 
+import type { TFunction } from "i18next";
 import {
   dishDisplayName,
   routerDisplayName,
@@ -37,7 +38,8 @@ export function buildDeviceList(
   /** Cloud DeviceIds answering on this LAN — see lanPresence. Devices in here
    *  are judged live rather than by the cloud's ~2-minute-old telemetry; an
    *  empty set (away from the network) simply leaves every dot to the cloud. */
-  lanOnline: ReadonlySet<string> = new Set(),
+  lanOnline: ReadonlySet<string>,
+  t: TFunction,
 ): DeviceItem[] {
   const active: DeviceItem[] = [];
   const inactive: DeviceItem[] = [];
@@ -52,7 +54,7 @@ export function buildDeviceList(
       // whole subtree each pass and feeds a render loop.
       key: terminal.userTerminalId ?? `dish-${terminalIndex}`,
       kind: "dish",
-      name: dishDisplayName(terminal),
+      name: dishDisplayName(terminal, t),
       status,
       groupInactive,
       terminal,
@@ -64,7 +66,7 @@ export function buildDeviceList(
       return {
         key: router.routerId ?? `router-${terminalIndex}-${routerIndex}`,
         kind: "router",
-        name: routerDisplayName(router.routerId, rtel),
+        name: routerDisplayName(router.routerId, rtel, t),
         status: routerStatus(rtel, groupInactive, lanOnline.has(routerId)),
         groupInactive,
         router,

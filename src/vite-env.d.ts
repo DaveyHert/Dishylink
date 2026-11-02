@@ -18,6 +18,9 @@ interface Window {
     platform: string;
     // The renderer has no shell access, so opening links crosses to main.
     openExternal: (url: string) => void;
+    // Tells main which interface language this window uses, so its tray menu
+    // and notifications match.
+    setLocale?: (locale: string) => void;
     signIn: () => Promise<{ ok: boolean; message?: string }>;
     cloud: (request: {
       path: string;

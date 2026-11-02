@@ -38,9 +38,11 @@ import {
   NotificationThrottle,
   notificationsRequested,
   notificationsProblem,
-  NOTIFICATIONS_ON_CONFIRMATION,
+  notificationsOnConfirmation,
   type NotificationState,
 } from "../core/alertNotification";
+import { isSupportedLocale } from "../core/i18n/locale";
+import { t, setLocale, onLocaleChanged } from "./i18n";
 import {
   NOTIFICATION_STATE_CHANNEL,
   MENUBAR_THROUGHPUT_CHANNEL,
@@ -55,6 +57,7 @@ import {
   hideThroughputWidget,
 } from "./throughputWidget";
 import { startUpdateChecks, updateState, onUpdateStateChanged } from "./updater";
+import { allowYoutubeEmbeds } from "./youtubeEmbed";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const rendererRoot = join(here, "../dist");
@@ -234,7 +237,7 @@ function createWindow(): void {
     ...(restoredBounds ? { x: savedBounds.x, y: savedBounds.y } : {}),
     minWidth: 800,
     minHeight: 700,
-    title: "Dishylink — Starlink Companion Desktop App (Unofficial)",
+    title: t("desktop.windowTitle"),
     titleBarStyle: "hiddenInset",
     show: false,
     // Matches index.css's dark --page. Electron's own default is white, which the
@@ -313,13 +316,27 @@ function createTray(): void {
     tray = new Tray(image.isEmpty() ? image : image.resize({ width: 18, height: 18 }));
   }
   tray.setToolTip("Dishylink");
+  let menu = buildTrayMenu();
+  // The labels are translated text, so the menu is rebuilt when the window
+  // reports a new language; the items it holds are re-resolved from the new one.
+  onLocaleChanged(() => {
+    menu = buildTrayMenu();
+    publishNotificationState();
+  });
+  // Left click opens the app; right click shows the menu (setContextMenu would make a
+  // left click open the menu too on macOS).
+  tray.on("click", showWindow);
+  tray.on("right-click", () => tray?.popUpContextMenu(menu));
+}
+
+function buildTrayMenu(): Menu {
   const menu = Menu.buildFromTemplate([
-    { label: "Open Dishylink", click: showWindow },
+    { label: t("desktop.openApp"), click: showWindow },
     { type: "separator" },
     {
       // Alerting runs when no window is open, so it must be switchable from the tray.
       id: NOTIFY_ITEM_ID,
-      label: "Notify Me About Alerts",
+      label: t("desktop.notifyMe"),
       type: "checkbox",
       // Opening value only; the checkbox owns its `checked` after this, and later
       // values are written by publishNotificationState.
@@ -328,11 +345,10 @@ function createTray(): void {
         setPreference("notifications", item.checked);
         // Enabling posts one immediately: on macOS the first notification raises the
         // permission prompt and proves the channel works.
-        if (item.checked)
-          void postNotification(
-            NOTIFICATIONS_ON_CONFIRMATION.title,
-            NOTIFICATIONS_ON_CONFIRMATION.body,
-          ).catch(() => {});
+        if (item.checked) {
+          const confirmation = notificationsOnConfirmation(t);
+          void postNotification(confirmation.title, confirmation.body).catch(() => {});
+        }
       },
     },
     {
@@ -350,8 +366,8 @@ function createTray(): void {
             id: THROUGHPUT_ITEM_ID,
             label:
               process.platform === "darwin"
-                ? "Show Throughput in Menu Bar"
-                : "Show Throughput in Taskbar",
+                ? t("desktop.showThroughputMenuBar")
+                : t("desktop.showThroughputTaskbar"),
             type: "checkbox" as const,
             checked: preferences().menuBarThroughput,
             click: (item: MenuItem) => setPreference("menuBarThroughput", item.checked),
@@ -362,7 +378,7 @@ function createTray(): void {
       ? [
           {
             id: HIDE_ICON_ITEM_ID,
-            label: "Hide Menu Bar Icon",
+            label: t("desktop.hideMenuBarIcon"),
             type: "checkbox" as const,
             checked: preferences().hideTrayIcon,
             visible: preferences().menuBarThroughput,
@@ -372,13 +388,13 @@ function createTray(): void {
       : []),
     {
       // openAsHidden + the wasOpenedAtLogin check below start collection with no window.
-      label: "Start at Login",
+      label: t("desktop.startAtLogin"),
       type: "checkbox",
       checked: app.getLoginItemSettings().openAtLogin,
       click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked, openAsHidden: true }),
     },
     { type: "separator" },
-    { label: "Quit Dishylink", role: "quit" },
+    { label: t("desktop.quit"), role: "quit" },
   ]);
   notifyItem = menu.getMenuItemById(NOTIFY_ITEM_ID);
   notifyReasonItem = menu.getMenuItemById(NOTIFY_REASON_ITEM_ID);
@@ -386,10 +402,7 @@ function createTray(): void {
   hideIconItem = menu.getMenuItemById(HIDE_ICON_ITEM_ID);
   applyMenuBarThroughput();
   updateThroughputWatchdog();
-  // Left click opens the app; right click shows the menu (setContextMenu would make a
-  // left click open the menu too on macOS).
-  tray.on("click", showWindow);
-  tray.on("right-click", () => tray?.popUpContextMenu(menu));
+  return menu;
 }
 
 /** "↓39Kb/s ↑159Kb/s". Padded to a fixed width so the icon holds while the
@@ -523,8 +536,8 @@ function registerCloudHandlers(): void {
  *  a binary it can't verify. */
 function undeliverableReason(): string {
   return app.isPackaged
-    ? "macOS isn’t delivering notifications — allow Dishylink under System Settings ▸ Notifications."
-    : "Native notifications need the installed Dishylink app; a dev run can’t post them.";
+    ? t("desktop.notificationsUndeliverable")
+    : t("desktop.notificationsDevRun");
 }
 
 /** The one notification answer every surface renders: stored request + channel as last
@@ -609,7 +622,7 @@ function startAlertNotifications(): void {
     // Only an explicit yes; an unseeded preference is unknown, not consent.
     if (preferences().notifications !== true) return;
     for (const transition of transitions) {
-      const notification = describeTransition(transition);
+      const notification = describeTransition(transition, t);
       if (!notification) continue;
       // Stamped from the reading, so a flapping link is rate-limited by device time.
       if (!throttle.allow(notification.key, transition.atMs)) continue;
@@ -628,6 +641,11 @@ function registerHostHandlers(): void {
   // from the host's own interfaces, plus the roster entry a window on the router's
   // network has since matched to them.
   ipcMain.handle("get-self-identity", () => hostIdentity());
+  // The window reports the interface language it uses; main follows, so the tray
+  // menu and the notifications it posts with no window open read the same way.
+  ipcMain.on("set-locale", (_event, locale: unknown) => {
+    if (isSupportedLocale(locale)) setLocale(locale);
+  });
   // Written whenever the window resolves this machine on a roster read over the LAN.
   ipcMain.handle("remember-self-device", (_event, clientId: unknown) => {
     if (typeof clientId === "number") rememberSelfDevice(clientId);
@@ -738,6 +756,7 @@ void app.whenReady().then(async () => {
   // signed in and its own limits unenforceable.
   startCloud(rendererRoot, devServerUrl ? resolve(process.cwd(), ".starlink-cookie") : undefined);
   registerCloudHandlers();
+  allowYoutubeEmbeds();
   // A dev server runs its own recorder; a second collector here would double-poll
   // the dish.
   if (!devServerUrl) {

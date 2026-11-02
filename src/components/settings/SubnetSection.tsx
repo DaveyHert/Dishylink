@@ -7,6 +7,7 @@
 // two on a single form for the same reason.
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -27,14 +28,14 @@ import {
 } from "@/components/ui/select";
 import { InfoDot } from "../shared/InfoDot";
 import { ConnectorThread } from "../../assets/icons/ConnectorThread";
+import { errorText } from "../../lib/errorText";
 import { SettingRow } from "./settingsChrome";
-import { SUBNET_PRESETS, subnetRefusal } from "@core/routerConfigUpdate";
-
-const SUBNET_TIP =
-  "Advanced feature that changes the IP addresses assigned to your devices. Most users should use the default. Changing it drops the network for up to a minute while every device is issued a new address.";
-
-const PASSWORD_TIP =
-  "Entering the wrong password here overrides your current password and no device can rejoin the WiFi until you set back the correct password in the official Starlink mobile app.";
+import {
+  MAX_PASSPHRASE,
+  MIN_PASSPHRASE,
+  SUBNET_PRESETS,
+  subnetRefusal,
+} from "@core/routerConfigUpdate";
 
 export function SubnetSection({
   /** What the router reports today, so the current entry can be marked. */
@@ -47,6 +48,7 @@ export function SubnetSection({
   disabled: boolean;
   onSave: (subnet: string, password: string) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   // Null while the router has not said where it is: a preset sitting in the
   // trigger reads as the range in use.
   const [subnet, setSubnet] = useState<string | null>(currentSubnet);
@@ -74,7 +76,13 @@ export function SubnetSection({
   }
 
   const subnetDiffersFromRouter = subnet !== null && subnet !== currentSubnet;
-  const refusalMessage = subnet === null ? null : subnetRefusal(subnet, password);
+  const refusal = subnet === null ? null : subnetRefusal(subnet, password);
+  const refusalMessage =
+    refusal === null
+      ? null
+      : refusal === "unsupportedSubnet"
+        ? t("subnet.refusedSubnet")
+        : t("subnet.refusedPassword", { min: MIN_PASSPHRASE, max: MAX_PASSPHRASE });
 
   const applySubnet = async () => {
     if (subnet === null) return;
@@ -82,12 +90,12 @@ export function SubnetSection({
     setError(null);
     try {
       await onSave(subnet, password);
-      setSuccessNote(`Moving to ${subnet}. Reconnect to the WiFi if this device drops.`);
+      setSuccessNote(t("subnet.moving", { subnet }));
       setConfirming(false);
       setPassword("");
       setEditInProgress(false);
     } catch (saveError) {
-      setError((saveError as Error).message);
+      setError(errorText(saveError));
     } finally {
       setSaving(false);
     }
@@ -96,15 +104,15 @@ export function SubnetSection({
   return (
     <>
       <SettingRow
-        title='Subnet'
-        info={SUBNET_TIP}
+        title={t("subnet.title")}
+        info={t("subnet.tip")}
         infoSeverity='danger'
         caption={
           disabled
-            ? "Connect your Starlink account to use this"
+            ? t("advanced.connectAccountToUse")
             : currentSubnet === null && !successNote
-              ? "Couldn't tell which subnet the router is on"
-              : "The address range the router gives your devices"
+              ? t("subnet.unknown")
+              : t("subnet.caption")
         }
         note={
           successNote && (
@@ -126,7 +134,7 @@ export function SubnetSection({
           }}
         >
           <SelectTrigger size='sm' className='w-[168px] font-mono text-[12px] tabular-nums'>
-            <SelectValue placeholder='Not known' />
+            <SelectValue placeholder={t("subnet.notKnown")} />
           </SelectTrigger>
           <SelectContent>
             {SUBNET_PRESETS.map((preset) => (
@@ -137,7 +145,9 @@ export function SubnetSection({
               >
                 {preset}
                 {preset === currentSubnet && (
-                  <span className='ml-2 font-sans text-[11px] text-muted-foreground'>Current</span>
+                  <span className='ml-2 font-sans text-[11px] text-muted-foreground'>
+                    {t("subnet.current")}
+                  </span>
                 )}
               </SelectItem>
             ))}
@@ -150,8 +160,8 @@ export function SubnetSection({
           <div className='relative flex items-center justify-between gap-5'>
             <ConnectorThread className='pointer-events-none absolute -top-[29px] right-[13px] h-[45px] w-2 animate-[rise_320ms_ease_both] text-ink/20' />
             <span className='flex items-center gap-1.5 text-[12px] text-muted-foreground'>
-              WiFi password
-              <InfoDot severity='danger' tip={PASSWORD_TIP} />
+              {t("subnet.wifiPassword")}
+              <InfoDot severity='danger' tip={t("subnet.passwordTip")} />
             </span>
             <div className='flex shrink-0 items-center gap-2'>
               <div className='relative'>
@@ -164,15 +174,15 @@ export function SubnetSection({
                     setEditInProgress(true);
                     setError(null);
                   }}
-                  placeholder='Your current WiFi password'
+                  placeholder={t("subnet.passwordPlaceholder")}
                   spellCheck={false}
                   autoComplete='off'
-                  aria-label='WiFi password'
+                  aria-label={t("subnet.wifiPassword")}
                   className='h-8 w-[232px] pr-8 text-[12px]'
                 />
                 <button
                   type='button'
-                  aria-label={passwordVisible ? "Hide password" : "Show password"}
+                  aria-label={passwordVisible ? t("subnet.hidePassword") : t("subnet.showPassword")}
                   onClick={() => setPasswordVisible(!passwordVisible)}
                   className='absolute top-1/2 right-1 -translate-y-1/2 cursor-pointer rounded-sm border-0 bg-transparent p-1 text-muted-foreground transition-colors hover:text-foreground'
                 >
@@ -197,7 +207,7 @@ export function SubnetSection({
               disabled={disabled || saving || refusalMessage !== null}
               onClick={() => setConfirming(true)}
             >
-              {saving ? "Moving…" : "Save"}
+              {saving ? t("subnet.movingEllipsis") : t("common.save")}
             </Button>
           </div>
         </div>
@@ -210,11 +220,11 @@ export function SubnetSection({
           overlayClassName='bg-black/30 backdrop-blur-[2px]'
         >
           <DialogHeader>
-            <DialogTitle className='text-[19px] leading-snug'>Move to {subnet}?</DialogTitle>
+            <DialogTitle className='text-[19px] leading-snug'>
+              {t("subnet.confirmTitle", { subnet })}
+            </DialogTitle>
             <DialogDescription className='text-[13.5px] leading-relaxed'>
-              The network drops for up to a minute while every device is issued a new address. If
-              the password is wrong, nothing can rejoin the WiFi until you retype it in the official
-              Starlink app.
+              {t("subnet.confirmBody")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className='mt-2 gap-2'>
@@ -224,7 +234,7 @@ export function SubnetSection({
               disabled={saving}
               onClick={() => setConfirming(false)}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               variant='destructive'
@@ -232,7 +242,7 @@ export function SubnetSection({
               disabled={saving}
               onClick={() => void applySubnet()}
             >
-              {saving ? "Moving…" : "Move"}
+              {saving ? t("subnet.movingEllipsis") : t("subnet.move")}
             </Button>
           </DialogFooter>
         </DialogContent>

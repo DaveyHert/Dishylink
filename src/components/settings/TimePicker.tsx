@@ -1,9 +1,11 @@
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { formatClock12 } from "./sleepSchedule";
+import { formatLocalMinutes } from "./sleepSchedule";
 import { triggerClass } from "./settingsChrome";
+import { use24HourClock, useTimeLocale } from "../../hooks/useTimeLocale";
 
 const DAY_MINUTES = 1440;
 const wrap = (minutes: number): number => ((minutes % DAY_MINUTES) + DAY_MINUTES) % DAY_MINUTES;
@@ -15,6 +17,7 @@ const pillButtonBase =
   "cursor-pointer rounded-full px-3.5 py-1 text-[10px] font-semibold transition-opacity duration-[120ms] enabled:hover:opacity-85 disabled:cursor-default disabled:opacity-45";
 
 const HOUR_TENS = [0, 1];
+const HOUR_TENS_24 = [0, 1, 2];
 const HOUR_ONES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
 const MINUTE_TENS = [0, 1, 2, 3, 4, 5];
 const MINUTE_ONES = [0, 5, 1, 2, 3, 4, 6, 7, 8, 9];
@@ -66,6 +69,8 @@ export function TimePicker({
   onChange: (minutes: number) => void;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation();
+  const timeLocale = useTimeLocale();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(minutes);
 
@@ -78,7 +83,7 @@ export function TimePicker({
     <Popover open={open} onOpenChange={openWith}>
       <PopoverTrigger asChild>
         <button type='button' className={triggerClass} disabled={disabled}>
-          {formatClock12(minutes)}
+          {formatLocalMinutes(minutes, timeLocale)}
           <ChevronDownIcon />
         </button>
       </PopoverTrigger>
@@ -94,7 +99,7 @@ export function TimePicker({
             )}
             onClick={() => openWith(false)}
           >
-            Cancel
+            {t("common.cancel")}
           </button>
           <button
             type='button'
@@ -104,7 +109,7 @@ export function TimePicker({
               setOpen(false);
             }}
           >
-            Set
+            {t("time.setTime")}
           </button>
         </div>
       </PopoverContent>
@@ -113,9 +118,11 @@ export function TimePicker({
 }
 
 function TimeDial({ minutes, onChange }: { minutes: number; onChange: (minutes: number) => void }) {
+  const twentyFourHour = use24HourClock();
   const hour24 = Math.floor(minutes / 60);
   const minute = minutes % 60;
   const hour12 = hour24 % 12 || 12;
+  const shownHour = twentyFourHour ? hour24 : hour12;
   const isPM = hour24 >= 12;
 
   const stepHour = (delta: number) => onChange(wrap(minutes + delta * 60));
@@ -124,6 +131,7 @@ function TimeDial({ minutes, onChange }: { minutes: number; onChange: (minutes: 
     if (wantPM !== isPM) onChange(wrap(minutes + 12 * 60));
   };
 
+  const { t } = useTranslation();
   const [editingHour, setEditingHour] = useState(false);
   const [editingMinute, setEditingMinute] = useState(false);
   const [hourInput, setHourInput] = useState("");
@@ -132,13 +140,15 @@ function TimeDial({ minutes, onChange }: { minutes: number; onChange: (minutes: 
   const minuteInputRef = useRef<HTMLInputElement>(null);
 
   const startEditHour = () => {
-    setHourInput(String(hour12));
+    setHourInput(String(shownHour));
     setEditingHour(true);
     requestAnimationFrame(() => hourInputRef.current?.select());
   };
   const commitHour = () => {
     const typed = parseInt(hourInput, 10);
-    if (!Number.isNaN(typed) && typed >= 1 && typed <= 12) {
+    if (twentyFourHour) {
+      if (!Number.isNaN(typed) && typed >= 0 && typed <= 23) onChange(typed * 60 + minute);
+    } else if (!Number.isNaN(typed) && typed >= 1 && typed <= 12) {
       const nextHour24 = isPM ? (typed === 12 ? 12 : typed + 12) : typed === 12 ? 0 : typed;
       onChange(nextHour24 * 60 + minute);
     }
@@ -163,7 +173,7 @@ function TimeDial({ minutes, onChange }: { minutes: number; onChange: (minutes: 
   return (
     <div className='flex items-center justify-center gap-1.5'>
       <TimeStepper
-        label='hour'
+        unit='hour'
         onUp={() => stepHour(1)}
         onDown={() => stepHour(-1)}
         editing={editingHour}
@@ -172,8 +182,8 @@ function TimeDial({ minutes, onChange }: { minutes: number; onChange: (minutes: 
           <input
             ref={hourInputRef}
             type='number'
-            min={1}
-            max={12}
+            min={twentyFourHour ? 0 : 1}
+            max={twentyFourHour ? 23 : 12}
             value={hourInput}
             onChange={(event) => setHourInput(event.target.value)}
             onBlur={commitHour}
@@ -188,10 +198,14 @@ function TimeDial({ minutes, onChange }: { minutes: number; onChange: (minutes: 
           <button
             type='button'
             onClick={startEditHour}
-            title='Click to type'
+            title={t("time.clickToType")}
             className='grid w-8 cursor-text place-items-center rounded-sm transition-colors hover:bg-accent'
           >
-            <TwoDigit value={hour12} tensSequence={HOUR_TENS} onesSequence={HOUR_ONES} />
+            <TwoDigit
+              value={shownHour}
+              tensSequence={twentyFourHour ? HOUR_TENS_24 : HOUR_TENS}
+              onesSequence={HOUR_ONES}
+            />
           </button>
         )}
       </TimeStepper>
@@ -199,7 +213,7 @@ function TimeDial({ minutes, onChange }: { minutes: number; onChange: (minutes: 
       <span className='text-[16px] font-semibold leading-none text-muted-foreground'>:</span>
 
       <TimeStepper
-        label='minute'
+        unit='minute'
         onUp={() => stepMinute(1)}
         onDown={() => stepMinute(-1)}
         editing={editingMinute}
@@ -224,7 +238,7 @@ function TimeDial({ minutes, onChange }: { minutes: number; onChange: (minutes: 
           <button
             type='button'
             onClick={startEditMinute}
-            title='Click to type'
+            title={t("time.clickToType")}
             className='grid w-8 cursor-text place-items-center rounded-sm transition-colors hover:bg-accent'
           >
             <TwoDigit value={minute} tensSequence={MINUTE_TENS} onesSequence={MINUTE_ONES} />
@@ -232,55 +246,59 @@ function TimeDial({ minutes, onChange }: { minutes: number; onChange: (minutes: 
         )}
       </TimeStepper>
 
-      <div className='ml-1 flex flex-col items-center gap-0.5'>
-        {(
-          [
-            ["AM", false],
-            ["PM", true],
-          ] as const
-        ).map(([label, wantPM]) => {
-          const active = wantPM === isPM;
-          return (
-            <button
-              key={label}
-              type='button'
-              onClick={() => setPeriod(wantPM)}
-              className={cn(
-                "cursor-pointer rounded-[3px] px-1.5 py-0.5 text-[9px] font-semibold uppercase transition-colors",
-                active
-                  ? "bg-accent text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
+      {!twentyFourHour && (
+        <div className='ml-1 flex flex-col items-center gap-0.5'>
+          {(
+            [
+              ["AM", false],
+              ["PM", true],
+            ] as const
+          ).map(([label, wantPM]) => {
+            const active = wantPM === isPM;
+            return (
+              <button
+                key={label}
+                type='button'
+                onClick={() => setPeriod(wantPM)}
+                className={cn(
+                  "cursor-pointer rounded-[3px] px-1.5 py-0.5 text-[9px] font-semibold uppercase transition-colors",
+                  active
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
 /** A vertical hour/minute control: up chevron, the (animated or editable) digits, down chevron. */
 function TimeStepper({
-  label,
+  unit,
   onUp,
   onDown,
   editing,
   children,
 }: {
-  label: string;
+  unit: "hour" | "minute";
   onUp: () => void;
   onDown: () => void;
   editing: boolean;
   children: React.ReactNode;
 }) {
+  const { t } = useTranslation();
+  const label = unit === "hour" ? t("time.hourUnit") : t("time.minuteUnit");
   return (
     <div className='flex flex-col items-center gap-0.5'>
       <button
         type='button'
         onClick={onUp}
-        aria-label={`Increase ${label}`}
+        aria-label={t("time.increase", { unit: label })}
         tabIndex={editing ? -1 : 0}
         className={stepBtnClass}
       >
@@ -290,7 +308,7 @@ function TimeStepper({
       <button
         type='button'
         onClick={onDown}
-        aria-label={`Decrease ${label}`}
+        aria-label={t("time.decrease", { unit: label })}
         tabIndex={editing ? -1 : 0}
         className={stepBtnClass}
       >

@@ -151,7 +151,7 @@ describe("DataMeterDialog", () => {
   test("given: a device with a rule, should: show what it is doing before offering to edit it", async () => {
     render(<Harness value={meter({ rule: rule() })} />);
 
-    await expect.poll(text).toContain("GB USED");
+    await expect.poll(text).toContain("GB used");
     expect(text()).toContain("Remaining");
     expect(text()).toContain("38 GB");
     expect(text()).not.toContain("Save limit");
@@ -163,16 +163,16 @@ describe("DataMeterDialog", () => {
       <Harness value={meter({ rule: rule({ usageBytes: 944_700_000, allocationBytes: GB }) })} />,
     );
 
-    await expect.poll(text).toContain("MB USED");
+    await expect.poll(text).toContain("MB used");
     expect(text()).toContain("945");
-    expect(text()).not.toContain("GB USED");
+    expect(text()).not.toContain("GB used");
   });
 
   test("given: usage at a gigabyte, should: turn over to GB rather than show 1000 MB", async () => {
     render(<Harness value={meter({ rule: rule({ usageBytes: GB, allocationBytes: 5 * GB }) })} />);
 
-    await expect.poll(text).toContain("GB USED");
-    expect(text()).not.toContain("MB USED");
+    await expect.poll(text).toContain("GB used");
+    expect(text()).not.toContain("MB used");
   });
 
   // The countdown and the cadence move independently: a rule five days out is
@@ -213,7 +213,7 @@ describe("DataMeterDialog", () => {
     render(<Harness value={meter({ rule: null })} />);
 
     await expect.poll(text).toContain("Save limit");
-    expect(text()).not.toContain("GB USED");
+    expect(text()).not.toContain("GB used");
   });
 
   test("given: a rule still loading, should: show neither face rather than a form of defaults", async () => {
@@ -229,7 +229,7 @@ describe("DataMeterDialog", () => {
       <Harness value={meter({ rule: rule({ pauseState: "applied", usageBytes: 50 * GB }) })} />,
     );
 
-    await expect.poll(text).toContain("PAUSED");
+    await expect.poll(text).toContain("Paused");
     expect(text()).toContain("50 GB allowance");
   });
 
@@ -240,7 +240,7 @@ describe("DataMeterDialog", () => {
     await expect.poll(text).toContain("Save limit");
 
     await page.getByText("Cancel").click();
-    await expect.poll(text).toContain("GB USED");
+    await expect.poll(text).toContain("GB used");
     expect(text()).not.toContain("Save limit");
     // The card is still open: cancelling an edit steps back, it does not dismiss.
     expect(document.querySelector('[data-slot="dialog-overlay"]')).not.toBeNull();
@@ -259,7 +259,7 @@ describe("DataMeterDialog", () => {
 
     await page.getByText("Start over").click();
 
-    await expect.poll(text).toContain("GB USED");
+    await expect.poll(text).toContain("GB used");
     expect(restarted).toEqual(["reset"]);
     expect(text()).not.toContain("Save limit");
   });
@@ -344,7 +344,7 @@ describe("DataMeterDialog", () => {
 
     // Being offline is a tag on the row, never a reason it cannot be metered.
     await expect.poll(text).toContain("Kids iPad");
-    expect(text()).toContain("ACTIVE NOW");
+    expect(text()).toContain("Active now");
     const away = [...document.querySelectorAll("label")].find((label) =>
       label.textContent?.includes("Kids iPad"),
     );

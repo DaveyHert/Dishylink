@@ -5,6 +5,7 @@
 // empty). This shows what a node actually has: what it serves, and what it is.
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { RadioReading } from "../../hooks/useRadioTemps";
 import type { WifiNetworkConfigJson, WifiStatusJson } from "@core/dishClient";
 import type { SelfIdentity } from "../../lib/selfIdentity";
@@ -38,6 +39,7 @@ export function NodeDetail({
   onSelect: (entryKey: string | null) => void;
   onRename?: (deviceId: string, displayName: string) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const client = node.client;
   const meshConfig = node.key ? wifiConfig?.meshConfigs?.[node.key] : undefined;
@@ -66,7 +68,7 @@ export function NodeDetail({
           <div className='flex items-center gap-2'>
             <span className='text-[18px] font-bold text-foreground'>{node.name}</span>
             {canRename && !editing && (
-              <RenameButton label='Rename node' onClick={() => setEditing(true)} />
+              <RenameButton label={t("network.renameNode")} onClick={() => setEditing(true)} />
             )}
           </div>
           <div className='text-[11.5px] font-medium text-muted-foreground'>{node.status}</div>
@@ -83,7 +85,7 @@ export function NodeDetail({
       )}
 
       <div className='flex flex-col'>
-        {client?.role && <DataRow label='Role' value={client.role} />}
+        {client?.role && <DataRow label={t("network.role")} value={client.role} />}
         {/* A mesh node is a client entry like any other, so it carries the same
             radio detail — the app's node screen leads with these two, and they
             are what a "move it closer" prompt is actually asking you to fix.
@@ -92,27 +94,32 @@ export function NodeDetail({
             backhaul as "good" while the Starlink app called the same node slow.
             The app prints the raw dBm too, and judges the node separately. */}
         {client?.signalStrength !== undefined && client.iface !== "ETH" && (
-          <DataRow label='Signal strength' value={`${client.signalStrength} dBm`} />
+          <DataRow label={t("network.signalStrength")} value={`${client.signalStrength} dBm`} />
         )}
         {linkRxMbps !== undefined && (
-          <DataRow label='Rx rate' value={`${Math.round(linkRxMbps)} Mbps`} />
+          <DataRow label={t("network.rxRate")} value={`${Math.round(linkRxMbps)} Mbps`} />
         )}
-        {client && <DataRow label='Connection' value={bandLabel(client)} />}
-        {client?.iface && <DataRow label='Interface' value={client.iface} />}
-        {isRouter && <DataRow label='Uplink' value='Starlink dish' />}
-        {client?.macAddress && <DataRow label='MAC address' value={client.macAddress} />}
-        {client?.deviceId && <DataRow label='Device ID' value={client.deviceId} />}
-        {client?.ipAddress && <DataRow label='IP address' value={client.ipAddress} />}
-        {firmware && <DataRow label='Firmware' value={firmware} />}
+        {client && <DataRow label={t("network.connection")} value={bandLabel(client)} />}
+        {client?.iface && <DataRow label={t("network.interface")} value={client.iface} />}
+        {isRouter && <DataRow label={t("network.uplink")} value={t("network.uplinkDish")} />}
+        {client?.macAddress && (
+          <DataRow label={t("network.macAddress")} value={client.macAddress} />
+        )}
+        {client?.deviceId && <DataRow label={t("network.deviceId")} value={client.deviceId} />}
+        {client?.ipAddress && <DataRow label={t("network.ipAddress")} value={client.ipAddress} />}
+        {firmware && <DataRow label={t("terminal.firmware")} value={firmware} />}
         {(meshConfig?.hardwareVersion ?? routerHardware) && (
-          <DataRow label='Hardware' value={meshConfig?.hardwareVersion ?? routerHardware!} />
+          <DataRow
+            label={t("terminal.hardware")}
+            value={meshConfig?.hardwareVersion ?? routerHardware!}
+          />
         )}
         {routerUptimeS !== undefined && (
-          <DataRow label='Uptime' value={formatUptime(Number(routerUptimeS))} />
+          <DataRow label={t("terminal.uptime")} value={formatUptime(Number(routerUptimeS), t)} />
         )}
-        {lastRebootReason && <DataRow label='Last reboot' value={lastRebootReason} />}
+        {lastRebootReason && <DataRow label={t("network.lastReboot")} value={lastRebootReason} />}
         {wifiConfig?.countryCode && isRouter && (
-          <DataRow label='Region' value={wifiConfig.countryCode} />
+          <DataRow label={t("network.region")} value={wifiConfig.countryCode} />
         )}
       </div>
 
@@ -123,10 +130,10 @@ export function NodeDetail({
           device, not a leaf. */}
       {node.connected && (
         <div>
-          <SectionHeading title='Connected devices' />
+          <SectionHeading title={t("network.connectedDevices")} />
           {node.devices.length === 0 ? (
             <div className='text-[11.5px] font-medium text-muted-foreground'>
-              No devices are using this node right now.
+              {t("network.noDevicesOnNode")}
             </div>
           ) : (
             <div className='flex flex-col gap-1.5'>
@@ -145,8 +152,7 @@ export function NodeDetail({
 
       {!node.connected && (
         <div className='text-[11.5px] font-medium text-muted-foreground py-3.5'>
-          This node is paired with your network but not currently reachable. Power it on, or move it
-          closer to the router, and it will reappear here.
+          {t("network.nodeUnreachable")}
         </div>
       )}
     </div>

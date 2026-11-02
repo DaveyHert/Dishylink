@@ -3,10 +3,11 @@
 // ported 1:1 from their web app (AlignmentInstruments.tsx); what lives here is
 // the panel that arranges them.
 
+import { useTranslation } from "react-i18next";
 import type { DishStatusJson } from "@core/dishClient";
 import {
   formatActuatorState,
-  formatAttitudeState,
+  attitudeStateLabel,
   formatHasActuators,
   formatRelativeTime,
 } from "../../lib/format";
@@ -31,6 +32,7 @@ function AlignmentVerdict({
   stale: boolean;
   lastStatusAtMs: number | null;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className='text-[11.5px] font-medium text-muted-foreground'
@@ -47,12 +49,14 @@ function AlignmentVerdict({
       }}
     >
       {stale
-        ? `Dish not answering — showing the last reading${lastStatusAtMs ? ` from ${formatRelativeTime(lastStatusAtMs)}` : ""}.`
+        ? lastStatusAtMs
+          ? t("alignment.staleFrom", { when: formatRelativeTime(lastStatusAtMs, t) })
+          : t("alignment.stale")
         : !reading.isValid
-          ? "Attitude filter not ready — alignment data is settling."
+          ? t("alignment.notReady")
           : reading.isAligned
-            ? "Starlink is aligned — pointed in the correct direction."
-            : "Starlink is not aligned — adjust the dish toward the wedge."}
+            ? t("alignment.aligned")
+            : t("alignment.notAligned")}
     </div>
   );
 }
@@ -66,6 +70,7 @@ function AlignmentFacts({
   status: DishStatusJson;
   reading: AlignmentReading;
 }) {
+  const { t } = useTranslation();
   const stats = status.alignmentStats;
   // Two columns matching the two dials above: rotation/azimuth on the left,
   // tilt/elevation on the right. Each column holds its own rows, so one can gain
@@ -74,17 +79,14 @@ function AlignmentFacts({
     <FactColumns>
       {/* Rotation — the left dial */}
       <FactColumn>
-        <FactRow
-          label='Current rotation'
-          hint='Current rotation (boresight azimuth) is the compass direction the dish is actually pointing, measured clockwise from North (0° to 360°).'
-        >
+        <FactRow label={t("alignment.currentRotation")} hint={t("alignment.currentRotationHint")}>
           <span className='font-mono tabular-nums'>{reading.boresightAzimuthDeg.toFixed(1)}°</span>
         </FactRow>
         {/* An amount and a direction per axis, so the panel says what to do and
             not only what is. Both are the dish's own current-minus-target. */}
         <FactRow
-          label='Rotate recommendation'
-          hint='How far to turn the dish around, and which way, seen from above. ↺ is anticlockwise, ↻ is clockwise.'
+          label={t("alignment.rotateRecommendation")}
+          hint={t("alignment.rotateRecommendationHint")}
         >
           <span
             className='font-mono tabular-nums'
@@ -94,61 +96,54 @@ function AlignmentFacts({
             {reading.azimuthErrorDeg > 0 ? "↺" : "↻"}
           </span>
         </FactRow>
-        <FactRow
-          label='Target azimuth'
-          hint='The compass direction the dish wants to point, clockwise from North, and how far either side of it still counts as aligned.'
-        >
+        <FactRow label={t("alignment.targetAzimuth")} hint={t("alignment.targetAzimuthHint")}>
           <span className='font-mono tabular-nums'>
             {reading.desiredAzimuthDeg.toFixed(1)}° ±{reading.azimuthToleranceDeg.toFixed(0)}°
           </span>
         </FactRow>
         <FactRow
-          label='Boresight error'
-          hint={`Boresight error (pointing error) is how far the dish is pointing from where it wants to point, as one angle. Under ${SEPARATION_LIMIT_DEG}° counts as aligned.`}
+          label={t("alignment.boresightError")}
+          hint={t("alignment.boresightErrorHint", { limit: SEPARATION_LIMIT_DEG })}
         >
           <span
             className='font-mono tabular-nums'
             style={{ color: adjustmentColor(reading.boresightErrorDeg) }}
           >
-            {reading.boresightErrorDeg.toFixed(2)}° · ideal &lt;{SEPARATION_LIMIT_DEG}°
+            {t("alignment.boresightErrorValue", {
+              error: reading.boresightErrorDeg.toFixed(2),
+              limit: SEPARATION_LIMIT_DEG,
+            })}
           </span>
         </FactRow>
         <FactRow
-          label='Attitude uncertainty'
-          hint='How sure the dish is of its own orientation. Smaller is better — a large figure means the readings above are still settling.'
+          label={t("alignment.attitudeUncertainty")}
+          hint={t("alignment.attitudeUncertaintyHint")}
         >
           <span className='font-mono tabular-nums'>
             ±{(stats?.attitudeUncertaintyDeg ?? 0).toFixed(2)}°
           </span>
         </FactRow>
-        <FactRow
-          label='Attitude estimation state'
-          hint='Whether the dish has finished working out its own orientation. Converged means the alignment figures can be trusted.'
-        >
+        <FactRow label={t("alignment.attitudeState")} hint={t("alignment.attitudeStateHint")}>
           <span className='font-mono tabular-nums'>
-            {formatAttitudeState(stats?.attitudeEstimationState) ?? "—"}
+            {attitudeStateLabel(stats?.attitudeEstimationState, t) ?? "—"}
           </span>
         </FactRow>
-        <FactRow
-          label='Satellites in View (GPS)'
-          hint='GPS satellites the dish can currently see. It uses these to fix its own position and orientation, not for the internet link.'
-        >
+        <FactRow label={t("terminal.gpsSatellites")} hint={t("alignment.gpsSatellitesHint")}>
           <span className='font-mono tabular-nums'>
-            {status.gpsStats?.gpsValid ? `${status.gpsStats.gpsSats ?? 0} satellites` : "no fix"}
+            {status.gpsStats?.gpsValid
+              ? t("terminal.satellitesCount", { count: status.gpsStats.gpsSats ?? 0 })
+              : t("terminal.noFix")}
           </span>
         </FactRow>
       </FactColumn>
       {/* Tilt — the right dial */}
       <FactColumn>
-        <FactRow
-          label='Current tilt'
-          hint='Current tilt (tilt angle) is the physical angle of the dish plate off flat. Flat is 0°, and the steeper the plate the lower it aims.'
-        >
+        <FactRow label={t("alignment.currentTilt")} hint={t("alignment.currentTiltHint")}>
           <span className='font-mono tabular-nums'>{reading.tiltAngleDeg.toFixed(1)}°</span>
         </FactRow>
         <FactRow
-          label='Tilt recommendation'
-          hint='How far to re-aim the dish up or down, and which way. Down means the dish is aiming too high; steepen the plate to bring it down.'
+          label={t("alignment.tiltRecommendation")}
+          hint={t("alignment.tiltRecommendationHint")}
         >
           <span
             className='font-mono tabular-nums'
@@ -159,8 +154,8 @@ function AlignmentFacts({
           </span>
         </FactRow>
         <FactRow
-          label='Boresight elevation'
-          hint='Boresight elevation is how far above the horizon the dish is actually pointing, where 0° is level with the horizon and 90° is straight up.'
+          label={t("alignment.boresightElevation")}
+          hint={t("alignment.boresightElevationHint")}
         >
           <span className='font-mono tabular-nums'>
             {reading.boresightElevationDeg.toFixed(1)}°
@@ -169,37 +164,25 @@ function AlignmentFacts({
         {/* The dish's own reported target — NOT `reading.targetElevationDeg`,
             which computeAlignment clamps to the band floor (min(70, desired)) for
             the alignment test. On this dish that clamp turns 76.0° into 70.0°. */}
-        <FactRow
-          label='Target elevation'
-          hint='Target elevation is the angle above the horizon this dish wants to point, worked out for your location.'
-        >
+        <FactRow label={t("alignment.targetElevation")} hint={t("alignment.targetElevationHint")}>
           <span className='font-mono tabular-nums'>{reading.desiredElevationDeg.toFixed(1)}°</span>
         </FactRow>
         {/* Split off Target elevation: that figure is this dish's own target, this
             one is SpaceX's fixed tolerance around it. Same span the Tilt dial
             fills as its grey wedge. */}
-        <FactRow
-          label='Acceptable elevation range'
-          hint='Acceptable elevation range is the span of elevations that still counts as aligned. It is the grey wedge drawn on the Tilt dial above — while the dish points inside it, the dial stays green.'
-        >
+        <FactRow label={t("alignment.elevationRange")} hint={t("alignment.elevationRangeHint")}>
           <span className='font-mono tabular-nums'>
             {reading.lowerElevationLimitDeg.toFixed(0)}–{reading.upperElevationLimitDeg.toFixed(0)}°
           </span>
         </FactRow>
-        <FactRow
-          label='Has actuators'
-          hint='Whether the dish steers itself with motors. Without them, aiming is electronic and any physical adjustment is done by hand.'
-        >
+        <FactRow label={t("alignment.hasActuators")} hint={t("alignment.hasActuatorsHint")}>
           <span className='font-mono tabular-nums'>
-            {formatHasActuators(status.alignmentStats?.hasActuators ?? status.hasActuators)}
+            {formatHasActuators(status.alignmentStats?.hasActuators ?? status.hasActuators, t)}
           </span>
         </FactRow>
-        <FactRow
-          label='Actuation state'
-          hint='What the dish’s motors are doing right now — idle, or actively moving to a new position.'
-        >
+        <FactRow label={t("alignment.actuationState")} hint={t("alignment.actuationStateHint")}>
           <span className='font-mono tabular-nums'>
-            {formatActuatorState(stats?.actuatorState)}
+            {formatActuatorState(stats?.actuatorState, t)}
           </span>
         </FactRow>
       </FactColumn>
@@ -218,15 +201,11 @@ export function AlignmentPanel({
   lastStatusAtMs?: number | null;
   onOpenSkyView?: () => void;
 }) {
+  const { t } = useTranslation();
   // Null only on a cold start; after the first reading the dish going quiet keeps
   // the last status and is the `stale` case instead.
   if (!status) {
-    return (
-      <Callout tone='error'>
-        Couldn't reach the Starlink dish — alignment needs a live reading. This updates on its own
-        once the dish is back online.
-      </Callout>
-    );
+    return <Callout tone='error'>{t("alignment.noReading")}</Callout>;
   }
 
   const reading = computeAlignment(status);
@@ -242,7 +221,7 @@ export function AlignmentPanel({
             className='shrink-0 cursor-pointer border-0 bg-transparent p-0 font-sans text-[13px] font-semibold text-(--accent) transition-[color,opacity] duration-[120ms] hover:opacity-75'
             onClick={onOpenSkyView}
           >
-            Live satellite view ›
+            {t("obstruction.liveSatelliteView")}
           </button>
         )}
       </div>
@@ -255,12 +234,7 @@ export function AlignmentPanel({
       <AlignmentFacts status={status} reading={reading} />
 
       <div className='text-[11.5px] font-medium text-muted-foreground' style={{ marginTop: 12 }}>
-        <Explainer title='How to read this'>
-          The wedge shows the desired pointing direction ± tolerance. The dish plate and orange
-          needle show where the dish is actually pointing. If the needle is inside the wedge, the
-          dish is aligned. If it’s outside, adjust the dish toward the wedge. Values update live
-          every 2s
-        </Explainer>
+        <Explainer title={t("alignment.howToRead")}>{t("alignment.howToReadBody")}</Explainer>
       </div>
     </div>
   );

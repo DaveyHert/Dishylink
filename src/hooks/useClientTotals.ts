@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import { usageKey, type ClientUsageTotal } from "@core/clientUsage";
 import type { MergeCandidate } from "@core/clientTotals";
 import { apiRequest } from "../lib/apiHost";
+import i18n from "../i18n";
 
 const REFRESH_MS = 10_000;
 
@@ -35,8 +36,8 @@ export function useClientTotals() {
       response.ok
         ? null
         : response.status === 403
-          ? "The historian refused the change — open the dashboard from this machine or your local network."
-          : `The historian rejected the change (HTTP ${response.status}).`,
+          ? i18n.t("errors.historianRefusedChange")
+          : i18n.t("errors.historianRejected", { status: response.status }),
     );
   }, []);
 

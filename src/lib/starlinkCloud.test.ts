@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { createI18n } from "@core/i18n/resources";
 import {
   routerStatus,
   dishStatus,
@@ -77,15 +78,16 @@ describe("dishStatus", () => {
 });
 
 describe("formatUptime", () => {
+  const { t } = createI18n("en");
   it("formats across units", () => {
-    expect(formatUptime(45)).toBe("45s");
-    expect(formatUptime(271)).toBe("4m 31s");
-    expect(formatUptime(3600 + 27 * 60)).toBe("1h 27m");
-    expect(formatUptime(90_000)).toBe("1d 1h");
+    expect(formatUptime(45, t)).toBe("45s");
+    expect(formatUptime(271, t)).toBe("4m 31s");
+    expect(formatUptime(3600 + 27 * 60, t)).toBe("1h 27m");
+    expect(formatUptime(90_000, t)).toBe("1d 1h");
   });
   it("returns a dash for missing/negative", () => {
-    expect(formatUptime(undefined)).toBe("—");
-    expect(formatUptime(-5)).toBe("—");
+    expect(formatUptime(undefined, t)).toBe("—");
+    expect(formatUptime(-5, t)).toBe("—");
   });
 });
 
@@ -104,8 +106,9 @@ describe("allowance / unlimited", () => {
 
 describe("dishDisplayName", () => {
   it("names by the last 6 hex of the terminal id, like the portal", () => {
-    expect(dishDisplayName({ userTerminalId: "01000000-00000000-004c8bb9" } as CloudTerminal)).toBe(
-      "STARLINK 4C8BB9",
-    );
+    const { t } = createI18n("en");
+    expect(
+      dishDisplayName({ userTerminalId: "01000000-00000000-004c8bb9" } as CloudTerminal, t),
+    ).toBe("STARLINK 4C8BB9");
   });
 });
