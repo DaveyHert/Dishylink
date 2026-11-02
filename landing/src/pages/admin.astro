@@ -1,0 +1,97 @@
+---
+import Base from "../layouts/Base.astro";
+import Nav from "../components/Nav.astro";
+import Footer from "../components/Footer.astro";
+---
+
+<Base title="Review queue" description="Approve reviews submitted on dishylink.com." path="/admin/">
+  <Nav />
+
+  <main class="mx-auto max-w-3xl px-5 pt-20 pb-28 sm:pt-28">
+    <div class="flex items-center justify-between gap-4">
+      <h1 class="text-3xl font-semibold">Review queue</h1>
+      <a
+        href="/cdn-cgi/access/logout"
+        class="rounded-full border border-rule px-3 py-1.5 text-sm text-ink-2 hover:border-ink-3 hover:text-ink"
+        >Log out</a
+      >
+    </div>
+    <p data-admin-status class="mt-3 text-ink-2">Loading…</p>
+    <ul data-admin-list class="mt-8 divide-y divide-rule border-y border-rule"></ul>
+  </main>
+
+  <Footer />
+</Base>
+
+<script>
+  interface Submission {
+    id: number;
+    created_at: string;
+    stars: number;
+    text: string;
+    name: string | null;
+    platform: string;
+    status: "pending" | "approved" | "rejected";
+  }
+
+  const list = document.querySelector<HTMLUListElement>("[data-admin-list]")!;
+  const status = document.querySelector<HTMLElement>("[data-admin-status]")!;
+
+  async function load() {
+    const response = await fetch("/api/admin/reviews");
+    if (!response.ok) {
+      status.textContent = response.status === 403 ? "Not signed in." : "Couldn't load reviews.";
+      return;
+    }
+    const { reviews } = (await response.json()) as { reviews: Submission[] };
+    const pending = reviews.filter((r) => r.status === "pending").length;
+    status.textContent = `${pending} waiting · ${reviews.length} in total`;
+    list.replaceChildren(...reviews.map(row));
+  }
+
+  // Built with textContent only: submissions are untrusted input.
+  function row(review: Submission): HTMLLIElement {
+    const li = document.createElement("li");
+    li.className = "flex gap-4 py-5";
+
+    const body = document.createElement("div");
+    body.className = "min-w-0 flex-1";
+    const meta = document.createElement("p");
+    meta.className = "text-sm text-ink-3";
+    meta.textContent = `${"★".repeat(review.stars)}${"☆".repeat(5 - review.stars)} · ${review.name ?? "Anonymous"} · ${review.platform} · ${review.created_at} · ${review.status}`;
+    const text = document.createElement("p");
+    text.className = "mt-1.5 text-ink";
+    text.textContent = review.text;
+    body.append(meta, text);
+
+    const actions = document.createElement("div");
+    actions.className = "flex flex-none items-start gap-2";
+    for (const [label, next] of [
+      ["Approve", "approved"],
+      ["Reject", "rejected"],
+    ] as const) {
+      if (review.status === next) continue;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = label;
+      button.className =
+        "cursor-pointer rounded-full border border-rule px-3 py-1.5 text-sm hover:border-ink-3";
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        const response = await fetch(`/api/admin/reviews/${review.id}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ status: next }),
+        });
+        if (response.ok) await load();
+        else button.disabled = false;
+      });
+      actions.append(button);
+    }
+
+    li.append(body, actions);
+    return li;
+  }
+
+  load();
+</script>

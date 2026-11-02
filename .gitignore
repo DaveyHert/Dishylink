@@ -41,6 +41,8 @@ landing/node_modules/
 landing/dist/
 landing/.env
 landing/.dev.vars
+# Review and press refresh scripts stay local; their output in src/data is committed.
+landing/scripts/
 .wrangler/
 # Unanchored: astro writes this cache into whichever directory it is run from,
 # not only the project root.

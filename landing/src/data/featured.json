@@ -1,0 +1,109 @@
+{
+  "fetchedAt": "2026-11-04",
+  "featured": [
+    {
+      "kind": "video",
+      "url": "https://www.youtube.com/watch?v=eSyFHaO211Q",
+      "title": "The Starlink Desktop App I’ve Been Waiting For",
+      "language": null,
+      "publisher": "DISHYtech",
+      "author": null,
+      "date": "2026-09-29",
+      "views": 51954,
+      "seconds": 1451,
+      "thumb": "yt-eSyFHaO211Q.webp",
+      "avatar": "yt-eSyFHaO211Q-channel.webp"
+    },
+    {
+      "kind": "article",
+      "url": "https://www.makeuseof.com/the-only-problem-with-starlink-is-fixed-now-it-didnt-come-from-spacex/",
+      "title": "The only problem I had with Starlink is fixed now, and it didn’t come from SpaceX",
+      "language": null,
+      "publisher": "MakeUseOf",
+      "author": "Gregory Gibson",
+      "date": "2026-10-18",
+      "views": null,
+      "seconds": null,
+      "thumb": "makeuseof-com.webp",
+      "avatar": "makeuseof-com-icon.webp"
+    },
+    {
+      "kind": "article",
+      "url": "https://www.iprofesional.com/tecnologia/462195-como-controlar-starlink-desde-tu-computadora-con-aplicacion-gratuita-dishylink",
+      "title": "A free app lets you manage Starlink without depending on your phone",
+      "language": "Spanish",
+      "publisher": "iProfesional",
+      "author": "César Dergarabedian",
+      "date": "2026-08-13",
+      "views": null,
+      "seconds": null,
+      "thumb": "iprofesional-com.webp",
+      "avatar": "iprofesional-com-icon.webp"
+    },
+    {
+      "kind": "video",
+      "url": "https://www.youtube.com/watch?v=gfOi7aQ7iUw",
+      "title": "This app changes everything for Starlink! See what it can do",
+      "language": "Portuguese",
+      "publisher": "Diego Dicas Tech",
+      "author": null,
+      "date": "2026-09-13",
+      "views": 37527,
+      "seconds": 647,
+      "thumb": "yt-gfOi7aQ7iUw.webp",
+      "avatar": "yt-gfOi7aQ7iUw-channel.webp"
+    },
+    {
+      "kind": "article",
+      "url": "https://www.macg.co/logiciels/2026/09/dishlylink-une-app-macos-pour-gerer-tous-les-reglages-dune-connexion-starlink-310897",
+      "title": "Dishylink: a macOS app to manage every setting of a Starlink connection",
+      "language": "French",
+      "publisher": "MacGeneration",
+      "author": "Pierre Dandumont",
+      "date": "2026-09-07",
+      "views": null,
+      "seconds": null,
+      "thumb": "macg-co.webp",
+      "avatar": "macg-co-icon.webp"
+    },
+    {
+      "kind": "forum",
+      "url": "https://bandaancha.eu/foros/dishylink-app-open-source-controlar-1760702",
+      "title": "DishyLink, the open-source app to control your Starlink dish from your PC",
+      "language": "Spanish",
+      "publisher": "BandaAncha",
+      "author": "Natanael",
+      "date": "2026-08-10",
+      "views": null,
+      "seconds": null,
+      "thumb": null,
+      "avatar": "bandaancha-eu-icon.webp"
+    },
+    {
+      "kind": "short",
+      "url": "https://www.youtube.com/shorts/Vt6eGzPSmsE",
+      "title": "I Found a Hidden Starlink App You Need To See",
+      "language": null,
+      "publisher": "Unbox Centric",
+      "author": null,
+      "date": "2026-08-11",
+      "views": 289,
+      "seconds": 42,
+      "thumb": "yt-Vt6eGzPSmsE.webp",
+      "avatar": "yt-Vt6eGzPSmsE-channel.webp"
+    },
+    {
+      "kind": "short",
+      "url": "https://www.youtube.com/shorts/_nreUexhEM0",
+      "title": "DISHYLINK — Open-source Starlink monitoring for Mac, Windows, and Web. Track performance in real tim",
+      "language": null,
+      "publisher": "Reed Floren",
+      "author": null,
+      "date": "2026-09-09",
+      "views": 110,
+      "seconds": 44,
+      "thumb": "yt-_nreUexhEM0.webp",
+      "avatar": "yt-_nreUexhEM0-channel.webp"
+    }
+  ]
+}

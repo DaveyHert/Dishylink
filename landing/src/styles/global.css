@@ -47,6 +47,8 @@
   --font-sans: "Barlow", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
   --font-display: "Manrope", system-ui, sans-serif;
+  /* Review quotes only. A system stack, so no font file ships for one block. */
+  --font-serif: Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
 
   /* A display scale that actually steps — marketing headlines want more range
      than a dashboard's 12→24px. Used as text-display / text-section. */

@@ -1,7 +1,7 @@
 export const GITHUB = "https://github.com/DaveyHert/dishylink";
 export const RELEASES = `${GITHUB}/releases/latest`;
 export const ISSUES = `${GITHUB}/issues`;
-export const PRIVACY = `${GITHUB}/blob/master/PRIVACY.md`;
+export const PRIVACY = "/privacy/";
 export const X = "https://x.com/daveyhert";
 
 /** Cloudflare Email Routing address; forwards to the verified destination. */
@@ -12,6 +12,9 @@ export const SPONSOR = {
   patreon: "https://www.patreon.com/DaveyHert",
   coffee: "https://buymeacoffee.com/daveyhert",
 };
+
+/** Public Turnstile site key for dishylink.com; its secret half lives in `wrangler secret`. */
+export const TURNSTILE_SITE_KEY = "0x4AAAAAAFzpb0BsCFY9znA8";
 
 export const STARLINK_REFERRAL = "https://starlink.com/?referral=RC-DF-5748912-79115-57";
 

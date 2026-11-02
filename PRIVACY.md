@@ -25,8 +25,8 @@ on your device only:
   extension can read it. It is not encrypted at rest, so anything with
   access to your browser profile on disk could.
 - The session is used solely to read your own plan, billing, and usage data
-  directly from `starlink.com` on your behalf, in response to your own
-  requests.
+  directly from `starlink.com` on your behalf, and to pause and resume
+  devices on your own network when a network rule you set up calls for it.
 - It is never sent to us or to any third party — we have no server that
   could receive it. Disconnecting the account clears the stored session.
   In the extension, disconnecting clears only Dishylink's copy — your own
@@ -46,7 +46,7 @@ already involves.
 ## Open source
 
 Dishylink's source is public, so you can verify all of the above yourself —
-see the repository this file lives in.
+see the code on [GitHub](https://github.com/DaveyHert/dishylink).
 
 ## Changes
 

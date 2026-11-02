@@ -1,0 +1,150 @@
+---
+import SectionRule from "./SectionRule.astro";
+import { Image } from "astro:assets";
+import type { ImageMetadata } from "astro";
+import data from "../data/featured.json";
+
+const files = import.meta.glob<{ default: ImageMetadata }>("../assets/featured/*.webp", {
+  eager: true,
+});
+const image = (file: string | null) =>
+  file ? files[`../assets/featured/${file}`]?.default : undefined;
+
+const compact = new Intl.NumberFormat("en", { notation: "compact" });
+const relative = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+
+function age(date: string | null): string | null {
+  if (!date) return null;
+  const days = (Date.now() - Date.parse(date)) / 86_400_000;
+  if (days < 7) return relative.format(-Math.round(days), "day");
+  if (days < 30) return relative.format(-Math.round(days / 7), "week");
+  if (days < 365) return relative.format(-Math.round(days / 30), "month");
+  return relative.format(-Math.round(days / 365), "year");
+}
+
+const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+
+const BADGE: Record<string, string> = { article: "Article", forum: "Forum post", short: "Short" };
+
+const items = data.featured.map((item) => ({
+  ...item,
+  thumb: image(item.thumb),
+  avatar: image(item.avatar),
+  badge: item.kind === "video" && item.seconds ? clock(item.seconds) : BADGE[item.kind],
+  meta: [item.kind === "video" && item.views ? `${compact.format(item.views)} views` : null, age(item.date)]
+    .filter(Boolean)
+    .join(" · "),
+}));
+---
+
+<section id="press">
+  <SectionRule />
+  <div class="mx-auto max-w-7xl px-5 py-24 lg:py-28">
+  <div class="flex items-end justify-between gap-6">
+    <h2 class="text-section font-semibold text-balance">In the press</h2>
+    <div class="flex gap-2">
+      {
+        [
+          { step: -1, label: "Previous", path: "M10 3 5 8l5 5" },
+          { step: 1, label: "Next", path: "m6 3 5 5-5 5" },
+        ].map(({ step, label, path }) => (
+          <button
+            type="button"
+            data-press-step={step}
+            aria-label={label}
+            class="grid size-9 cursor-pointer place-items-center rounded-full border border-rule text-ink-2 transition-colors hover:text-ink disabled:cursor-default disabled:opacity-35"
+          >
+            <svg viewBox="0 0 16 16" class="size-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d={path} />
+            </svg>
+          </button>
+        ))
+      }
+    </div>
+  </div>
+  <div
+    data-press-track
+    class="-mx-5 mt-10 flex snap-x snap-mandatory gap-5 overflow-x-auto scroll-px-5 px-5 pb-4 [scrollbar-color:var(--color-rule-2)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-rule-2 [&::-webkit-scrollbar-track]:bg-transparent"
+  >
+    {
+      items.map((item) => (
+        <a
+          href={item.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="group w-72 flex-none snap-start"
+        >
+          <div class="relative aspect-video overflow-hidden rounded-xl bg-surface">
+            {item.thumb ? (
+              <Image
+                src={item.thumb}
+                alt=""
+                widths={[288, 576]}
+                sizes="288px"
+                loading="eager"
+                class="size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+              />
+            ) : (
+              item.avatar && (
+                <div class="grid size-full place-items-center">
+                  <Image src={item.avatar} alt="" width={64} height={64} class="size-16 rounded-2xl" />
+                </div>
+              )
+            )}
+            {item.badge && (
+              <span class="absolute right-1.5 bottom-1.5 rounded-md bg-black/80 px-1.5 py-0.5 text-[11px] font-medium text-white">
+                {item.badge}
+              </span>
+            )}
+            {item.language && (
+              <span class="absolute top-1.5 left-1.5 rounded-md bg-black/70 px-1.5 py-0.5 text-[11px] text-white">
+                Translated from {item.language}
+              </span>
+            )}
+          </div>
+          <div class="mt-3 flex gap-3">
+            {item.avatar ? (
+              <Image src={item.avatar} alt="" width={36} height={36} class="size-9 flex-none rounded-full" />
+            ) : (
+              <span class="size-9 flex-none rounded-full bg-surface" />
+            )}
+            <div class="min-w-0">
+              <h3 class="line-clamp-2 text-[15px] leading-snug font-semibold text-ink">{item.title}</h3>
+              <p class="mt-1 truncate text-sm text-ink-2">
+                {item.publisher}
+                {item.author && <span class="text-ink-3"> · {item.author}</span>}
+              </p>
+              {item.meta && <p class="text-sm text-ink-3">{item.meta}</p>}
+            </div>
+          </div>
+        </a>
+      ))
+    }
+  </div>
+  </div>
+</section>
+
+<script>
+  const track = document.querySelector<HTMLElement>("[data-press-track]");
+  const buttons = [...document.querySelectorAll<HTMLButtonElement>("[data-press-step]")];
+
+  if (track) {
+    const sync = () => {
+      const end = track.scrollWidth - track.clientWidth - 1;
+      for (const button of buttons) {
+        const step = Number(button.dataset.pressStep);
+        button.disabled = step < 0 ? track.scrollLeft <= 1 : track.scrollLeft >= end;
+      }
+    };
+    for (const button of buttons) {
+      button.addEventListener("click", () => {
+        const card = track.firstElementChild as HTMLElement | null;
+        const stride = card ? card.offsetWidth + 20 : track.clientWidth;
+        track.scrollBy({ left: Number(button.dataset.pressStep) * stride, behavior: "smooth" });
+      });
+    }
+    track.addEventListener("scroll", sync, { passive: true });
+    addEventListener("resize", sync);
+    sync();
+  }
+</script>

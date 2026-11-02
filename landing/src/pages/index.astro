@@ -11,6 +11,9 @@ import Button from "../components/Button.astro";
 import ShootingStars from "../components/ShootingStars.astro";
 import HeroGlow from "../components/HeroGlow.astro";
 import DownloadCard from "../components/DownloadCard.astro";
+import Reviews from "../components/Reviews.astro";
+import FeaturedLogos from "../components/FeaturedLogos.astro";
+import Press from "../components/Press.astro";
 import { readFileSync } from "node:fs";
 import { Image } from "astro:assets";
 import { GITHUB, SPONSOR, EMAIL, STARLINK_REFERRAL, downloadPlatforms } from "../constants";
@@ -85,9 +88,9 @@ const faqs: { q: string; a: string; aside?: string }[] = [
 
       <div class="relative pt-20 pb-16 text-center sm:pt-28">
         <h1 class="mx-auto max-w-[96vw] font-display font-medium leading-[0.95] tracking-[-0.03em] text-ink-3">
-          <span class="hero-line-fade block whitespace-nowrap text-[clamp(1.8rem,4.3vw,5rem)] max-sm:whitespace-normal">Your <span class="font-bold text-ink">Starlink</span> experience.</span>
-          <span class="hero-line-fade block whitespace-nowrap text-[clamp(1.8rem,4.3vw,5rem)] max-sm:whitespace-normal">Now on <span class="font-bold text-ink">desktop</span>!</span>
-          <span class="mt-5 block whitespace-nowrap text-[clamp(1.25rem,2vw,2rem)] tracking-[-0.02em] max-sm:whitespace-normal">...because space-age internet deserves more than a mobile <span class="font-bold text-ink">app</span>.</span>
+          <span class="hero-line-fade block whitespace-nowrap text-[clamp(1.7rem,4vw,4.65rem)] max-sm:whitespace-normal">Your <span class="font-bold text-ink">Starlink</span> experience.</span>
+          <span class="hero-line-fade block whitespace-nowrap text-[clamp(1.7rem,4vw,4.65rem)] max-sm:whitespace-normal">Now on <span class="font-bold text-ink">desktop</span>!</span>
+          <span class="mt-5 block whitespace-nowrap text-[clamp(1.16rem,1.86vw,1.86rem)] tracking-[-0.02em] max-sm:whitespace-normal">...because space-age internet deserves more than a mobile <span class="font-bold text-ink">app</span>.</span>
         </h1>
 
         <div class="mx-auto max-w-7xl px-5">
@@ -107,7 +110,7 @@ const faqs: { q: string; a: string; aside?: string }[] = [
         </div>
 
         <p class="mt-6 font-mono text-[12px] text-ink-3">
-          Free and open source · No account · Nothing leaves your machine · Unofficial, not affiliated with SpaceX
+          Free and open source · No account · Nothing leaves your machine · Not affiliated with SpaceX
         </p>
 
         <Figure
@@ -123,6 +126,8 @@ const faqs: { q: string; a: string; aside?: string }[] = [
       </div>
     </section>
 
+    <FeaturedLogos />
+
     <div id="features" class="mx-auto flex max-w-md items-center gap-5 px-5 py-16">
       <span class="h-px flex-1 [background:linear-gradient(90deg,transparent,var(--color-rule-2))]"></span>
       <span class="font-mono text-[11px] uppercase tracking-[0.35em] text-ink-3">Features</span>
@@ -130,6 +135,8 @@ const faqs: { q: string; a: string; aside?: string }[] = [
     </div>
 
     {sections.map((section) => <Section {...section} />)}
+
+    <Reviews />
 
     <section id="get">
       <SectionRule />
@@ -151,6 +158,8 @@ const faqs: { q: string; a: string; aside?: string }[] = [
         </p>
       </div>
     </section>
+
+    <Press />
     <section id="starlink">
       <SectionRule />
       <div class="mx-auto grid max-w-5xl items-center gap-12 px-5 py-24 lg:grid-cols-[1fr_auto] lg:gap-20 lg:py-32">

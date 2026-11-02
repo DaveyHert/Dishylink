@@ -1,14 +1,26 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "dishylink-landing",
-  // No Worker code — this is a static asset upload. Nothing here reads a secret,
-  // and account_id is deliberately absent: pass CLOUDFLARE_ACCOUNT_ID as an env
-  // var so no account identifier is committed to a public repo.
+  // account_id is deliberately absent: pass CLOUDFLARE_ACCOUNT_ID as an env var
+  // so no account identifier is committed to a public repo. For the same reason
+  // TURNSTILE_SECRET, ACCESS_TEAM_DOMAIN and ACCESS_AUD are `wrangler secret`s.
   "compatibility_date": "2026-08-01",
+  "main": "worker/index.ts",
   "assets": {
     "directory": "./dist",
+    "binding": "ASSETS",
     "not_found_handling": "404-page",
+    // Everything else is served as static files without invoking the Worker.
+    "run_worker_first": ["/api/*"],
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "dishylink-reviews",
+      "database_id": "9f6ff16e-5110-4a51-840c-3bfd726c45e6",
+      "migrations_dir": "migrations",
+    },
+  ],
   // Both hosts serve the same assets. The apex is the canonical one — every page
   // emits <link rel="canonical"> against it (Base.astro), so search engines fold
   // the www copy into the apex rather than treating it as duplicate content.

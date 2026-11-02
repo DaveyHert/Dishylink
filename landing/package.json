@@ -7,7 +7,9 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "deploy": "astro build && wrangler deploy"
+    "deploy": "astro build && wrangler deploy",
+    "reviews": "npm ci --prefix scripts && node scripts/fetch-reviews.mjs",
+    "featured": "npm ci --prefix scripts && node scripts/fetch-featured.mjs"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.0",

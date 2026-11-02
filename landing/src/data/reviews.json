@@ -1,0 +1,1451 @@
+{
+  "fetchedAt": "2026-11-04",
+  "ratings": {
+    "chrome": {
+      "average": 5,
+      "count": 45
+    },
+    "firefox": {
+      "average": 5,
+      "count": 7
+    },
+    "edge": {
+      "average": 5,
+      "count": 1
+    }
+  },
+  "supporters": 56,
+  "reviews": [
+    {
+      "id": "chrome:f917217f-5216-4aa5-b975-04baa27b22d8",
+      "source": "chrome",
+      "name": "Mark R.",
+      "stars": 5,
+      "text": "Nice app to run on Chrome. Give you quick access to current operation.",
+      "date": "2026-11-04",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-f917217f-5216-4aa5-b975-04baa27b22d8.webp"
+    },
+    {
+      "id": "firefox:2775233",
+      "source": "firefox",
+      "name": "landry",
+      "stars": 5,
+      "text": "Very cool app. Highly recommend if You wish to have a complete dashboard with all relevant information about your starlink",
+      "date": "2026-10-22",
+      "url": "https://addons.mozilla.org/addon/dishylink/reviews/2775233/",
+      "avatar": "/avatars/firefox-2775233.webp"
+    },
+    {
+      "id": "edge:7845ce22-b866-0228-4f40-d9a631ec8f80",
+      "source": "edge",
+      "name": "Peter",
+      "stars": 5,
+      "text": "Great insights in your Starlink installation! Works flawless.",
+      "date": "2026-11-02",
+      "url": "https://microsoftedge.microsoft.com/addons/detail/pknccegejhlgmeiojalenedmkbcaimdo",
+      "country": "FR",
+      "avatar": "/avatars/edge-7845ce22-b866-0228-4f40-d9a631ec8f80.webp"
+    },
+    {
+      "id": "supporter:16134339",
+      "source": "supporter",
+      "name": "Jason",
+      "stars": null,
+      "text": "Your app is first rate! You are genius, thank you!",
+      "date": "2026-11-04",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-16134339.webp"
+    },
+    {
+      "id": "producthunt:confidence-onumabor",
+      "source": "producthunt",
+      "name": "Confidence O.",
+      "stars": null,
+      "text": "I liked everything I saw on the app. It even detected a recent issue I had with my Starlink that needed adjustment, and suggested the fix too (the dish was misaligned). Weldone, David 👏🎉",
+      "date": "2026-08-13",
+      "url": "https://www.producthunt.com/products/dishylink",
+      "avatar": "/avatars/producthunt-confidence-onumabor.webp"
+    },
+    {
+      "id": "reddit:MegaDeKay",
+      "source": "reddit",
+      "name": "MegaDeKay",
+      "stars": null,
+      "text": "I just installed the Firefox extension and it is FANTASTIC. Thank you so much! I almost never have my phone on so having this available in a browser on my Linux PC is wonderful. You rock!",
+      "date": "2026-10-27",
+      "url": "https://www.reddit.com/r/Starlink/comments/1xfu3jg/",
+      "avatar": "/avatars/reddit-MegaDeKay.webp"
+    },
+    {
+      "id": "youtube:UgxD_z4qCTegEKV5H1l4AaABAg",
+      "source": "youtube",
+      "name": "lawoffices9616",
+      "stars": null,
+      "text": "I really like the top bar. Nice large, easy to read at a glance numbers. I also like the graphs when I want more detail.",
+      "date": "2026-10-26",
+      "url": "https://www.youtube.com/watch?v=eSyFHaO211Q&lc=UgxD_z4qCTegEKV5H1l4AaABAg",
+      "avatar": "/avatars/youtube-UgxD-z4qCTegEKV5H1l4AaABAg.webp"
+    },
+    {
+      "id": "chrome:e7b88692-d090-4069-b3f0-c02bdec156aa",
+      "source": "chrome",
+      "name": "Jay B.",
+      "stars": 5,
+      "text": "10/10 - This app gives me more visibility to my Starlink connection than the native app",
+      "date": "2026-10-30",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-e7b88692-d090-4069-b3f0-c02bdec156aa.webp"
+    },
+    {
+      "id": "firefox:2765583",
+      "source": "firefox",
+      "name": "Firefox user",
+      "stars": 5,
+      "text": "Impressive, wish it for Linux tho ;)",
+      "date": "2026-10-10",
+      "url": "https://addons.mozilla.org/addon/dishylink/reviews/2765583/",
+      "avatar": "/avatars/firefox-2765583.webp"
+    },
+    {
+      "id": "supporter:16111446",
+      "source": "supporter",
+      "name": "John R.",
+      "stars": null,
+      "text": "Outstanding tool, thanks much!",
+      "date": "2026-11-02",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-16111446.webp"
+    },
+    {
+      "id": "producthunt:brittany-joiner",
+      "source": "producthunt",
+      "name": "Brittany J.",
+      "stars": null,
+      "text": "Wow, didnt know i needed this until I saw it. Buying you a coffee bro, this is awesome",
+      "date": "2026-08-13",
+      "url": "https://www.producthunt.com/products/dishylink",
+      "avatar": "/avatars/producthunt-brittany-joiner.webp"
+    },
+    {
+      "id": "reddit:aceweboe",
+      "source": "reddit",
+      "name": "aceweboe",
+      "stars": null,
+      "text": "This is becoming quite the useful Starlink monitoring tool!",
+      "date": "2026-10-04",
+      "url": "https://www.reddit.com/user/aceweboe/submitted/",
+      "avatar": "/avatars/reddit-aceweboe.webp"
+    },
+    {
+      "id": "youtube:Ugxuvr1VpFXSchRv5VB4AaABAg",
+      "source": "youtube",
+      "name": "ellabelle1277",
+      "stars": null,
+      "text": "How cool is this! I live in a very rural location in north Idaho that has always had horrid Smartphone service, I never bothered to buy one and just use a simple Kyocera Flip Phone. I had to actually buy a darn smartphone just to be able to install my Starlink Dish! I still have been having to pay for smartphone service to be able to monitor or adjust my Starlink Dish. So this app for a computer is totally awesome and if it works good for me in my location, I can get rid of the annoying smartphone.",
+      "date": "2026-10-21",
+      "url": "https://www.youtube.com/watch?v=eSyFHaO211Q&lc=Ugxuvr1VpFXSchRv5VB4AaABAg",
+      "avatar": "/avatars/youtube-Ugxuvr1VpFXSchRv5VB4AaABAg.webp"
+    },
+    {
+      "id": "chrome:efc536e8-cbf9-4050-b31b-144cb294dc49",
+      "source": "chrome",
+      "name": "Israel M.",
+      "stars": 5,
+      "text": "Great app with lots of useful info.",
+      "date": "2026-10-30",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-efc536e8-cbf9-4050-b31b-144cb294dc49.webp"
+    },
+    {
+      "id": "firefox:2753128",
+      "source": "firefox",
+      "name": "SkidKid276",
+      "stars": 5,
+      "text": "Very cool browser extension. Gives the details that the nerds want!",
+      "date": "2026-09-29",
+      "url": "https://addons.mozilla.org/addon/dishylink/reviews/2753128/",
+      "avatar": "/avatars/firefox-2753128.webp"
+    },
+    {
+      "id": "supporter:16097029",
+      "source": "supporter",
+      "name": "Peter",
+      "stars": null,
+      "text": "Thanks, great app!",
+      "date": "2026-11-01",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-16097029.webp"
+    },
+    {
+      "id": "producthunt:alexander-kaiser",
+      "source": "producthunt",
+      "name": "Alexander K.",
+      "stars": null,
+      "text": "Good job! I was missing a proper desktop client. Bonus points for making it open source. 🖤",
+      "date": "2026-08-13",
+      "url": "https://www.producthunt.com/products/dishylink",
+      "avatar": "/avatars/producthunt-alexander-kaiser.webp"
+    },
+    {
+      "id": "reddit:zerbey",
+      "source": "reddit",
+      "name": "zerbey",
+      "stars": null,
+      "text": "This has become an essential tool, I use it almost every day.",
+      "date": "2026-10-04",
+      "url": "https://www.reddit.com/user/aceweboe/submitted/",
+      "avatar": "/avatars/reddit-zerbey.webp"
+    },
+    {
+      "id": "youtube:UgzwSc2jW_-JZU0X-gV4AaABAg",
+      "source": "youtube",
+      "name": "amin08088",
+      "stars": null,
+      "text": "What a wonderful app",
+      "date": "2026-10-14",
+      "url": "https://www.youtube.com/watch?v=eSyFHaO211Q&lc=UgzwSc2jW_-JZU0X-gV4AaABAg",
+      "avatar": "/avatars/youtube-UgzwSc2jW-JZU0X-gV4AaABAg.webp"
+    },
+    {
+      "id": "chrome:ba1c019d-3dec-46da-974f-0ddf4d137e58",
+      "source": "chrome",
+      "name": "Stuart G.",
+      "stars": 5,
+      "text": "Great interface, lots of real time info.",
+      "date": "2026-10-23",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-ba1c019d-3dec-46da-974f-0ddf4d137e58.webp"
+    },
+    {
+      "id": "firefox:2751087",
+      "source": "firefox",
+      "name": "tom",
+      "stars": 5,
+      "text": "What Elon should have given us",
+      "date": "2026-09-24",
+      "url": "https://addons.mozilla.org/addon/dishylink/reviews/2751087/",
+      "avatar": "/avatars/firefox-2751087.webp"
+    },
+    {
+      "id": "supporter:16084431",
+      "source": "supporter",
+      "name": "Anonymous",
+      "stars": null,
+      "text": "Thanks David, this is a great addition to my Starlink setup.",
+      "date": "2026-10-31",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-16084431.webp"
+    },
+    {
+      "id": "bandaancha:natanael",
+      "source": "bandaancha",
+      "name": "Natanael",
+      "stars": null,
+      "text": "I gave it a try and honestly it pleasantly surprised me with how much information it shows (basically what the mobile app collects, but prettier :D)",
+      "translatedFrom": "Spanish",
+      "date": "2026-08-10",
+      "url": "https://bandaancha.eu/foros/dishylink-app-open-source-controlar-1760702",
+      "avatar": "/avatars/bandaancha-natanael.webp"
+    },
+    {
+      "id": "reddit:breannazoey",
+      "source": "reddit",
+      "name": "breannazoey",
+      "stars": null,
+      "text": "I wasn't aware this utility existed, this is so neat. Thanks for the post!",
+      "date": "2026-10-04",
+      "url": "https://www.reddit.com/user/aceweboe/submitted/",
+      "avatar": "/avatars/reddit-breannazoey.webp"
+    },
+    {
+      "id": "youtube:UgxUB5Jebkq2-efz8PB4AaABAg",
+      "source": "youtube",
+      "name": "mattpobursky850",
+      "stars": null,
+      "text": "This is awesome! I've been wanting a desktop App for a long time. I hope they do a native Linux version but the browser extension will work for now.",
+      "date": "2026-10-05",
+      "url": "https://www.youtube.com/watch?v=eSyFHaO211Q&lc=UgxUB5Jebkq2-efz8PB4AaABAg",
+      "avatar": "/avatars/youtube-UgxUB5Jebkq2-efz8PB4AaABAg.webp"
+    },
+    {
+      "id": "chrome:c598a84e-98be-4de9-afab-f5098b2488d1",
+      "source": "chrome",
+      "name": "Wicked O.",
+      "stars": 5,
+      "text": "Good UI Love the real time satellite feed",
+      "date": "2026-10-17",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-c598a84e-98be-4de9-afab-f5098b2488d1.webp"
+    },
+    {
+      "id": "firefox:2749636",
+      "source": "firefox",
+      "name": "Simple S.",
+      "stars": 5,
+      "text": "This is what I would've written if I had the author's level of expertise in Dishy data.",
+      "date": "2026-09-21",
+      "url": "https://addons.mozilla.org/addon/dishylink/reviews/2749636/",
+      "avatar": "/avatars/firefox-2749636.webp"
+    },
+    {
+      "id": "supporter:16075940",
+      "source": "supporter",
+      "name": "Larry H.",
+      "stars": null,
+      "text": "I'm really enjoying Dishylink. Thanks for keeping it going.",
+      "date": "2026-10-30",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-16075940.webp"
+    },
+    {
+      "id": "reddit:GSDer_RIP_Good_Girl",
+      "source": "reddit",
+      "name": "GSDer_RIP_Good_Girl",
+      "stars": null,
+      "text": "FWIW it shows you per device data usage, which the Starlink app doesn't (the Starlink app just shows you total data used from the dish point of view). Note that for this to work the Dishylink app must be running (in the foreground or background) on a computer that is on the same network as the dish. It also gives you finer granularity in adjusting the Alignment of your dish if you're so inclined.",
+      "date": "2026-10-04",
+      "url": "https://www.reddit.com/user/aceweboe/submitted/",
+      "avatar": "/avatars/reddit-GSDer-RIP-Good-Girl.webp"
+    },
+    {
+      "id": "youtube:UgziHvLFinXKczr6Xr94AaABAg",
+      "source": "youtube",
+      "name": "DeathBlade94",
+      "stars": null,
+      "text": "Been using this for over a month now and it’s nice.",
+      "date": "2026-10-05",
+      "url": "https://www.youtube.com/watch?v=eSyFHaO211Q&lc=UgziHvLFinXKczr6Xr94AaABAg",
+      "avatar": "/avatars/youtube-UgziHvLFinXKczr6Xr94AaABAg.webp"
+    },
+    {
+      "id": "chrome:9847e5da-db1b-465f-972b-9150b89366a8",
+      "source": "chrome",
+      "name": "Ronald V.",
+      "stars": 5,
+      "text": "Amazing interface!",
+      "date": "2026-10-15",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-9847e5da-db1b-465f-972b-9150b89366a8.webp"
+    },
+    {
+      "id": "firefox:2736943",
+      "source": "firefox",
+      "name": "Technology-Warrior",
+      "stars": 5,
+      "text": "Whether you're new to SL or experienced, you need this extension...everything you ever wanted to know about your SL system is one convenient place. Highly recommended.",
+      "date": "2026-08-15",
+      "url": "https://addons.mozilla.org/addon/dishylink/reviews/2736943/",
+      "avatar": "/avatars/firefox-2736943.webp"
+    },
+    {
+      "id": "supporter:16029313",
+      "source": "supporter",
+      "name": "Cprendon",
+      "stars": null,
+      "text": "Really appreciate your work on this. I keep it running in the background.",
+      "date": "2026-10-26",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-16029313.webp"
+    },
+    {
+      "id": "reddit:rostol",
+      "source": "reddit",
+      "name": "rostol",
+      "stars": null,
+      "text": "YAY !! supporting changing the router IP address ! ❤️👌",
+      "date": "2026-09-04",
+      "url": "https://www.reddit.com/user/DaveyHert/submitted/",
+      "avatar": "/avatars/reddit-rostol.webp"
+    },
+    {
+      "id": "youtube:UgyVW2VptHXloF2cERZ4AaABAg",
+      "source": "youtube",
+      "name": "edginvestor",
+      "stars": null,
+      "text": "I'm sort of an old school laptop/desktop type of user much more than my using phone. This is really a great app! Covers what has always been missing from the phone app. Great work by the developer of this!",
+      "date": "2026-10-05",
+      "url": "https://www.youtube.com/watch?v=eSyFHaO211Q&lc=UgyVW2VptHXloF2cERZ4AaABAg",
+      "avatar": "/avatars/youtube-UgyVW2VptHXloF2cERZ4AaABAg.webp"
+    },
+    {
+      "id": "chrome:46ff12a8-296a-4f13-b7bf-7853f89dbd2c",
+      "source": "chrome",
+      "name": "Bluebeard G.",
+      "stars": 5,
+      "text": "Spiffy",
+      "date": "2026-10-10",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-46ff12a8-296a-4f13-b7bf-7853f89dbd2c.webp"
+    },
+    {
+      "id": "supporter:16001986",
+      "source": "supporter",
+      "name": "ThomasG",
+      "stars": null,
+      "text": "Thanks for the great app.",
+      "date": "2026-10-24",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-16001986.webp"
+    },
+    {
+      "id": "reddit:heyzy7",
+      "source": "reddit",
+      "name": "heyzy7",
+      "stars": null,
+      "text": "Just downloaded it and looks amazing, thanks.",
+      "date": "2026-09-04",
+      "url": "https://www.reddit.com/user/DaveyHert/submitted/",
+      "avatar": "/avatars/reddit-heyzy7.webp"
+    },
+    {
+      "id": "youtube:UgyKByK_Kw1TGLkH4Up4AaABAg",
+      "source": "youtube",
+      "name": "davestarr7112",
+      "stars": null,
+      "text": "Used the browser version. No need to mess with installing software on my Mac. Works great.",
+      "date": "2026-10-05",
+      "url": "https://www.youtube.com/watch?v=eSyFHaO211Q&lc=UgyKByK_Kw1TGLkH4Up4AaABAg",
+      "avatar": "/avatars/youtube-UgyKByK-Kw1TGLkH4Up4AaABAg.webp"
+    },
+    {
+      "id": "chrome:a348f5d5-d145-41af-a9bb-35de8afc5141",
+      "source": "chrome",
+      "name": "Andrew M.",
+      "stars": 5,
+      "text": "works like a charm, well done and very interesting.",
+      "date": "2026-10-09",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-a348f5d5-d145-41af-a9bb-35de8afc5141.webp"
+    },
+    {
+      "id": "supporter:15983231",
+      "source": "supporter",
+      "name": "Anonymous",
+      "stars": null,
+      "text": "Great app!! Thanks",
+      "date": "2026-10-22",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-15983231.webp"
+    },
+    {
+      "id": "reddit:Educational-Fee8578",
+      "source": "reddit",
+      "name": "Educational-Fee8578",
+      "stars": null,
+      "text": "Great",
+      "date": "2026-09-04",
+      "url": "https://www.reddit.com/user/DaveyHert/submitted/",
+      "avatar": "/avatars/reddit-Educational-Fee8578.webp"
+    },
+    {
+      "id": "youtube:UgwkmJ0cft5GR5z9bdd4AaABAg",
+      "source": "youtube",
+      "name": "RetiredOldManEric",
+      "stars": null,
+      "text": "Installed the windowz version and Firefox extension. This program/extension kicks butt! I think SpaceX/Starlink needs to hook up with the creator, pay them some serious coin to purchase it, hire them to continue updating/improving it, and provide this to owners/users. Will be camping for the rest of the week, so will have time to test this out on the tablet with the mini.",
+      "date": "2026-10-05",
+      "url": "https://www.youtube.com/watch?v=eSyFHaO211Q&lc=UgwkmJ0cft5GR5z9bdd4AaABAg",
+      "avatar": "/avatars/youtube-UgwkmJ0cft5GR5z9bdd4AaABAg.webp"
+    },
+    {
+      "id": "chrome:a2d104bc-9a0b-4d4e-8f2f-524ddd2d7a24",
+      "source": "chrome",
+      "name": "minoux",
+      "stars": 5,
+      "text": "work very well with the apps starlink dish . Elle fonctionne tres bien pour starlink dish",
+      "date": "2026-10-08",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-a2d104bc-9a0b-4d4e-8f2f-524ddd2d7a24.webp"
+    },
+    {
+      "id": "supporter:15941739",
+      "source": "supporter",
+      "name": "rosshasadrone",
+      "stars": null,
+      "text": "thanks so much dude, this is a super dialed app and I used it all the time on my travel gigs when we're out in the wilderness! you rock, treat yoself",
+      "date": "2026-10-18",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-15941739.webp"
+    },
+    {
+      "id": "reddit:SampaD22",
+      "source": "reddit",
+      "name": "SampaD22",
+      "stars": null,
+      "text": "Thank you for sharing! I'm loving the app so far!",
+      "date": "2026-09-04",
+      "url": "https://www.reddit.com/user/DaveyHert/submitted/",
+      "avatar": "/avatars/reddit-SampaD22.webp"
+    },
+    {
+      "id": "youtube:Ugy5C-N_9DyHJiJAxlp4AaABAg",
+      "source": "youtube",
+      "name": "airizonneed1403",
+      "stars": null,
+      "text": "One more thing that I didn't know I needed until I needed it.",
+      "date": "2026-10-05",
+      "url": "https://www.youtube.com/watch?v=eSyFHaO211Q&lc=Ugy5C-N_9DyHJiJAxlp4AaABAg",
+      "avatar": "/avatars/youtube-Ugy5C-N-9DyHJiJAxlp4AaABAg.webp"
+    },
+    {
+      "id": "chrome:00faf165-fead-46ce-9641-7a08a79a7d0c",
+      "source": "chrome",
+      "name": "Ruy A.",
+      "stars": 5,
+      "text": "Top",
+      "date": "2026-10-08",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-00faf165-fead-46ce-9641-7a08a79a7d0c.webp"
+    },
+    {
+      "id": "supporter:15926279",
+      "source": "supporter",
+      "name": "glawther",
+      "stars": null,
+      "text": "Great app! Very appreciated!",
+      "date": "2026-10-17",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-15926279.webp"
+    },
+    {
+      "id": "reddit:Abe_Frohman",
+      "source": "reddit",
+      "name": "Abe_Frohman",
+      "stars": null,
+      "text": "Thanks for a great tool!",
+      "date": "2026-09-04",
+      "url": "https://www.reddit.com/user/DaveyHert/submitted/",
+      "avatar": "/avatars/reddit-Abe-Frohman.webp"
+    },
+    {
+      "id": "youtube:Ugz0dbXsnhdO8KDL-VB4AaABAg",
+      "source": "youtube",
+      "name": "Vicki_Shedd",
+      "stars": null,
+      "text": "No iPhone here so this is a very welcome option. Look forward to using it, thanks Davey.",
+      "date": "2026-10-05",
+      "url": "https://www.youtube.com/watch?v=eSyFHaO211Q&lc=Ugz0dbXsnhdO8KDL-VB4AaABAg",
+      "avatar": "/avatars/youtube-Ugz0dbXsnhdO8KDL-VB4AaABAg.webp"
+    },
+    {
+      "id": "chrome:f3163726-24ad-4aed-9464-1496593ea570",
+      "source": "chrome",
+      "name": "Justin G.",
+      "stars": 5,
+      "text": "This is one of the coolest apps I've seen. So much data available in a well organized layout. Well done!",
+      "date": "2026-10-02",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-f3163726-24ad-4aed-9464-1496593ea570.webp"
+    },
+    {
+      "id": "supporter:15907534",
+      "source": "supporter",
+      "name": "Gerald",
+      "stars": null,
+      "text": "Lot of good data from the app. Appreciate the effort",
+      "date": "2026-10-15",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-15907534.webp"
+    },
+    {
+      "id": "reddit:DeathBlade94",
+      "source": "reddit",
+      "name": "DeathBlade94",
+      "stars": null,
+      "text": "Loving the app, is there a chance that in the future the app has the ability to monitor multiple accounts? I don't know how many people are in a situation where they have to manager multiple account and I also know the way it polls data it would not 100% work without being on the local network but it would be nice to at minimum see some details such as data usage and whatever else can be pulled from linking the starlink account.",
+      "date": "2026-09-04",
+      "url": "https://www.reddit.com/user/DaveyHert/submitted/",
+      "avatar": "/avatars/reddit-DeathBlade94.webp"
+    },
+    {
+      "id": "youtube:UgwyJMqPhQHocub1_3J4AaABAg",
+      "source": "youtube",
+      "name": "kevinmcelroy8367",
+      "stars": null,
+      "text": "Really like this app. The view of the orbiting satellites is mesmerizing.",
+      "date": "2026-10-05",
+      "url": "https://www.youtube.com/watch?v=eSyFHaO211Q&lc=UgwyJMqPhQHocub1_3J4AaABAg",
+      "avatar": "/avatars/youtube-UgwyJMqPhQHocub1-3J4AaABAg.webp"
+    },
+    {
+      "id": "chrome:d8dcb9ff-1f48-4f1e-a4b4-6dcde20dfb33",
+      "source": "chrome",
+      "name": "Jerwin E.",
+      "stars": 5,
+      "text": "thank you!!",
+      "date": "2026-10-02",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-d8dcb9ff-1f48-4f1e-a4b4-6dcde20dfb33.webp"
+    },
+    {
+      "id": "supporter:15897037",
+      "source": "supporter",
+      "name": "Steve",
+      "stars": null,
+      "text": "You made a great app. Thank you for sharing it with the Starlink community.",
+      "date": "2026-10-14",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-15897037.webp"
+    },
+    {
+      "id": "reddit:KenjiFox",
+      "source": "reddit",
+      "name": "KenjiFox",
+      "stars": null,
+      "text": "I love this, it works great. … Just noticed my favorite feature by far, the obstruction timelapse. I had none, but moved my mini near some trees to try it. Seeing the leaves move in the red pixel fringe is cool as hell. … I just discovered that I can toss it in the tray and leave a little floating window with the real time throughput at all times... and it's in Kb/s? You spoil me. THIS is my favorite feature.",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-KenjiFox.webp"
+    },
+    {
+      "id": "youtube:UgytjvZ-h13v2jUDBVd4AaABAg",
+      "source": "youtube",
+      "name": "PickMeUpPoetry",
+      "stars": null,
+      "text": "The network and device rules feature is what sold it to me (as someone who was considering a 3rd party router just for this feature). Downloading Dishylink now.",
+      "date": "2026-10-05",
+      "url": "https://www.youtube.com/watch?v=eSyFHaO211Q&lc=UgytjvZ-h13v2jUDBVd4AaABAg",
+      "avatar": "/avatars/youtube-UgytjvZ-h13v2jUDBVd4AaABAg.webp"
+    },
+    {
+      "id": "chrome:3e1c7f28-e6dd-47eb-9d6b-9df5f6d12a64",
+      "source": "chrome",
+      "name": "Skippy U.",
+      "stars": 5,
+      "text": "I love all the info at my finger tips. better than iPhone default starlink app",
+      "date": "2026-10-01",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-3e1c7f28-e6dd-47eb-9d6b-9df5f6d12a64.webp"
+    },
+    {
+      "id": "supporter:15893700",
+      "source": "supporter",
+      "name": "Raymond K.",
+      "stars": null,
+      "text": "I appreciate your efforts",
+      "date": "2026-10-14",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-15893700.webp"
+    },
+    {
+      "id": "reddit:Chaz28o",
+      "source": "reddit",
+      "name": "Chaz28o",
+      "stars": null,
+      "text": "I really like this app, the live satellite view is totally cool, and now you know when it changes satellites 🛰️",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-Chaz28o.webp"
+    },
+    {
+      "id": "youtube:UgxhRhv7a0JneiDN_m14AaABAg",
+      "source": "youtube",
+      "name": "MrCanadiandad",
+      "stars": null,
+      "text": "I like the separate top bar and the graphs. Perfect just the way it is. But I would like to be able to show a split screen with my main Skyline and my Starlink Mini showing live data side-by-side",
+      "date": "2026-10-05",
+      "url": "https://www.youtube.com/watch?v=eSyFHaO211Q&lc=UgxhRhv7a0JneiDN_m14AaABAg",
+      "avatar": "/avatars/youtube-UgxhRhv7a0JneiDN-m14AaABAg.webp"
+    },
+    {
+      "id": "chrome:9d115e01-7b4d-440d-a5bb-f0f8a6b1952b",
+      "source": "chrome",
+      "name": "Charlles C.",
+      "stars": 5,
+      "text": "I take my hats off for the developer! I love this app!",
+      "date": "2026-09-30",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-9d115e01-7b4d-440d-a5bb-f0f8a6b1952b.webp"
+    },
+    {
+      "id": "supporter:15888509",
+      "source": "supporter",
+      "name": "John",
+      "stars": null,
+      "text": "Cool app, I could watch the satellites for hours",
+      "date": "2026-10-13",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-15888509.webp"
+    },
+    {
+      "id": "reddit:Alternative-Shine920",
+      "source": "reddit",
+      "name": "Alternative-Shine920",
+      "stars": null,
+      "text": "That moment when you were about to do something, but decide to procrastinate and open Reddit. Thanks to that I was able to find this and am glad it did. :) little by little my Mac is becoming more useful heheh.",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-Alternative-Shine920.webp"
+    },
+    {
+      "id": "youtube:UgxnIqDR9lLVbFslLnZ4AaABAg",
+      "source": "youtube",
+      "name": "zolalloyd46",
+      "stars": null,
+      "text": "This is an awesome bit of kit, works great on W11 especially on larger monitors. The smartphone is fine, but fiddly with a small screen. Kudos to the developer",
+      "date": "2026-10-05",
+      "url": "https://www.youtube.com/watch?v=eSyFHaO211Q&lc=UgxnIqDR9lLVbFslLnZ4AaABAg",
+      "avatar": "/avatars/youtube-UgxnIqDR9lLVbFslLnZ4AaABAg.webp"
+    },
+    {
+      "id": "chrome:c446abf1-236f-419c-a078-62988c8f44d8",
+      "source": "chrome",
+      "name": "Ton L.",
+      "stars": 5,
+      "text": "phenomenal app, thanks heaps",
+      "date": "2026-09-30",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-c446abf1-236f-419c-a078-62988c8f44d8.webp"
+    },
+    {
+      "id": "supporter:15863230",
+      "source": "supporter",
+      "name": "Mike C.",
+      "stars": null,
+      "text": "Couldn't be better If StarLink itself had created it.",
+      "date": "2026-10-11",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-15863230.webp"
+    },
+    {
+      "id": "reddit:DestroyYesterday",
+      "source": "reddit",
+      "name": "DestroyYesterday",
+      "stars": null,
+      "text": "This provides way more info than the Starlink app.",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-DestroyYesterday.webp"
+    },
+    {
+      "id": "youtube:UgzVknB6dpBigzxROjp4AaABAg",
+      "source": "youtube",
+      "name": "joesalyers",
+      "stars": null,
+      "text": "This is great, the starling iPad app works on the Arm (apple Silicon) Macs but it is a GPU HOG even on a M5 Max chip but this Dishylink App doesn't have the 90% GPU usage that the iPad Starling does on the Mac.",
+      "date": "2026-10-05",
+      "url": "https://www.youtube.com/watch?v=eSyFHaO211Q&lc=UgzVknB6dpBigzxROjp4AaABAg",
+      "avatar": "/avatars/youtube-UgzVknB6dpBigzxROjp4AaABAg.webp"
+    },
+    {
+      "id": "chrome:f78a6846-fa71-4c94-8738-4561a7fe5bc0",
+      "source": "chrome",
+      "name": "Ray D.",
+      "stars": 5,
+      "text": "Fabulous app! Thanks",
+      "date": "2026-09-29",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-f78a6846-fa71-4c94-8738-4561a7fe5bc0.webp"
+    },
+    {
+      "id": "supporter:15861691",
+      "source": "supporter",
+      "name": "Kevin B.",
+      "stars": null,
+      "text": "Love this app! Thank you for creating it and for the ongoing effort you put into it.",
+      "date": "2026-10-11",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-15861691.webp"
+    },
+    {
+      "id": "reddit:desertadventurer",
+      "source": "reddit",
+      "name": "desertadventurer",
+      "stars": null,
+      "text": "That's awesome!",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-desertadventurer.webp"
+    },
+    {
+      "id": "youtube:Ugxl38EC64xJFIaEUNN4AaABAg",
+      "source": "youtube",
+      "name": "directrix101",
+      "stars": null,
+      "text": "Nice, I can do more accurate alignhments with this app.",
+      "date": "2026-10-05",
+      "url": "https://www.youtube.com/watch?v=eSyFHaO211Q&lc=Ugxl38EC64xJFIaEUNN4AaABAg",
+      "avatar": "/avatars/youtube-Ugxl38EC64xJFIaEUNN4AaABAg.webp"
+    },
+    {
+      "id": "chrome:9b49511d-a26c-4c60-ae91-9aff6bb35b7a",
+      "source": "chrome",
+      "name": "Fonepi L.",
+      "stars": 5,
+      "text": "Really amazing. It was annoying to constantly have to check my phone for some basic info",
+      "date": "2026-09-28",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-9b49511d-a26c-4c60-ae91-9aff6bb35b7a.webp"
+    },
+    {
+      "id": "supporter:15853459",
+      "source": "supporter",
+      "name": "Randy",
+      "stars": null,
+      "text": "Great addition",
+      "date": "2026-10-10",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-15853459.webp"
+    },
+    {
+      "id": "reddit:usnmustanger",
+      "source": "reddit",
+      "name": "usnmustanger",
+      "stars": null,
+      "text": "Really cool app, very well done and informative! I'll likely support you!",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-usnmustanger.webp"
+    },
+    {
+      "id": "youtube:UgwmbAQ8OiDlUpJ8k854AaABAg",
+      "source": "youtube",
+      "name": "OurTeslaModelXJourney",
+      "stars": null,
+      "text": "I had Grok Build install it on my Mac. Works great! It's not just about wanting to avoid the phone; it's about being able to see the data lol.",
+      "date": "2026-10-05",
+      "url": "https://www.youtube.com/watch?v=eSyFHaO211Q&lc=UgwmbAQ8OiDlUpJ8k854AaABAg",
+      "avatar": "/avatars/youtube-UgwmbAQ8OiDlUpJ8k854AaABAg.webp"
+    },
+    {
+      "id": "chrome:90a973cb-0d49-439e-adec-066a5b7f0e22",
+      "source": "chrome",
+      "name": "Lester M.",
+      "stars": 5,
+      "text": "Works great",
+      "date": "2026-09-28",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-90a973cb-0d49-439e-adec-066a5b7f0e22.webp"
+    },
+    {
+      "id": "supporter:15851318",
+      "source": "supporter",
+      "name": "Robin B.",
+      "stars": null,
+      "text": "Great addition",
+      "date": "2026-10-10",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-15851318.webp"
+    },
+    {
+      "id": "reddit:Intelligent-Tap-4724",
+      "source": "reddit",
+      "name": "Intelligent-Tap-4724",
+      "stars": null,
+      "text": "Amazing, thank you.",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-Intelligent-Tap-4724.webp"
+    },
+    {
+      "id": "youtube:Ugydh7CD7JP6u3Qj1DJ4AaABAg",
+      "source": "youtube",
+      "name": "WyllCavalcante",
+      "stars": null,
+      "text": "This one is way too good!!! My daily Starlink monitoring app! And if you can, folks, donate to the developer! You have no idea how much it helps us and inspires him to improve the app!!!",
+      "translatedFrom": "Portuguese",
+      "date": "2026-10-05",
+      "url": "https://www.youtube.com/watch?v=gfOi7aQ7iUw&lc=Ugydh7CD7JP6u3Qj1DJ4AaABAg",
+      "avatar": "/avatars/youtube-Ugydh7CD7JP6u3Qj1DJ4AaABAg.webp"
+    },
+    {
+      "id": "chrome:15bc1d39-d69d-47e2-b083-7823a72a947a",
+      "source": "chrome",
+      "name": "Greg M.",
+      "stars": 5,
+      "text": "VERY GOOD",
+      "date": "2026-09-22",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-15bc1d39-d69d-47e2-b083-7823a72a947a.webp"
+    },
+    {
+      "id": "supporter:15811594",
+      "source": "supporter",
+      "name": "Garry",
+      "stars": null,
+      "text": "This works better than the app",
+      "date": "2026-10-07",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-15811594.webp"
+    },
+    {
+      "id": "reddit:Metalmilitia777",
+      "source": "reddit",
+      "name": "Metalmilitia777",
+      "stars": null,
+      "text": "This is awesome. Good job!",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-Metalmilitia777.webp"
+    },
+    {
+      "id": "youtube:UgxIVYMMd3io-ifD7-Z4AaABAg",
+      "source": "youtube",
+      "name": "joaosarraff1509",
+      "stars": null,
+      "text": "This one is excellent, I haven't seen a better one yet!!",
+      "translatedFrom": "Portuguese",
+      "date": "2026-10-05",
+      "url": "https://www.youtube.com/watch?v=gfOi7aQ7iUw&lc=UgxIVYMMd3io-ifD7-Z4AaABAg",
+      "avatar": "/avatars/youtube-UgxIVYMMd3io-ifD7-Z4AaABAg.webp"
+    },
+    {
+      "id": "chrome:6e8f3da9-765e-4b52-9496-c4c2fef87b36",
+      "source": "chrome",
+      "name": "Benjamin D.",
+      "stars": 5,
+      "text": "Excellent I love it! Cheers!",
+      "date": "2026-09-22",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-6e8f3da9-765e-4b52-9496-c4c2fef87b36.webp"
+    },
+    {
+      "id": "supporter:15808550",
+      "source": "supporter",
+      "name": "Thomas",
+      "stars": null,
+      "text": "Great app!",
+      "date": "2026-10-06",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-15808550.webp"
+    },
+    {
+      "id": "reddit:Fuzzy-Shift-3516",
+      "source": "reddit",
+      "name": "Fuzzy-Shift-3516",
+      "stars": null,
+      "text": "Awesome! I wouldn't mind purchasing one but not building it.",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-Fuzzy-Shift-3516.webp"
+    },
+    {
+      "id": "youtube:UgwkxNMH95vbxjnTvSR4AaABAg",
+      "source": "youtube",
+      "name": "thalesvmr1",
+      "stars": null,
+      "text": "This program is awesome",
+      "translatedFrom": "Portuguese",
+      "date": "2026-10-05",
+      "url": "https://www.youtube.com/watch?v=gfOi7aQ7iUw&lc=UgwkxNMH95vbxjnTvSR4AaABAg",
+      "avatar": "/avatars/youtube-UgwkxNMH95vbxjnTvSR4AaABAg.webp"
+    },
+    {
+      "id": "chrome:b33a1d72-5d26-40c5-804b-0e8bf8591022",
+      "source": "chrome",
+      "name": "Matteo P.",
+      "stars": 5,
+      "text": "Super tool!",
+      "date": "2026-09-21",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-b33a1d72-5d26-40c5-804b-0e8bf8591022.webp"
+    },
+    {
+      "id": "supporter:15808394",
+      "source": "supporter",
+      "name": "Kirk",
+      "stars": null,
+      "text": "Great app!",
+      "date": "2026-10-06",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-15808394.webp"
+    },
+    {
+      "id": "reddit:Straight-Charity9825",
+      "source": "reddit",
+      "name": "Straight-Charity9825",
+      "stars": null,
+      "text": "OMG this is amazing!!!! i need this in a android app ASAP!!!",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-Straight-Charity9825.webp"
+    },
+    {
+      "id": "youtube:UgzKSIhyhusaF_mJ71F4AaABAg",
+      "source": "youtube",
+      "name": "aldaeciobergaminii",
+      "stars": null,
+      "text": "Loved the app, it's awesome",
+      "translatedFrom": "Portuguese",
+      "date": "2026-10-05",
+      "url": "https://www.youtube.com/watch?v=gfOi7aQ7iUw&lc=UgzKSIhyhusaF_mJ71F4AaABAg",
+      "avatar": "/avatars/youtube-UgzKSIhyhusaF-mJ71F4AaABAg.webp"
+    },
+    {
+      "id": "chrome:d1933425-00c0-4c2b-9c79-591b38063820",
+      "source": "chrome",
+      "name": "Justinien",
+      "stars": 5,
+      "text": "Super useful",
+      "date": "2026-09-20",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-d1933425-00c0-4c2b-9c79-591b38063820.webp"
+    },
+    {
+      "id": "supporter:15772558",
+      "source": "supporter",
+      "name": "Shane",
+      "stars": null,
+      "text": "Thanks for crafting up Diskylink, super helpful app!",
+      "date": "2026-10-03",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-15772558.webp"
+    },
+    {
+      "id": "reddit:jesshutch81",
+      "source": "reddit",
+      "name": "jesshutch81",
+      "stars": null,
+      "text": "This is beautiful.. im sorry to say it but I hate my phone, and it's just annoying to use and find myself using my desktop more and more. This is just amazing...",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-jesshutch81.webp"
+    },
+    {
+      "id": "youtube:UgyM2fkhIdPavmgwzwd4AaABAg",
+      "source": "youtube",
+      "name": "bielneres",
+      "stars": null,
+      "text": "Wow, that's cool! These features are really good",
+      "translatedFrom": "Portuguese",
+      "date": "2026-10-05",
+      "url": "https://www.youtube.com/watch?v=gfOi7aQ7iUw&lc=UgyM2fkhIdPavmgwzwd4AaABAg",
+      "avatar": "/avatars/youtube-UgyM2fkhIdPavmgwzwd4AaABAg.webp"
+    },
+    {
+      "id": "chrome:4ba94923-096a-45ef-bd03-15d10e3db5ff",
+      "source": "chrome",
+      "name": "Snoww",
+      "stars": 5,
+      "text": "This is such a great tool for all Starlink users!",
+      "date": "2026-09-15",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-4ba94923-096a-45ef-bd03-15d10e3db5ff.webp"
+    },
+    {
+      "id": "supporter:15761181",
+      "source": "supporter",
+      "name": "Anonymous",
+      "stars": null,
+      "text": "Thank you for doing that",
+      "date": "2026-10-02",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-15761181.webp"
+    },
+    {
+      "id": "reddit:Ok1Count3935",
+      "source": "reddit",
+      "name": "Ok1Count3935",
+      "stars": null,
+      "text": "Looks awesome! Can't wait to try this out!",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-Ok1Count3935.webp"
+    },
+    {
+      "id": "chrome:5464640a-bb7a-4a0e-a84a-d42e752f0517",
+      "source": "chrome",
+      "name": "Kris L.",
+      "stars": 5,
+      "text": "Great and useful plugin.",
+      "date": "2026-08-14",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-5464640a-bb7a-4a0e-a84a-d42e752f0517.webp"
+    },
+    {
+      "id": "supporter:15757855",
+      "source": "supporter",
+      "name": "Thomas C.",
+      "stars": null,
+      "text": "Great Program",
+      "date": "2026-10-02",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-15757855.webp"
+    },
+    {
+      "id": "reddit:Bobcat322",
+      "source": "reddit",
+      "name": "Bobcat322",
+      "stars": null,
+      "text": "Many thanks to you, great work.",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-Bobcat322.webp"
+    },
+    {
+      "id": "chrome:8915329f-7a47-431d-ac68-1491c7e0db75",
+      "source": "chrome",
+      "name": "Ian S.",
+      "stars": 5,
+      "text": "Amazing app. Absolutly amazing.",
+      "date": "2026-08-13",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-8915329f-7a47-431d-ac68-1491c7e0db75.webp"
+    },
+    {
+      "id": "supporter:15744083",
+      "source": "supporter",
+      "name": "mupf",
+      "stars": null,
+      "text": "thank you!",
+      "date": "2026-10-01",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-15744083.webp"
+    },
+    {
+      "id": "reddit:stormytimber",
+      "source": "reddit",
+      "name": "stormytimber",
+      "stars": null,
+      "text": "I downloaded this last week and I love it! Thank you so much!",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-stormytimber.webp"
+    },
+    {
+      "id": "chrome:d8a028d0-4903-45a2-918e-ebbad27b8f60",
+      "source": "chrome",
+      "name": "Victor A.",
+      "stars": 5,
+      "text": "Cool!",
+      "date": "2026-08-12",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-d8a028d0-4903-45a2-918e-ebbad27b8f60.webp"
+    },
+    {
+      "id": "supporter:15727257",
+      "source": "supporter",
+      "name": "Guillermo L.",
+      "stars": null,
+      "text": "Thanks, great browser plugin. I will use it as a screensaver.",
+      "date": "2026-09-30",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-15727257.webp"
+    },
+    {
+      "id": "reddit:GoldenEkpendu",
+      "source": "reddit",
+      "name": "GoldenEkpendu",
+      "stars": null,
+      "text": "This is amazing!",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-GoldenEkpendu.webp"
+    },
+    {
+      "id": "chrome:97962f06-6f87-4bfe-8b8e-d2f7ce20d91d",
+      "source": "chrome",
+      "name": "Kyle B.",
+      "stars": 5,
+      "text": "Finally - all my Starlink stats in one place! This is exactly what I was looking for. I was tired of flipping between the Starlink app and 192.168.100.1 to check performance. Dishylink puts everything you actually want to know in real-time in one clean, effective dashboard. Super easy to install, works perfectly, and displays way more usefully than the stock options. If you have Starlink, you need this extension. Highly recommended!",
+      "date": "2026-08-10",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-97962f06-6f87-4bfe-8b8e-d2f7ce20d91d.webp"
+    },
+    {
+      "id": "supporter:15726800",
+      "source": "supporter",
+      "name": "Bill S.",
+      "stars": null,
+      "text": "Thanks for all your work on this!",
+      "date": "2026-09-30",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-15726800.webp"
+    },
+    {
+      "id": "reddit:scjcs",
+      "source": "reddit",
+      "name": "scjcs",
+      "stars": null,
+      "text": "This is awesome. Thank you.",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-scjcs.webp"
+    },
+    {
+      "id": "chrome:61195bc2-93bf-4025-a57e-7dbe02b49da4",
+      "source": "chrome",
+      "name": "Folajomi B.",
+      "stars": 5,
+      "text": "this works amazingly",
+      "date": "2026-08-10",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-61195bc2-93bf-4025-a57e-7dbe02b49da4.webp"
+    },
+    {
+      "id": "supporter:15604995",
+      "source": "supporter",
+      "name": "Nico",
+      "stars": null,
+      "text": "Hey David! Greetings from Argentina. I really like the project — it looks great! Keep it up. It’d be cool to see some of the other antennas you have too, not just the local one. I really like the interface as well. Cheers!",
+      "date": "2026-09-19",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-15604995.webp"
+    },
+    {
+      "id": "reddit:Technology-Warrior",
+      "source": "reddit",
+      "name": "Technology-Warrior",
+      "stars": null,
+      "text": "Just installed. Wow. Review submitted. Thank you for all your hard work -- terrific product.",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-Technology-Warrior.webp"
+    },
+    {
+      "id": "chrome:ed680553-2e12-4028-9dd8-8d2cc2653678",
+      "source": "chrome",
+      "name": "Favourite J.",
+      "stars": 5,
+      "text": "Easy to use Starlink app alternative, especially on my Mac. I get to see my data usage, speed check and other analytics from the app on my Mac, without picking up my phone. Good extension done!",
+      "date": "2026-08-10",
+      "url": "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
+      "avatar": "/avatars/chrome-ed680553-2e12-4028-9dd8-8d2cc2653678.webp"
+    },
+    {
+      "id": "supporter:15306254",
+      "source": "supporter",
+      "name": "southerndoc",
+      "stars": null,
+      "text": "Love the app!",
+      "date": "2026-08-24",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-15306254.webp"
+    },
+    {
+      "id": "reddit:Rasheim2",
+      "source": "reddit",
+      "name": "Rasheim2",
+      "stars": null,
+      "text": "This is Genuinely Incredible",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-Rasheim2.webp"
+    },
+    {
+      "id": "supporter:15189637",
+      "source": "supporter",
+      "name": "Brittany J.",
+      "stars": null,
+      "text": "DishyLink is awesome",
+      "date": "2026-08-13",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-15189637.webp"
+    },
+    {
+      "id": "reddit:Sammy296296",
+      "source": "reddit",
+      "name": "Sammy296296",
+      "stars": null,
+      "text": "Looks cool. Will check it out",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-Sammy296296.webp"
+    },
+    {
+      "id": "supporter:15159081",
+      "source": "supporter",
+      "name": "markoatodorov",
+      "stars": null,
+      "text": "Hey David! Just wanted to say thanks for building DishyLink. I set it up in Docker on my Mac mini and it’s working great with my Starlink setup. I really appreciate that it’s open source, local-first, and actually useful beyond just basic monitoring. Keep up the great work — happy to support the project! ☕️",
+      "date": "2026-08-10",
+      "url": "https://buymeacoffee.com/daveyhert",
+      "avatar": "/avatars/supporter-15159081.webp"
+    },
+    {
+      "id": "reddit:Positive-Resort4383",
+      "source": "reddit",
+      "name": "Positive-Resort4383",
+      "stars": null,
+      "text": "Awesome checking it out!",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-Positive-Resort4383.webp"
+    },
+    {
+      "id": "reddit:Guru_Woodman",
+      "source": "reddit",
+      "name": "Guru_Woodman",
+      "stars": null,
+      "text": "Very cool, thank you.",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-Guru-Woodman.webp"
+    },
+    {
+      "id": "reddit:pslgz_",
+      "source": "reddit",
+      "name": "pslgz_",
+      "stars": null,
+      "text": "Ok I like this, looking and working great!",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-pslgz-.webp"
+    },
+    {
+      "id": "reddit:Docproc2018",
+      "source": "reddit",
+      "name": "Docproc2018",
+      "stars": null,
+      "text": "This is great, thank you!",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-Docproc2018.webp"
+    },
+    {
+      "id": "reddit:LDWme",
+      "source": "reddit",
+      "name": "LDWme",
+      "stars": null,
+      "text": "Love the Starlink themed design!",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-LDWme.webp"
+    },
+    {
+      "id": "reddit:DustRaider8",
+      "source": "reddit",
+      "name": "DustRaider8",
+      "stars": null,
+      "text": "I really like this and wanted something like this since I got Starlink.",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-DustRaider8.webp"
+    },
+    {
+      "id": "reddit:sffunfun",
+      "source": "reddit",
+      "name": "sffunfun",
+      "stars": null,
+      "text": "Installed it. Love it. Thank you!",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-sffunfun.webp"
+    },
+    {
+      "id": "reddit:New-Ad5610",
+      "source": "reddit",
+      "name": "New-Ad5610",
+      "stars": null,
+      "text": "This is why i love reddit. Trying it out now!",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-New-Ad5610.webp"
+    },
+    {
+      "id": "reddit:hematomancer",
+      "source": "reddit",
+      "name": "hematomancer",
+      "stars": null,
+      "text": "this is actually kind of a lifesaver right now because i'm using my backup mini for my home after the cable for my main satellite got damaged. thank you!",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-hematomancer.webp"
+    },
+    {
+      "id": "reddit:SignificantWar6063",
+      "source": "reddit",
+      "name": "SignificantWar6063",
+      "stars": null,
+      "text": "great work",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-SignificantWar6063.webp"
+    },
+    {
+      "id": "reddit:panuvic",
+      "source": "reddit",
+      "name": "panuvic",
+      "stars": null,
+      "text": "nice looking app.",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-panuvic.webp"
+    },
+    {
+      "id": "reddit:juliustip",
+      "source": "reddit",
+      "name": "juliustip",
+      "stars": null,
+      "text": "Nice work! I remember 4 years ago when I brought Starlink to Nigeria as the first Starlink user in the country. The speed was great, and it still had the web interface that made it easy to manage. Glad to see something like this being developed, and even better. NB: The ability to pause connected users would be a great addition too, if possible.",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-juliustip.webp"
+    },
+    {
+      "id": "reddit:Uncomplaint",
+      "source": "reddit",
+      "name": "Uncomplaint",
+      "stars": null,
+      "text": "Will it work with bypass mode enabled ? EDIT: Great project, will try it out soon and will see if it works in bypass mode.",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-Uncomplaint.webp"
+    },
+    {
+      "id": "reddit:Trojanw0w",
+      "source": "reddit",
+      "name": "Trojanw0w",
+      "stars": null,
+      "text": "Cool",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-Trojanw0w.webp"
+    },
+    {
+      "id": "reddit:FallenVain",
+      "source": "reddit",
+      "name": "FallenVain",
+      "stars": null,
+      "text": "LOVE this i just need a version where I can view it from a website starlink is currently my backup so would love to host it locally",
+      "date": "2026-08-10",
+      "url": "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+      "avatar": "/avatars/reddit-FallenVain.webp"
+    }
+  ],
+  "silent": [
+    "/avatars/silent-0.webp",
+    "/avatars/silent-1.webp",
+    "/avatars/silent-2.webp",
+    "/avatars/silent-3.webp",
+    "/avatars/silent-4.webp",
+    "/avatars/silent-5.webp",
+    "/avatars/silent-6.webp",
+    "/avatars/silent-7.webp",
+    "/avatars/silent-8.webp",
+    "/avatars/silent-9.webp",
+    "/avatars/silent-10.webp",
+    "/avatars/silent-11.webp",
+    "/avatars/silent-12.webp",
+    "/avatars/silent-13.webp",
+    "/avatars/silent-14.webp",
+    "/avatars/silent-15.webp",
+    "/avatars/silent-16.webp",
+    "/avatars/silent-17.webp",
+    "/avatars/silent-18.webp",
+    "/avatars/silent-19.webp",
+    "/avatars/silent-20.webp",
+    "/avatars/silent-21.webp",
+    "/avatars/silent-22.webp",
+    "/avatars/silent-23.webp",
+    "/avatars/silent-24.webp",
+    "/avatars/silent-25.webp",
+    "/avatars/silent-26.webp",
+    "/avatars/silent-27.webp",
+    "/avatars/silent-28.webp",
+    "/avatars/silent-29.webp",
+    "/avatars/silent-30.webp",
+    "/avatars/silent-31.webp",
+    "/avatars/silent-32.webp",
+    "/avatars/silent-33.webp",
+    "/avatars/silent-34.webp",
+    "/avatars/silent-35.webp",
+    "/avatars/silent-36.webp",
+    "/avatars/silent-37.webp",
+    "/avatars/silent-38.webp",
+    "/avatars/silent-39.webp",
+    "/avatars/silent-40.webp",
+    "/avatars/silent-41.webp"
+  ]
+}

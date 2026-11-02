@@ -12,12 +12,15 @@ const STAGED = [
   "dishylink-whats-new-seen",
   "dishylink-installed-at",
   "dishylink-prompt-donation",
+  "dishylink-prompt-rating",
 ];
 
 STAGED.forEach((key) => localStorage.removeItem(key));
 localStorage.setItem("dishylink-theme", "dark");
 localStorage.setItem("dishylink-whats-new-seen", "1.3");
 localStorage.setItem("dishylink-installed-at", String(Date.now() - 2 * DAY_MS));
+// Every build can rate now, and the rating ask outranks the donation one.
+localStorage.setItem("dishylink-prompt-rating", "retired");
 
 const { AppPrompts } = await import("./AppPrompts");
 
@@ -56,5 +59,5 @@ test("the donation ask follows the release notes later in the same run", async (
   vi.spyOn(Date, "now").mockReturnValue(later);
   window.dispatchEvent(new Event("focus"));
   await settle();
-  expect(text()).toContain("Dishylink is free");
+  expect(text()).toContain("Help keep Dishylink going");
 });

@@ -1,0 +1,104 @@
+---
+const outlets: {
+  name: string;
+  href: string;
+  logo: string;
+  /** Shown instead of `logo` on the dark theme. */
+  darkLogo?: string;
+  label?: boolean;
+  class?: string;
+}[] = [
+  {
+    name: "DISHYtech",
+    href: "https://www.youtube.com/watch?v=eSyFHaO211Q",
+    logo: "/press/dishytech.webp",
+    label: true,
+  },
+  {
+    name: "MakeUseOf",
+    href: "https://www.makeuseof.com/the-only-problem-with-starlink-is-fixed-now-it-didnt-come-from-spacex/",
+    logo: "/press/makeuseof.svg",
+    // The full wordmark's "MAKE USE OF" is white, so light pages get the badge alone.
+    darkLogo: "/press/makeuseof-full.svg",
+    class: "h-6",
+  },
+  {
+    name: "iProfesional",
+    href: "https://www.iprofesional.com/tecnologia/462195-como-controlar-starlink-desde-tu-computadora-con-aplicacion-gratuita-dishylink",
+    logo: "/press/iprofesional.svg",
+    // The wordmark is white only.
+    class: "h-3.5 invert dark:invert-0",
+  },
+  {
+    name: "MacGeneration",
+    href: "https://www.macg.co/logiciels/2026/09/dishlylink-une-app-macos-pour-gerer-tous-les-reglages-dune-connexion-starlink-310897",
+    logo: "/press/macgeneration.webp",
+    label: true,
+  },
+  {
+    name: "Diego Dicas Tech",
+    href: "https://www.youtube.com/watch?v=gfOi7aQ7iUw",
+    logo: "/press/diego-dicas-tech.webp",
+    label: true,
+  },
+  {
+    name: "BandaAncha",
+    href: "https://bandaancha.eu/foros/dishylink-app-open-source-controlar-1760702",
+    logo: "/bandaancha.svg",
+    label: true,
+  },
+  {
+    name: "Product Hunt",
+    href: "https://www.producthunt.com/products/dishylink",
+    logo: "/producthunt.svg",
+    label: true,
+  },
+  {
+    name: "r/Starlink",
+    href: "https://www.reddit.com/r/Starlink/comments/1vjx7qi/i_built_a_free_opensource_desktop_app_to_monitor/",
+    logo: "/reddit.svg",
+    label: true,
+  },
+];
+---
+
+<section class="mx-auto max-w-7xl px-5 pt-16 pb-16 sm:pt-24 sm:pb-24">
+  <p class="text-center font-mono text-[11px] uppercase tracking-[0.35em] text-ink-3">Featured</p>
+  <ul class="mt-8 flex flex-wrap items-center justify-center gap-x-8 gap-y-4 lg:flex-nowrap lg:justify-between lg:gap-x-6">
+    {
+      outlets.map((outlet) => (
+        <li>
+          <a
+            href={outlet.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={outlet.name}
+            class="flex items-center gap-2 opacity-80 transition-opacity hover:opacity-100"
+          >
+            <img
+              src={outlet.logo}
+              alt=""
+              class:list={[
+                "w-auto object-contain",
+                outlet.class ?? "size-5 rounded-full",
+                outlet.darkLogo && "dark:hidden",
+              ]}
+            />
+            {outlet.darkLogo && (
+              <img
+                src={outlet.darkLogo}
+                alt=""
+                class:list={["hidden w-auto object-contain dark:block", outlet.class]}
+              />
+            )}
+            {outlet.label && (
+              <span class="text-[14px] font-semibold tracking-tight whitespace-nowrap text-ink">
+                {outlet.name}
+              </span>
+            )}
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+</section>

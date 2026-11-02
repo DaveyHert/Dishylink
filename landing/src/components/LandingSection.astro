@@ -39,7 +39,7 @@ const { label, tint = false, id, center = false, backdrop } = Astro.props;
       center && "text-center [&>h2]:mx-auto [&>p]:mx-auto",
     ]}
   >
-    <div class="flex items-center gap-3.5 text-left font-mono text-[11px] uppercase tracking-[0.14em] text-ink-3">
+    <div class="flex items-center gap-3.5 text-left font-mono text-[11px] uppercase tracking-[0.14em] text-ink-3 dark:text-ink/65">
       <span class="before:[content:counter(section,decimal-leading-zero)'_/_']">{label}</span>
     </div>
     <slot />

@@ -1,13 +1,8 @@
-export type ReviewStore = "chrome" | "edge" | "firefox";
-
-const STORE_NAME: Record<ReviewStore, string> = {
-  chrome: "Chrome Web Store",
-  edge: "Edge Add-ons",
-  firefox: "Firefox Add-ons",
-};
+/** "site" is dishylink.com/review, for the builds no store lists: desktop and web. */
+export type ReviewStore = "chrome" | "edge" | "firefox" | "site";
 
 // Edge has no /reviews route; it 404s, so Edge lands on the listing.
-const REVIEW_URL: Record<ReviewStore, string> = {
+const REVIEW_URL: Record<Exclude<ReviewStore, "site">, string> = {
   chrome:
     "https://chromewebstore.google.com/detail/dishylink/pljgamnkfokhbchiiommnblkjffffnna/reviews",
   edge: "https://microsoftedge.microsoft.com/addons/detail/pknccegejhlgmeiojalenedmkbcaimdo",
@@ -20,21 +15,27 @@ function buildTarget(): string | undefined {
 }
 
 export function reviewStore(): ReviewStore | null {
-  if (typeof window !== "undefined" && window.dishlink) return null;
+  if (typeof window !== "undefined" && window.dishlink) return "site";
 
   const target = buildTarget();
   if (target === "firefox") return "firefox";
   if (target === "edge") return "edge";
-  if (target !== "chrome") return null;
+  if (target !== "chrome") return "site";
 
   const ua = typeof navigator === "undefined" ? "" : navigator.userAgent;
   return ua.includes("Edg/") ? "edge" : "chrome";
 }
 
-export function reviewStoreName(store: ReviewStore): string {
-  return STORE_NAME[store];
+export function reviewUrl(store: ReviewStore): string {
+  if (store !== "site") return REVIEW_URL[store];
+  return `https://dishylink.com/review/?from=${sitePlatform()}`;
 }
 
-export function reviewUrl(store: ReviewStore): string {
-  return REVIEW_URL[store];
+// Recorded with the review so it can be shown as from the Mac or Windows app.
+function sitePlatform(): string {
+  if (typeof window === "undefined" || !window.dishlink) return "web";
+  const ua = typeof navigator === "undefined" ? "" : navigator.userAgent;
+  if (ua.includes("Mac")) return "mac";
+  if (ua.includes("Windows")) return "windows";
+  return "linux";
 }

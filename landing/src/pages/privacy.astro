@@ -1,0 +1,26 @@
+---
+import { getEntry, render } from "astro:content";
+import Base from "../layouts/Base.astro";
+import Nav from "../components/Nav.astro";
+import Footer from "../components/Footer.astro";
+
+const policy = await getEntry("policies", "privacy");
+if (!policy) throw new Error("PRIVACY.md is missing from the repo root");
+const { Content } = await render(policy);
+---
+
+<Base
+  title="Privacy policy — Dishylink"
+  description="What the Dishylink app does with your data: everything it measures stays on your machine, and connecting a Starlink account is optional."
+  path="/privacy/"
+>
+  <Nav />
+
+  <main
+    class="mx-auto max-w-2xl px-5 pt-20 pb-28 sm:pt-28 [&_a]:font-semibold [&_a]:text-ink [&_a]:underline [&_a]:decoration-rule-2 [&_a]:underline-offset-4 hover:[&_a]:decoration-ink [&_code]:rounded [&_code]:bg-surface [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.9em] [&_h1]:text-section [&_h1]:font-semibold [&_h1]:text-balance [&_h2]:mt-12 [&_h2]:text-xl [&_h2]:font-semibold [&_li]:mt-2 [&_li]:pl-1 [&_p]:mt-4 [&_p]:text-ink-2 [&_p]:leading-relaxed [&_ul]:mt-4 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:text-ink-2 [&_ul]:leading-relaxed [&_ul]:marker:text-ink-3"
+  >
+    <Content />
+  </main>
+
+  <Footer />
+</Base>

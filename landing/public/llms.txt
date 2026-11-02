@@ -33,7 +33,7 @@ Dishylink is an unofficial, independent project with no affiliation to SpaceX or
 - [Local API notes](https://github.com/DaveyHert/dishylink/blob/master/LOCAL-API.md): measured behaviour of the dish's and router's undocumented local gRPC API — sample clocks, poll costs, fields that exist but are never populated, and hardware-safety findings.
 - [History recorder](https://github.com/DaveyHert/dishylink/blob/master/collector/README.md): how the always-on recording service runs and its on-disk format.
 - [Contributing](https://github.com/DaveyHert/dishylink/blob/master/CONTRIBUTING.md)
-- [Privacy policy](https://github.com/DaveyHert/dishylink/blob/master/PRIVACY.md): what stays on the machine, and what the optional account feature does.
+- [Privacy policy](https://dishylink.com/privacy/): what stays on the machine, and what the optional account feature does.
 - [Disclaimer](https://github.com/DaveyHert/dishylink/blob/master/DISCLAIMER.md): independence from SpaceX/Starlink, no warranty, no liability.
 - [FAQ](https://dishylink.com/#faq)
 

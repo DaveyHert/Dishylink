@@ -1,0 +1,559 @@
+---
+import SectionRule from "./SectionRule.astro";
+import CoffeeIcon from "./CoffeeIcon.astro";
+import {
+  reviews as allReviews,
+  silentFaces,
+  rating,
+  reviewLinks,
+  SOURCES,
+} from "../data/reviews";
+
+// A staircase of tiles rising to the right. Some tiles are reviewers; one at a
+// time is lit and its quote shows above. Placement is seeded, never
+// Math.random(), so the HTML and every reviewer's tile stay put between builds.
+
+const COLS = 53;
+const ROWS = 23;
+// The last column rises this many dots above the rest, so the top tapers to one.
+const PEAK = 2;
+// Second-row dots over the flat opening run: on its 4th and 7th dots.
+const STEPS = [3, 6];
+
+function seeded(seed: number) {
+  return () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const random = seeded(20261104);
+
+// Column heights: a flat run of single tiles, a slow climb of one row every six
+// columns, then an exponential rise into the last few columns.
+const heights = Array.from({ length: COLS }, (_, col) =>
+  col === COLS - 1
+    ? ROWS
+    : col === COLS - 2
+      ? ROWS - PEAK
+      : STEPS.includes(col)
+        ? 2
+        : Math.min(
+            ROWS - PEAK,
+            Math.round(1 + Math.max(0, col - 6) / 6 + Math.exp(0.32 * (col - 44))),
+          ),
+);
+
+const TONES = ["bg-ink/[0.07]", "bg-ink/[0.085]", "bg-ink/[0.1]", "bg-ink/[0.115]"];
+
+interface Cell {
+  col: number;
+  /** 0 is the bottom row. */
+  row: number;
+  tone: string;
+  reviewer?: number;
+  silent?: string;
+}
+
+// Tiles lighten toward the top of each column and toward the left, and the odd
+// one is missing, so the top edge reads ragged rather than ruled.
+const cells: Cell[] = [];
+heights.forEach((height, col) => {
+  const raggedTop = col < COLS - 2 && height > 2 && random() < 0.3;
+  for (let row = 0; row < height; row++) {
+    if (raggedTop && row === height - 1) continue;
+    if (row > 0 && col < COLS - 1 && !STEPS.includes(col) && random() < 0.05) continue;
+    const depth = height - 1 - row;
+    const strength =
+      Math.min(1, (depth + 1) / 3) * (0.6 + (0.4 * col) / (COLS - 1)) * (0.6 + 0.8 * random());
+    cells.push({ col, row, tone: TONES[Math.min(TONES.length - 1, Math.floor(strength * 4))] });
+  }
+});
+
+// The peak's 1st and 3rd dots from the top stay plain.
+const PLAIN_PEAK_ROWS = [ROWS - 1, ROWS - 3];
+const seats = cells.filter(
+  (cell) => !(cell.col === COLS - 1 && PLAIN_PEAK_ROWS.includes(cell.row)),
+);
+const reviews = allReviews.slice(0, seats.length);
+
+// Each kind sorted by its own evenly spaced position, so the wordless faces are
+// mixed through the readable ones rather than bunched at one end.
+const faces = [
+  ...reviews.map((_, index) => ({ reviewer: index, at: (index + 0.5) / reviews.length })),
+  ...silentFaces.map((silent, index) => ({ silent, at: (index + 0.5) / silentFaces.length })),
+]
+  .sort((a, b) => a.at - b.at)
+  .slice(0, seats.length);
+
+// One face per equal run of tiles, so they spread across the whole shape
+// instead of bunching where the columns are tallest.
+const stride = seats.length / faces.length;
+faces.forEach((face, index) => {
+  // Whole-number runs that never overlap, so no two faces share a tile.
+  const start = Math.ceil(index * stride);
+  const end = Math.ceil((index + 1) * stride);
+  Object.assign(seats[start + Math.floor(random() * (end - start))], face);
+});
+
+const average = rating.average.toFixed(1);
+---
+
+<section id="reviews" class="overflow-hidden">
+  <SectionRule />
+  <div data-reviews class="mx-auto max-w-7xl px-5 pt-24 pb-16 lg:pt-32">
+    <div class="grid">
+    {/* Only the words and caption take the pointer; a long quote's empty box would otherwise cover tiles. */}
+    <div class="pointer-events-none relative z-10 max-w-2xl xl:max-w-xl xl:self-start xl:[grid-area:1/1]">
+    <p class="pointer-events-auto inline-flex rounded-md border border-rule px-2.5 py-1 text-sm text-ink-2">Reviews</p>
+
+    <h2 class="pointer-events-auto mt-6 max-w-2xl text-[clamp(1.75rem,1.2rem+1.8vw,2.6rem)] leading-[1.1] font-semibold tracking-[-0.02em] text-balance">
+      Loved by Starlink owners.
+      <span class="mt-2 block text-[clamp(1.05rem,0.9rem+0.6vw,1.35rem)] font-medium tracking-normal text-ink-3">Rated <span class="text-gold">{average}</span> from <span class="text-ink">{rating.count}</span> reviews.</span>
+    </h2>
+
+    <div class="mt-10">
+      <div data-reviews-live data-reviews-hold aria-live="off" class="grid">
+        {
+          reviews.map((review, index) => {
+            const source = SOURCES[review.source];
+            return (
+              <figure
+                data-review-quote={index}
+                data-active={index === 0 ? "" : undefined}
+                class="invisible translate-y-1.5 opacity-0 transition-[opacity,translate,visibility] duration-500 [grid-area:1/1] data-active:visible data-active:translate-y-0 data-active:opacity-100 motion-reduce:transition-none"
+              >
+                <blockquote
+                  class:list={[
+                    "font-serif text-pretty",
+                    review.text.length <= 170
+                      ? "text-[clamp(1.3rem,1.05rem+0.8vw,1.7rem)] leading-[1.35]"
+                      : review.text.length <= 300
+                        ? "text-[clamp(1.15rem,0.95rem+0.6vw,1.45rem)] leading-[1.4]"
+                        : "text-[clamp(1.05rem,0.9rem+0.4vw,1.25rem)] leading-[1.45]",
+                  ]}
+                >
+                  <span class="pointer-events-auto">“{review.text}”</span>
+                </blockquote>
+                <figcaption class="pointer-events-auto mt-4 flex w-fit flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-2">
+                  <span class="font-semibold text-ink">{review.name}</span>
+                  <span class="text-ink-3" aria-hidden="true">·</span>
+                  <a
+                    href={review.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="inline-flex items-center gap-1.5 hover:text-ink"
+                  >
+                    {source.logo ? (
+                      <img src={source.logo} alt="" class="size-3.5" width="14" height="14" />
+                    ) : (
+                      <CoffeeIcon class="size-3.5" />
+                    )}
+                    {source.label}
+                  </a>
+                  {review.via && <span class="text-ink-3">· {review.via}</span>}
+                  {review.translatedFrom && (
+                    <span class="text-ink-3">· Translated from {review.translatedFrom}</span>
+                  )}
+                  {review.stars !== null && (
+                    <span class="flex text-gold" role="img" aria-label={`${review.stars} out of 5 stars`}>
+                      {Array.from({ length: review.stars }, () => (
+                        <svg viewBox="0 0 20 20" class="size-3.5" fill="currentColor" aria-hidden="true">
+                          <path d="m10 1.8 2.5 5.3 5.8.7-4.3 4 1.1 5.7L10 14.7l-5.1 2.8L6 11.8l-4.3-4 5.8-.7L10 1.8Z" />
+                        </svg>
+                      ))}
+                    </span>
+                  )}
+                </figcaption>
+              </figure>
+            );
+          })
+        }
+      </div>
+    </div>
+    </div>
+
+    {/* Below xl the tiles sit under the text. From xl they share its grid cell:
+        the text fills the empty top-left the staircase leaves, as in the design. */}
+    <div
+      role="group"
+      aria-label="Reviewers"
+      data-reviews-hold
+      data-cols={COLS}
+      data-rows={ROWS}
+      class="relative mt-12 grid gap-[2px] sm:gap-[3px] lg:gap-1 xl:mt-0 xl:self-end xl:[grid-area:1/1]"
+      style={`aspect-ratio:${COLS}/${ROWS};grid-template-columns:repeat(${COLS},minmax(0,1fr));grid-template-rows:repeat(${ROWS},minmax(0,1fr))`}
+    >
+      {
+        cells.map((cell) => {
+          const place = `grid-column:${cell.col + 1};grid-row:${ROWS - cell.row}`;
+          if (cell.silent) {
+            return (
+              <span class="aspect-square self-center overflow-hidden rounded-full bg-ink/[0.19]" style={place}>
+                <img
+                  src={cell.silent}
+                  alt=""
+                  width="96"
+                  height="96"
+                  loading="lazy"
+                  decoding="async"
+                  class="block size-full object-cover opacity-35 grayscale"
+                />
+              </span>
+            );
+          }
+          return cell.reviewer === undefined ? (
+            <span class:list={["aspect-square self-center rounded-full", cell.tone]} style={place} />
+          ) : (
+            <button
+              type="button"
+              data-review-tile={cell.reviewer}
+              data-active={cell.reviewer === 0 ? "" : undefined}
+              aria-pressed={cell.reviewer === 0 ? "true" : "false"}
+              tabindex={cell.reviewer === 0 ? 0 : -1}
+              aria-label={`Review by ${reviews[cell.reviewer].name}`}
+              style={place}
+              class="group aspect-square cursor-pointer self-center overflow-hidden rounded-full bg-ink/[0.19] transition-shadow duration-300 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-warm data-active:shadow-[0_0_10px_2px_color-mix(in_oklab,var(--color-warm)_50%,transparent)]"
+            >
+              {/* Dimmed and grey until picked, so the lit reviewer is the one in colour. */}
+              <img
+                src={reviews[cell.reviewer].avatar}
+                alt=""
+                width="96"
+                height="96"
+                loading="lazy"
+                decoding="async"
+                class="block size-full object-cover opacity-35 grayscale transition-[opacity,filter] duration-300 group-hover:opacity-75 group-data-active:opacity-100 group-data-active:grayscale-0"
+              />
+            </button>
+          );
+        })
+      }
+      <svg
+        data-reviews-trail
+        aria-hidden="true"
+        class="pointer-events-none absolute inset-0 size-full overflow-visible"
+      >
+      </svg>
+    </div>
+    </div>
+    <div class="mt-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-3 text-sm text-ink-3">
+      <div class="flex items-center gap-3">
+        <button
+          type="button"
+          data-reviews-pause
+          aria-pressed="false"
+          aria-label="Pause reviews"
+          class="group grid size-7 flex-none cursor-pointer place-items-center rounded-md border border-rule text-ink-2 transition-colors hover:text-ink"
+        >
+          <svg viewBox="0 0 16 16" class="size-3 group-aria-pressed:hidden" fill="currentColor" aria-hidden="true">
+            <rect x="3.5" y="3" width="3" height="10" rx="1" /><rect x="9.5" y="3" width="3" height="10" rx="1" />
+          </svg>
+          <svg viewBox="0 0 16 16" class="hidden size-3 group-aria-pressed:block" fill="currentColor" aria-hidden="true">
+            <path d="M4.5 2.8v10.4a.6.6 0 0 0 .9.5l8.2-5.2a.6.6 0 0 0 0-1L5.4 2.3a.6.6 0 0 0-.9.5Z" />
+          </svg>
+        </button>
+        <span>Every bolder tile is a real reviewer. Pick one to read theirs.</span>
+      </div>
+      <span>
+        Leave a review on
+        {
+          reviewLinks.map((link, i) => (
+            <><a href={link.href} target="_blank" rel="noopener noreferrer" class="font-semibold text-ink-2 underline decoration-rule-2 underline-offset-4 hover:text-ink">{link.label}</a>{i < reviewLinks.length - 2 ? ", " : i === reviewLinks.length - 2 ? " or " : ""}</>
+          ))
+        }
+      </span>
+    </div>
+  </div>
+</section>
+
+<script>
+  const root = document.querySelector<HTMLElement>("[data-reviews]");
+
+  if (root) {
+    const tiles = [...root.querySelectorAll<HTMLButtonElement>("[data-review-tile]")].sort(
+      (a, b) => Number(a.dataset.reviewTile) - Number(b.dataset.reviewTile),
+    );
+    const quotes = [...root.querySelectorAll<HTMLElement>("[data-review-quote]")];
+    const live = root.querySelector<HTMLElement>("[data-reviews-live]");
+    const pause = root.querySelector<HTMLButtonElement>("[data-reviews-pause]");
+    const INTERVAL = 6000;
+
+    const svg = root.querySelector<SVGSVGElement>("[data-reviews-trail]");
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const NS = "http://www.w3.org/2000/svg";
+    const TAIL = 80;
+    // SVG can't fade a stroke along its length, so the tail is short slices, each fainter.
+    const SLICES = 14;
+
+    let active = 0;
+    let timer: number | undefined;
+    let frame = 0;
+    let stopped = reduced;
+    let held = false;
+    let inView = false;
+
+    const stroke = (el: SVGElement, width: number) => {
+      el.setAttribute("fill", "none");
+      el.setAttribute("stroke", "var(--color-warm)");
+      el.setAttribute("stroke-width", String(width));
+      el.setAttribute("stroke-linecap", "round");
+      el.setAttribute("stroke-linejoin", "round");
+    };
+    const slices = Array.from({ length: SLICES }, (_, i) => {
+      const path = document.createElementNS(NS, "path");
+      stroke(path, 2 - (i / SLICES) * 1.2);
+      path.setAttribute("opacity", String((1 - i / SLICES) ** 1.6));
+      svg?.append(path);
+      return path;
+    });
+    const ring = document.createElementNS(NS, "circle");
+    stroke(ring, 1.6);
+    ring.style.filter =
+      "drop-shadow(0 0 4px color-mix(in oklab, var(--color-warm) 70%, transparent))";
+    ring.style.opacity = "0";
+    ring.style.transition = "opacity 350ms ease";
+    svg?.append(ring);
+
+    // Not offsetLeft/Width: they round to whole pixels and tiles sit on fractional ones,
+    // which pushes the ring visibly off-centre at this size.
+    const centre = (tile: HTMLElement) => {
+      const t = tile.getBoundingClientRect();
+      const box = svg?.getBoundingClientRect() ?? t;
+      return {
+        x: t.left - box.left + t.width / 2,
+        y: t.top - box.top + t.height / 2,
+        // Flush with the avatar: any dark gap merges with dark edges in the picture
+        // (a black shirt, say) and reads as uneven padding.
+        r: Math.max(t.width, t.height) / 2 + 0.8,
+      };
+    };
+
+    const placeRing = (c: ReturnType<typeof centre>, drawn: number, angle: number) => {
+      const length = 2 * Math.PI * c.r;
+      ring.setAttribute("cx", String(c.x));
+      ring.setAttribute("cy", String(c.y));
+      ring.setAttribute("r", String(c.r));
+      ring.setAttribute("transform", `rotate(${angle} ${c.x} ${c.y})`);
+      ring.style.strokeDasharray = `${drawn * length} ${length}`;
+    };
+
+    const ease = (t: number) => (t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2);
+
+    const grid = svg?.parentElement;
+    const cellOf = (tile: HTMLElement) => ({
+      col: parseInt(tile.style.gridColumn, 10),
+      row: parseInt(tile.style.gridRow, 10),
+    });
+    const dot = (col: number, row: number) => {
+      const box = svg!.getBoundingClientRect();
+      const style = getComputedStyle(grid!);
+      const gx = parseFloat(style.columnGap) || 0;
+      const gy = parseFloat(style.rowGap) || 0;
+      const cols = Number(grid!.dataset.cols);
+      const rows = Number(grid!.dataset.rows);
+      const w = (box.width - (cols - 1) * gx) / cols;
+      const h = (box.height - (rows - 1) * gy) / rows;
+      return { x: (col - 1) * (w + gx) + w / 2, y: (row - 1) * (h + gy) + h / 2 };
+    };
+
+    // Highest tile in each column (smallest grid row), so the snake never leaves the staircase.
+    const tops = new Map<number, number>();
+    for (const tile of grid?.querySelectorAll<HTMLElement>("[style*='grid-row']") ?? []) {
+      const { col, row } = cellOf(tile);
+      tops.set(col, Math.min(tops.get(col) ?? Infinity, row));
+    }
+    const onTiles = (col: number, row: number) => row >= (tops.get(col) ?? Infinity);
+
+    // Planned from the lower face: down to a row every column in between reaches,
+    // across it, 45° through the dots, then up the higher face's column. Columns
+    // only grow to the right, so that path stays on tiles; reversed when leaving
+    // the higher face.
+    const route = (from: HTMLElement, to: HTMLElement) => {
+      const a = cellOf(from);
+      const b = cellOf(to);
+      const leavingHigher = a.row < b.row;
+      const [low, high] = leavingHigher ? [b, a] : [a, b];
+      let floor = low.row;
+      for (let col = Math.min(low.col, high.col) + 1; col < Math.max(low.col, high.col); col++) {
+        floor = Math.max(floor, tops.get(col) ?? floor);
+      }
+      const dx = high.col - low.col;
+      const dy = high.row - floor;
+      const shorter = Math.min(Math.abs(dx), Math.abs(dy));
+      let diagonal = shorter - Math.floor(shorter / 3);
+      // A 45° step also needs both corner tiles, or it cuts across an empty corner.
+      const fits = (d: number) =>
+        Array.from({ length: d + 1 }, (_, k) => k).every((k) => {
+          const col = low.col + Math.sign(dx) * (Math.abs(dx) - d + k);
+          const row = floor + Math.sign(dy) * k;
+          return (
+            onTiles(col, row) &&
+            (k === d ||
+              (onTiles(col, row + Math.sign(dy)) && onTiles(col + Math.sign(dx), row)))
+          );
+        });
+      while (diagonal > 0 && !fits(diagonal)) diagonal--;
+      const across = Math.abs(dx) - diagonal;
+      const points = [
+        dot(low.col, floor),
+        dot(low.col + Math.sign(dx) * across, floor),
+        dot(low.col + Math.sign(dx) * (across + diagonal), floor + Math.sign(dy) * diagonal),
+      ];
+      return leavingHigher ? points.reverse() : points;
+    };
+
+    const travel = (from: HTMLElement, to: HTMLElement, onArrive: () => void) => {
+      cancelAnimationFrame(frame);
+      const a = centre(from);
+      const b = centre(to);
+      const near = (p: { x: number; y: number }, q: { x: number; y: number }) =>
+        Math.hypot(p.x - q.x, p.y - q.y) < 0.5;
+      const points = [a, ...route(from, to), b].filter(
+        (p, i, all) => i === 0 || !near(p, all[i - 1]),
+      );
+      const toward = (p: { x: number; y: number }, q: { x: number; y: number }, r: number) => {
+        const length = Math.hypot(q.x - p.x, q.y - p.y) || 1;
+        return { x: p.x + ((q.x - p.x) / length) * r, y: p.y + ((q.y - p.y) / length) * r };
+      };
+      const start = toward(a, points[1] ?? b, a.r);
+      const entry = toward(b, points.at(-2) ?? a, b.r);
+      const legs = [start, ...points.slice(1, -1), entry];
+      const opposite = { x: 2 * b.x - entry.x, y: 2 * b.y - entry.y };
+      const d = `M${legs.map((p) => `${p.x} ${p.y}`).join("L")}A${b.r} ${b.r} 0 1 1 ${opposite.x} ${opposite.y}A${b.r} ${b.r} 0 1 1 ${entry.x} ${entry.y}`;
+      slices.forEach((path) => path.setAttribute("d", d));
+
+      const line = legs
+        .slice(1)
+        .reduce((sum, p, i) => sum + Math.hypot(p.x - legs[i].x, p.y - legs[i].y), 0);
+      const circle = 2 * Math.PI * b.r;
+      const total = line + circle;
+      const angle = (Math.atan2(entry.y - b.y, entry.x - b.x) * 180) / Math.PI;
+      const duration = Math.min(1800, 700 + total * 0.5);
+      const began = performance.now();
+      let arrived = false;
+      ring.style.opacity = "1";
+
+      const step = (now: number) => {
+        const t = Math.min(1, (now - began) / duration);
+        const position = ease(t) * (total + TAIL);
+        const head = Math.min(position, total);
+        slices.forEach((path, i) => {
+          const tailStart = Math.max(0, position - ((i + 1) * TAIL) / SLICES);
+          const tailEnd = Math.min(head, position - (i * TAIL) / SLICES);
+          path.style.strokeDasharray = `${Math.max(0, tailEnd - tailStart)} ${total + TAIL}`;
+          path.style.strokeDashoffset = String(-tailStart);
+        });
+        placeRing(b, Math.max(0, head - line) / circle, angle);
+        if (!arrived && head >= line) {
+          arrived = true;
+          onArrive();
+        }
+        if (t < 1) frame = requestAnimationFrame(step);
+      };
+      frame = requestAnimationFrame(step);
+    };
+
+    const show = (next: number, announce = false) => {
+      const from = tiles[active];
+      from.removeAttribute("data-active");
+      quotes[active].removeAttribute("data-active");
+      quotes[next].setAttribute("data-active", "");
+      const arrive = () => tiles[next].setAttribute("data-active", "");
+      if (reduced || next === active) {
+        placeRing(centre(tiles[next]), 1, 0);
+        ring.style.opacity = "1";
+        arrive();
+      } else {
+        travel(from, tiles[next], arrive);
+      }
+      tiles[active].tabIndex = -1;
+      tiles[active].setAttribute("aria-pressed", "false");
+      tiles[next].tabIndex = 0;
+      tiles[next].setAttribute("aria-pressed", "true");
+      live?.setAttribute("aria-live", announce ? "polite" : "off");
+      active = next;
+    };
+
+    // Reviewers are laid out in list order, so stepping through the list would only
+    // ever hop to a neighbour. A shuffled bag spreads the jumps across the shape
+    // and still shows everyone once per round.
+    let bag: number[] = [];
+    const nextRandom = () => {
+      if (!bag.length) {
+        bag = tiles.map((_, i) => i).filter((i) => i !== active);
+        for (let i = bag.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [bag[i], bag[j]] = [bag[j], bag[i]];
+        }
+      }
+      const next = bag.pop()!;
+      return next === active && bag.length ? bag.pop()! : next;
+    };
+
+    const schedule = () => {
+      window.clearInterval(timer);
+      timer = undefined;
+      pause?.setAttribute("aria-pressed", String(stopped));
+      pause?.setAttribute("aria-label", stopped ? "Play reviews" : "Pause reviews");
+      if (stopped || held || !inView || document.hidden || tiles.length < 2) return;
+      timer = window.setInterval(() => show(nextRandom()), INTERVAL);
+    };
+
+    tiles.forEach((tile, index) => {
+      tile.addEventListener("click", () => {
+        show(index, true);
+        schedule();
+      });
+      tile.addEventListener("keydown", (event) => {
+        const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+        if (!step) return;
+        event.preventDefault();
+        const next = (index + step + tiles.length) % tiles.length;
+        show(next, true);
+        tiles[next].focus();
+      });
+    });
+
+    pause?.addEventListener("click", () => {
+      stopped = !stopped;
+      schedule();
+    });
+
+    const hold = (on: boolean) => () => {
+      held = on;
+      schedule();
+    };
+    // Only the quote and the tiles hold the rotation. Scrolling fires pointerenter
+    // on whatever lands under a resting cursor, so holding on the whole section
+    // would leave it paused for anyone who scrolled here with the mouse over it.
+    for (const area of root.querySelectorAll("[data-reviews-hold]")) {
+      area.addEventListener("pointerenter", hold(true));
+      area.addEventListener("pointerleave", hold(false));
+    }
+    // Keyboard focus only: a clicked tile keeps focus, and that should not stop it for good.
+    root.addEventListener("focusin", (event) => {
+      if ((event.target as Element).matches(":focus-visible")) hold(true)();
+    });
+    root.addEventListener("focusout", (event) => {
+      if (!root.contains(event.relatedTarget as Node | null)) hold(false)();
+    });
+    document.addEventListener("visibilitychange", schedule);
+
+    new IntersectionObserver(([entry]) => {
+      inView = entry.isIntersecting;
+      schedule();
+    }).observe(root);
+
+    const settleRing = () => {
+      if (!tiles.length) return;
+      cancelAnimationFrame(frame);
+      slices.forEach((path) => (path.style.strokeDasharray = "0 1"));
+      placeRing(centre(tiles[active]), 1, 0);
+      ring.style.opacity = "1";
+    };
+    settleRing();
+    addEventListener("resize", settleRing);
+  }
+</script>

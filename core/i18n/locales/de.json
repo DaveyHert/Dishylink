@@ -440,10 +440,11 @@
     "maybeLater": "Vielleicht später",
     "dontAskAgain": "Nicht mehr fragen",
     "ratingTitle": "Gefällt Ihnen Dishylink?",
-    "ratingBody": "Eine Bewertung dauert zehn Sekunden, ist aber das Eine, was anderen Starlink-Besitzern hilft, die App zu finden.",
-    "rateOn": "Auf {{store}} bewerten",
-    "donationTitle": "Dishylink ist kostenlos und wird es immer bleiben.",
-    "donationBody": "Ich habe es in meiner Freizeit gebaut, weil es nichts Vergleichbares gab. Ihr einmaliger oder regelmäßiger Beitrag hilft sehr, es zu pflegen und aktuell zu halten. Bitte unterstützen Sie das Projekt, wenn Sie können!"
+    "ratingBody": "Wenn Dishylink Ihnen nützlich ist, hinterlassen Sie bitte eine kurze Bewertung. Das dauert nur ein paar Sekunden und hilft anderen Starlink-Besitzern, die App zu finden.",
+    "leaveReview": "Bewertung schreiben",
+    "edgeReviewHint": "Scrollen Sie nach unten zu <b>Benutzerbewertungen</b> und klicken Sie auf <b>Bewertung hinzufügen</b>.",
+    "donationTitle": "Helfen Sie, dass es mit Dishylink weitergeht",
+    "donationBody": "Ich habe Dishylink in meiner Freizeit entwickelt, weil es nichts Vergleichbares gab. Wenn es Ihnen nützlich ist, unterstützen Sie es bitte. Ihr einmaliger oder regelmäßiger Beitrag hilft sehr, es zu pflegen."
   },
   "whatsNew": {
     "title": "Neu in Dishylink {{version}}",

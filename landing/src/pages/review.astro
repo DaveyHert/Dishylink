@@ -1,0 +1,158 @@
+---
+import Base from "../layouts/Base.astro";
+import Nav from "../components/Nav.astro";
+import Footer from "../components/Footer.astro";
+import { TURNSTILE_SITE_KEY } from "../constants";
+
+const MAX_TEXT = 500;
+---
+
+<Base
+  title="Review Dishylink"
+  description="Tell other Starlink owners what you think of Dishylink."
+  path="/review/"
+>
+  <Nav />
+
+  <main class="mx-auto max-w-xl px-5 pt-20 pb-28 sm:pt-28">
+    <h1 class="text-section font-semibold text-balance">How's Dishylink working for you?</h1>
+    <p class="mt-4 text-lg text-ink-2">
+      Your review helps other Starlink owners find the app. It takes ten seconds.
+    </p>
+
+    <form data-review-form class="mt-10 space-y-8" novalidate>
+      <fieldset>
+        <legend class="text-sm font-semibold">Your rating</legend>
+        <div class="mt-3 flex flex-row-reverse justify-end gap-1">
+          {
+            [5, 4, 3, 2, 1].map((n) => (
+              <>
+                <input
+                  type="radio"
+                  name="stars"
+                  id={`stars-${n}`}
+                  value={n}
+                  required
+                  class="peer sr-only"
+                />
+                <label
+                  for={`stars-${n}`}
+                  aria-label={`${n} star${n > 1 ? "s" : ""}`}
+                  class="cursor-pointer text-rule-2 transition-colors peer-checked:text-gold hover:text-gold peer-focus-visible:outline-2 peer-focus-visible:outline-ink-3 [&:hover~label]:text-gold"
+                >
+                  <svg viewBox="0 0 20 20" class="size-9" fill="currentColor" aria-hidden="true">
+                    <path d="m10 1.8 2.5 5.3 5.8.7-4.3 4 1.1 5.7L10 14.7l-5.1 2.8L6 11.8l-4.3-4 5.8-.7L10 1.8Z" />
+                  </svg>
+                </label>
+              </>
+            ))
+          }
+        </div>
+      </fieldset>
+
+      <div>
+        <label for="review-text" class="text-sm font-semibold">Your review</label>
+        <textarea
+          id="review-text"
+          name="text"
+          required
+          maxlength={MAX_TEXT}
+          rows="4"
+          placeholder="What do you like about it?"
+          class="mt-3 block w-full resize-none rounded-xl border border-rule bg-surface px-4 py-3 text-ink placeholder:text-ink-3 focus:border-ink-3 focus:outline-none"
+        ></textarea>
+        <p class="mt-2 text-right font-mono text-[12px] text-ink-3">
+          <span data-review-count>0</span>/{MAX_TEXT}
+        </p>
+      </div>
+
+      <div>
+        <label for="review-name" class="text-sm font-semibold">
+          Name <span class="font-normal text-ink-3">(optional, shown with your review)</span>
+        </label>
+        <input
+          id="review-name"
+          name="name"
+          maxlength="40"
+          autocomplete="nickname"
+          placeholder="Anonymous"
+          class="mt-3 block w-full rounded-xl border border-rule bg-surface px-4 py-3 text-ink placeholder:text-ink-3 focus:border-ink-3 focus:outline-none"
+        />
+      </div>
+
+      <div class="cf-turnstile flex justify-center" data-sitekey={TURNSTILE_SITE_KEY} data-theme="auto"></div>
+
+      <p data-review-error class="hidden text-sm text-crit" role="alert"></p>
+
+      <button
+        type="submit"
+        class="w-full cursor-pointer rounded-full bg-ink px-6 py-3.5 font-semibold text-paper transition-opacity hover:opacity-90 disabled:cursor-default disabled:opacity-50"
+      >
+        Send review
+      </button>
+    </form>
+
+    <div data-review-thanks class="mt-10 hidden" role="status">
+      <p class="text-2xl font-semibold">Thank you!</p>
+      <p class="mt-3 text-lg text-ink-2">
+        Your review will appear on dishylink.com once it's been read.
+      </p>
+    </div>
+  </main>
+
+  <Footer />
+</Base>
+
+<script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+
+<script>
+  const form = document.querySelector<HTMLFormElement>("[data-review-form]");
+  const error = document.querySelector<HTMLElement>("[data-review-error]");
+  const thanks = document.querySelector<HTMLElement>("[data-review-thanks]");
+  const count = document.querySelector<HTMLElement>("[data-review-count]");
+  const textBox = document.querySelector<HTMLTextAreaElement>("#review-text");
+
+  // The app opens this page with ?from=mac|windows|web|… so a review records where it came from.
+  const platform = new URLSearchParams(location.search).get("from") ?? "web";
+
+  textBox?.addEventListener("input", () => {
+    if (count) count.textContent = String(textBox.value.length);
+  });
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = new FormData(form);
+    const fail = (message: string) => {
+      if (!error) return;
+      error.textContent = message;
+      error.classList.remove("hidden");
+    };
+    if (!data.get("stars")) return fail("Pick a star rating.");
+    if (!String(data.get("text") ?? "").trim()) return fail("Write a few words.");
+
+    const button = form.querySelector("button");
+    if (button) button.disabled = true;
+    error?.classList.add("hidden");
+
+    const response = await fetch("/api/reviews", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        stars: Number(data.get("stars")),
+        text: data.get("text"),
+        name: data.get("name"),
+        platform,
+        turnstile: data.get("cf-turnstile-response"),
+      }),
+    }).catch(() => null);
+
+    if (response?.ok) {
+      form.classList.add("hidden");
+      thanks?.classList.remove("hidden");
+      return;
+    }
+    const body = (await response?.json().catch(() => null)) as { error?: string } | null;
+    fail(body?.error ?? "Couldn't send your review. Check your connection and try again.");
+    if (button) button.disabled = false;
+  });
+</script>

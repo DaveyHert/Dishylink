@@ -177,7 +177,7 @@ export const sections: SectionContent[] = [
     label: "Network rules",
     id: "rules",
     layout: "media-right",
-    title: "Set the rules for every device on your network.",
+    title: "Set rules for every device on your network.",
     body: [
       "Set a data limit, a schedule or a timer on any device, or on a whole group at once. When the data or time runs out, Dishylink pauses it for you, then lets it back on when the next window opens.",
       "Connect your Starlink account and the pausing happens on its own.",

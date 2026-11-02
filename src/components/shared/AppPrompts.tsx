@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { PlayIcon, SparklesIcon } from "lucide-react";
 import { MediaDialog } from "./MediaDialog";
 import type { TranslationKey } from "@core/i18n/resources";
@@ -13,7 +13,7 @@ import { CoffeeIcon } from "../../assets/icons/CoffeeIcon";
 import { PatreonIcon } from "../../assets/icons/PatreonIcon";
 import { JobmateBanner } from "./JobmateBanner";
 import { promptDue, retirePrompt, snoozePrompt, type PromptId } from "@/lib/promptSchedule";
-import { reviewStore, reviewStoreName, reviewUrl } from "@/lib/storeReview";
+import { reviewStore, reviewUrl } from "@/lib/storeReview";
 import {
   highlightsSince,
   markWhatsNewSeen,
@@ -213,10 +213,21 @@ export function AppPrompts() {
             className='w-full cursor-pointer'
             onClick={() => acted(reviewUrl(store))}
           >
-            {t("prompts.rateOn", { store: reviewStoreName(store) })}
+            {t("prompts.leaveReview")}
           </Button>
         }
-      />
+      >
+        {/* Edge's listing can't be linked to its review box, so say where it is.
+            The labels quote Edge's own UI text in each language. */}
+        {store === "edge" && (
+          <p className='mx-auto mt-3 max-w-[440px] text-[13px] leading-relaxed text-ink-secondary'>
+            <Trans
+              i18nKey='prompts.edgeReviewHint'
+              components={{ b: <strong className='font-semibold text-ink' /> }}
+            />
+          </p>
+        )}
+      </PromptDialog>
     );
   }
 
