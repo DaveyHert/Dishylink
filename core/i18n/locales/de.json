@@ -447,6 +447,12 @@
   },
   "whatsNew": {
     "title": "Neu in Dishylink {{version}}",
+    "speedTitle": "Schneller in belebten Netzwerken.",
+    "speedBody": "Die App wird nicht mehr langsam, wenn sich das Ereignisprotokoll mit Hunderten von WLAN-Bandwechseln füllt.",
+    "signInTitle": "Starlink-Anmeldung bleibt erhalten.",
+    "signInBody": "Sie werden nicht mehr bei jedem erneuten Öffnen der App von Ihrem Starlink-Konto abgemeldet.",
+    "tiltTargetTitle": "Ziellinie für die Neigung.",
+    "tiltTargetBody": "Eine blasse gestrichelte Linie auf der Skala Neigung markiert jetzt die ideale Neigung Ihrer Antenne.",
     "languagesTitle": "Mehrsprachige Unterstützung.",
     "languagesBody": "Dishylink gibt es jetzt auf Englisch, Spanisch, Französisch, Deutsch und Portugiesisch. Ändern Sie die Sprache unter Einstellungen › App.",
     "reportsTitle": "Post-Mortem-Berichte zu Ausfällen.",

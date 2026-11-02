@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { PlayIcon, SparklesIcon } from "lucide-react";
 import { MediaDialog } from "./MediaDialog";
@@ -14,7 +14,13 @@ import { PatreonIcon } from "../../assets/icons/PatreonIcon";
 import { JobmateBanner } from "./JobmateBanner";
 import { promptDue, retirePrompt, snoozePrompt, type PromptId } from "@/lib/promptSchedule";
 import { reviewStore, reviewStoreName, reviewUrl } from "@/lib/storeReview";
-import { markWhatsNewSeen, WHATS_NEW_RELEASE, whatsNewDue } from "@/lib/whatsNew";
+import {
+  highlightsSince,
+  markWhatsNewSeen,
+  WHATS_NEW_RELEASE,
+  whatsNewDue,
+  whatsNewLastSeen,
+} from "@/lib/whatsNew";
 
 function open(url: string): void {
   // The desktop renderer has no shell access, so it crosses the preload bridge.
@@ -24,7 +30,8 @@ function open(url: string): void {
 
 type Showing = PromptId | "whatsNew";
 
-// Chosen once, so answering the first never promotes the second into the same sitting.
+const NEXT_ASK_GAP_MS = 3 * 60 * 60 * 1000;
+
 function choose(canRate: boolean): Showing | null {
   if (whatsNewDue()) return "whatsNew";
   if (canRate && promptDue("rating")) return "rating";
@@ -46,16 +53,6 @@ const FUNDING: {
     iconClassName: "text-[#ea4aaa]",
   },
   { href: SUPPORT_LINKS.patreon, icon: PatreonIcon, label: "support.patreon" },
-];
-
-// A row without a title carries on from the row above it.
-const HIGHLIGHTS: { title?: TranslationKey; body: TranslationKey }[] = [
-  { title: "whatsNew.languagesTitle", body: "whatsNew.languagesBody" },
-  { title: "whatsNew.reportsTitle", body: "whatsNew.reportsBody" },
-  { title: "whatsNew.timeFormatTitle", body: "whatsNew.timeFormatBody" },
-  { title: "whatsNew.eventLogTitle", body: "whatsNew.eventLogBody" },
-  { title: "whatsNew.fixesTitle", body: "whatsNew.factoryResetBody" },
-  { body: "whatsNew.chartsBody" },
 ];
 
 const WALKTHROUGH_EMBED = "https://www.youtube-nocookie.com/embed/BxpOIzJBlg8?autoplay=1&rel=0";
@@ -111,7 +108,7 @@ function WhatsNew({ onDone }: { onDone: () => void }) {
       onDismiss={onDone}
     >
       <ul className='mt-7 list-disc space-y-2.5 pl-5 text-left text-[14px] leading-relaxed text-ink-secondary marker:text-ink-muted'>
-        {HIGHLIGHTS.map(({ title, body }) => (
+        {highlightsSince(whatsNewLastSeen()).map(({ title, body }) => (
           <li key={body}>
             {title && <strong className='font-semibold text-ink'>{t(title)} </strong>}
             {t(body)}
@@ -153,16 +150,36 @@ function WhatsNew({ onDone }: { onDone: () => void }) {
 export function AppPrompts() {
   const { t } = useTranslation();
   const store = reviewStore();
-  const [showing, setShowing] = useState(() => choose(store !== null));
+  const canRate = store !== null;
+  const [showing, setShowing] = useState(() => choose(canRate));
+
+  useEffect(() => {
+    if (showing !== null) return;
+    const quietSinceMs = Date.now();
+    const askIfDue = (): void => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - quietSinceMs < NEXT_ASK_GAP_MS) return;
+      const next = choose(canRate);
+      if (next !== null) setShowing(next);
+    };
+    document.addEventListener("visibilitychange", askIfDue);
+    window.addEventListener("focus", askIfDue);
+    return () => {
+      document.removeEventListener("visibilitychange", askIfDue);
+      window.removeEventListener("focus", askIfDue);
+    };
+  }, [showing, canRate]);
 
   if (showing === null) return null;
+
+  const close = (): void => setShowing(null);
 
   if (showing === "whatsNew") {
     return (
       <WhatsNew
         onDone={() => {
           markWhatsNewSeen();
-          setShowing(null);
+          close();
         }}
       />
     );
@@ -170,16 +187,16 @@ export function AppPrompts() {
 
   const later = (): void => {
     snoozePrompt(showing);
-    setShowing(null);
+    close();
   };
   const never = (): void => {
     retirePrompt(showing);
-    setShowing(null);
+    close();
   };
   const acted = (url: string): void => {
     open(url);
     retirePrompt(showing);
-    setShowing(null);
+    close();
   };
 
   if (showing === "rating" && store !== null) {

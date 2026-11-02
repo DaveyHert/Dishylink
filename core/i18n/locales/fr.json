@@ -454,6 +454,12 @@
   },
   "whatsNew": {
     "title": "Nouveautés de Dishylink {{version}}",
+    "speedTitle": "Plus rapide sur les réseaux chargés.",
+    "speedBody": "L'application ne ralentit plus quand le journal des événements se remplit de centaines de changements de bande Wi-Fi.",
+    "signInTitle": "Connexion Starlink conservée.",
+    "signInBody": "Vous n'êtes plus déconnecté de votre compte Starlink à chaque réouverture de l'application.",
+    "tiltTargetTitle": "Ligne cible d'inclinaison.",
+    "tiltTargetBody": "Une fine ligne pointillée sur le cadran Inclinaison marque désormais l'inclinaison idéale de votre antenne.",
     "languagesTitle": "Prise en charge multilingue.",
     "languagesBody": "Dishylink est désormais disponible en anglais, espagnol, français, allemand et portugais. Changez de langue dans Paramètres › Application.",
     "reportsTitle": "Rapports post-mortem des pannes.",

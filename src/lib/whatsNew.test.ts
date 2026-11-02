@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readWhatsNewDue, WHATS_NEW_RELEASE } from "./whatsNew";
+import { highlightsSince, readWhatsNewDue, WHATS_NEW_RELEASE } from "./whatsNew";
 
 function storageWith(entries: Record<string, string> = {}): Storage {
   const store = new Map(Object.entries(entries));
@@ -46,5 +46,28 @@ describe("what's new", () => {
       "dishylink-whats-new-seen": WHATS_NEW_RELEASE,
     });
     expect(readWhatsNewDue(storage)).toBe(false);
+  });
+});
+
+describe("highlightsSince", () => {
+  const bodies = (lastSeen: string | null) => highlightsSince(lastSeen).map((item) => item.body);
+
+  it("shows someone on 1.3 only what 1.3.1 added", () => {
+    expect(bodies("1.3")).toEqual([
+      "whatsNew.speedBody",
+      "whatsNew.signInBody",
+      "whatsNew.tiltTargetBody",
+    ]);
+  });
+
+  it("shows an upgrade from before the notes every release, newest first", () => {
+    const all = bodies(null);
+    expect(all.slice(0, 3)).toEqual(bodies("1.3"));
+    expect(all).toContain("whatsNew.languagesBody");
+    expect(all).toContain("whatsNew.chartsBody");
+  });
+
+  it("shows nothing to someone who already saw the newest notes", () => {
+    expect(bodies(WHATS_NEW_RELEASE)).toEqual([]);
   });
 });

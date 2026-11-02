@@ -447,6 +447,12 @@
   },
   "whatsNew": {
     "title": "What’s new in Dishylink {{version}}",
+    "speedTitle": "Faster on busy networks.",
+    "speedBody": "The app no longer slows down when your event log fills up with hundreds of WiFi band switches.",
+    "signInTitle": "Stays signed in to Starlink.",
+    "signInBody": "You’re no longer signed out of your Starlink account every time you reopen the app.",
+    "tiltTargetTitle": "Tilt target line.",
+    "tiltTargetBody": "A faint dashed line on the Tilt dial now marks your dish’s ideal tilt.",
     "languagesTitle": "Multi-language support.",
     "languagesBody": "Dishylink now comes in English, Spanish, French, German and Portuguese. Change it in Settings › App.",
     "reportsTitle": "Outage post-mortem reports.",

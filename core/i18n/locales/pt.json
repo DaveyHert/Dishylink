@@ -454,6 +454,12 @@
   },
   "whatsNew": {
     "title": "Novidades do Dishylink {{version}}",
+    "speedTitle": "Mais rápido em redes movimentadas.",
+    "speedBody": "O app não fica mais lento quando o registro de eventos se enche de centenas de trocas de banda Wi-Fi.",
+    "signInTitle": "Login da Starlink mantido.",
+    "signInBody": "Você não é mais desconectado da sua conta Starlink toda vez que reabre o app.",
+    "tiltTargetTitle": "Linha de inclinação ideal.",
+    "tiltTargetBody": "Uma linha tracejada tênue no mostrador Inclinação agora marca a inclinação ideal da sua antena.",
     "languagesTitle": "Suporte a vários idiomas.",
     "languagesBody": "O Dishylink agora está disponível em inglês, espanhol, francês, alemão e português. Altere em Configurações › Aplicativo.",
     "reportsTitle": "Relatórios post-mortem de interrupções.",
