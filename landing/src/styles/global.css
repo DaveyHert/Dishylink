@@ -38,7 +38,7 @@
   --gradient-rule: linear-gradient(90deg, transparent, var(--color-rule-2) 50%, transparent);
 
   --color-warm: #0f766e;
-  --color-gold: #b7791f;
+  --color-gold: #ee9a21;
   --color-down: #2f6fed;
   --color-up: #1ba85f;
   --color-good: #16a34a;
@@ -71,7 +71,7 @@
   --color-rule: #232322;
   --color-rule-2: #3a3a38;
   --color-warm: #2dd4bf;
-  --color-gold: #e0a422;
+  --color-gold: #ee9a21;
   --color-down: #5b9bff;
   --color-up: #4ade80;
   --color-good: #4db450;

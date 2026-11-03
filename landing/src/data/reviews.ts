@@ -64,15 +64,12 @@ export const reviewLinks = [
 const storeRatings = Object.values(snapshot.ratings).filter((r) => r.count > 0);
 const storeCount = storeRatings.reduce((sum, r) => sum + r.count, 0);
 
-// These are already inside storeCount and snapshot.supporters.
-const STORE_SOURCES: ReviewSource[] = ["chrome", "firefox", "edge", "supporter"];
-const feedbackCount = reviews.filter((r) => !STORE_SOURCES.includes(r.source)).length;
-
 // Reviews left on dishylink.com carry stars too, so they count toward the average.
 const siteStars = reviews.filter((r) => r.source === "site" && r.stars !== null);
 
 export const rating = {
-  count: storeCount + snapshot.supporters + feedbackCount,
+  // One per face in the grid: every quote, plus every rating, coffee and comment shown without words.
+  count: reviews.length + silentFaces.length,
   average:
     (storeRatings.reduce((sum, r) => sum + r.average * r.count, 0) +
       siteStars.reduce((sum, r) => sum + (r.stars ?? 0), 0)) /
