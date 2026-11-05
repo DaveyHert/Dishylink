@@ -170,7 +170,7 @@ const SECTIONS: { label: TranslationKey; badge?: TranslationKey; items: MenuEntr
     badge: "support.new",
     items: [
       {
-        href: SUPPORT_LINKS.jobmate,
+        href: SUPPORT_LINKS.jobmateFromSupportMenu,
         banner: (t) => (
           <JobmateBanner
             height={56}

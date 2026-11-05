@@ -24,7 +24,10 @@ describe("support menu links", () => {
       linkedin: "http://linkedin.com/in/daveyhert/",
       privacyPolicy: "https://github.com/DaveyHert/dishylink/blob/master/PRIVACY.md",
       disclaimer: "https://github.com/DaveyHert/dishylink/blob/master/DISCLAIMER.md",
-      jobmate: "https://usejobmate.com",
+      jobmateFromReleaseNotes:
+        "https://usejobmate.com/?utm_source=dishylink&utm_medium=app&utm_content=release_notes",
+      jobmateFromSupportMenu:
+        "https://usejobmate.com/?utm_source=dishylink&utm_medium=app&utm_content=support_menu",
       jobmateVideo: "https://youtu.be/BxpOIzJBlg8",
     });
   });

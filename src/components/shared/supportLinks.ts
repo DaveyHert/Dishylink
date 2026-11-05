@@ -6,6 +6,8 @@
 // guarded, in one place.
 
 const REPO = "https://github.com/DaveyHert/dishylink";
+// usejobmate.com reports traffic in Google Analytics, which reads these UTM tags.
+const JOBMATE = "https://usejobmate.com/?utm_source=dishylink&utm_medium=app";
 
 export const SUPPORT_LINKS = {
   starRepo: REPO,
@@ -21,6 +23,7 @@ export const SUPPORT_LINKS = {
   linkedin: "http://linkedin.com/in/daveyhert/",
   privacyPolicy: `${REPO}/blob/master/PRIVACY.md`,
   disclaimer: `${REPO}/blob/master/DISCLAIMER.md`,
-  jobmate: "https://usejobmate.com",
+  jobmateFromReleaseNotes: `${JOBMATE}&utm_content=release_notes`,
+  jobmateFromSupportMenu: `${JOBMATE}&utm_content=support_menu`,
   jobmateVideo: "https://youtu.be/BxpOIzJBlg8",
 };

@@ -16,6 +16,9 @@ export const SPONSOR = {
 /** Public Turnstile site key for dishylink.com; its secret half lives in `wrangler secret`. */
 export const TURNSTILE_SITE_KEY = "0x4AAAAAAFzpb0BsCFY9znA8";
 
+/** usejobmate.com reports traffic in Google Analytics, which reads these UTM tags. */
+export const JOBMATE_BANNER = "https://usejobmate.com/?utm_source=dishylink&utm_medium=banner";
+
 export const STARLINK_REFERRAL = "https://starlink.com/?referral=RC-DF-5748912-79115-57";
 
 /** null = listing not published yet; the UI renders a disabled control instead. */

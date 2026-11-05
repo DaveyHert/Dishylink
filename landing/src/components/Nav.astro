@@ -3,6 +3,7 @@ import Logo from "./Logo.astro";
 import Button from "./Button.astro";
 import Icon from "./Icon.astro";
 import SponsorMenu from "./SponsorMenu.astro";
+import JobmateBanner from "./JobmateBanner.astro";
 import { GITHUB, X, PRIVACY, STARLINK_REFERRAL } from "../constants";
 
 const links = [
@@ -25,6 +26,7 @@ const socials = [
 <header
   class="sticky top-0 z-50 before:absolute before:inset-0 before:-z-10 before:bg-paper/85 before:backdrop-blur-md"
 >
+  <JobmateBanner />
   <nav
     class="mx-auto flex h-14 max-w-7xl items-center gap-6"
     aria-label="Primary"

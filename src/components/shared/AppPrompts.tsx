@@ -62,7 +62,7 @@ function JobmateCard() {
   return (
     <button
       type='button'
-      onClick={() => open(SUPPORT_LINKS.jobmate)}
+      onClick={() => open(SUPPORT_LINKS.jobmateFromReleaseNotes)}
       className='group block w-full cursor-pointer overflow-hidden rounded-2xl border-[1.5px] border-[#1a1a1a] bg-card p-0 text-left transition-transform hover:-translate-y-0.5'
     >
       <JobmateBanner badge={t("support.new")} tagline={t("support.jobmateTagline")} />

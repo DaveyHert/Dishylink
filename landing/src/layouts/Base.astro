@@ -8,9 +8,11 @@ interface Props {
   description: string;
   /** Page path for the canonical URL, e.g. "/" or "/privacy/". */
   path?: string;
+  /** Short pages: the body fills the window so the footer sits at the bottom. */
+  fill?: boolean;
 }
 
-const { title, description, path = "/" } = Astro.props;
+const { title, description, path = "/", fill = false } = Astro.props;
 const canonical = new URL(path, Astro.site ?? "https://dishylink.com").toString();
 const ogImage = new URL("/og.png", Astro.site ?? "https://dishylink.com").toString();
 
@@ -176,7 +178,7 @@ const faqSchema = {
     <script is:inline set:html={JSON.stringify(faqSchema)} type="application/ld+json" />
 
   </head>
-  <body class="bg-paper text-ink antialiased">
+  <body class:list={["bg-paper text-ink antialiased", fill && "flex min-h-dvh flex-col"]}>
     <slot />
 
     {/* Shared image lightbox. Triggered by any [data-lightbox] element carrying

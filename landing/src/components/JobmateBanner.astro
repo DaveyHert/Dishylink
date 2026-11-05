@@ -1,0 +1,70 @@
+---
+import Icon from "./Icon.astro";
+import { JOBMATE_BANNER } from "../constants";
+import logo from "../data/jobmate-logo.json";
+
+// Jobmate's brand indigo, as the app's JobmateGlyph and JobmateWordmark draw it.
+const INK = "oklch(0.4894 0.2298 275.42)";
+const MATE = `color-mix(in oklab, ${INK} 60%, #ffffff)`;
+---
+
+<div data-jobmate-banner class="relative border-b border-rule bg-surface">
+  <a
+    href={JOBMATE_BANNER}
+    target="_blank"
+    rel="noopener"
+    class="group mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-x-3 gap-y-1.5 px-12 py-2 text-center text-sm"
+  >
+    <span class="flex items-center gap-1.5 rounded-[2px] bg-[#ddd8ff] py-1 pr-1 pl-2">
+      <span role="img" aria-label="Jobmate" class="flex items-center gap-1">
+        <svg viewBox="9.4 4.3 16.21 26.2" fill={INK} aria-hidden="true" class="h-3.5 w-auto shrink-0">
+          <path d={logo.glyph.right} />
+          <path d={logo.glyph.left} opacity="0.85" />
+          <path d={logo.glyph.tail} />
+        </svg>
+        <svg viewBox="433.3 117.3 1808.2 361" aria-hidden="true" class="h-[11px] w-auto shrink-0">
+          <path d={logo.wordmark.job} fill={INK} />
+          <path d={logo.wordmark.mate} style={`fill:${MATE}`} />
+        </svg>
+      </span>
+      <span
+        class="rounded-full bg-linear-to-r from-[#f0457f] to-[#fb8a3c] px-2 py-0.5 text-[10.5px] leading-none font-semibold text-white"
+      >
+        New
+      </span>
+    </span>
+    <span class="text-ink-2 dark:text-ink/75">
+      We just launched Jobmate, your AI copilot for a faster, smarter job search.
+    </span>
+    <span class="inline-flex items-center gap-1 font-semibold text-ink">
+      <span class="underline decoration-[#f39a42] decoration-1 underline-offset-4">Check it out</span>
+      <span aria-hidden="true" class="transition-transform group-hover:translate-x-0.5">→</span>
+    </span>
+  </a>
+  <button
+    type="button"
+    data-jobmate-dismiss
+    aria-label="Hide this banner"
+    class="absolute top-1/2 right-3 grid size-7 -translate-y-1/2 cursor-pointer place-items-center rounded-md text-ink-3 transition-colors hover:bg-rule/60 hover:text-ink"
+  >
+    <Icon name="close" class="size-3.5" />
+  </button>
+</div>
+
+<script is:inline>
+  // Runs before first paint, so a banner already dismissed in this browser never flashes.
+  try {
+    if (localStorage.getItem("dishylink-jobmate-banner") === "hidden") {
+      document.querySelector("[data-jobmate-banner]")?.remove();
+    }
+  } catch {}
+</script>
+
+<script>
+  document.querySelector("[data-jobmate-dismiss]")?.addEventListener("click", () => {
+    document.querySelector("[data-jobmate-banner]")?.remove();
+    try {
+      localStorage.setItem("dishylink-jobmate-banner", "hidden");
+    } catch {}
+  });
+</script>
