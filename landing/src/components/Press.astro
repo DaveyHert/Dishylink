@@ -11,16 +11,6 @@ const image = (file: string | null) =>
   file ? files[`../assets/featured/${file}`]?.default : undefined;
 
 const compact = new Intl.NumberFormat("en", { notation: "compact" });
-const relative = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
-
-function age(date: string | null): string | null {
-  if (!date) return null;
-  const days = (Date.now() - Date.parse(date)) / 86_400_000;
-  if (days < 7) return relative.format(-Math.round(days), "day");
-  if (days < 30) return relative.format(-Math.round(days / 7), "week");
-  if (days < 365) return relative.format(-Math.round(days / 30), "month");
-  return relative.format(-Math.round(days / 365), "year");
-}
 
 const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 
@@ -31,9 +21,7 @@ const items = data.featured.map((item) => ({
   thumb: image(item.thumb),
   avatar: image(item.avatar),
   badge: item.kind === "video" && item.seconds ? clock(item.seconds) : BADGE[item.kind],
-  meta: [item.kind === "video" && item.views ? `${compact.format(item.views)} views` : null, age(item.date)]
-    .filter(Boolean)
-    .join(" · "),
+  meta: item.kind === "video" && item.views ? `${compact.format(item.views)} views` : null,
 }));
 ---
 
