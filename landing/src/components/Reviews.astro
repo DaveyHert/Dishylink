@@ -103,7 +103,7 @@ const average = rating.average.toFixed(1);
 <section id="reviews" class="overflow-hidden">
   <SectionRule />
   <div data-reviews class="mx-auto max-w-7xl px-5 pt-24 pb-16 lg:pt-32">
-    <div class="grid">
+    <div class="grid grid-cols-[minmax(0,1fr)]">
     {/* Only the words and caption take the pointer; a long quote's empty box would otherwise cover tiles. */}
     <div class="pointer-events-none relative z-10 max-w-2xl xl:max-w-xl xl:self-start xl:[grid-area:1/1]">
     <p class="pointer-events-auto inline-flex rounded-md border border-rule px-2.5 py-1 text-sm text-ink-2">Reviews</p>

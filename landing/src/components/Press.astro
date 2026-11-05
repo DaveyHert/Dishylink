@@ -96,13 +96,15 @@ const items = data.featured.map((item) => ({
             ) : (
               <span class="size-9 flex-none rounded-full bg-surface" />
             )}
-            <div class="min-w-0">
+            <div class="min-w-0 flex-1">
               <h3 class="line-clamp-2 text-[15px] leading-snug font-semibold text-ink">{item.title}</h3>
-              <p class="mt-1 truncate text-sm text-ink-2">
-                {item.publisher}
-                {item.author && <span class="text-ink-3"> · {item.author}</span>}
-              </p>
-              {item.meta && <p class="text-sm text-ink-3">{item.meta}</p>}
+              <div class="mt-1 flex items-baseline justify-between gap-3 text-sm">
+                <p class="min-w-0 truncate text-ink-2">
+                  {item.publisher}
+                  {item.author && <span class="text-ink-3"> · {item.author}</span>}
+                </p>
+                {item.meta && <span class="flex-none text-ink-3">{item.meta}</span>}
+              </div>
             </div>
           </div>
         </a>

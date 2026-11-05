@@ -4,7 +4,7 @@ import CoffeeIcon from "./CoffeeIcon.astro";
 import { SPONSOR } from "../constants";
 
 // The app's support menu, trimmed to the ways to chip in. Built on <details> so
-// it opens without JavaScript; the script below only adds dismissal.
+// it opens without JavaScript; Nav.astro adds dismissal.
 const links = [
   { href: SPONSOR.github, label: "Become a GitHub Sponsor" },
   { href: SPONSOR.patreon, label: "Become a Patreon" },
@@ -12,7 +12,7 @@ const links = [
 ];
 ---
 
-<details class="sponsor-menu relative">
+<details data-menu class="relative">
   <summary
     class="flex cursor-pointer list-none items-center gap-2 text-sm text-ink-2 transition-colors hover:text-ink [&::-webkit-details-marker]:hidden"
   >
@@ -44,19 +44,3 @@ const links = [
     </div>
   </div>
 </details>
-
-<script>
-  // Click-away and Escape, the two things <details> does not do on its own.
-  const menus = document.querySelectorAll<HTMLDetailsElement>(".sponsor-menu");
-
-  document.addEventListener("click", (event) => {
-    for (const menu of menus) {
-      if (!menu.contains(event.target as Node)) menu.open = false;
-    }
-  });
-
-  document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") return;
-    for (const menu of menus) menu.open = false;
-  });
-</script>

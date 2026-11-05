@@ -45,12 +45,16 @@ const icons = {
     viewBox: "0 0 24 24",
     path: "M6 6l12 12M18 6L6 18",
   },
+  menu: {
+    viewBox: "0 0 24 24",
+    path: "M4 7h16M4 12h16M4 17h16",
+  },
 };
 
 const { name, class: className = "size-[18px]" } = Astro.props;
 const { viewBox, path } = icons[name];
-/** The close mark is a stroked cross, not a filled silhouette. */
-const stroked = name === "close";
+/** The close and menu marks are stroked lines, not filled silhouettes. */
+const stroked = name === "close" || name === "menu";
 ---
 
 <svg

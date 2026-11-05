@@ -28,7 +28,7 @@ const socials = [
 >
   <JobmateBanner />
   <nav
-    class="mx-auto flex h-14 max-w-7xl items-center gap-6"
+    class="mx-auto flex h-14 max-w-7xl items-center gap-6 px-5"
     aria-label="Primary"
   >
     <a href="/" class="flex items-center gap-2 text-xl font-semibold tracking-tight">
@@ -76,6 +76,52 @@ const socials = [
           </Button>
         ))
       }
+
+      {/* No `relative` here: the panel hangs from the sticky header, so it clears the banner too. */}
+      <details data-menu class="md:hidden">
+        <summary
+          aria-label="Menu"
+          class="grid size-9 cursor-pointer list-none place-items-center rounded-lg text-ink-2 transition-colors hover:bg-surface hover:text-ink [&::-webkit-details-marker]:hidden"
+        >
+          <Icon name="menu" class="size-4.5" />
+        </summary>
+        <ul
+          class="absolute inset-x-3 top-full z-50 mt-1 overflow-hidden rounded-xl border border-rule/50 bg-[color-mix(in_srgb,var(--color-surface)_80%,transparent)] p-1.5 text-ink shadow-[0_12px_40px_rgb(0_0_0/0.28),inset_0_1px_0_rgb(255_255_255/0.08)] backdrop-blur-xl backdrop-saturate-150 dark:bg-[color-mix(in_srgb,#0e0e0e_80%,transparent)] dark:shadow-[0_12px_40px_rgb(0_0_0/0.45),inset_0_1px_0_rgb(255_255_255/0.08)]"
+        >
+          {
+            links.map((link) => (
+              <li>
+                <a
+                  href={link.href}
+                  target={link.href.startsWith("http") ? "_blank" : undefined}
+                  rel={link.href.startsWith("http") ? "noopener noreferrer" : undefined}
+                  class="flex rounded-[8px] px-3 py-2.5 text-[15px] transition-colors hover:bg-rule/40"
+                >
+                  {link.label}
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+      </details>
     </div>
   </nav>
 </header>
+
+<script>
+  const menus = document.querySelectorAll<HTMLDetailsElement>("details[data-menu]");
+
+  // <details> neither closes on click-away nor on following one of its own links;
+  // an in-page link like /#reviews never reloads, so it would stay open over the section.
+  document.addEventListener("click", (event) => {
+    const target = event.target as Element;
+    for (const menu of menus) {
+      if (!menu.contains(target) || target.closest("a")) menu.open = false;
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    for (const menu of menus) menu.open = false;
+  });
+</script>
