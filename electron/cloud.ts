@@ -278,8 +278,16 @@ function openLoginWindow(parent?: BrowserWindow): Promise<{ ok: boolean; message
       modal: Boolean(parent),
       title: t("desktop.signInTitle"),
       autoHideMenuBar: true,
-      webPreferences: { partition: LOGIN_PARTITION },
+      webPreferences: {
+        partition: LOGIN_PARTITION,
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+      },
     });
+    // Prevent the login window from spawning popups — the OAuth flow has
+    // no legitimate reason to open a new window.
+    win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     // macOS draws a modal child window as a sheet: attached to the parent, and
     // with no title bar of its own, so it carries no close button — `isClosable()`
     // still answers true, but there is nothing on screen to click. Escape is the
