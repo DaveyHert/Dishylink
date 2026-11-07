@@ -27,6 +27,8 @@ export interface SkyCameraOptions {
   /** Where the viewer starts. The card frames the dome at a fixed distance;
    *  the full view opens here and lets you zoom from it. */
   distance?: number;
+  /** Opt-in origin-centered shell (including labels) to fit at maximum zoom-out. */
+  framingRadius?: number;
   /** Whether the wheel zooms. False on the card, which holds one framing — the
    *  listener is then never attached, so the page scrolls over it normally. */
   zoomable?: boolean;
@@ -79,9 +81,17 @@ const TARGET_Y_FAR = 0.42,
 /** Movement beyond this many pixels is an orbit, not a tap. */
 const TAP_SLOP = 4;
 
+export const SKY_FOV = 0.9;
+
+/** Sphere tangent fit in the narrower viewport axis; includes elevated orbit focus. */
+export function skyFramingDistance(radius: number, aspect: number): number {
+  const halfAngle = Math.atan(Math.tan(SKY_FOV / 2) * Math.min(1, aspect));
+  return (1.08 * (radius + TARGET_Y_FAR)) / Math.sin(halfAngle);
+}
+
 export function createSkyCamera(
   canvas: HTMLCanvasElement,
-  { onTap, distance: initialDistance, zoomable = true }: SkyCameraOptions,
+  { onTap, distance: initialDistance, framingRadius, zoomable = true }: SkyCameraOptions,
 ): SkyCamera {
   let { yaw, pitch } = INITIAL;
   let distance = initialDistance ?? INITIAL.distance;
@@ -149,7 +159,17 @@ export function createSkyCamera(
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
     resetTo = null;
-    distance = Math.min(DISTANCE_MAX, Math.max(floor(), distance + e.deltaY * 0.0035));
+    const ceiling =
+      framingRadius === undefined
+        ? DISTANCE_MAX
+        : Math.max(
+            DISTANCE_MAX,
+            skyFramingDistance(
+              framingRadius,
+              canvas.clientWidth / Math.max(1, canvas.clientHeight),
+            ),
+          );
+    distance = Math.min(ceiling, Math.max(floor(), distance + e.deltaY * 0.0035));
     lastInteraction = performance.now();
   };
 

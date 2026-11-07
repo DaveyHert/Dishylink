@@ -54,7 +54,7 @@ function decode<T extends Int16Array | Uint16Array>(
  * dish reads as standing beneath the sky instead of inside a cage. Only the dome
  * moves — the terrain, dish and compass stay put.
  */
-const DOME_LIFT = 0.18;
+export const DOME_LIFT = 0.18;
 
 /** The envelope's resolution: 72 spokes of 5°, widened across ±3 of them. */
 const ENVELOPE_SPOKES = 72;

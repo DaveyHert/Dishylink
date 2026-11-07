@@ -12,6 +12,7 @@ import { meshForModel } from "./dishModels";
 import { lookAt, multiply, perspective } from "./skyMath";
 import {
   LIGHT,
+  DOME_LIFT,
   buildCompass,
   buildCompassLabels,
   buildDish,
@@ -21,7 +22,7 @@ import {
   type SkySurvey,
 } from "./skyGeometry";
 import { createPrograms } from "./skyPrograms";
-import { createSkyCamera } from "./skyCamera";
+import { createSkyCamera, SKY_FOV } from "./skyCamera";
 
 // Re-exported so callers keep importing the scene's vocabulary from the scene,
 // even though the type now lives with the geometry that consumes it.
@@ -120,6 +121,7 @@ function surveyPalette(canvas: HTMLCanvasElement) {
     clear: read("--sky-clear", [1, 1, 1]),
     partial: read("--sky-partial", [0.431, 0.059, 0.059]),
     obstructed: read("--sky-obstructed", [0.961, 0.118, 0.118]),
+    beamHighlight: read("--status-good", [77 / 255, 180 / 255, 80 / 255]),
   };
 }
 
@@ -135,10 +137,25 @@ export interface SkySceneOptions {
    *  at all — no mesh, no instance buffers, no trail or beam passes — which is
    *  what the dashboard card wants: the same dome, none of the constellation. */
   buildSatelliteMesh?: () => SatelliteMesh;
+  /** Hardware-specific meshes; unknown keys use the legacy model. */
+  buildSatelliteMeshes?: () => Record<string, SatelliteMesh>;
+  satelliteModel?: (sat: SatelliteSky) => string;
   /** The starfield behind the dome. */
   stars?: boolean;
+  atmosphere?: () => {
+    fog: [number, number, number];
+    stars: boolean;
+    /** Opt-in alpha blending; omitted keeps original opaque production stars. */
+    starIntensity?: number;
+  };
+  /** Optional depth-tested world triangles, interleaved xyz/rgb; no production default. */
+  worldMarkers?: (eye: number[]) => Float32Array;
+  /** Unfogged markers without depth writes: terrain occludes, satellites/dome draw over them. */
+  worldMarkersBackground?: boolean;
   /** Fixed framing, and whether the wheel may change it. */
   distance?: number;
+  /** Opt-in shell framing at maximum zoom-out; production keeps its existing bound. */
+  framingRadius?: number;
   zoomable?: boolean;
   /** Draws the dish above true size — see buildDish. */
   dishScale?: number;
@@ -151,8 +168,14 @@ export function createSkyScene(
   initialSurvey: SkySurvey,
   {
     buildSatelliteMesh,
+    buildSatelliteMeshes,
+    satelliteModel,
     stars = true,
+    atmosphere,
+    worldMarkers,
+    worldMarkersBackground = false,
     distance,
+    framingRadius,
     zoomable = true,
     dishScale = 1,
     trimUnmapped: initialTrim = false,
@@ -163,6 +186,7 @@ export function createSkyScene(
   // Bind to a non-nullable local: the frame loop and callbacks below close over
   // it, and narrowing does not survive into those.
   const gl = context;
+  let fog = FOG;
   const instancing = gl.getExtension("ANGLE_instanced_arrays");
 
   const {
@@ -199,24 +223,27 @@ export function createSkyScene(
   const compassBuffer = buffer(compassData);
   const labelBuffer = buffer(labelData);
   const dishBuffer = buffer(dishData, gl.DYNAMIC_DRAW);
+  const markerBuffer = worldMarkers ? buffer(new Float32Array(0), gl.DYNAMIC_DRAW) : null;
 
   // Built only where satellites are drawn. A scene without them holds no craft
   // mesh and no per-instance buffers, rather than uploading both to never use
   // them — `satellites` being null is what every satellite pass checks.
-  const satellites = buildSatelliteMesh
-    ? (() => {
-        const mesh = buildSatelliteMesh();
-        return {
-          mesh,
-          pos: buffer(mesh.positions),
-          normal: buffer(mesh.normals),
-          color: buffer(mesh.colors),
-          offset: buffer(new Float32Array(MAX_SATELLITES * 3), gl.DYNAMIC_DRAW),
-          right: buffer(new Float32Array(MAX_SATELLITES * 3), gl.DYNAMIC_DRAW),
-          up: buffer(new Float32Array(MAX_SATELLITES * 3), gl.DYNAMIC_DRAW),
-          forward: buffer(new Float32Array(MAX_SATELLITES * 3), gl.DYNAMIC_DRAW),
-        };
-      })()
+  const meshes =
+    buildSatelliteMeshes?.() ?? (buildSatelliteMesh ? { legacy: buildSatelliteMesh() } : null);
+  const satellites = meshes
+    ? Object.entries(meshes).map(([key, mesh]) => ({
+        key,
+        mesh,
+        indices: [] as number[],
+        data: Array.from({ length: 4 }, () => new Float32Array(MAX_SATELLITES * 3)),
+        pos: buffer(mesh.positions),
+        normal: buffer(mesh.normals),
+        color: buffer(mesh.colors),
+        offset: buffer(new Float32Array(MAX_SATELLITES * 3), gl.DYNAMIC_DRAW),
+        right: buffer(new Float32Array(MAX_SATELLITES * 3), gl.DYNAMIC_DRAW),
+        up: buffer(new Float32Array(MAX_SATELLITES * 3), gl.DYNAMIC_DRAW),
+        forward: buffer(new Float32Array(MAX_SATELLITES * 3), gl.DYNAMIC_DRAW),
+      }))
     : null;
   const offsets = new Float32Array(MAX_SATELLITES * 3);
   const rights = new Float32Array(MAX_SATELLITES * 3);
@@ -351,7 +378,7 @@ export function createSkyScene(
     return best;
   }
 
-  function drawBeam(mvp: Float32Array, eye: number[]) {
+  function drawBeam(mvp: Float32Array, eye: number[], outsidePass = false) {
     if (!beamTarget) return;
     const a = dish.origin,
       b = beamTarget;
@@ -396,6 +423,10 @@ export function createSkyScene(
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, beamVerts);
     gl.useProgram(beamProgram);
     gl.uniformMatrix4fv(gl.getUniformLocation(beamProgram, "uMvp"), false, mvp);
+    gl.uniform3fv(gl.getUniformLocation(beamProgram, "uBeamStart"), a);
+    gl.uniform3fv(gl.getUniformLocation(beamProgram, "uBeamEnd"), b);
+    gl.uniform1f(gl.getUniformLocation(beamProgram, "uDomeLift"), DOME_LIFT);
+    gl.uniform1i(gl.getUniformLocation(beamProgram, "uOutsidePass"), outsidePass ? 1 : 0);
     const aPos = gl.getAttribLocation(beamProgram, "aPos");
     const aAcross = gl.getAttribLocation(beamProgram, "aAcross");
     const aAlong = gl.getAttribLocation(beamProgram, "aAlong");
@@ -408,15 +439,20 @@ export function createSkyScene(
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE); // additive: light, not paint
     gl.depthMask(false);
+    if (outsidePass) gl.disable(gl.DEPTH_TEST);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
+    if (outsidePass) gl.enable(gl.DEPTH_TEST);
     gl.depthMask(true);
     gl.disable(gl.BLEND);
   }
 
   function refreshSatellites() {
+    if (satellites) for (const group of satellites) group.indices.length = 0;
     if (!satellites || !sampleSatellites) {
       satelliteCount = 0;
       beamTarget = null;
+      frameSky = [];
+      framePositions = [];
       frameTrails = [];
       return;
     }
@@ -444,6 +480,11 @@ export function createSkyScene(
       if (servingName !== null && sat.name === servingName) beamTarget = at;
       frameSky.push(sat);
       framePositions.push(at);
+      const key = satelliteModel?.(sat) ?? "legacy";
+      const group =
+        satellites.find((entry) => entry.key === key) ??
+        satellites.find((entry) => entry.key === "legacy");
+      group?.indices.push(n);
       offsets[n * 3] = at[0];
       offsets[n * 3 + 1] = at[1];
       offsets[n * 3 + 2] = at[2];
@@ -491,14 +532,17 @@ export function createSkyScene(
       n++;
     }
     satelliteCount = n;
-    for (const [b, data] of [
-      [satellites.offset, offsets],
-      [satellites.right, rights],
-      [satellites.up, ups],
-      [satellites.forward, forwards],
-    ] as Array<[WebGLBuffer, Float32Array]>) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, b);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, data);
+    for (const group of satellites) {
+      const buffers = [group.offset, group.right, group.up, group.forward];
+      const sources = [offsets, rights, ups, forwards];
+      buffers.forEach((b, axis) => {
+        const data = group.data[axis];
+        group.indices.forEach((index, instance) => {
+          data.set(sources[axis].subarray(index * 3, index * 3 + 3), instance * 3);
+        });
+        gl.bindBuffer(gl.ARRAY_BUFFER, b);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, data.subarray(0, group.indices.length * 3));
+      });
     }
   }
 
@@ -604,6 +648,7 @@ export function createSkyScene(
   // and we answer it.
   const camera = createSkyCamera(canvas, {
     distance,
+    framingRadius,
     zoomable,
     // Nothing to resolve a tap into where there are no satellites, so the card
     // does not listen for one.
@@ -649,7 +694,7 @@ export function createSkyScene(
     gl.useProgram(satProgram);
     gl.uniformMatrix4fv(gl.getUniformLocation(satProgram, "uMvp"), false, mvp);
     gl.uniform1f(gl.getUniformLocation(satProgram, "uScale"), SATELLITE_SIZE);
-    gl.uniform3f(gl.getUniformLocation(satProgram, "uFog"), FOG[0], FOG[1], FOG[2]);
+    gl.uniform3f(gl.getUniformLocation(satProgram, "uFog"), fog[0], fog[1], fog[2]);
     gl.uniform3f(gl.getUniformLocation(satProgram, "uLight"), LIGHT[0], LIGHT[1], LIGHT[2]);
     const bind = (name: string, buf: WebGLBuffer, divisor: number) => {
       const loc = gl.getAttribLocation(satProgram, name);
@@ -659,23 +704,26 @@ export function createSkyScene(
       instancing.vertexAttribDivisorANGLE(loc, divisor);
       return loc;
     };
-    const locs = [
-      bind("aPos", satellites.pos, 0),
-      bind("aNormal", satellites.normal, 0),
-      bind("aColor", satellites.color, 0),
-      bind("iOffset", satellites.offset, 1),
-      bind("iRight", satellites.right, 1),
-      bind("iUp", satellites.up, 1),
-      bind("iForward", satellites.forward, 1),
-    ];
-    instancing.drawArraysInstancedANGLE(
-      gl.TRIANGLES,
-      0,
-      satellites.mesh.triangleCount * 3,
-      satelliteCount,
-    );
-    // Leave the divisors clean or the next pass inherits them.
-    for (const loc of locs) instancing.vertexAttribDivisorANGLE(loc, 0);
+    for (const group of satellites) {
+      if (group.indices.length === 0) continue;
+      const locs = [
+        bind("aPos", group.pos, 0),
+        bind("aNormal", group.normal, 0),
+        bind("aColor", group.color, 0),
+        bind("iOffset", group.offset, 1),
+        bind("iRight", group.right, 1),
+        bind("iUp", group.up, 1),
+        bind("iForward", group.forward, 1),
+      ];
+      instancing.drawArraysInstancedANGLE(
+        gl.TRIANGLES,
+        0,
+        group.mesh.triangleCount * 3,
+        group.indices.length,
+      );
+      // Leave the divisors clean or the next pass inherits them.
+      for (const loc of locs) instancing.vertexAttribDivisorANGLE(loc, 0);
+    }
   }
 
   let frameHandle = 0;
@@ -684,6 +732,9 @@ export function createSkyScene(
     const dt = Math.min(0.05, (now - previous) / 1000);
     previous = now;
     refreshSatellites();
+    const skyAtmosphere = atmosphere?.();
+    fog = skyAtmosphere?.fog ?? FOG;
+    gl.clearColor(fog[0], fog[1], fog[2], 1);
 
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -693,13 +744,22 @@ export function createSkyScene(
       // Near stays as far out as the closest approach allows (dish edge ~0.2 away
       // at min zoom): a tiny near plane wrecks depth precision and the dish faces
       // z-fight at distance. Far must reach the stars at radius 40.
-      perspective(0.9, canvas.width / Math.max(1, canvas.height), 0.12, 90),
+      perspective(SKY_FOV, canvas.width / Math.max(1, canvas.height), 0.12, 90),
       lookAt(eye, target, [0, 1, 0]),
     );
 
-    if (starBuffer && starData) {
+    if (starBuffer && starData && (skyAtmosphere?.stars ?? true)) {
+      const fadeStars = skyAtmosphere?.starIntensity !== undefined;
+      if (fadeStars) {
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      }
       gl.depthMask(false);
       gl.useProgram(starProgram);
+      gl.uniform1f(
+        gl.getUniformLocation(starProgram, "uStarIntensity"),
+        Math.max(0, Math.min(1, skyAtmosphere?.starIntensity ?? 1)),
+      );
       gl.uniformMatrix4fv(gl.getUniformLocation(starProgram, "uMvp"), false, mvp);
       gl.bindBuffer(gl.ARRAY_BUFFER, starBuffer);
       const aStar = gl.getAttribLocation(starProgram, "aStar");
@@ -707,15 +767,30 @@ export function createSkyScene(
       gl.vertexAttribPointer(aStar, 4, gl.FLOAT, false, 16, 0);
       gl.drawArrays(gl.POINTS, 0, starData.length / 4);
       gl.depthMask(true);
+      if (fadeStars) gl.disable(gl.BLEND);
     }
 
     gl.useProgram(meshProgram);
     gl.uniformMatrix4fv(gl.getUniformLocation(meshProgram, "uMvp"), false, mvp);
-    gl.uniform3f(gl.getUniformLocation(meshProgram, "uFog"), FOG[0], FOG[1], FOG[2]);
+    gl.uniform3f(gl.getUniformLocation(meshProgram, "uFog"), fog[0], fog[1], fog[2]);
     bindMesh(terrainBuffer, terrainData.length / 6);
     bindMesh(dishBuffer, dishData.length / 6);
     bindMesh(compassBuffer, compassData.length / 6);
     bindMesh(labelBuffer, labelData.length / 6);
+    if (markerBuffer && worldMarkers) {
+      const data = worldMarkers(eye);
+      gl.bindBuffer(gl.ARRAY_BUFFER, markerBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+      if (worldMarkersBackground) {
+        gl.depthMask(false);
+        gl.uniform1i(gl.getUniformLocation(meshProgram, "uUnfogged"), 1);
+      }
+      bindMesh(markerBuffer, data.length / 6);
+      if (worldMarkersBackground) {
+        gl.depthMask(true);
+        gl.uniform1i(gl.getUniformLocation(meshProgram, "uUnfogged"), 0);
+      }
+    }
 
     // Wakes under the craft and the beam, so a satellite and its serving beam
     // both sit crisply on top of the haze rather than behind it.
@@ -734,11 +809,19 @@ export function createSkyScene(
     gl.useProgram(dotProgram);
     gl.uniformMatrix4fv(gl.getUniformLocation(dotProgram, "uMvp"), false, mvp);
     gl.uniform1f(gl.getUniformLocation(dotProgram, "uPointScale"), canvas.height * 0.0075);
+    gl.uniform3fv(gl.getUniformLocation(dotProgram, "uBeamStart"), dish.origin);
+    gl.uniform3fv(gl.getUniformLocation(dotProgram, "uBeamEnd"), beamTarget ?? dish.origin);
+    // Cover one grid cell around the physical beam crossing, independent of camera angle.
+    gl.uniform1f(
+      gl.getUniformLocation(dotProgram, "uBeamRadius"),
+      beamTarget ? (survey.maxThetaDeg * Math.PI * 2) / (180 * Math.max(1, survey.gridSize)) : 0,
+    );
     for (const [name, colour] of [
       ["uUnmapped", palette.unmapped],
       ["uClear", palette.clear],
       ["uPartial", palette.partial],
       ["uObstructed", palette.obstructed],
+      ["uBeamHighlight", palette.beamHighlight],
     ] as Array<[string, [number, number, number]]>) {
       gl.uniform3f(gl.getUniformLocation(dotProgram, name), colour[0], colour[1], colour[2]);
     }
@@ -748,6 +831,9 @@ export function createSkyScene(
     gl.enableVertexAttribArray(aData);
     gl.vertexAttribPointer(aData, 4, gl.FLOAT, false, 16, 0);
     if (domeVisible) gl.drawArrays(gl.POINTS, 0, domeData.length / 4);
+
+    // Only the segment beyond the dome overlays dots; the inside keeps its depth.
+    drawBeam(mvp, eye, true);
 
     frameHandle = requestAnimationFrame(frame);
   }
@@ -820,6 +906,40 @@ export function createSkyScene(
       cancelAnimationFrame(frameHandle);
       camera.dispose();
       removeEventListener("resize", resize);
+      for (const group of satellites ?? []) {
+        for (const b of [
+          group.pos,
+          group.normal,
+          group.color,
+          group.offset,
+          group.right,
+          group.up,
+          group.forward,
+        ])
+          gl.deleteBuffer(b);
+      }
+      for (const b of [
+        domeBuffer,
+        starBuffer,
+        terrainBuffer,
+        compassBuffer,
+        labelBuffer,
+        dishBuffer,
+        markerBuffer,
+        beamBuffer,
+        trailBuffer,
+      ]) {
+        if (b) gl.deleteBuffer(b);
+      }
+      for (const program of [
+        dotProgram,
+        starProgram,
+        meshProgram,
+        satProgram,
+        beamProgram,
+        trailProgram,
+      ])
+        gl.deleteProgram(program);
     },
   };
 }

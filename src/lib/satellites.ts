@@ -6,6 +6,11 @@
 // everything actually above the horizon.
 
 import * as satelliteJs from "satellite.js";
+import {
+  noradIdFromTle,
+  resolveSatelliteHardwareVersion,
+  type SatelliteHardwareVersion,
+} from "./satelliteHardware";
 
 // CelesTrak sends no CORS headers, so the dev server and desktop app fetch it
 // through a same-origin proxy prefix. A host that reaches it directly — the
@@ -68,6 +73,8 @@ export interface TopocentricState {
 
 export interface SatelliteSky {
   name: string;
+  noradId?: string;
+  hardwareVersion?: SatelliteHardwareVersion;
   /** Height above Earth's surface and orbital speed, from the propagated state. */
   altitudeKm?: number;
   speedKmS?: number;
@@ -212,7 +219,12 @@ export async function loadStarlinkTles(): Promise<TleRecord[]> {
 const FORECAST_OFFSETS_MINUTES = [5, 10, 15, 20, 25, 30];
 
 export class StarlinkTracker {
-  private readonly satellites: Array<{ name: string; satrec: satelliteJs.SatRec }>;
+  private readonly satellites: Array<{
+    name: string;
+    noradId?: string;
+    hardwareVersion?: SatelliteHardwareVersion;
+    satrec: satelliteJs.SatRec;
+  }>;
   private readonly observerGd: satelliteJs.GeodeticLocation;
   /** Local east/north/up axes at the observer, as ECEF vectors. */
   private readonly east: Vec3;
@@ -226,7 +238,15 @@ export class StarlinkTracker {
 
   constructor(tleRecords: TleRecord[], observer: ObserverLocation) {
     this.satellites = tleRecords
-      .map((tle) => ({ name: tle.name, satrec: satelliteJs.twoline2satrec(tle.line1, tle.line2) }))
+      .map((tle) => {
+        const noradId = noradIdFromTle(tle.line1, tle.line2);
+        return {
+          name: tle.name,
+          noradId,
+          hardwareVersion: resolveSatelliteHardwareVersion(noradId),
+          satrec: satelliteJs.twoline2satrec(tle.line1, tle.line2),
+        };
+      })
       .filter((entry) => entry.satrec.error === 0);
     this.observerGd = {
       latitude: satelliteJs.degreesToRadians(observer.latitudeDeg),
@@ -406,6 +426,8 @@ export class StarlinkTracker {
       const sky = this.lookAngles(entry.satrec, atDate, gmst, true);
       if (sky && sky.elevationDeg > FINE_ELEVATION_FLOOR_DEG) {
         sky.name = entry.name;
+        sky.noradId = entry.noradId;
+        sky.hardwareVersion = entry.hardwareVersion;
         sky.sampledAtMs = nowMs;
         inView.push(sky);
       }

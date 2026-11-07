@@ -6,6 +6,8 @@ import { createSkyScene, type SkyScene } from "../satellite/skyScene";
 import { liveSurvey } from "../satellite/skySurvey";
 import { useDomeTrim } from "../../hooks/useDomeTrim";
 import { domeTrimEnabled } from "../../lib/domeTrim";
+import type { ObserverLocation } from "../../lib/satellites";
+import { createLiveCelestialSky, CELESTIAL_UPDATE_MS } from "../satellite/liveCelestialSky";
 
 // The distance and dish scale are locked to a visually pleasing view of the dish and its sky
 const CARD_DISTANCE = 3.6;
@@ -14,10 +16,12 @@ const CARD_DISH_SCALE = 1.5;
 export function ObstructionDome({
   obstructionMap,
   status,
+  observerLocation = null,
   onSceneChange,
 }: {
   obstructionMap: DishObstructionMapJson | null;
   status: DishStatusJson | null;
+  observerLocation?: ObserverLocation | null;
   /** Hands the scene up so the card's chrome can drive it — the controls sit in
    *  the card, over the canvas, but the scene is built down here. */
   onSceneChange?: (scene: SkyScene | null) => void;
@@ -40,6 +44,21 @@ export function ObstructionDome({
     surveyRef.current = survey;
   }, [survey]);
   const hasSurvey = survey !== null;
+  const celestialSky = useMemo(() => createLiveCelestialSky(), []);
+  const latitudeDeg = observerLocation?.latitudeDeg;
+  const longitudeDeg = observerLocation?.longitudeDeg;
+
+  useEffect(() => {
+    const location =
+      latitudeDeg === undefined || longitudeDeg === undefined
+        ? null
+        : { latitudeDeg, longitudeDeg };
+    const update = () => celestialSky.update(location, Date.now());
+    update();
+    if (!hasSurvey || !location) return;
+    const timer = window.setInterval(update, CELESTIAL_UPDATE_MS);
+    return () => window.clearInterval(timer);
+  }, [celestialSky, hasSurvey, latitudeDeg, longitudeDeg]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -50,6 +69,9 @@ export function ObstructionDome({
       zoomable: false,
       dishScale: CARD_DISH_SCALE,
       trimUnmapped: domeTrimEnabled(),
+      atmosphere: celestialSky.atmosphere,
+      worldMarkers: celestialSky.worldMarkers,
+      worldMarkersBackground: true,
     });
     if (!built) return;
     setScene(built);
@@ -57,7 +79,7 @@ export function ObstructionDome({
       built.dispose();
       setScene(null);
     };
-  }, [hasSurvey]);
+  }, [hasSurvey, celestialSky]);
 
   useEffect(() => {
     onSceneChange?.(scene);
