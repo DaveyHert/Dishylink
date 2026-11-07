@@ -285,14 +285,9 @@ function openLoginWindow(parent?: BrowserWindow): Promise<{ ok: boolean; message
         sandbox: true,
       },
     });
-    // Prevent the login window from opening popups or navigating outside
-    // starlink.com — the OAuth flow stays entirely on that domain.
-    win.setWindowOpenHandler(() => ({ action: "deny" }));
-    win.webContents.on("will-navigate", (event: { preventDefault(): void }, url: string) => {
-      if (!/^https:\/\/(\w[\w-]*\.)*starlink\.com(\/|$)/i.test(url)) {
-        event.preventDefault();
-      }
-    });
+    // Prevent the login window from spawning popups — the OAuth flow has
+    // no legitimate reason to open a new window.
+    win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     // macOS draws a modal child window as a sheet: attached to the parent, and
     // with no title bar of its own, so it carries no close button — `isClosable()`
     // still answers true, but there is nothing on screen to click. Escape is the
