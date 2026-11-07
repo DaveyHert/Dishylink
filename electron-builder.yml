@@ -45,6 +45,7 @@ files:
   - build/trayTemplateOutline.png
   - build/trayTemplateOutline@2x.png
   - package.json
+  - scripts/linux-postinstall.sh
   - "!node_modules/**/*"
 
 # Two per-arch DMGs rather than one universal build. Without an explicit arch list
@@ -96,3 +97,24 @@ win:
   # the prebuilt-icns dance on macOS above — its ICO writer is fine, so no per-format
   # icon script is needed on this side.
   icon: build/icon.png
+# Native Linux desktop package. The application already supports Linux in Electron;
+# this target adds a standard Debian package for Ubuntu/Debian systems.
+linux:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  syncDesktopName: true
+  target:
+    - target: deb
+      arch: [x64, arm64]
+  icon: build/linux-icons/
+  category: Network;Monitor;
+  synopsis: Starlink network monitoring and control
+  description: Dishylink is an unofficial Starlink companion desktop application for monitoring and controlling a Starlink network over the local LAN.
+  maintainer: DaveyHert <daviehert@gmail.com>
+
+
+# Debian-specific post-installation behavior. The package installs an XDG autostart
+# entry so the collector/tray process starts when an Ubuntu/GNOME session begins.
+deb:
+  afterInstall: scripts/linux-postinstall.sh
+  depends:
+    - libnotify4
