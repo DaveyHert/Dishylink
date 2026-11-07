@@ -75,6 +75,47 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  release-linux:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build Linux package
+        env:
+          npm_config_arch: ${{ matrix.arch }}
+        run: npm run pack:linux
+      - name: Upload Linux package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dishylink-linux-${{ matrix.arch }}
+          path: release/*.deb
+
+  attach-linux-packages:
+    needs: [prepare, release-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Dishylink-linux-*
+          path: release
+          merge-multiple: true
+      - name: Create package checksums
+        run: sha256sum release/*.deb > release/SHA256SUMS
+      - name: Attach Linux packages to the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ needs.prepare.outputs.tag }}" release/*.deb release/SHA256SUMS \
+            --clobber --repo "$GITHUB_REPOSITORY"
+
   release-extension:
     needs: prepare
     runs-on: ubuntu-latest
