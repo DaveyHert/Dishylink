@@ -71,6 +71,7 @@ import {
   onUpdateStateChanged,
   installUpdate,
 } from "./updater";
+import { allowYoutubeEmbeds } from "./youtubeEmbed";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const rendererRoot = join(here, "../dist");
@@ -459,11 +460,10 @@ function menuTemplate(): MenuItemConstructorOptions[] {
     checked: notificationsRequested(notificationState()),
     click: (item) => {
       setPreference("notifications", item.checked);
-      if (item.checked)
-        void postNotification(
-          NOTIFICATIONS_ON_CONFIRMATION.title,
-          NOTIFICATIONS_ON_CONFIRMATION.body,
-        ).catch(() => {});
+      if (item.checked) {
+        const confirmation = notificationsOnConfirmation(t);
+        void postNotification(confirmation.title, confirmation.body).catch(() => {});
+      }
     },
   };
   const updateMenuItem: MenuItemConstructorOptions = {
@@ -561,6 +561,8 @@ function createTray(): void {
   hideIconItems = itemsById(HIDE_ICON_ITEM_ID);
   startOnSystemStartItems = itemsById(START_ON_SYSTEM_START_ITEM_ID);
   updateItems = itemsById("update-dishylink");
+  onLocaleChanged(applyLocalizedMenuLabels);
+  applyLocalizedMenuLabels();
   applyUpdateMenu();
   applyMenuBarThroughput();
   updateThroughputWatchdog();
@@ -572,6 +574,17 @@ function createTray(): void {
     tray.on("click", showWindow);
     tray.on("right-click", () => tray?.popUpContextMenu(menu));
   }
+}
+
+/** Refresh the menu labels that come from the main process's locale catalog. */
+function applyLocalizedMenuLabels(): void {
+  for (const item of throughputItems) {
+    item.label =
+      process.platform === "darwin"
+        ? t("desktop.showThroughputMenuBar")
+        : t("desktop.showThroughputTaskbar");
+  }
+  for (const item of hideIconItems) item.label = t("desktop.hideMenuBarIcon");
 }
 
 /** "↓39Kb/s ↑159Kb/s". Padded to a fixed width so the icon holds while the
