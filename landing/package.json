@@ -12,6 +12,7 @@
     "featured": "npm ci --prefix scripts && node scripts/fetch-featured.mjs"
   },
   "dependencies": {
+    "@astrojs/rss": "^4.0.19",
     "@astrojs/sitemap": "^3.7.0",
     "@fontsource/barlow": "^5.2.5",
     "@fontsource/hanken-grotesk": "^5.3.0",

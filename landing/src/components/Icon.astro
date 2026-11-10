@@ -49,12 +49,24 @@ const icons = {
     viewBox: "0 0 24 24",
     path: "M4 7h16M4 12h16M4 17h16",
   },
+  caret: {
+    viewBox: "0 0 24 24",
+    path: "M6 9l6 6 6-6",
+  },
+  search: {
+    viewBox: "0 0 24 24",
+    path: "M21 21l-4.3-4.3M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z",
+  },
+  arrow: {
+    viewBox: "0 0 24 24",
+    path: "M5 12h14M13 6l6 6-6 6",
+  },
 };
 
 const { name, class: className = "size-[18px]" } = Astro.props;
 const { viewBox, path } = icons[name];
-/** The close and menu marks are stroked lines, not filled silhouettes. */
-const stroked = name === "close" || name === "menu";
+/** These marks are stroked lines, not filled silhouettes. */
+const stroked = ["close", "menu", "caret", "search", "arrow"].includes(name);
 ---
 
 <svg

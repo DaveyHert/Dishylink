@@ -1,0 +1,131 @@
+---
+import Base from "../../layouts/Base.astro";
+import Nav from "../../components/Nav.astro";
+import Footer from "../../components/Footer.astro";
+import Icon from "../../components/Icon.astro";
+import PostCard from "../../components/PostCard.astro";
+import { BLOG } from "../../constants";
+import { BLOG_DESCRIPTION, listedPosts, type Post } from "../../data/blog";
+
+const posts = await listedPosts();
+const searchText = (post: Post) =>
+  [post.data.title, post.data.description, ...post.data.tags, post.body ?? ""]
+    .join(" ")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}.]+/gu, " ");
+const articleCount = (count: number) => `${count} ${count === 1 ? "article" : "articles"}`;
+---
+
+<Base title="Blog — Dishylink" description={BLOG_DESCRIPTION} path={BLOG} fill>
+  <Nav />
+
+  <main class="mx-auto w-full max-w-7xl flex-1 px-5 pt-16 pb-28 sm:pt-24">
+    <header class="mx-auto max-w-3xl text-center">
+      <p class="font-mono text-[11px] tracking-[0.35em] text-ink-3 uppercase">Blog</p>
+      <h1 class="mt-5 text-section font-medium text-balance">Guides for Starlink owners</h1>
+      <p class="mt-5 text-lg text-ink-2">{BLOG_DESCRIPTION}</p>
+
+      <form
+        role="search"
+        data-blog-search
+        class="mx-auto mt-9 w-full max-w-md text-left"
+        onsubmit="return false"
+      >
+        <label for="blog-search" class="sr-only">Search articles</label>
+        <div class="relative">
+          <Icon
+            name="search"
+            class="pointer-events-none absolute top-1/2 left-4 size-4.5 -translate-y-1/2 text-ink-3"
+          />
+          <input
+            id="blog-search"
+            type="search"
+            placeholder="Search articles"
+            autocomplete="off"
+            class="h-12 w-full rounded-full border border-rule bg-surface/60 pr-12 pl-11 text-[15px] text-ink transition-colors outline-none placeholder:text-ink-3 hover:border-rule-2 focus-visible:border-ink-3 [&::-webkit-search-cancel-button]:hidden"
+          />
+          <kbd
+            class="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 rounded border border-rule px-1.5 font-mono text-[11px] text-ink-3 max-sm:hidden"
+          >
+            /
+          </kbd>
+        </div>
+      </form>
+    </header>
+
+    <p
+      data-blog-count
+      aria-live="polite"
+      class="mt-12 border-t border-rule pt-5 font-mono text-[12px] text-ink-3"
+    >
+      {articleCount(posts.length)}
+    </p>
+
+    <ul class="mt-8 grid gap-x-8 gap-y-14 sm:grid-cols-2 lg:grid-cols-3">
+      {
+        posts.map((post, index) => (
+          <li
+            data-post
+            data-search={searchText(post)}
+            class:list={[index === 0 && "sm:col-span-2 lg:col-span-3"]}
+          >
+            <PostCard post={post} featured={index === 0} />
+          </li>
+        ))
+      }
+    </ul>
+
+    <div data-blog-empty hidden class="py-16 text-center">
+      <p class="text-lg font-semibold">No articles match that search.</p>
+      <p class="mt-2 text-ink-2">Try a different word, or see everything again.</p>
+      <button
+        type="button"
+        data-blog-clear
+        class="mt-6 cursor-pointer rounded-full border border-rule-2 px-5 py-2.5 text-sm font-semibold transition-colors hover:border-ink/40"
+      >
+        Clear search
+      </button>
+    </div>
+  </main>
+
+  <Footer />
+</Base>
+
+<script>
+  const input = document.querySelector<HTMLInputElement>("#blog-search");
+  const count = document.querySelector<HTMLElement>("[data-blog-count]");
+  const empty = document.querySelector<HTMLElement>("[data-blog-empty]");
+  const clear = document.querySelector<HTMLButtonElement>("[data-blog-clear]");
+  const posts = [...document.querySelectorAll<HTMLElement>("[data-post]")];
+
+  if (input && count && empty && clear) {
+    const articleCount = (total: number) => `${total} ${total === 1 ? "article" : "articles"}`;
+
+    const filter = () => {
+      const terms = input.value.toLowerCase().split(/\s+/).filter(Boolean);
+      let shown = 0;
+      for (const post of posts) {
+        const matches = terms.every((term) => (post.dataset.search ?? "").includes(term));
+        post.hidden = !matches;
+        if (matches) shown += 1;
+      }
+      count.textContent = terms.length
+        ? `${shown} of ${articleCount(posts.length)}`
+        : articleCount(posts.length);
+      empty.hidden = shown > 0;
+    };
+
+    input.addEventListener("input", filter);
+    clear.addEventListener("click", () => {
+      input.value = "";
+      filter();
+      input.focus();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "/" || event.target instanceof HTMLInputElement) return;
+      event.preventDefault();
+      input.focus();
+    });
+    filter();
+  }
+</script>

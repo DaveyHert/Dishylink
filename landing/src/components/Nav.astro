@@ -4,16 +4,34 @@ import Button from "./Button.astro";
 import Icon from "./Icon.astro";
 import SponsorMenu from "./SponsorMenu.astro";
 import JobmateBanner from "./JobmateBanner.astro";
-import { GITHUB, X, PRIVACY, STARLINK_REFERRAL } from "../constants";
+import { BLOG, GITHUB, X, PRIVACY, STARLINK_REFERRAL } from "../constants";
 
-const links = [
+interface NavLink {
+  label: string;
+  href: string;
+}
+
+const links: (NavLink | { label: string; children: NavLink[] })[] = [
   { label: "Features", href: "/#features" },
   { label: "Reviews", href: "/#reviews" },
-  { label: "Privacy", href: PRIVACY },
+  { label: "Blog", href: BLOG },
   { label: "FAQ", href: "/#faq" },
-  { label: "Contribute", href: GITHUB },
+  {
+    label: "More",
+    children: [
+      { label: "Privacy", href: PRIVACY },
+      { label: "Contribute", href: GITHUB },
+    ],
+  },
   { label: "Order Starlink", href: STARLINK_REFERRAL },
 ];
+const flatLinks = links.flatMap((link) => ("children" in link ? link.children : [link]));
+
+const newTab = (href: string) =>
+  href.startsWith("http") ? { target: "_blank", rel: "noopener noreferrer" } : {};
+
+const glassPanel =
+  "overflow-hidden rounded-xl border border-rule/50 bg-[color-mix(in_srgb,var(--color-surface)_80%,transparent)] text-ink shadow-[0_12px_40px_rgb(0_0_0/0.28),inset_0_1px_0_rgb(255_255_255/0.08)] backdrop-blur-xl backdrop-saturate-150 dark:bg-[color-mix(in_srgb,#0e0e0e_80%,transparent)] dark:shadow-[0_12px_40px_rgb(0_0_0/0.45),inset_0_1px_0_rgb(255_255_255/0.08)]";
 
 const socials = [
   { href: GITHUB, icon: "github", label: "Dishylink on GitHub" },
@@ -40,14 +58,35 @@ const socials = [
       {
         links.map((link) => (
           <li>
-            <a
-              href={link.href}
-              target={link.href.startsWith("http") ? "_blank" : undefined}
-              rel={link.href.startsWith("http") ? "noopener noreferrer" : undefined}
-              class="cursor-pointer transition-colors hover:text-ink"
-            >
-              {link.label}
-            </a>
+            {"children" in link ? (
+              <details data-menu class="group relative">
+                <summary class="flex cursor-pointer list-none items-center gap-1 transition-colors hover:text-ink [&::-webkit-details-marker]:hidden">
+                  {link.label}
+                  <Icon name="caret" class="size-3.5 transition-transform group-open:rotate-180" />
+                </summary>
+                <ul class:list={["absolute left-0 z-50 mt-2 w-40 p-1.5", glassPanel]}>
+                  {link.children.map((child) => (
+                    <li>
+                      <a
+                        href={child.href}
+                        {...newTab(child.href)}
+                        class="flex rounded-[8px] px-2 py-2 text-[13px] transition-colors hover:bg-rule/40"
+                      >
+                        {child.label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : (
+              <a
+                href={link.href}
+                {...newTab(link.href)}
+                class="cursor-pointer transition-colors hover:text-ink"
+              >
+                {link.label}
+              </a>
+            )}
           </li>
         ))
       }
@@ -85,16 +124,13 @@ const socials = [
         >
           <Icon name="menu" class="size-4.5" />
         </summary>
-        <ul
-          class="absolute inset-x-3 top-full z-50 mt-1 overflow-hidden rounded-xl border border-rule/50 bg-[color-mix(in_srgb,var(--color-surface)_80%,transparent)] p-1.5 text-ink shadow-[0_12px_40px_rgb(0_0_0/0.28),inset_0_1px_0_rgb(255_255_255/0.08)] backdrop-blur-xl backdrop-saturate-150 dark:bg-[color-mix(in_srgb,#0e0e0e_80%,transparent)] dark:shadow-[0_12px_40px_rgb(0_0_0/0.45),inset_0_1px_0_rgb(255_255_255/0.08)]"
-        >
+        <ul class:list={["absolute inset-x-3 top-full z-50 mt-1 p-1.5", glassPanel]}>
           {
-            links.map((link) => (
+            flatLinks.map((link) => (
               <li>
                 <a
                   href={link.href}
-                  target={link.href.startsWith("http") ? "_blank" : undefined}
-                  rel={link.href.startsWith("http") ? "noopener noreferrer" : undefined}
+                  {...newTab(link.href)}
                   class="flex rounded-[8px] px-3 py-2.5 text-[15px] transition-colors hover:bg-rule/40"
                 >
                   {link.label}

@@ -2,6 +2,7 @@ export const GITHUB = "https://github.com/DaveyHert/dishylink";
 export const RELEASES = `${GITHUB}/releases/latest`;
 export const ISSUES = `${GITHUB}/issues`;
 export const PRIVACY = "/privacy/";
+export const BLOG = "/blog/";
 export const X = "https://x.com/daveyhert";
 
 /** Cloudflare Email Routing address; forwards to the verified destination. */

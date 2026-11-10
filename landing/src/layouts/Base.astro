@@ -10,11 +10,21 @@ interface Props {
   path?: string;
   /** Short pages: the body fills the window so the footer sits at the bottom. */
   fill?: boolean;
+  /** Share image for this page; the site-wide one when absent. */
+  image?: { src: string; width: number; height: number; alt: string };
+  /** Blog posts: marks the page as an article for social cards and search engines. */
+  article?: { headline: string; publishDate: Date; updatedDate?: Date };
 }
 
-const { title, description, path = "/", fill = false } = Astro.props;
+const { title, description, path = "/", fill = false, image, article } = Astro.props;
 const canonical = new URL(path, Astro.site ?? "https://dishylink.com").toString();
-const ogImage = new URL("/og.png", Astro.site ?? "https://dishylink.com").toString();
+const share = image ?? {
+  src: "/og.png",
+  width: 1200,
+  height: 630,
+  alt: "Dishylink — monitor your Starlink's performance and health, shown on the app's dashboard.",
+};
+const ogImage = new URL(share.src, Astro.site ?? "https://dishylink.com").toString();
 
 const site = Astro.site?.toString().replace(/\/$/, "") ?? "https://dishylink.com";
 const ORGANIZATION_ID = `${site}/#organization`;
@@ -115,6 +125,21 @@ const faqSchema = {
     },
   ],
 };
+
+const articleSchema = article && {
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  headline: article.headline,
+  description,
+  url: canonical,
+  mainEntityOfPage: canonical,
+  image: ogImage,
+  datePublished: article.publishDate.toISOString(),
+  dateModified: (article.updatedDate ?? article.publishDate).toISOString(),
+  inLanguage: "en",
+  author: organizationSchema.founder,
+  publisher: { "@id": ORGANIZATION_ID },
+};
 ---
 
 <!doctype html>
@@ -154,19 +179,27 @@ const faqSchema = {
     <link rel="icon" href="/favicon-96.png" type="image/png" sizes="96x96" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="sitemap" href="/sitemap-index.xml" />
+    <link rel="alternate" type="application/rss+xml" title="Dishylink blog" href="/rss.xml" />
 
-    <meta property="og:type" content="website" />
+    <meta property="og:type" content={article ? "article" : "website"} />
     <meta property="og:site_name" content="Dishylink" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
     <meta property="og:image" content={ogImage} />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    <meta
-      property="og:image:alt"
-      content="Dishylink — monitor your Starlink's performance and health, shown on the app's dashboard."
-    />
+    <meta property="og:image:width" content={String(share.width)} />
+    <meta property="og:image:height" content={String(share.height)} />
+    <meta property="og:image:alt" content={share.alt} />
+    {
+      article && (
+        <meta property="article:published_time" content={article.publishDate.toISOString()} />
+      )
+    }
+    {
+      article?.updatedDate && (
+        <meta property="article:modified_time" content={article.updatedDate.toISOString()} />
+      )
+    }
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
@@ -174,8 +207,20 @@ const faqSchema = {
 
     <script is:inline set:html={JSON.stringify(organizationSchema)} type="application/ld+json" />
     <script is:inline set:html={JSON.stringify(websiteSchema)} type="application/ld+json" />
-    <script is:inline set:html={JSON.stringify(appSchema)} type="application/ld+json" />
-    <script is:inline set:html={JSON.stringify(faqSchema)} type="application/ld+json" />
+    {/* Both describe what the home page itself shows, so no other page may claim them. */}
+    {
+      path === "/" && (
+        <>
+          <script is:inline set:html={JSON.stringify(appSchema)} type="application/ld+json" />
+          <script is:inline set:html={JSON.stringify(faqSchema)} type="application/ld+json" />
+        </>
+      )
+    }
+    {
+      articleSchema && (
+        <script is:inline set:html={JSON.stringify(articleSchema)} type="application/ld+json" />
+      )
+    }
 
   </head>
   <body class:list={["bg-paper text-ink antialiased", fill && "flex min-h-dvh flex-col"]}>

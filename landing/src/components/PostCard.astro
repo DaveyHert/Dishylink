@@ -1,0 +1,91 @@
+---
+import { Image } from "astro:assets";
+import Icon from "./Icon.astro";
+import Logo from "./Logo.astro";
+import { formatPostDate, postPath, readingMinutes, type Post } from "../data/blog";
+
+interface Props {
+  post: Post;
+  /** The lead card: image beside the text, at display size. */
+  featured?: boolean;
+  heading?: "h2" | "h3";
+}
+
+const { post, featured = false, heading: Heading = "h2" } = Astro.props;
+const { title, description, publishDate, cover, tags, draft } = post.data;
+---
+
+<a
+  href={postPath(post)}
+  class:list={[
+    "group block",
+    featured && "lg:grid lg:grid-cols-[1.3fr_1fr] lg:items-center lg:gap-14",
+  ]}
+>
+  <div
+    class:list={[
+      "aspect-[16/10] overflow-hidden border border-rule bg-surface",
+      featured ? "rounded-2xl" : "rounded-xl",
+    ]}
+  >
+    {
+      cover ? (
+        <Image
+          src={cover}
+          alt=""
+          widths={featured ? [640, 960, 1440] : [480, 720, 960]}
+          sizes={
+            featured ? "(max-width: 1024px) 100vw, 700px" : "(max-width: 640px) 100vw, 400px"
+          }
+          loading={featured ? "eager" : "lazy"}
+          class="size-full object-cover object-top transition-transform duration-300 ease-out group-hover:scale-[1.03]"
+        />
+      ) : (
+        <div class="grid size-full place-items-center text-ink-3">
+          <Logo class="size-14" />
+        </div>
+      )
+    }
+  </div>
+
+  <div class:list={[featured ? "mt-6 lg:mt-0" : "mt-5"]}>
+    <p
+      class="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] tracking-[0.18em] text-ink-3 uppercase"
+    >
+      {
+        tags[0] && (
+          <>
+            <span class="text-ink-2">{tags[0]}</span>
+            <span aria-hidden="true">·</span>
+          </>
+        )
+      }
+      <time datetime={publishDate.toISOString()}>{formatPostDate(publishDate)}</time>
+      <span aria-hidden="true">·</span>
+      <span>{readingMinutes(post)} min read</span>
+      {draft && <span class="rounded-full border border-rule-2 px-2 py-0.5">Draft</span>}
+    </p>
+    <Heading
+      class:list={[
+        "font-semibold text-balance decoration-rule-2 decoration-1 underline-offset-4 group-hover:underline",
+        featured ? "mt-4 text-3xl sm:text-4xl sm:leading-[1.08]" : "mt-3 text-xl leading-snug",
+      ]}
+    >
+      {title}
+    </Heading>
+    <p class:list={["text-ink-2", featured ? "mt-4 text-lg" : "mt-2 line-clamp-3"]}>
+      {description}
+    </p>
+    {
+      featured && (
+        <p class="mt-6 inline-flex items-center gap-2 font-semibold">
+          Read article
+          <Icon
+            name="arrow"
+            class="size-4 transition-transform duration-200 ease-out group-hover:translate-x-1"
+          />
+        </p>
+      )
+    }
+  </div>
+</a>

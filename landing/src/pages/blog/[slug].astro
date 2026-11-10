@@ -1,0 +1,215 @@
+---
+import type { InferGetStaticPropsType } from "astro";
+import { getImage, Image } from "astro:assets";
+import { render } from "astro:content";
+import Base from "../../layouts/Base.astro";
+import Nav from "../../components/Nav.astro";
+import Footer from "../../components/Footer.astro";
+import Button from "../../components/Button.astro";
+import Logo from "../../components/Logo.astro";
+import PostCard from "../../components/PostCard.astro";
+import { BLOG } from "../../constants";
+import { formatPostDate, listedPosts, postPath, readingMinutes } from "../../data/blog";
+
+export async function getStaticPaths() {
+  const posts = await listedPosts();
+  return posts.map((post) => ({
+    params: { slug: post.id },
+    props: { post, others: posts.filter((other) => other.id !== post.id).slice(0, 3) },
+  }));
+}
+
+type Props = InferGetStaticPropsType<typeof getStaticPaths>;
+
+const { post, others } = Astro.props;
+const { title, description, publishDate, updatedDate, cover, coverAlt = "", tags } = post.data;
+const { Content, headings } = await render(post);
+const sections = headings.filter((heading) => heading.depth === 2);
+
+const SHARE_WIDTH = 1200;
+const shareWidth = cover ? Math.min(cover.width, SHARE_WIDTH) : 0;
+const share = cover && {
+  src: (await getImage({ src: cover, width: shareWidth, format: "jpg" })).src,
+  width: shareWidth,
+  height: Math.round((shareWidth * cover.height) / cover.width),
+  alt: coverAlt || title,
+};
+
+const prose = [
+  "text-[17px] leading-[1.75] text-ink-2 sm:text-lg sm:leading-[1.75]",
+  "[&>*:first-child]:mt-0",
+  "[&_p]:mt-6",
+  "[&_h2]:mt-14 [&_h2]:scroll-mt-32 [&_h2]:text-[1.75rem] [&_h2]:leading-tight [&_h2]:font-semibold [&_h2]:tracking-[-0.01em] [&_h2]:text-balance [&_h2]:text-ink",
+  "[&_h3]:mt-10 [&_h3]:scroll-mt-32 [&_h3]:text-xl [&_h3]:font-semibold [&_h3]:text-ink",
+  "[&_a]:font-semibold [&_a]:text-ink [&_a]:underline [&_a]:decoration-rule-2 [&_a]:underline-offset-4 hover:[&_a]:decoration-ink",
+  "[&_strong]:font-semibold [&_strong]:text-ink",
+  "[&_ul]:mt-5 [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:marker:text-ink-3",
+  "[&_ol]:mt-5 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:marker:text-ink-3",
+  "[&_li]:mt-2.5 [&_li]:pl-1",
+  "[&_blockquote]:mt-8 [&_blockquote]:border-l-2 [&_blockquote]:border-ink-3 [&_blockquote]:pl-5 [&_blockquote]:text-ink",
+  "[&_code]:rounded [&_code]:bg-surface [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.85em] [&_code]:text-ink",
+  "[&_pre]:mt-7 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-rule [&_pre]:p-5 [&_pre]:text-sm [&_pre]:leading-relaxed [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-[1em]",
+  "[&_img]:mt-10 [&_img]:rounded-xl [&_img]:border [&_img]:border-rule",
+  "[&_hr]:my-12 [&_hr]:border-rule",
+  "[&_table]:mt-8 [&_table]:w-full [&_table]:border-collapse [&_table]:text-left [&_table]:text-[15px] [&_table]:leading-snug max-sm:[&_table]:block max-sm:[&_table]:overflow-x-auto",
+  "[&_th]:border-b [&_th]:border-rule-2 [&_th]:py-3 [&_th]:pr-5 [&_th]:align-bottom [&_th]:font-semibold [&_th]:text-ink",
+  "[&_td]:border-b [&_td]:border-rule [&_td]:py-3 [&_td]:pr-5 [&_td]:align-top",
+];
+---
+
+<Base
+  title={`${title} — Dishylink`}
+  description={description}
+  path={postPath(post)}
+  image={share}
+  article={{ headline: title, publishDate, updatedDate }}
+>
+  <Nav />
+
+  <main class="mx-auto max-w-7xl px-5 pt-12 pb-28 sm:pt-16">
+    <article>
+      <header class="mx-auto max-w-4xl text-center">
+        <nav
+          aria-label="Breadcrumb"
+          class="font-mono text-[11px] tracking-[0.18em] text-ink-3 uppercase"
+        >
+          <a href={BLOG} class="transition-colors hover:text-ink">Blog</a>
+          {
+            tags[0] && (
+              <>
+                <span aria-hidden="true"> / </span>
+                <span>{tags[0]}</span>
+              </>
+            )
+          }
+        </nav>
+        <h1
+          class="mt-6 text-[clamp(2.1rem,1.2rem+3.6vw,3.9rem)] leading-[1.05] font-medium tracking-[-0.02em] text-balance"
+        >
+          {title}
+        </h1>
+        <p class="mx-auto mt-6 max-w-3xl text-xl text-ink-2">{description}</p>
+        <p
+          class="mt-8 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 font-mono text-[12px] text-ink-3"
+        >
+          <time datetime={publishDate.toISOString()}>{formatPostDate(publishDate)}</time>
+          {
+            updatedDate && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>
+                  Updated{" "}
+                  <time datetime={updatedDate.toISOString()}>{formatPostDate(updatedDate)}</time>
+                </span>
+              </>
+            )
+          }
+          <span aria-hidden="true">·</span>
+          <span>{readingMinutes(post)} min read</span>
+        </p>
+      </header>
+
+      {
+        cover && (
+          <div class="mt-12 overflow-hidden rounded-2xl border border-rule bg-surface">
+            <Image
+              src={cover}
+              alt={coverAlt}
+              widths={[768, 1240, 1860, 2480]}
+              sizes="(max-width: 1280px) 100vw, 1240px"
+              loading="eager"
+              class="aspect-[16/10] w-full object-cover lg:aspect-[16/9]"
+            />
+          </div>
+        )
+      }
+
+      <div class="mt-14 grid gap-14 lg:grid-cols-[minmax(0,1fr)_17rem] lg:gap-20">
+        <div class:list={["max-w-[46rem] min-w-0", prose]}>
+          <Content />
+        </div>
+
+        <aside class="max-lg:hidden">
+          <div class="sticky top-28">
+            {
+              sections.length > 0 && (
+                <nav aria-label="On this page">
+                  <p class="font-mono text-[11px] tracking-[0.18em] text-ink-3 uppercase">
+                    On this page
+                  </p>
+                  <ul class="mt-4 border-l border-rule text-sm">
+                    {sections.map((section) => (
+                      <li>
+                        <a
+                          href={`#${section.slug}`}
+                          data-toc-link
+                          class="-ml-px block border-l border-transparent py-1.5 pl-4 text-ink-2 transition-colors hover:text-ink aria-[current=true]:border-ink aria-[current=true]:text-ink"
+                        >
+                          {section.text}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </nav>
+              )
+            }
+
+            <div class="mt-10 rounded-2xl border border-rule bg-surface/60 p-5">
+              <Logo class="size-8" />
+              <p class="mt-4 font-semibold">Dishylink</p>
+              <p class="mt-1 text-sm text-ink-2">
+                The free, open-source Starlink app for Mac, Windows and browsers.
+              </p>
+              <Button href="/#get" variant="primary" size="sm" class="mt-4 w-full">Download</Button>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </article>
+
+    {
+      others.length > 0 && (
+        <section class="mt-24 border-t border-rule pt-14">
+          <div class="flex items-end justify-between gap-6">
+            <h2 class="text-2xl font-semibold">Keep reading</h2>
+            <a
+              href={BLOG}
+              class="text-sm font-semibold text-ink-2 underline decoration-rule-2 underline-offset-4 transition-colors hover:text-ink"
+            >
+              All articles
+            </a>
+          </div>
+          <ul class="mt-10 grid gap-x-8 gap-y-14 sm:grid-cols-2 lg:grid-cols-3">
+            {others.map((other) => (
+              <li>
+                <PostCard post={other} heading="h3" />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )
+    }
+  </main>
+
+  <Footer />
+</Base>
+
+<script>
+  const links = [...document.querySelectorAll<HTMLAnchorElement>("[data-toc-link]")];
+  const targets = links.map((link) =>
+    document.getElementById(decodeURIComponent(link.hash.slice(1))),
+  );
+
+  if (links.length > 0) {
+    const READING_LINE = 160;
+    const mark = () => {
+      let current = 0;
+      targets.forEach((target, index) => {
+        if (target && target.getBoundingClientRect().top <= READING_LINE) current = index;
+      });
+      links.forEach((link, index) => link.setAttribute("aria-current", String(index === current)));
+    };
+    addEventListener("scroll", mark, { passive: true });
+    mark();
+  }
+</script>
