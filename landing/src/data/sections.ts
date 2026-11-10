@@ -177,7 +177,7 @@ export const sections: SectionContent[] = [
     label: "Network rules",
     id: "rules",
     layout: "media-right",
-    title: "Set rules for every device on your network.",
+    title: "Set rules for devices on your network.",
     body: [
       "Set a data limit, a schedule or a timer on any device, or on a whole group at once. When the data or time runs out, Dishylink pauses it for you, then lets it back on when the next window opens.",
       "Connect your Starlink account and the pausing happens on its own.",
@@ -225,16 +225,16 @@ export const sections: SectionContent[] = [
     title: "Direct control of your Starlink hardware.",
     body: [
       "Manage configuration for your dish and local network. Control routine maintenance, software updates, and power management with ease on supported firmware versions.",
-      "Custom DNS, bypass mode and content filtering are deliberately left out — a bad write can take your WiFi down until a physical reset.",
+      "Content filtering is deliberately left out — a bad write can take your WiFi down until a physical reset.",
     ],
     media: [
       screenshot(
         "settings-starlink",
-        "Dishylink's settings on the Starlink tab: snow melt, sleep schedule, a software update window set to overnight around 3 AM, firmware deferral, a debug data copy button, and maintenance actions to reset the obstruction map or reboot the dish.",
+        "Dishylink's settings on the Starlink tab: snow melt, sleep schedule, a software update window set to overnight around 3 AM, firmware deferral, a debug data copy button, and maintenance actions to reset the obstruction map, reboot the dish or factory reset it.",
       ),
       screenshot(
         "settings-router",
-        "The Router tab of the same settings panel: the StarL X network with its 2 GHz, 5 GHz and 5 GHz hi bands, a trusted Mesh 1 node, router firmware and country, and a reboot router action.",
+        "The Router tab of the same settings panel: the StarL X network with its 2 GHz, 5 GHz and 5 GHz hi bands, a trusted mesh node, router firmware and country, reboot and factory reset actions, and an Advanced section with the router IP address and custom DNS.",
       ),
     ],
   },
