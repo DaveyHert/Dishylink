@@ -60,20 +60,26 @@ const outlets: {
     label: true,
   },
 ];
+
+const grayscaleUntilHover =
+  "transition-[filter] duration-300 [@media(hover:hover)_and_(pointer:fine)]:grayscale group-hover:grayscale-0";
 ---
 
 <section class="mx-auto max-w-7xl px-5 pt-16 pb-16 sm:pt-24 sm:pb-24">
   <p class="text-center font-mono text-[11px] uppercase tracking-[0.35em] text-ink-3">Featured</p>
-  <ul class="mt-8 flex flex-wrap items-center justify-center gap-x-8 gap-y-4 lg:flex-nowrap lg:justify-between lg:gap-x-6">
+  <ul
+    data-featured-dock
+    class="mt-8 flex flex-wrap items-center justify-center gap-x-8 gap-y-4 lg:mt-4 lg:h-10 lg:flex-nowrap lg:items-end lg:justify-between lg:gap-x-6"
+  >
     {
       outlets.map((outlet) => (
-        <li>
+        <li data-featured-item class="group flex items-end">
           <a
             href={outlet.href}
             target="_blank"
             rel="noopener noreferrer"
             aria-label={outlet.name}
-            class="flex items-center gap-2 opacity-80 transition-opacity hover:opacity-100"
+            class="flex h-6 origin-bottom-left items-center gap-2 opacity-80 transition-opacity hover:opacity-100"
           >
             <img
               src={outlet.logo}
@@ -82,13 +88,18 @@ const outlets: {
                 "w-auto object-contain",
                 outlet.class ?? "size-5 rounded-full",
                 outlet.darkLogo && "dark:hidden",
+                grayscaleUntilHover,
               ]}
             />
             {outlet.darkLogo && (
               <img
                 src={outlet.darkLogo}
                 alt=""
-                class:list={["hidden w-auto object-contain dark:block", outlet.class]}
+                class:list={[
+                  "hidden w-auto object-contain dark:block",
+                  outlet.class,
+                  grayscaleUntilHover,
+                ]}
               />
             )}
             {outlet.label && (
@@ -102,3 +113,92 @@ const outlets: {
     }
   </ul>
 </section>
+
+<script>
+  const dock = document.querySelector<HTMLElement>("[data-featured-dock]");
+  const entries = [...(dock?.querySelectorAll<HTMLElement>("[data-featured-item]") ?? [])].flatMap(
+    (item) => {
+      const link = item.querySelector<HTMLElement>("a");
+      return link ? [{ item, link, scale: 1, velocity: 0 }] : [];
+    },
+  );
+
+  if (dock && entries.length > 1 && matchMedia("(hover: hover) and (pointer: fine)").matches) {
+    const PEAK_SCALE = 1.5;
+    const RANGE_IN_PITCHES = 2.6;
+    const STIFFNESS = 320;
+    const DAMPING = 26;
+    const MASS = 0.6;
+    const SETTLED = 0.001;
+
+    let pointerX: number | null = null;
+    let frame = 0;
+    let previousTime = 0;
+
+    const step = (time: number) => {
+      const elapsed = Math.min(Math.max(time - previousTime, 0) / 1000, 1 / 30);
+      previousTime = time;
+
+      const style = getComputedStyle(dock);
+      const sizes = entries.map(({ link, scale }) => {
+        const box = link.getBoundingClientRect();
+        return { width: box.width / scale, height: box.height / scale };
+      });
+      const centers = entries.map(({ item }) => {
+        const box = item.getBoundingClientRect();
+        return box.left + box.width / 2;
+      });
+      const range =
+        (RANGE_IN_PITCHES * (centers[centers.length - 1] - centers[0])) / (centers.length - 1);
+      const growths = centers.map((center) => {
+        if (pointerX === null || style.flexWrap !== "nowrap") return 0;
+        const distance = Math.abs(pointerX - center);
+        if (distance >= range) return 0;
+        return (PEAK_SCALE - 1) * 0.5 * (1 + Math.cos((Math.PI * distance) / range));
+      });
+      const room =
+        dock.clientWidth -
+        sizes.reduce((total, size) => total + size.width, 0) -
+        (parseFloat(style.columnGap) || 0) * (entries.length - 1);
+      const wanted = growths.reduce(
+        (total, growth, index) => total + growth * sizes[index].width,
+        0,
+      );
+      const fit = wanted > 0 ? Math.min(1, Math.max(room, 0) / wanted) : 1;
+
+      let moving = false;
+      entries.forEach((entry, index) => {
+        const target = 1 + growths[index] * fit;
+        const force = -STIFFNESS * (entry.scale - target) - DAMPING * entry.velocity;
+        entry.velocity += (force / MASS) * elapsed;
+        entry.scale += entry.velocity * elapsed;
+        if (Math.abs(entry.velocity) > SETTLED || Math.abs(entry.scale - target) > SETTLED) {
+          moving = true;
+        } else {
+          entry.scale = target;
+          entry.velocity = 0;
+        }
+        const resting = entry.scale === 1;
+        entry.item.style.width = resting ? "" : `${sizes[index].width * entry.scale}px`;
+        entry.item.style.height = resting ? "" : `${sizes[index].height * entry.scale}px`;
+        entry.link.style.transform = resting ? "" : `scale(${entry.scale})`;
+      });
+      frame = moving ? requestAnimationFrame(step) : 0;
+    };
+
+    const animate = () => {
+      if (frame) return;
+      previousTime = performance.now();
+      frame = requestAnimationFrame(step);
+    };
+
+    dock.addEventListener("pointermove", (event) => {
+      pointerX = event.clientX;
+      animate();
+    });
+    dock.addEventListener("pointerleave", () => {
+      pointerX = null;
+      animate();
+    });
+  }
+</script>
