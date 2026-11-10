@@ -109,15 +109,16 @@ below as requiring an optional Starlink account connection:
 - **Custom DNS**: point the router at your own resolvers.
 - **Bypass mode**: put the router into bridge mode for your own networking gear.
 - **Connected devices**: pause or unpause another device while it is connected.
-  Available in the desktop app and web development harness, this control requires
-  an optional Starlink account sign-in: Dishylink reads the router configuration
-  locally, prepares the smallest accepted client update on the trusted host, and
-  sends it only to Starlink's authenticated device endpoint. The device running
-  Dishylink cannot pause itself, which is what **Your device on this network** in
-  app settings pins down. The browser extension does not expose this control
-  because ordinary desktop extensions cannot reliably read the host computer's LAN
-  IP or MAC address. Although the extension can send the update, it cannot prove
-  which router client is itself and therefore cannot safely prevent self-pausing.
+  Available in the desktop app, the browser extension and the Docker dashboard,
+  this control requires an optional Starlink account sign-in: Dishylink reads the
+  router configuration locally, prepares the smallest accepted client update on
+  the trusted host, and sends it only to Starlink's authenticated device endpoint.
+  The device running Dishylink cannot pause itself, which is what **Your device on
+  this network** in app settings pins down. The desktop app also reads the
+  computer's own LAN addresses to recognise itself. A browser extension cannot
+  read the host computer's LAN IP or MAC address, so there the device you pick in
+  app settings is the only identity it has, and it refuses to pause anything
+  until you have picked one.
 - **Copy debug data**: diagnostics + status + config as JSON, for bug reports.
 
 Content filtering is deliberately _not_ exposed: a bad write there can take the
