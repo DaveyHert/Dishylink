@@ -30,6 +30,7 @@ import { AlignmentPanel } from "./components/alignment/AlignmentCard";
 import { DataUsagePanel } from "./components/data-usage/DataUsagePanel";
 import { NetworkPanel } from "./components/network/NetworkPanel";
 import { AccountPanel } from "./components/account/AccountPanel";
+import { UptimePanel } from "./components/uptime/UptimePanel";
 import { SettingsModal } from "./components/settings/SettingsModal";
 import { useRouterNetwork } from "./hooks/useRouterNetwork";
 import { useRouterUnreachable } from "./hooks/useRouterUnreachable";
@@ -222,6 +223,16 @@ export default function App() {
           size='wide'
         >
           <AccountPanel lanOnline={lanOnline} />
+        </DetailsModal>
+      )}
+      {/* Uptime / SLA modal */}
+      {openPanel === "uptime" && (
+        <DetailsModal
+          title={t("navigation.uptime")}
+          onClose={() => setOpenPanel(null)}
+          size='wide'
+        >
+          <UptimePanel />
         </DetailsModal>
       )}
       {/* Network modal */}
