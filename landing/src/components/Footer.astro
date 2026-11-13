@@ -37,9 +37,13 @@ const links = [
     </nav>
   </div>
 
-  <p class="mt-8 text-sm leading-relaxed text-ink-2">
-    Dishylink is an unofficial, independent project. It is not affiliated with, endorsed by, or
-    connected to SpaceX or Starlink, and Starlink is a trademark of Space Exploration
-    Technologies Corp.
-  </p>
+  {/* Google only honours data-nosnippet on a div, span or section. Without it the search
+      result for a page could show this notice in place of the page's own description. */}
+  <div data-nosnippet>
+    <p class="mt-8 text-sm leading-relaxed text-ink-2">
+      Dishylink is an unofficial, independent project. It is not affiliated with, endorsed by, or
+      connected to SpaceX or Starlink, and Starlink is a trademark of Space Exploration
+      Technologies Corp.
+    </p>
+  </div>
 </footer>
