@@ -411,6 +411,15 @@
     "refusedDenied": "Permission to reach that address was declined, so it wasn't saved.",
     "refusedUnsupported": "This browser can't be granted access to that address. Use an IPv4 address."
   },
+  "dishAddress": {
+    "title": "Dish IP address",
+    "tip": "Dishylink looks for your dish at this address. Change it only if the dish is reachable at another address — a Mini behind a MikroTik or another router, for example, where that router forwards the dish's port 9201. Clearing the box returns to {{fallback}}.",
+    "defaultIs": "Default is {{fallback}}",
+    "using": "Dishylink is using {{stored}}. Clear the box to go back to {{fallback}}.",
+    "refusedInvalid": "That isn't an IP address this app can reach. Use the numeric address, not a name.",
+    "refusedDenied": "Permission to reach that address was declined, so it wasn't saved.",
+    "refusedUnsupported": "This browser can't be granted access to that address. Use an IPv4 address."
+  },
   "support": {
     "aria": "Support and more",
     "ariaUpdateAvailable": "Support and more (update available)",

@@ -418,6 +418,15 @@
     "refusedDenied": "La permission de joindre cette adresse a été refusée, elle n'a donc pas été enregistrée.",
     "refusedUnsupported": "Ce navigateur ne peut pas obtenir l'accès à cette adresse. Utilisez une adresse IPv4."
   },
+  "dishAddress": {
+    "title": "Adresse IP de l'antenne",
+    "tip": "Dishylink cherche votre antenne à cette adresse. Ne la changez que si l'antenne est joignable à une autre adresse — par exemple une Mini derrière un MikroTik ou un autre routeur qui redirige le port 9201 de l'antenne. Vider le champ revient à {{fallback}}.",
+    "defaultIs": "La valeur par défaut est {{fallback}}",
+    "using": "Dishylink utilise {{stored}}. Videz le champ pour revenir à {{fallback}}.",
+    "refusedInvalid": "Ce n'est pas une adresse IP que cette application peut joindre. Utilisez l'adresse numérique, pas un nom.",
+    "refusedDenied": "La permission de joindre cette adresse a été refusée, elle n'a donc pas été enregistrée.",
+    "refusedUnsupported": "Ce navigateur ne peut pas obtenir l'accès à cette adresse. Utilisez une adresse IPv4."
+  },
   "support": {
     "aria": "Assistance et plus",
     "ariaUpdateAvailable": "Assistance et plus (mise à jour disponible)",

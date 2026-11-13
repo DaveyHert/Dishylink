@@ -63,12 +63,23 @@ export interface Preferences {
    * Where to reach the router. null means 192.168.1.1, which is right for almost
    * every kit; a value is for the setups it cannot serve — a router whose subnet
    * was moved in the official app, or a kit in bypass mode behind a third-party
-   * router. The dish has no equivalent: its 192.168.100.1 is fixed in firmware.
+   * router.
    *
    * Owned by main for the same reason `notifications` is: the recorder in this
    * process dials the router with no window open.
    */
   routerAddress: string | null;
+
+  /**
+   * Where to reach the dish. null means 192.168.100.1, its firmware default; a
+   * value is for a kit behind another router — a Mini wired into a MikroTik, for
+   * instance — where the dish is only reachable at the address that router
+   * exposes it on.
+   *
+   * Owned here for the same reason as `routerAddress`: the recorder polls the
+   * dish with no window open.
+   */
+  dishAddress: string | null;
 
   /**
    * The router's clientId for this machine, or null until the window has seen
@@ -92,6 +103,7 @@ const DEFAULTS: Preferences = {
   trayIconStyle: "original",
   windowBounds: null,
   routerAddress: null,
+  dishAddress: null,
   selfClientId: null,
   locale: null,
 };
@@ -147,6 +159,7 @@ export function preferences(): Preferences {
           : "original",
       windowBounds: isWindowBounds(parsed.windowBounds) ? parsed.windowBounds : null,
       routerAddress: storedAddress(parsed.routerAddress),
+      dishAddress: storedAddress(parsed.dishAddress),
       selfClientId: storedClientId(parsed.selfClientId),
       locale: isSupportedLocale(parsed.locale) ? parsed.locale : null,
     };

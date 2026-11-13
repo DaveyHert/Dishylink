@@ -418,6 +418,15 @@
     "refusedDenied": "A permissão para acessar esse endereço foi negada, então ele não foi salvo.",
     "refusedUnsupported": "Este navegador não pode receber acesso a esse endereço. Use um endereço IPv4."
   },
+  "dishAddress": {
+    "title": "Endereço IP da antena",
+    "tip": "O Dishylink procura sua antena neste endereço. Altere-o apenas se a antena estiver acessível em outro endereço — por exemplo, uma Mini atrás de um MikroTik ou outro roteador que encaminha a porta 9201 da antena. Limpar o campo volta para {{fallback}}.",
+    "defaultIs": "O padrão é {{fallback}}",
+    "using": "O Dishylink está usando {{stored}}. Limpe o campo para voltar para {{fallback}}.",
+    "refusedInvalid": "Esse não é um endereço IP que este aplicativo consiga acessar. Use o endereço numérico, não um nome.",
+    "refusedDenied": "A permissão para acessar esse endereço foi negada, então ele não foi salvo.",
+    "refusedUnsupported": "Este navegador não pode receber acesso a esse endereço. Use um endereço IPv4."
+  },
   "support": {
     "aria": "Suporte e mais",
     "ariaUpdateAvailable": "Suporte e mais (atualização disponível)",

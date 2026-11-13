@@ -23,6 +23,7 @@ import { AccountRequiredError } from "../../lib/dishConfigUpdate";
 import { errorText } from "../../lib/errorText";
 import { AccountRequiredNotice } from "../shared/AccountRequiredNotice";
 import {
+  CollapsibleSection,
   DangerAction,
   SectionLabel,
   SettingRow,
@@ -30,6 +31,8 @@ import {
   selectItemClass,
   triggerClass,
 } from "./settingsChrome";
+import { DishAddressRow } from "./DishAddressRow";
+import { useDishAddressState } from "../../hooks/useDishAddress";
 import {
   formatLocalMinutes,
   localMinutesToUtcMinutes,
@@ -112,6 +115,7 @@ export function StarlinkSettingsTab({
   const { t } = useTranslation();
   const timeLocale = useTimeLocale();
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [dishAddresses, setDishAddresses] = useDishAddressState();
   const config = settings.config;
 
   const sleepEnabled = Boolean(config?.powerSaveMode);
@@ -324,6 +328,18 @@ export function StarlinkSettingsTab({
           )}
         </>
       )}
+
+      {/* Outside the block above on purpose: a dish at the wrong address answers
+          nothing, which is exactly when this row is needed and exactly when
+          there is no config to render the rest of the tab around. */}
+      <CollapsibleSection title={t("settings.advanced")}>
+        {dishAddresses && (
+          <>
+            <SectionLabel>{t("settings.connection")}</SectionLabel>
+            <DishAddressRow addresses={dishAddresses} onChanged={setDishAddresses} />
+          </>
+        )}
+      </CollapsibleSection>
     </>
   );
 }

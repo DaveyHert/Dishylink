@@ -19,7 +19,8 @@ import {
 import { extname, join, resolve, sep } from "node:path";
 import { networkInterfaces } from "node:os";
 import { createRouterOrigins } from "../core/routerEndpoint.ts";
-import { DISH_LAN_HANDLE_URL, ROUTER_LAN_ADDRESS } from "../core/dishClient.ts";
+import { DISH_LAN_ADDRESS, ROUTER_LAN_ADDRESS } from "../core/dishClient.ts";
+import { dishOriginFrom } from "../core/dishEndpoint.ts";
 import { normalizeIpAddress } from "../core/ipAddress.ts";
 import { identityFromEnv } from "../core/hostNetworkIdentity.ts";
 import type { RouterClientUpdate } from "../core/routerClientUpdate.ts";
@@ -38,7 +39,9 @@ process.env.HISTORIAN_PROTOSET ??= resolve("public/dish.protoset");
 
 const PORT = Number(process.env.BROWSER_HOST_PORT ?? 8080);
 const DIST = resolve(process.env.BROWSER_DIST ?? "dist");
-const DISH_ORIGIN = originOf(process.env.DISH_URL ?? DISH_LAN_HANDLE_URL);
+/** An explicit DISH_URL still pins the dish, for pointing the image at a
+ *  stand-in; otherwise it is dialled wherever the Settings row says. */
+const DISH_URL_OVERRIDE = process.env.DISH_URL ?? null;
 const ROUTER_URL_OVERRIDE = process.env.ROUTER_URL ?? null;
 const CELESTRAK_ORIGIN = "https://celestrak.org";
 const SPEEDTEST_ORIGIN = "https://speed.cloudflare.com";
@@ -222,6 +225,7 @@ function readSelfDevice(): number | null {
 }
 
 const ROUTER_ADDRESS_FILE = join(DATA_DIR, "router-address");
+const DISH_ADDRESS_FILE = join(DATA_DIR, "dish-address");
 
 function readRouterAddress(): string | null {
   try {
@@ -229,6 +233,20 @@ function readRouterAddress(): string | null {
   } catch {
     return null;
   }
+}
+
+function readDishAddress(): string | null {
+  try {
+    return normalizeIpAddress(readFileSync(DISH_ADDRESS_FILE, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+/** Where the dish is dialled right now: the pinned override if one was given,
+ *  otherwise the address the Settings row stored (192.168.100.1 by default). */
+function dishOrigin(): string {
+  return DISH_URL_OVERRIDE ? originOf(DISH_URL_OVERRIDE) : dishOriginFrom(readDishAddress());
 }
 
 function writeSelfDevice(clientId: number | null): void {
@@ -250,6 +268,7 @@ const cloudHandler = createFileCloudHandler({
   }),
   protosetPath: process.env.HISTORIAN_PROTOSET,
   cookieFile,
+  dishHandleUrl: () => `${dishOrigin()}/SpaceX.API.Device.Device/Handle`,
 });
 
 // Pausing the device this dashboard runs on cuts off the connection needed to
@@ -288,6 +307,7 @@ try {
   const historian = await import("../collector/historian.mts");
   chargeLanBytes = historian.recordSelfTraffic;
   historian.setRouterAddressReader(() => readRouterAddress());
+  historian.setDishAddressReader(() => readDishAddress());
   historian.setAccountSessionReader(() => readCookie() !== null);
   historian.setDevicePauser(async (clientId, paused) => {
     const { status, body } = await guardedCloudHandler.updateClient({
@@ -386,6 +406,38 @@ export async function handleBrowserRequest(
         writeFileSync(ROUTER_ADDRESS_FILE, normalized, "utf8");
         return answer();
       }
+      case "dish-address": {
+        if (writeRefused(request, response)) return;
+        const answer = () =>
+          sendJson(response, 200, {
+            dish: readDishAddress(),
+            dishDefault: DISH_LAN_ADDRESS,
+          });
+        if (request.method === "GET") return answer();
+        if (request.method !== "POST") {
+          response.statusCode = 405;
+          response.end();
+          return;
+        }
+        const { address } = JSON.parse((await readBody(request)).toString() || "{}") as {
+          address?: string | null;
+        };
+        if (address === null || address === undefined || address === "") {
+          try {
+            rmSync(DISH_ADDRESS_FILE);
+          } catch {
+            /* already the default */
+          }
+          return answer();
+        }
+        const normalized = normalizeIpAddress(address);
+        if (!normalized) {
+          sendJson(response, 400, { error: "invalid" });
+          return;
+        }
+        writeFileSync(DISH_ADDRESS_FILE, normalized, "utf8");
+        return answer();
+      }
       case "whoami": {
         const injected = identityFromEnv();
         sendJson(response, 200, {
@@ -399,7 +451,7 @@ export async function handleBrowserRequest(
         return;
       case "dish":
         await proxyTo(
-          DISH_ORIGIN + route.path,
+          dishOrigin() + route.path,
           request,
           response,
           await readBody(request),
@@ -469,7 +521,7 @@ export async function handleBrowserRequest(
 createServer((request, response) => {
   void handleBrowserRequest(request, response);
 }).listen(PORT, "0.0.0.0", () => {
-  console.log(`[browser-host] http://0.0.0.0:${PORT}  (dish: ${DISH_ORIGIN})`);
+  console.log(`[browser-host] http://0.0.0.0:${PORT}  (dish: ${dishOrigin()})`);
   console.log(`[browser-host] UI from ${DIST}`);
   if (handleRequest)
     console.log(

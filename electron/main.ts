@@ -30,8 +30,8 @@ import {
 } from "./collector";
 import { startCloud, handleCloudRequest, signIn } from "./cloud";
 import { hostIdentity, rememberSelfDevice } from "./selfDevice";
-import { normalizeIpAddress, type RouterAddress } from "../core/ipAddress";
-import { ROUTER_LAN_ADDRESS } from "../core/dishClient";
+import { normalizeIpAddress, type DishAddress, type RouterAddress } from "../core/ipAddress";
+import { DISH_LAN_ADDRESS, ROUTER_LAN_ADDRESS } from "../core/dishClient";
 import { preferences, setPreference, onPreferencesChanged, type WindowBounds } from "./preferences";
 import {
   describeTransition,
@@ -660,12 +660,23 @@ function registerHostHandlers(): void {
     setPreference("routerAddress", normalized);
     return routerAddress();
   });
+  ipcMain.handle("get-dish-address", () => dishAddress());
+  ipcMain.handle("set-dish-address", (_event, address: string | null): DishAddress | null => {
+    const normalized = address === null ? null : normalizeIpAddress(address);
+    if (address !== null && normalized === null) return null;
+    setPreference("dishAddress", normalized);
+    return dishAddress();
+  });
 }
 
 /** The window shows the default as a placeholder, so it is told it rather than
  *  keeping its own copy that could drift from what this process actually dials. */
 function routerAddress(): RouterAddress {
   return { router: preferences().routerAddress, routerDefault: ROUTER_LAN_ADDRESS };
+}
+
+function dishAddress(): DishAddress {
+  return { dish: preferences().dishAddress, dishDefault: DISH_LAN_ADDRESS };
 }
 
 function registerExternalLinkHandler(): void {
