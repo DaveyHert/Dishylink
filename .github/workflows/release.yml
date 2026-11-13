@@ -75,6 +75,24 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Linux is built here rather than on a developer machine: electron-builder needs
+  # Docker to produce AppImage/deb from macOS, and even then the result is not the
+  # environment these packages are installed into. A stock ubuntu runner has the
+  # tooling the deb target expects (dpkg/fpm) already.
+  release-linux:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run release:linux
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   release-extension:
     needs: prepare
     runs-on: ubuntu-latest
