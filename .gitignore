@@ -14,10 +14,19 @@ collector/data
 # Local Starlink account session for the dev cloud proxy (never commit).
 .starlink-cookie
 .router-address
+.dish-address
 
 # Machine-specific agent state.
 .claude/
 CLAUDE.local.md
+
+# OpenCode's project-local state: its own config, agents, commands, plugins,
+# skills, and scratch files. Local to whoever is running the agent, so it never
+# ships alongside the code it was used to write.
+.opencode/
+.opencode*
+opencode.json
+opencode.jsonc
 
 # Working notes and throwaway probe scripts. Local to whoever is mid-task.
 HANDOFF.md
