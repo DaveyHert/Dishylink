@@ -3,10 +3,11 @@
 // a circle hung above the top edge with constellation arcs sweeping under it;
 // "spotlight" is the careers treatment, a tilted ellipse over a dot grid with a
 // vignette pulling the corners back down. Neither carries the hero's grain.
+// "glow" is the halo's circle alone, with no arcs and no constellation.
 import Constellation from "./Constellation.astro";
 
 interface Props {
-  variant: "halo" | "spotlight";
+  variant: "halo" | "spotlight" | "glow";
 }
 
 const { variant } = Astro.props;
@@ -17,18 +18,16 @@ const rings = [1044, 1476, 1700];
 
 <div class:list={["section-glow", variant]} aria-hidden="true">
   {
-    variant === "halo" ? (
-      <>
-        {rings.map((d) => (
-          <span class="ring" style={`--d:${d}px`} />
-        ))}
-        <span class="halo" />
-      </>
-    ) : (
+    variant === "spotlight" ? (
       <>
         <span class="grid" />
         <span class="beam" />
         <span class="vignette" />
+      </>
+    ) : (
+      <>
+        {variant === "halo" && rings.map((d) => <span class="ring" style={`--d:${d}px`} />)}
+        <span class="halo" />
       </>
     )
   }

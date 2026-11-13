@@ -1,0 +1,60 @@
+---
+import type { HTMLAttributes } from "astro/types";
+
+// The raised panel the download cards sit on: a top hairline, the section
+// backdrop's dot field and a bloom behind it. Content goes in a `relative z-10`
+// box of its own, or the canvas paints over it.
+type Props = HTMLAttributes<"div">;
+
+const { class: className, ...rest } = Astro.props;
+---
+
+<div
+  class:list={[
+    "relative overflow-hidden rounded-2xl border border-rule bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.04),0_18px_40px_-20px_rgba(0,0,0,0.18)] before:absolute before:inset-x-0 before:top-0 before:z-10 before:h-px before:[background:var(--gradient-rule)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_24px_60px_-24px_rgba(0,0,0,0.9)]",
+    className,
+  ]}
+  {...rest}
+>
+  <div class="card-canvas" aria-hidden="true">
+    <span class="dots"></span>
+    <span class="bloom"></span>
+  </div>
+
+  <slot />
+</div>
+
+<style>
+  .card-canvas {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    --glow: rgb(17 17 16 / 0.06);
+  }
+
+  :global([data-theme="dark"]) .card-canvas {
+    --glow: rgb(255 255 255 / 0.1);
+  }
+
+  /* The section backdrop's dot field, faded away from the rail corner so it
+     never competes with the panel's own text. */
+  .dots {
+    position: absolute;
+    inset: 0;
+    opacity: 0.6;
+    background-image: radial-gradient(var(--color-rule-2) 0.5px, transparent 0.5px);
+    background-size: 22px 22px;
+    -webkit-mask-image: radial-gradient(120% 120% at 8% 0%, #000 0%, transparent 68%);
+    mask-image: radial-gradient(120% 120% at 8% 0%, #000 0%, transparent 68%);
+  }
+
+  .bloom {
+    position: absolute;
+    left: -8%;
+    top: -70%;
+    width: 62%;
+    aspect-ratio: 1;
+    background: radial-gradient(circle, var(--glow) 0, transparent 70%);
+  }
+</style>

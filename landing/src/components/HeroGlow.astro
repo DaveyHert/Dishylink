@@ -1,9 +1,26 @@
 ---
 // Hero backdrop: tilted haze, film grain and stars, scoped to the text band.
 
+interface Star {
+  /** Distance down the band, as any CSS length. */
+  y: string;
+  x: number;
+  size: number;
+  tilt: number;
+  delay: number;
+  /** Dropped below the lg breakpoint, where the text column reaches it. */
+  wideOnly?: boolean;
+}
+
+interface Props {
+  stars?: Star[];
+  /** The band's height. Left out, it takes a share of the section it sits in. */
+  height?: string;
+}
+
 // `x` is a vw offset from the band's centre, so the scatter narrows with the
 // column and needs no second set of positions. Negative delays stagger.
-const stars = [
+const homeStars: Star[] = [
   { y: "7%", x: -8, size: 16, tilt: 18, delay: -0.5 },
   { y: "5%", x: 15, size: 5, tilt: 18, delay: -0.5 },
   { y: "24%", x: 2, size: 13, tilt: -8, delay: -1.2 },
@@ -15,14 +32,16 @@ const stars = [
 
 
 ];
+
+const { stars = homeStars, height } = Astro.props;
 ---
 
-<div class="hero-glow" aria-hidden="true">
+<div class="hero-glow" aria-hidden="true" style={height && `height:${height}`}>
   <span class="glow"></span>
   {
-    stars.map(({ y, x, size, tilt, delay }) => (
+    stars.map(({ y, x, size, tilt, delay, wideOnly }) => (
       <span
-        class="star"
+        class:list={["star", wideOnly && "wide-only"]}
         style={`--y:${y};--x:${x}vw;--size:${size}px;--tilt:${tilt}deg;animation-delay:${delay}s`}
       />
     ))
@@ -103,6 +122,12 @@ const stars = [
 
   .star::after {
     transform: rotate(78deg);
+  }
+
+  @media (width < 64rem) {
+    .star.wide-only {
+      display: none;
+    }
   }
 
   /* A tile rather than filter: url(#…) — one rasterisation, no global id. */

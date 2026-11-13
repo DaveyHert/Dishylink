@@ -17,6 +17,8 @@ const blog = defineCollection({
       updatedDate: z.coerce.date().optional(),
       cover: image().optional(),
       coverAlt: z.string().optional(),
+      /** Who a cover belongs to when it is not ours, shown under it as "Image Credit: …". */
+      coverCredit: z.string().optional(),
       tags: z.array(z.string()).default([]),
       draft: z.boolean().default(false),
     }),

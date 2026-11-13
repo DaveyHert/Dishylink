@@ -2,89 +2,144 @@
 import Base from "../../layouts/Base.astro";
 import Nav from "../../components/Nav.astro";
 import Footer from "../../components/Footer.astro";
+import HeroGlow from "../../components/HeroGlow.astro";
 import Icon from "../../components/Icon.astro";
 import PostCard from "../../components/PostCard.astro";
 import { BLOG } from "../../constants";
-import { BLOG_DESCRIPTION, listedPosts, type Post } from "../../data/blog";
+import {
+  BLOG_DESCRIPTION,
+  listedPosts,
+  topicColour,
+  topicsOf,
+  type Post,
+} from "../../data/blog";
 
 const posts = await listedPosts();
+const topics = topicsOf(posts);
 const searchText = (post: Post) =>
   [post.data.title, post.data.description, ...post.data.tags, post.body ?? ""]
     .join(" ")
     .toLowerCase()
     .replace(/[^\p{L}\p{N}.]+/gu, " ");
 const articleCount = (count: number) => `${count} ${count === 1 ? "article" : "articles"}`;
+
+// Placed around the centred header rather than the home hero's two lines.
+const stars = [
+  { y: "58px", x: -31, size: 21, tilt: 6, delay: -0.9 },
+  { y: "38px", x: -11, size: 9, tilt: 18, delay: -0.5 },
+  { y: "46px", x: 17, size: 14, tilt: -14, delay: -1.5 },
+  { y: "100px", x: 34, size: 18, tilt: -24, delay: 0 },
+  { y: "262px", x: -37, size: 15, tilt: 12, delay: -0.3, wideOnly: true },
+  { y: "316px", x: 29, size: 13, tilt: -8, delay: -1.2, wideOnly: true },
+  { y: "472px", x: -27, size: 8, tilt: 18, delay: -0.7, wideOnly: true },
+];
+
+const chip =
+  "inline-flex h-10 cursor-pointer items-center gap-2 rounded-full border border-rule bg-surface/60 px-4 text-sm text-ink-2 transition-colors hover:border-ink-3 hover:text-ink aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:font-medium aria-pressed:text-paper";
 ---
 
-<Base title="Blog — Dishylink" description={BLOG_DESCRIPTION} path={BLOG} fill>
+<Base
+  title="Starlink guides and news — Dishylink Blog"
+  description={BLOG_DESCRIPTION}
+  path={BLOG}
+  fill
+>
   <Nav />
 
-  <main class="mx-auto w-full max-w-7xl flex-1 px-5 pt-16 pb-28 sm:pt-24">
-    <header class="mx-auto max-w-3xl text-center">
-      <p class="font-mono text-[11px] tracking-[0.35em] text-ink-3 uppercase">Blog</p>
-      <h1 class="mt-5 text-section font-medium text-balance">Guides for Starlink owners</h1>
-      <p class="mt-5 text-lg text-ink-2">{BLOG_DESCRIPTION}</p>
+  <main class="relative w-full flex-1 overflow-hidden">
+    <HeroGlow stars={stars} height="940px" />
 
-      <form
-        role="search"
-        data-blog-search
-        class="mx-auto mt-9 w-full max-w-md text-left"
-        onsubmit="return false"
-      >
-        <label for="blog-search" class="sr-only">Search articles</label>
-        <div class="relative">
-          <Icon
-            name="search"
-            class="pointer-events-none absolute top-1/2 left-4 size-4.5 -translate-y-1/2 text-ink-3"
-          />
-          <input
-            id="blog-search"
-            type="search"
-            placeholder="Search articles"
-            autocomplete="off"
-            class="h-12 w-full rounded-full border border-rule bg-surface/60 pr-12 pl-11 text-[15px] text-ink transition-colors outline-none placeholder:text-ink-3 hover:border-rule-2 focus-visible:border-ink-3 [&::-webkit-search-cancel-button]:hidden"
-          />
-          <kbd
-            class="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 rounded border border-rule px-1.5 font-mono text-[11px] text-ink-3 max-sm:hidden"
-          >
-            /
-          </kbd>
+    <div class="relative mx-auto w-full max-w-7xl px-5 pt-16 pb-28 sm:pt-26">
+      <header class="mx-auto max-w-225 text-center">
+        <p class="font-mono text-[11px] tracking-[0.35em] text-ink-3 uppercase">Blog</p>
+        <h1
+          class="mt-5.5 font-display text-[clamp(2.5rem,5.4vw,4.875rem)] leading-[1.02] font-normal tracking-[-0.04em] text-balance"
+        >
+          Starlink guides and news
+        </h1>
+        <p class="mx-auto mt-6.5 max-w-155 text-[19px] leading-[1.55] text-pretty text-ink-2">
+          Guides, how-tos and news for Starlink owners: the apps for every platform, how to read
+          your dish, and what is new from Starlink.
+        </p>
+
+        <form
+          role="search"
+          data-blog-search
+          class="mx-auto mt-10 w-full max-w-md text-left"
+          onsubmit="return false"
+        >
+          <label for="blog-search" class="sr-only">Search articles</label>
+          <div class="relative">
+            <Icon
+              name="search"
+              class="pointer-events-none absolute top-1/2 left-4 size-4.5 -translate-y-1/2 text-ink-3"
+            />
+            <input
+              id="blog-search"
+              type="search"
+              placeholder="Search articles"
+              autocomplete="off"
+              class="h-12 w-full rounded-full border border-rule bg-surface/60 pr-12 pl-11 text-[15px] text-ink transition-colors outline-none placeholder:text-ink-3 hover:border-rule-2 focus-visible:border-ink-3 [&::-webkit-search-cancel-button]:hidden"
+            />
+            <kbd
+              class="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 rounded border border-rule px-1.5 font-mono text-[11px] text-ink-3 max-sm:hidden"
+            >
+              /
+            </kbd>
+          </div>
+        </form>
+
+        <div class="mt-5 flex flex-wrap justify-center gap-2" role="group" aria-label="Topics">
+          <button type="button" data-topic="" aria-pressed="true" class={chip}>All</button>
+          {
+            topics.map((topic) => (
+              <button type="button" data-topic={topic} aria-pressed="false" class={chip}>
+                <span
+                  class="size-[7px] rounded-full"
+                  style={`background:${topicColour(topic)}`}
+                  aria-hidden="true"
+                />
+                {topic}
+              </button>
+            ))
+          }
         </div>
-      </form>
-    </header>
+      </header>
 
-    <p
-      data-blog-count
-      aria-live="polite"
-      class="mt-12 border-t border-rule pt-5 font-mono text-[12px] text-ink-3"
-    >
-      {articleCount(posts.length)}
-    </p>
-
-    <ul class="mt-8 grid gap-x-8 gap-y-14 sm:grid-cols-2 lg:grid-cols-3">
-      {
-        posts.map((post, index) => (
-          <li
-            data-post
-            data-search={searchText(post)}
-            class:list={[index === 0 && "sm:col-span-2 lg:col-span-3"]}
-          >
-            <PostCard post={post} featured={index === 0} />
-          </li>
-        ))
-      }
-    </ul>
-
-    <div data-blog-empty hidden class="py-16 text-center">
-      <p class="text-lg font-semibold">No articles match that search.</p>
-      <p class="mt-2 text-ink-2">Try a different word, or see everything again.</p>
-      <button
-        type="button"
-        data-blog-clear
-        class="mt-6 cursor-pointer rounded-full border border-rule-2 px-5 py-2.5 text-sm font-semibold transition-colors hover:border-ink/40"
+      <p
+        data-blog-count
+        aria-live="polite"
+        class="mt-12 border-t border-rule pt-5 font-mono text-[12px] text-ink-3"
       >
-        Clear search
-      </button>
+        {articleCount(posts.length)}
+      </p>
+
+      <ul class="mt-8 grid gap-x-8 gap-y-14 sm:grid-cols-2 lg:grid-cols-3">
+        {
+          posts.map((post, index) => (
+            <li
+              data-post
+              data-search={searchText(post)}
+              data-topics={JSON.stringify(post.data.tags)}
+              class:list={[index === 0 && "sm:col-span-2 lg:col-span-3"]}
+            >
+              <PostCard post={post} featured={index === 0} />
+            </li>
+          ))
+        }
+      </ul>
+
+      <div data-blog-empty hidden class="py-16 text-center">
+        <p class="text-lg font-semibold">No articles match that search.</p>
+        <p class="mt-2 text-ink-2">Try a different word, or see everything again.</p>
+        <button
+          type="button"
+          data-blog-clear
+          class="mt-6 cursor-pointer rounded-full border border-rule-2 px-5 py-2.5 text-sm font-semibold transition-colors hover:border-ink/40"
+        >
+          Show all articles
+        </button>
+      </div>
     </div>
   </main>
 
@@ -96,29 +151,49 @@ const articleCount = (count: number) => `${count} ${count === 1 ? "article" : "a
   const count = document.querySelector<HTMLElement>("[data-blog-count]");
   const empty = document.querySelector<HTMLElement>("[data-blog-empty]");
   const clear = document.querySelector<HTMLButtonElement>("[data-blog-clear]");
-  const posts = [...document.querySelectorAll<HTMLElement>("[data-post]")];
+  const chips = [...document.querySelectorAll<HTMLButtonElement>("[data-topic]")];
+  const posts = [...document.querySelectorAll<HTMLElement>("[data-post]")].map((element) => ({
+    element,
+    search: element.dataset.search ?? "",
+    topics: JSON.parse(element.dataset.topics ?? "[]") as string[],
+  }));
 
   if (input && count && empty && clear) {
     const articleCount = (total: number) => `${total} ${total === 1 ? "article" : "articles"}`;
+    let topic = "";
 
     const filter = () => {
       const terms = input.value.toLowerCase().split(/\s+/).filter(Boolean);
       let shown = 0;
       for (const post of posts) {
-        const matches = terms.every((term) => (post.dataset.search ?? "").includes(term));
-        post.hidden = !matches;
+        const matches =
+          terms.every((term) => post.search.includes(term)) &&
+          (!topic || post.topics.includes(topic));
+        post.element.hidden = !matches;
         if (matches) shown += 1;
       }
-      count.textContent = terms.length
-        ? `${shown} of ${articleCount(posts.length)}`
-        : articleCount(posts.length);
+      count.textContent =
+        terms.length || topic
+          ? `${shown} of ${articleCount(posts.length)}`
+          : articleCount(posts.length);
       empty.hidden = shown > 0;
     };
 
+    const selectTopic = (next: string) => {
+      topic = next;
+      for (const chip of chips) {
+        chip.setAttribute("aria-pressed", String(chip.dataset.topic === topic));
+      }
+      filter();
+    };
+
     input.addEventListener("input", filter);
+    for (const chip of chips) {
+      chip.addEventListener("click", () => selectTopic(chip.dataset.topic ?? ""));
+    }
     clear.addEventListener("click", () => {
       input.value = "";
-      filter();
+      selectTopic("");
       input.focus();
     });
     document.addEventListener("keydown", (event) => {

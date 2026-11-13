@@ -1,6 +1,7 @@
 ---
 import Icon from "./Icon.astro";
 import Button from "./Button.astro";
+import CardSurface from "./CardSurface.astro";
 import type { DownloadPlatform } from "../constants";
 
 interface Props {
@@ -25,15 +26,7 @@ const CTA =
   "ml-auto aria-disabled:cursor-default aria-disabled:border-dashed aria-disabled:border-rule-2 aria-disabled:bg-transparent aria-disabled:text-ink-3 aria-disabled:hover:bg-transparent";
 ---
 
-<div
-  data-download-card
-  class="relative overflow-hidden rounded-2xl border border-rule bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.04),0_18px_40px_-20px_rgba(0,0,0,0.18)] before:absolute before:inset-x-0 before:top-0 before:z-10 before:h-px before:[background:var(--gradient-rule)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_24px_60px_-24px_rgba(0,0,0,0.9)]"
->
-  <div class="card-canvas" aria-hidden="true">
-    <span class="dots"></span>
-    <span class="bloom"></span>
-  </div>
-
+<CardSurface data-download-card>
   <div class="relative z-10 grid md:grid-cols-[15.5rem_1fr]">
     <div
       class="border-b border-rule bg-ink/[0.02] p-5 md:border-r md:border-b-0 md:p-6 dark:bg-black/30"
@@ -129,42 +122,7 @@ const CTA =
       }
     </div>
   </div>
-</div>
-
-<style>
-  .card-canvas {
-    position: absolute;
-    inset: 0;
-    overflow: hidden;
-    pointer-events: none;
-    --glow: rgb(17 17 16 / 0.06);
-  }
-
-  :global([data-theme="dark"]) .card-canvas {
-    --glow: rgb(255 255 255 / 0.1);
-  }
-
-  /* The section backdrop's dot field, faded away from the rail corner so it
-     never competes with the panel's own text. */
-  .dots {
-    position: absolute;
-    inset: 0;
-    opacity: 0.6;
-    background-image: radial-gradient(var(--color-rule-2) 0.5px, transparent 0.5px);
-    background-size: 22px 22px;
-    -webkit-mask-image: radial-gradient(120% 120% at 8% 0%, #000 0%, transparent 68%);
-    mask-image: radial-gradient(120% 120% at 8% 0%, #000 0%, transparent 68%);
-  }
-
-  .bloom {
-    position: absolute;
-    left: -8%;
-    top: -70%;
-    width: 62%;
-    aspect-ratio: 1;
-    background: radial-gradient(circle, var(--glow) 0, transparent 70%);
-  }
-</style>
+</CardSurface>
 
 <noscript>
   <div class="mt-4 rounded-2xl border border-rule bg-surface p-6">
