@@ -1,13 +1,13 @@
 ---
-title: "Starlink app for Windows: the best ways to manage your dish from a PC"
-description: Dishylink is a free Starlink app for Windows 10 and 11. Here is what it does and how it compares with every other way to manage Starlink from a PC.
+title: "Starlink desktop app for Windows: the best ways to manage your dish from a PC"
+description: Dishylink is a free Starlink desktop app for Windows 10 and 11. Here is what it does and how it compares with every other way to manage Starlink from a PC.
 publishDate: 2026-11-10T08:00:00Z
 cover: ../../assets/blog/starlink-app-for-windows.jpg
-coverAlt: Dishylink's latency panel beside the words "Starlink app for Windows".
+coverAlt: Dishylink's latency panel beside the words "Starlink desktop app for Windows".
 tags: [Windows]
 ---
 
-There is a Starlink app for Windows. It is called Dishylink, and it is free. It runs on Windows 10 and Windows 11 and shows your Starlink speed, latency, outages, data usage and connected devices on your PC.
+There is a Starlink desktop app for Windows. It is called Dishylink, and it is free. It runs on Windows 10 and Windows 11 and shows your Starlink speed, latency, outages, data usage and connected devices on your PC.
 
 SpaceX does not make a Windows app. The official Starlink app is available for iPhone, iPad and Android only. This guide explains how to use Dishylink on Windows and covers the other ways to manage Starlink from a computer.
 
@@ -16,7 +16,7 @@ Dishylink is our app. The details about Starlink's own pages were checked on a S
 ## Quick summary
 
 - The official Starlink app is not available for Windows.
-- Dishylink is a free Starlink app for Windows 10 and 11. It works over your local network and does not need a Starlink account.
+- Dishylink is a free Starlink desktop app for Windows 10 and 11. It works over your local network and does not need a Starlink account.
 - Your dish has a basic status page at `192.168.100.1`.
 - Billing, plan changes and support are handled at starlink.com.
 
@@ -151,7 +151,7 @@ The tools do not have a graphical interface. You build the charts yourself, usua
 
 ## Frequently asked questions
 
-### Is there a Starlink app for Windows?
+### Is there a Starlink desktop app for Windows?
 
 Yes. Dishylink is a free desktop app for Windows 10 and 11. SpaceX's official Starlink app is only available for iPhone, iPad and Android.
 

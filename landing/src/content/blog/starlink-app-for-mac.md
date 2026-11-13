@@ -1,13 +1,13 @@
 ---
-title: "Starlink app for Mac: every way to manage your dish from macOS"
-description: Dishylink is a free, native Starlink app for Mac, with your live speeds in the menu bar. Here is what it does and how it compares with every other option on macOS.
+title: "Starlink desktop app for Mac: every way to manage your dish from macOS"
+description: Dishylink is a free, native Starlink desktop app for Mac, with your live speeds in the menu bar. Here is what it does and how it compares with every other option on macOS.
 publishDate: 2026-11-10T07:00:00Z
 cover: ../../assets/blog/starlink-app-for-mac.jpg
-coverAlt: Dishylink's live speeds in the macOS menu bar and its alerts in Notification Center, beside the words "Starlink app for Mac".
+coverAlt: Dishylink's live speeds in the macOS menu bar and its alerts in Notification Center, beside the words "Starlink desktop app for Mac".
 tags: [macOS]
 ---
 
-There is a Starlink app for Mac. It is called Dishylink, and it is free. It shows your live Starlink speeds in the menu bar, sends alerts to Notification Center and keeps a history of your connection.
+There is a Starlink desktop app for Mac. It is called Dishylink, and it is free. It shows your live Starlink speeds in the menu bar, sends alerts to Notification Center and keeps a history of your connection.
 
 SpaceX does not make a native Mac app. The official Starlink app is built for phones and tablets. This guide explains how to use Dishylink on a Mac and covers the other ways to manage Starlink from macOS.
 
@@ -15,7 +15,7 @@ Dishylink is our app. The details about Starlink's own pages and the App Store l
 
 ## Quick summary
 
-- Dishylink is a free Starlink app for macOS 12 and later. It runs on both Apple silicon and Intel Macs.
+- Dishylink is a free Starlink desktop app for macOS 12 and later. It runs on both Apple silicon and Intel Macs.
 - The official Starlink app for iPad can be installed on Apple silicon Macs running macOS 26 or later.
 - Your dish has a basic status page at `192.168.100.1`.
 - Billing, plan changes and support are handled at starlink.com.
@@ -142,9 +142,9 @@ The tools do not have a graphical interface. You build the charts yourself, usua
 
 ## Frequently asked questions
 
-### Is there a Starlink app for Mac?
+### Is there a Starlink desktop app for Mac?
 
-Yes. Dishylink is a free app for macOS 12 and later, on both Apple silicon and Intel Macs. SpaceX's official app is an iPad app that can also be installed on Apple silicon Macs running macOS 26 or later.
+Yes. Dishylink is a free desktop app for macOS 12 and later, on both Apple silicon and Intel Macs. SpaceX's official app is an iPad app that can also be installed on Apple silicon Macs running macOS 26 or later.
 
 ### Does Starlink work on a Mac without an app?
 
