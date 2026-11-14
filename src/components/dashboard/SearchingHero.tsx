@@ -3,9 +3,15 @@
 
 import { DISH_LAN_ADDRESS } from "@core/dishClient";
 import { Trans, useTranslation } from "react-i18next";
+import { useDishAddressState } from "../../hooks/useDishAddress";
 
 export function SearchingHero() {
   const { t } = useTranslation();
+  // Whatever the app is actually dialling: a configured dish address is the one
+  // worth telling the user to open, since the firmware default is not reachable
+  // when another router sits in front of the dish.
+  const [addresses] = useDishAddressState();
+  const address = addresses?.dish ?? DISH_LAN_ADDRESS;
   return (
     <div className='flex min-h-[60vh] flex-col items-center justify-center gap-3.5 p-6 text-center'>
       <div className='relative size-[74px] overflow-hidden rounded-full border border-input'>
@@ -20,7 +26,7 @@ export function SearchingHero() {
       <p className='max-w-[420px] text-[13.5px] text-ink-secondary'>
         <Trans
           i18nKey='metrics.searchingHelp'
-          values={{ address: DISH_LAN_ADDRESS }}
+          values={{ address }}
           components={{
             address: (
               <code className='rounded-[5px] dark:bg-card px-1.5 py-px font-mono text-[12px]' />

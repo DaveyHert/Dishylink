@@ -39,7 +39,9 @@ import { grpcWebUnaryCall } from "../core/grpcWeb.ts";
 import { routerPresence, type RouterPresence } from "../core/routerPresence.ts";
 import type { DishStatusJson } from "../core/dishClient.ts";
 import { createRouterOrigins } from "../core/routerEndpoint.ts";
+import { dishHandleUrlFrom } from "../core/dishEndpoint.ts";
 import { readDevRouterAddress } from "./devRouterAddress.mts";
+import { readDevDishAddress } from "./devDishAddress.mts";
 import {
   decodeHistoryWindow,
   decodeOutageEvents,
@@ -93,8 +95,29 @@ import { AlertStore, type AlertEpisode } from "./alertStore.mts";
 import { AlertEngine, type AlertObservation, type AlertTransition } from "../core/alertEngine.ts";
 import { ObstructionStore, packCells } from "./obstructionStore.mts";
 
-const DISH_URL =
-  process.env.DISH_URL ?? "http://192.168.100.1:9201/SpaceX.API.Device.Device/Handle";
+/**
+ * Where the dish is. 192.168.100.1 is its firmware default and right for an
+ * ordinary kit; a dish behind another router is reached only at the address
+ * that router forwards its port to, which the user names in Settings.
+ *
+ * Resolved per call rather than fixed here for the same reason the router's is:
+ * this process runs for weeks, so a value read once at import would take effect
+ * at the next restart, which is to say never. DISH_URL still pins it outright,
+ * for the probe scripts and a recording.
+ */
+const DISH_URL_OVERRIDE = process.env.DISH_URL ?? null;
+
+let readConfiguredDishAddress: () => string | null = process.env.HISTORIAN_EMBED
+  ? () => null
+  : readDevDishAddress;
+
+export function setDishAddressReader(reader: () => string | null): void {
+  readConfiguredDishAddress = reader;
+}
+
+function dishUrl(): string {
+  return DISH_URL_OVERRIDE ?? dishHandleUrlFrom(readConfiguredDishAddress());
+}
 
 /**
  * Where the router is, when 192.168.1.1 is wrong for this kit. A host with a
@@ -297,7 +320,7 @@ async function routerCall(
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getHistory(): Promise<any> {
-  const json = (await deviceCall(DISH_URL, GET_HISTORY_FIELD)) as { dishGetHistory?: unknown };
+  const json = (await deviceCall(dishUrl(), GET_HISTORY_FIELD)) as { dishGetHistory?: unknown };
   return json.dishGetHistory ?? {};
 }
 
@@ -320,7 +343,7 @@ async function getStatusAlerts(): Promise<{
   ethSpeedMbps?: number;
   routerPresence: RouterPresence;
 }> {
-  const json = (await deviceCall(DISH_URL, GET_STATUS_FIELD)) as {
+  const json = (await deviceCall(dishUrl(), GET_STATUS_FIELD)) as {
     dishGetStatus?: DishStatusJson;
   };
   const status = json.dishGetStatus ?? null;
@@ -995,7 +1018,7 @@ let liveThroughputTimer: ReturnType<typeof setInterval> | null = null;
 async function pollLiveThroughput(): Promise<void> {
   let status: { downlinkThroughputBps?: number; uplinkThroughputBps?: number } | undefined;
   try {
-    const json = (await deviceCall(DISH_URL, GET_STATUS_FIELD)) as {
+    const json = (await deviceCall(dishUrl(), GET_STATUS_FIELD)) as {
       dishGetStatus?: { downlinkThroughputBps?: number; uplinkThroughputBps?: number };
     };
     status = json.dishGetStatus;
@@ -1203,7 +1226,7 @@ async function pollObstruction(): Promise<void> {
   if (!obstructionStore.isDue(now)) return;
   try {
     const json = (await deviceCall(
-      DISH_URL,
+      dishUrl(),
       GET_OBSTRUCTION_MAP_FIELD,
       OBSTRUCTION_TIMEOUT_MS,
     )) as {
@@ -2062,7 +2085,7 @@ if (process.env.HISTORIAN_EMBED !== "1") {
     }
     handleRequest(request, response);
   }).listen(PORT, "127.0.0.1", () => {
-    console.log(`[historian] API on http://localhost:${PORT}  (dish: ${DISH_URL})`);
+    console.log(`[historian] API on http://localhost:${PORT}  (dish: ${dishUrl()})`);
     console.log(`[historian] persisting to ${DATA_FILE}`);
   });
 }

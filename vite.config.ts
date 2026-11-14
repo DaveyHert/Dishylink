@@ -9,6 +9,7 @@ import tailwindcss from "@tailwindcss/vite";
 import electron from "vite-plugin-electron/simple";
 import { starlinkCloudProxy } from "./dev/starlinkCloudProxy";
 import { routerProxy } from "./dev/routerProxy";
+import { dishProxy } from "./dev/dishProxy";
 
 // Config files run in plain Node, outside every build target's tsconfig
 // `include`, so this is the one place package.json can be read without wiring
@@ -17,14 +18,9 @@ const appVersion: string = JSON.parse(
   readFileSync(new URL("./package.json", import.meta.url), "utf-8"),
 ).version;
 
-interface OutgoingProxyRequest {
-  removeHeader(headerName: string): void;
-}
-
 // The Electron host is opt-in per command (ELECTRON=1) so plain `vite` stays a
 // browser dev server — running the extension/browser build never launches a window.
 const withElectron = process.env.ELECTRON === "1";
-
 // The dish's grpc-web endpoint (port 9201) only allows CORS from its own
 // origin, so the dev server proxies it same-origin under /dishy.
 export default defineConfig(({ command }) => ({
@@ -38,6 +34,7 @@ export default defineConfig(({ command }) => ({
     tailwindcss(),
     starlinkCloudProxy(),
     routerProxy(),
+    dishProxy(),
     ...(withElectron
       ? [
           electron({
@@ -111,26 +108,9 @@ export default defineConfig(({ command }) => ({
   },
   server: {
     proxy: {
-      "/dishy": {
-        target: "http://192.168.100.1:9201",
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/dishy/, ""),
-        // The dish returns an empty 200 when the request carries a browser
-        // Referer/Origin it doesn't recognize — strip them before forwarding.
-        // Vite 7's bundled proxy typings omit the EventEmitter surface that
-        // exists at runtime, hence the cast.
-        configure: (proxy) => {
-          const proxyEvents = proxy as unknown as {
-            on(eventName: "proxyReq", handler: (proxyRequest: OutgoingProxyRequest) => void): void;
-          };
-          proxyEvents.on("proxyReq", (proxyRequest) => {
-            proxyRequest.removeHeader("referer");
-            proxyRequest.removeHeader("origin");
-          });
-        },
-      },
-      // /router is not here: its address can be taken by another router, so it
-      // is served by dev/routerProxy, which can retry against a second one.
+      // /dishy and /router are not here: each box's address can be moved, so
+      // they are served by dev/dishProxy and dev/routerProxy, which read the
+      // address the settings row stores.
       // CelesTrak publishes SpaceX's official Starlink ephemerides but sends
       // no CORS headers; same-origin proxy for the TLE fetch.
       "/celestrak": {

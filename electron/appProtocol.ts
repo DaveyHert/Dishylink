@@ -11,11 +11,9 @@ import { readFile } from "node:fs/promises";
 import { networkInterfaces } from "node:os";
 import { join, extname, normalize, sep } from "node:path";
 import { createRouterOrigins } from "../core/routerEndpoint";
-import { DISH_LAN_ADDRESS } from "../core/dishClient";
+import { dishOriginFrom } from "../core/dishEndpoint";
 import { preferences } from "./preferences";
 import { recordProxiedLanBytes } from "./collector";
-
-const DISH_PORT = 9201;
 
 const SCHEME = "app";
 const HOST = "bundle";
@@ -25,7 +23,15 @@ const HOST = "bundle";
 // fetched from here rather than the renderer.
 const CELESTRAK_ORIGIN = "https://celestrak.org";
 
-const DISH_ORIGIN = process.env.DISH_ORIGIN ?? `http://${DISH_LAN_ADDRESS}:${DISH_PORT}`;
+/** Pins the dish to one origin — for pointing a build at a stand-in. Unset, the
+ *  dish is dialled wherever the user set it in Settings. */
+const DISH_ORIGIN_OVERRIDE = process.env.DISH_ORIGIN ?? null;
+
+/** Where the dish is dialled right now. Read per request rather than once: the
+ *  settings row can change it while this process keeps running. */
+function dishOrigin(): string {
+  return DISH_ORIGIN_OVERRIDE ?? dishOriginFrom(preferences().dishAddress);
+}
 
 /** Pins the router to one origin and turns the fallback off — for pointing a
  *  build at a stand-in. Unset, the router is found by core/routerEndpoint. */
@@ -202,7 +208,7 @@ export function handleAppProtocol(
     const { pathname, search } = url;
 
     if (pathname.startsWith("/dishy/")) {
-      return proxy(request, DISH_ORIGIN + pathname.slice("/dishy".length) + search, true);
+      return proxy(request, dishOrigin() + pathname.slice("/dishy".length) + search, true);
     }
     if (pathname.startsWith("/router/")) {
       return proxyRouter(request, pathname.slice("/router".length) + search);

@@ -25,8 +25,8 @@ directories:
 # an installed app has no credential to authenticate a private-repo download.
 publish:
   provider: github
-  owner: DaveyHert
-  repo: dishylink
+  owner: nimaam
+  repo: Dishylink
   releaseType: draft
 
 # Only the built app ships. The build/*.png icons are named explicitly because
@@ -96,3 +96,28 @@ win:
   # the prebuilt-icns dance on macOS above — its ICO writer is fine, so no per-format
   # icon script is needed on this side.
   icon: build/icon.png
+
+# Linux, built on Linux and only on Linux: electron-builder needs Docker to emit
+# AppImage/deb from macOS, so these targets exist for the release workflow's
+# ubuntu runner rather than for a local `pack:linux` on a Mac. Both arches for the
+# same reason as Windows — AppImage/deb are per-arch, and an arm64 desktop can run
+# the x64 build only under emulation, which is slower than shipping the real one.
+# Nothing is compiled per-arch in this tree (vite inlines every dependency), so the
+# second arch costs only its own Electron download.
+linux:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  executableName: dishylink
+  target:
+    - target: AppImage
+      arch: [x64, arm64]
+    - target: deb
+      arch: [x64, arm64]
+  # Same 1024 px PNG the Windows build converts to .ico; AppImage wants a single
+  # square icon of at least 256 px, so nothing is pre-rendered for this side.
+  icon: build/icon.png
+  category: Utility
+  vendor: Dishylink
+  synopsis: Monitor the performance and health of your Starlink
+  # electron-builder would fall back to package.json's author; stating it here keeps
+  # the deb maintainer field correct if that author line ever changes.
+  maintainer: daveyhert <daviehert@gmail.com>
