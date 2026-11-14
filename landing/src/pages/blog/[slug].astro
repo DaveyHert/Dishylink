@@ -35,6 +35,9 @@ const {
   tags,
 } = post.data;
 const { Content, headings } = await render(post);
+// Hyphenated words land at the odd indexes, to be kept whole: balancing otherwise
+// breaks the title at a hyphen ("built-" / "in").
+const titleParts = title.split(/(\S+-\S+)/);
 const sections = headings.filter((heading) => heading.depth === 2);
 
 const SHARE_WIDTH = 1200;
@@ -88,7 +91,7 @@ const prose = [
 
     <div class="relative mx-auto max-w-7xl px-5 pt-16 pb-28 sm:pt-26">
       <article>
-        <header class="mx-auto max-w-4xl text-center">
+        <header class="text-center">
           <nav
             aria-label="Breadcrumb"
             class="font-mono text-[11px] tracking-[0.18em] text-ink-3 uppercase"
@@ -106,7 +109,11 @@ const prose = [
           <h1
             class="mt-6 text-[clamp(2.1rem,1.2rem+3.6vw,3.9rem)] leading-[1.05] font-medium tracking-[-0.02em] text-balance"
           >
-            {title}
+            {
+              titleParts.map((part, index) =>
+                index % 2 ? <span class="sm:whitespace-nowrap">{part}</span> : part,
+              )
+            }
           </h1>
           <p class="mx-auto mt-6 max-w-3xl text-xl text-ink-2">{description}</p>
           <p

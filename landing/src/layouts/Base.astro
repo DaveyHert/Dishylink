@@ -172,6 +172,15 @@ const articleSchema = article && {
 
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script is:inline>
+      // Runs before first paint, so a stored light choice never flashes dark.
+      try {
+        const stored = localStorage.getItem("dishylink-theme");
+        if (stored === "light" || stored === "dark") {
+          document.documentElement.dataset.theme = stored;
+        }
+      } catch {}
+    </script>
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
@@ -344,11 +353,12 @@ const articleSchema = article && {
     </script>
 
     <script is:inline>
-      // Deliberately not persisted: the choice lasts the visit, and every
-      // arrival starts dark.
       document.getElementById("theme-toggle")?.addEventListener("click", function () {
-        document.documentElement.dataset.theme =
-          document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+        var theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+        document.documentElement.dataset.theme = theme;
+        try {
+          localStorage.setItem("dishylink-theme", theme);
+        } catch {}
       });
     </script>
   </body>

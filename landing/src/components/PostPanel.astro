@@ -1,0 +1,178 @@
+---
+import { Image } from "astro:assets";
+import Icon from "./Icon.astro";
+import Logo from "./Logo.astro";
+import {
+  formatPostDate,
+  postPath,
+  readingMinutes,
+  topicColour,
+  type Post,
+} from "../data/blog";
+
+interface Props {
+  post: Post;
+  /** The lead panel: image beside the text, at display size. */
+  featured?: boolean;
+}
+
+const { post, featured = false } = Astro.props;
+const { title, description, publishDate, cover, tags, draft } = post.data;
+const topic = tags[0];
+
+const TITLE =
+  "font-display text-pretty underline decoration-transparent decoration-1 underline-offset-[5px] transition-[text-decoration-color] duration-200 group-hover:decoration-ink-3";
+const ARROW = "size-4 transition-transform duration-200 ease-out group-hover:translate-x-1";
+const DRAFT = "rounded-full border border-rule-2 px-2 py-0.5 text-ink-2";
+---
+
+<a
+  href={postPath(post)}
+  class:list={[
+    "group relative flex h-full overflow-hidden border border-rule bg-paper shadow-[0_1px_2px_rgba(0,0,0,0.04),0_18px_40px_-20px_rgba(0,0,0,0.18)] transition-colors duration-200 before:absolute before:inset-x-0 before:top-0 before:z-10 before:h-px before:[background:var(--gradient-rule)] hover:border-rule-2 dark:bg-surface dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_24px_60px_-24px_rgba(0,0,0,0.9)]",
+    featured ? "flex-wrap rounded-[20px]" : "flex-col rounded-2xl",
+  ]}
+>
+  {
+    featured && (
+      <div class="backdrop" aria-hidden="true">
+        <span class="dots"></span>
+        <span class="bloom"></span>
+      </div>
+    )
+  }
+
+  <div class:list={["relative min-w-0", featured ? "flex-[1.3_1_520px] p-2.5" : "px-2.5 pt-2.5"]}>
+    <div
+      class:list={[
+        "aspect-[16/10] overflow-hidden border border-rule bg-paper dark:border-white/[0.08]",
+        featured ? "rounded-xl" : "rounded-[10px]",
+      ]}
+    >
+      {
+        cover ? (
+          <Image
+            src={cover}
+            alt=""
+            widths={featured ? [640, 960, 1440] : [480, 720, 960]}
+            sizes={
+              featured ? "(max-width: 1024px) 100vw, 700px" : "(max-width: 640px) 100vw, 400px"
+            }
+            loading={featured ? "eager" : "lazy"}
+            class="size-full object-cover object-top transition-transform duration-300 ease-out group-hover:scale-[1.03]"
+          />
+        ) : (
+          <div class="grid size-full place-items-center text-ink-3">
+            <Logo class="size-14" />
+          </div>
+        )
+      }
+    </div>
+  </div>
+
+  {
+    featured ? (
+      <div class="relative flex min-w-0 flex-[1_1_380px] flex-col justify-center px-6 pt-4 pb-7 lg:py-9 lg:pr-11 lg:pl-7.5">
+        <p class="flex flex-wrap items-center gap-x-2.5 gap-y-1 font-mono text-[11px] tracking-[0.18em] text-ink-2 uppercase">
+          {topic && (
+            <>
+              <span
+                class="size-[7px] rounded-full"
+                style={`background:${topicColour(topic)}`}
+                aria-hidden="true"
+              />
+              <span class="text-ink">{topic}</span>
+              <span aria-hidden="true">·</span>
+            </>
+          )}
+          <time datetime={publishDate.toISOString()}>{formatPostDate(publishDate)}</time>
+          <span aria-hidden="true">·</span>
+          <span>{readingMinutes(post)} min read</span>
+          {draft && <span class={DRAFT}>Draft</span>}
+        </p>
+        <h2
+          class:list={[
+            TITLE,
+            "mt-4.5 text-[clamp(1.75rem,2.7vw,2.375rem)] leading-[1.12] font-normal tracking-[-0.03em]",
+          ]}
+        >
+          {title}
+        </h2>
+        <p class="mt-4 text-lg leading-[1.55] text-pretty text-ink-2">{description}</p>
+        <p class="mt-4 flex min-h-11 items-center gap-2 font-semibold">
+          Read article
+          <Icon name="arrow" class={ARROW} />
+        </p>
+      </div>
+    ) : (
+      <>
+        <div class="flex flex-1 flex-col px-5 pt-5">
+          {(topic || draft) && (
+            <p class="flex items-center gap-2.5 font-mono text-[11px] tracking-[0.18em] uppercase">
+              {topic && (
+                <>
+                  <span
+                    class="size-[7px] rounded-full"
+                    style={`background:${topicColour(topic)}`}
+                    aria-hidden="true"
+                  />
+                  {topic}
+                </>
+              )}
+              {draft && <span class={DRAFT}>Draft</span>}
+            </p>
+          )}
+          <h2
+            class:list={[
+              TITLE,
+              "mt-3 text-[21px] leading-[1.28] font-medium tracking-[-0.02em]",
+            ]}
+          >
+            {title}
+          </h2>
+          <p class="mt-2.5 line-clamp-3 text-base leading-[1.55] text-ink-2">{description}</p>
+        </div>
+        <p class="mx-5 mt-5 flex items-center justify-between gap-3 border-t border-rule pt-3.5 pb-4 font-mono text-[11px] tracking-[0.14em] text-ink-2 uppercase">
+          <span>
+            <time datetime={publishDate.toISOString()}>{formatPostDate(publishDate)}</time>
+            · {readingMinutes(post)} min read
+          </span>
+          <Icon name="arrow" class={`${ARROW} text-ink`} />
+        </p>
+      </>
+    )
+  }
+</a>
+
+<style>
+  .backdrop {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    --glow: rgb(17 17 16 / 0.06);
+  }
+
+  :global([data-theme="dark"]) .backdrop {
+    --glow: rgb(255 255 255 / 0.1);
+  }
+
+  .dots {
+    position: absolute;
+    inset: 0;
+    opacity: 0.6;
+    background-image: radial-gradient(var(--color-rule-2) 0.5px, transparent 0.5px);
+    background-size: 22px 22px;
+    -webkit-mask-image: radial-gradient(120% 120% at 100% 0%, #000 0%, transparent 60%);
+    mask-image: radial-gradient(120% 120% at 100% 0%, #000 0%, transparent 60%);
+  }
+
+  .bloom {
+    position: absolute;
+    right: -8%;
+    top: -70%;
+    width: 50%;
+    aspect-ratio: 1;
+    background: radial-gradient(circle, var(--glow) 0, transparent 70%);
+  }
+</style>
