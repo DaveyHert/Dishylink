@@ -1,5 +1,12 @@
 export const GITHUB = "https://github.com/DaveyHert/dishylink";
-export const RELEASES = `${GITHUB}/releases/latest`;
+// Downloads come from this fork's releases, not upstream's: the binaries on this
+// site are built and published here. The source/issues links above still point at
+// the upstream project, which is where the code lives.
+export const RELEASES = "https://github.com/nimaam/Dishylink/releases/latest";
+/** Base for a versioned asset URL, used when the release API is unreachable. */
+export const RELEASE_DOWNLOADS = "https://github.com/nimaam/Dishylink/releases/download";
+/** Newest *published* release — the same repo the download buttons fetch from. */
+export const RELEASE_API = "https://api.github.com/repos/nimaam/Dishylink/releases/latest";
 export const ISSUES = `${GITHUB}/issues`;
 export const PRIVACY = "/privacy/";
 export const BLOG = "/blog/";
@@ -58,10 +65,9 @@ interface ReleaseAsset {
 // assets that do not exist yet and every download button would 404.
 async function fetchLatestRelease(): Promise<{ tag: string; assets: ReleaseAsset[] } | null> {
   try {
-    const response = await fetch(
-      "https://api.github.com/repos/DaveyHert/dishylink/releases/latest",
-      { headers: { accept: "application/vnd.github+json" } },
-    );
+    const response = await fetch(RELEASE_API, {
+      headers: { accept: "application/vnd.github+json" },
+    });
     if (!response.ok) return null;
     const release = await response.json();
     if (typeof release?.tag_name !== "string") return null;
@@ -102,8 +108,7 @@ export async function downloadPlatforms(fallbackVersion: string): Promise<{
       id,
       label,
       fileType,
-      href:
-        asset?.browser_download_url ?? `${GITHUB}/releases/download/v${version}/${fallbackName}`,
+      href: asset?.browser_download_url ?? `${RELEASE_DOWNLOADS}/v${version}/${fallbackName}`,
       size: asset ? formatSize(asset.size) : null,
     };
   };
