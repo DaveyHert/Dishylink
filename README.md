@@ -54,6 +54,17 @@ Apple silicon (M1 and later) or `x64` for Intel.
 >
 > You only need to do this once.
 
+### Homebrew
+
+On macOS you can also install it with [Homebrew](https://brew.sh), from a community tap:
+
+```bash
+brew install --cask seupedro/tap/dishylink
+```
+
+`brew upgrade` keeps it up to date. The tap isn't run by this project: it installs the same DMG
+from the releases page and skips the first-launch step above.
+
 ## Features
 
 ### What it shows
