@@ -1,8 +1,8 @@
 # <img src="docs/logo.svg" alt="" width="34" height="34" align="top"> Dishylink
 
-[![Downloads](https://img.shields.io/github/downloads/DaveyHert/dishylink/total.svg)](https://github.com/DaveyHert/dishylink/releases)
-[![macOS](https://img.shields.io/badge/macOS-12.0+-black.svg)](https://github.com/DaveyHert/dishylink/releases/latest)
-[![Windows](https://img.shields.io/badge/Windows-10+-0078D4.svg)](https://github.com/DaveyHert/dishylink/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/nimaam/Dishylink/total.svg)](https://github.com/nimaam/Dishylink/releases)
+[![macOS](https://img.shields.io/badge/macOS-12.0+-black.svg)](https://github.com/nimaam/Dishylink/releases/latest)
+[![Windows](https://img.shields.io/badge/Windows-10+-0078D4.svg)](https://github.com/nimaam/Dishylink/releases/latest)
 [![Browsers](https://img.shields.io/badge/Chrome%20%7C%20Edge%20%7C%20Firefox-extension-FF6F00.svg)](#browser-extension-chrome-edge-firefox)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![X](https://img.shields.io/badge/X-%23000000.svg?style=flat&logo=X&logoColor=white)](https://x.com/daveyhert)
@@ -37,7 +37,7 @@ only to Starlink.
 | <img src="landing/public/browsers/edge.svg" alt="" width="16" align="top"> **Edge**          | Extension | Any                    | [<img src="docs/platforms/download.svg" alt="Download" width="16">](https://microsoftedge.microsoft.com/addons/detail/pknccegejhlgmeiojalenedmkbcaimdo)  |
 | <img src="landing/public/browsers/firefox.svg" alt="" width="16" align="top"> **Firefox**    | Extension | Any                    |                     [<img src="docs/platforms/download.svg" alt="Download" width="16">](https://addons.mozilla.org/addon/dishylink/)                     |
 
-[latest]: https://github.com/DaveyHert/dishylink/releases/latest
+[latest]: https://github.com/nimaam/Dishylink/releases/latest
 
 Not sure which to pick? On Windows, take Universal. On macOS, take `arm64` for
 Apple silicon (M1 and later) or `x64` for Intel.

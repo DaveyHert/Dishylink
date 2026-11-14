@@ -20,14 +20,14 @@ import { createRouterOrigins } from "../core/routerEndpoint";
 import { DEV_ROUTER_ADDRESS_FILE, readDevRouterAddress } from "../collector/devRouterAddress.mts";
 
 /** Set by the response itself, or meaningless once fetch has decoded the body. */
-const SKIP_RESPONSE_HEADERS = new Set([
+export const SKIP_RESPONSE_HEADERS = new Set([
   "content-length",
   "content-encoding",
   "transfer-encoding",
   "connection",
 ]);
 
-function readBody(request: IncomingMessage): Promise<Buffer> {
+export function readBody(request: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     request.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -38,7 +38,7 @@ function readBody(request: IncomingMessage): Promise<Buffer> {
 
 /** The dish drops requests carrying a browser Referer/Origin it does not know,
  *  and the router is the same service — so neither is forwarded. */
-function forwardableHeaders(request: IncomingMessage): Headers {
+export function forwardableHeaders(request: IncomingMessage): Headers {
   const headers = new Headers();
   for (const [name, value] of Object.entries(request.headers)) {
     if (value === undefined) continue;

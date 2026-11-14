@@ -6,6 +6,7 @@ export type BrowserRoute =
   | { kind: "whoami" }
   | { kind: "self-device" }
   | { kind: "router-address" }
+  | { kind: "dish-address" }
   | { kind: "celestrak"; path: string }
   | { kind: "speedtest"; path: string }
   | { kind: "static" };
@@ -30,6 +31,7 @@ export function classifyBrowserPath(url: string): BrowserRoute {
   if (path === "/api/self-device") return { kind: "self-device" };
   if (path === "/api" || path.startsWith("/api/")) return { kind: "api" };
   if (path === "/router-address") return { kind: "router-address" };
+  if (path === "/dish-address") return { kind: "dish-address" };
   const dish = afterSegment(path, "/dishy");
   if (dish !== null) return { kind: "dish", path: dish + rest };
   const router = afterSegment(path, "/router");

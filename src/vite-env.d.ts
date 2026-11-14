@@ -9,6 +9,11 @@ interface RouterAddress {
   routerDefault: string;
 }
 
+interface DishAddress {
+  dish: string | null;
+  dishDefault: string;
+}
+
 // Exposed by the Electron preload bridge; absent in the browser and extension.
 interface Window {
   dishlink?: {
@@ -39,6 +44,11 @@ interface Window {
     // rendering there.
     routerAddress?: () => Promise<RouterAddress>;
     setRouterAddress?: (address: string | null) => Promise<RouterAddress | null>;
+    // Where the host dials the dish, with the default it falls back to. Absent on
+    // hosts that cannot reach it at a user-chosen address, which keeps the dish
+    // setting from rendering there.
+    dishAddress?: () => Promise<DishAddress>;
+    setDishAddress?: (address: string | null) => Promise<DishAddress | null>;
     // The throughput-readout controls — macOS menu bar or Windows taskbar —
     // exposed by the preload only on those platforms, so they are optional, and
     // the settings toggle renders only where `setMenuBarThroughput` is present.

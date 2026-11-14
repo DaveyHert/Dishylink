@@ -14,8 +14,9 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { createCloudHandler } from "../cloud/starlinkCloudHandler.ts";
 import { resilientFetch } from "../cloud/resilientFetch.ts";
 import { CollectorBusyError } from "../collector/collectorLock.mts";
-import { DishClient, DISH_LAN_HANDLE_URL, ROUTER_LAN_HANDLE_URL } from "../core/dishClient.ts";
+import { DishClient, ROUTER_LAN_HANDLE_URL } from "../core/dishClient.ts";
 import type { DishConfigJson } from "../core/dishClient.ts";
+import { dishHandleUrlFrom } from "../core/dishEndpoint.ts";
 import { prepareDishConfigUpdate } from "../core/dishConfigUpdate.ts";
 import {
   buildRouterConfigRequest,
@@ -27,11 +28,14 @@ import {
 import { prepareRouterClientUpdate, readRouterClients } from "../core/routerClientUpdate.ts";
 import type { RouterClientUpdate } from "../core/routerClientUpdate.ts";
 import { localNetworkIdentity, type HostNetworkIdentity } from "../core/hostNetworkIdentity.ts";
+import { readDevDishAddress } from "../collector/devDishAddress.mts";
 
 export interface FileCloudHandlerOptions {
   cookieFile?: string;
   identity?: () => HostNetworkIdentity;
   protosetPath?: string;
+  /** Where the dish is, resolved per call. Unset uses its firmware default. */
+  dishHandleUrl?: () => string;
 }
 
 /** null, never "", so every reader agrees on what "no session" looks like. */
@@ -104,7 +108,9 @@ export function createFileCloudHandler(options: FileCloudHandlerOptions = {}) {
     options.protosetPath ?? resolve(process.cwd(), "public/dish.protoset"),
   );
   let routerPromise: Promise<DishClient> | null = null;
-  let dishPromise: Promise<DishClient> | null = null;
+  // Keyed by the URL it was built for: a host whose dish address can change
+  // while this runs (the dev server, the Docker host) hands over a reader.
+  let dishPromise: { url: string; client: Promise<DishClient> } | null = null;
   const protosetBytes = () => new Uint8Array(readFileSync(protosetPath));
   // Every router callback needs the same client, and the gateway ones need it
   // only as a codec — loading it dials nothing.
@@ -113,18 +119,22 @@ export function createFileCloudHandler(options: FileCloudHandlerOptions = {}) {
       handleUrl: ROUTER_LAN_HANDLE_URL,
       protosetBytes: protosetBytes(),
     }));
+  const loadDish = () => {
+    const url = (options.dishHandleUrl ?? (() => dishHandleUrlFrom(null)))();
+    if (dishPromise?.url !== url) {
+      dishPromise = {
+        url,
+        client: DishClient.load("dish", { handleUrl: url, protosetBytes: protosetBytes() }),
+      };
+    }
+    return dishPromise.client;
+  };
   return createCloudHandler({
     fetch: resilientFetch,
     ...store,
     prepareDeviceUpdate: async (update, targetId, callGateway) =>
       prepareRouterClientUpdate(await loadRouter(), update, targetId, callGateway, identity()),
-    prepareDishConfigUpdate: async (changes) => {
-      dishPromise ??= DishClient.load("dish", {
-        handleUrl: DISH_LAN_HANDLE_URL,
-        protosetBytes: protosetBytes(),
-      });
-      return prepareDishConfigUpdate(await dishPromise, changes);
-    },
+    prepareDishConfigUpdate: async (changes) => prepareDishConfigUpdate(await loadDish(), changes),
     // Encoding only — the client is never dialled here, so this works on a
     // kit whose router answers nothing on the LAN.
     prepareRouterConfigUpdate: async (update, targetId, callGateway) => {
@@ -211,7 +221,10 @@ export function starlinkCloudProxy(): Plugin {
     process.env.STARLINK_COOKIE_FILE ?? resolve(process.cwd(), ".starlink-cookie"),
   );
   const { readCookie } = cookieStore(cookieFile);
-  const handler = createFileCloudHandler({ cookieFile });
+  const handler = createFileCloudHandler({
+    cookieFile,
+    dishHandleUrl: () => dishHandleUrlFrom(readDevDishAddress()),
+  });
   return {
     name: "starlink-cloud-proxy",
     async configureServer(server) {

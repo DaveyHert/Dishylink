@@ -1,5 +1,5 @@
-// Literal IP addresses the user types: where the router is, and which DNS servers
-// it should forward to.
+// Literal IP addresses the user types: where the dish and the router are, and
+// which DNS servers the router should forward to.
 //
 // Validation is deliberately narrow — a literal IPv4 or IPv6 address, nothing
 // else. A hostname would need a resolver, and every host here (a service worker,
@@ -11,6 +11,14 @@
 export interface RouterAddress {
   router: string | null;
   routerDefault: string;
+}
+
+/** The same answer for the dish. It has a fixed 192.168.100.1 in firmware, but
+ *  a kit behind another router can only be reached at the address that router
+ *  exposes it on, so it gets its own setting. */
+export interface DishAddress {
+  dish: string | null;
+  dishDefault: string;
 }
 
 /** The eight hextets of `address`, or null when it is not an IPv6 address this

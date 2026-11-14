@@ -411,6 +411,15 @@
     "refusedDenied": "Die Berechtigung, diese Adresse zu erreichen, wurde verweigert, daher wurde sie nicht gespeichert.",
     "refusedUnsupported": "Diesem Browser kann kein Zugriff auf diese Adresse gewährt werden. Verwenden Sie eine IPv4-Adresse."
   },
+  "dishAddress": {
+    "title": "IP-Adresse der Antenne",
+    "tip": "Dishylink sucht Ihre Antenne unter dieser Adresse. Ändern Sie sie nur, wenn die Antenne unter einer anderen Adresse erreichbar ist — etwa ein Mini hinter einem MikroTik oder einem anderen Router, der den Port 9201 der Antenne weiterleitet. Ein Leeren des Felds kehrt zu {{fallback}} zurück.",
+    "defaultIs": "Vorgabe ist {{fallback}}",
+    "using": "Dishylink verwendet {{stored}}. Leeren Sie das Feld, um zu {{fallback}} zurückzukehren.",
+    "refusedInvalid": "Das ist keine IP-Adresse, die diese App erreichen kann. Verwenden Sie die numerische Adresse, keinen Namen.",
+    "refusedDenied": "Die Berechtigung, diese Adresse zu erreichen, wurde verweigert, daher wurde sie nicht gespeichert.",
+    "refusedUnsupported": "Diesem Browser kann kein Zugriff auf diese Adresse gewährt werden. Verwenden Sie eine IPv4-Adresse."
+  },
   "support": {
     "aria": "Support und mehr",
     "ariaUpdateAvailable": "Support und mehr (Update verfügbar)",

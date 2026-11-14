@@ -4,27 +4,19 @@
 // address is the most likely reason it doesn't. Nothing here may sit behind a
 // reachability check.
 
-import { useState } from "react";
-import { useTranslation } from "react-i18next";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import type { TranslationKey } from "@core/i18n/resources";
-import { SettingRow } from "./settingsChrome";
-import { normalizeIpAddress } from "@core/ipAddress";
-import {
-  routerAddressHost,
-  type RouterAddressWriteResult,
-  type RouterAddress,
-} from "../../lib/routerAddressHost";
-import { addressSavable, saveArgument } from "./routerAddressDraft";
+import { routerAddressHost, type RouterAddress } from "../../lib/routerAddressHost";
+import { AddressRow, type AddressRowCopy } from "./AddressRow";
 
-const REFUSAL_MESSAGE: Record<
-  Extract<RouterAddressWriteResult, { ok: false }>["reason"],
-  TranslationKey
-> = {
-  invalid: "routerAddress.refusedInvalid",
-  denied: "routerAddress.refusedDenied",
-  unsupported: "routerAddress.refusedUnsupported",
+const COPY: AddressRowCopy = {
+  title: "routerAddress.title",
+  tip: "routerAddress.tip",
+  defaultIs: "routerAddress.defaultIs",
+  using: "routerAddress.using",
+  refused: {
+    invalid: "routerAddress.refusedInvalid",
+    denied: "routerAddress.refusedDenied",
+    unsupported: "routerAddress.refusedUnsupported",
+  },
 };
 
 export function RouterAddressRow({
@@ -34,78 +26,19 @@ export function RouterAddressRow({
   addresses: RouterAddress;
   onChanged: (next: RouterAddress) => void;
 }) {
-  const { t } = useTranslation();
-  const stored = addresses.router;
-  const fallback = addresses.routerDefault;
-  const [draft, setDraft] = useState(stored ?? "");
-  const [saving, setSaving] = useState(false);
-  const [refused, setRefused] = useState<
-    Extract<RouterAddressWriteResult, { ok: false }>["reason"] | null
-  >(null);
-
-  // The field follows what the host confirmed it stored, so a save that was
-  // normalised on the way in shows the value actually in use.
-  const [shownStored, setShownStored] = useState(stored);
-  if (shownStored !== stored) {
-    setShownStored(stored);
-    setDraft(stored ?? "");
-    setRefused(null);
-  }
-
-  const trimmed = draft.trim();
-
-  const save = () => {
-    const host = routerAddressHost();
-    if (!host || !addressSavable(draft, stored)) return;
-    setSaving(true);
-    setRefused(null);
-    void host
-      .write(saveArgument(draft))
-      .then((result) => {
-        if (result.ok) onChanged(result.addresses);
-        else setRefused(result.reason);
-      })
-      .finally(() => setSaving(false));
-  };
-
   return (
-    <>
-      <SettingRow
-        title={t("routerAddress.title")}
-        info={t("routerAddress.tip", { fallback })}
-        infoSeverity='warn'
-        caption={t("routerAddress.defaultIs", { fallback })}
-        note={
-          refused ? (
-            <span className='text-destructive'>{t(REFUSAL_MESSAGE[refused])}</span>
-          ) : stored ? (
-            t("routerAddress.using", { stored, fallback })
-          ) : undefined
-        }
-      >
-        <Input
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") save();
-          }}
-          placeholder={fallback}
-          spellCheck={false}
-          autoComplete='off'
-          inputMode='numeric'
-          aria-label={t("routerAddress.title")}
-          aria-invalid={trimmed !== "" && normalizeIpAddress(trimmed) === null}
-          className='h-8 w-[168px] font-mono text-[12px] tabular-nums'
-        />
-        <Button
-          size='sm'
-          variant='secondary'
-          disabled={!addressSavable(draft, stored) || saving}
-          onClick={save}
-        >
-          {saving ? t("common.savingEllipsis") : t("common.save")}
-        </Button>
-      </SettingRow>
-    </>
+    <AddressRow
+      stored={addresses.router}
+      fallback={addresses.routerDefault}
+      copy={COPY}
+      save={async (address) => {
+        const host = routerAddressHost();
+        if (!host) return { ok: false, reason: "unsupported" };
+        const result = await host.write(address);
+        if (!result.ok) return result;
+        onChanged(result.addresses);
+        return { ok: true };
+      }}
+    />
   );
 }

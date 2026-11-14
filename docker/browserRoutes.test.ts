@@ -8,6 +8,7 @@ describe("classifyBrowserPath", () => {
     expect(classifyBrowserPath("/api/whoami")).toEqual({ kind: "whoami" });
     expect(classifyBrowserPath("/api/self-device")).toEqual({ kind: "self-device" });
     expect(classifyBrowserPath("/router-address")).toEqual({ kind: "router-address" });
+    expect(classifyBrowserPath("/dish-address")).toEqual({ kind: "dish-address" });
     expect(classifyBrowserPath("/dishy/SpaceX.API.Device.Device/Handle")).toEqual({
       kind: "dish",
       path: "/SpaceX.API.Device.Device/Handle",

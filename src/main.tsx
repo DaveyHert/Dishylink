@@ -9,6 +9,7 @@ import { setCloudHost } from "./lib/cloudHost.ts";
 import { bindNotifications } from "./lib/notifications.ts";
 import { setRecorderInProcess } from "./lib/apiHost.ts";
 import { setRouterAddressHost } from "./lib/routerAddressHost.ts";
+import { setDishAddressHost } from "./lib/dishAddressHost.ts";
 import { setSelfDeviceHost } from "./lib/selfDeviceHost.ts";
 import { setLocaleHost } from "./lib/locale.ts";
 
@@ -50,6 +51,19 @@ if (desktop) {
       },
     });
   }
+  // The dish's address is owned by main for the same reason: its recorder polls
+  // the dish with no window open.
+  if (!import.meta.env.DEV && desktop.dishAddress && desktop.setDishAddress) {
+    const read = desktop.dishAddress;
+    const write = desktop.setDishAddress;
+    setDishAddressHost({
+      read: () => read(),
+      write: async (address) => {
+        const addresses = await write(address);
+        return addresses ? { ok: true, addresses } : { ok: false, reason: "invalid" };
+      },
+    });
+  }
 }
 
 // Whichever server proxies /router/* holds the address, so the setting writes to
@@ -63,6 +77,23 @@ if (import.meta.env.DEV || !desktop) {
     read: readAddresses,
     write: async (address) => {
       const response = await fetch("/router-address", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ address }),
+      });
+      if (!response.ok) return { ok: false, reason: "invalid" };
+      return { ok: true, addresses: await response.json() };
+    },
+  });
+  // The dish's address lives in the same server-side store as the router's, so
+  // the dev server and the Docker host both answer for it.
+  setDishAddressHost({
+    read: async () => {
+      const response = await fetch("/dish-address");
+      return (await response.json()) as { dish: string | null; dishDefault: string };
+    },
+    write: async (address) => {
+      const response = await fetch("/dish-address", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ address }),

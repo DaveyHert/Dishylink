@@ -40,7 +40,7 @@ Dishylink is an unofficial, independent project with no affiliation to SpaceX or
 ## Source and contact
 
 - [Source code](https://github.com/DaveyHert/dishylink): MIT licensed.
-- [Releases](https://github.com/DaveyHert/dishylink/releases/latest)
+- [Releases](https://github.com/nimaam/Dishylink/releases/latest)
 - [Issues and bug reports](https://github.com/DaveyHert/dishylink/issues)
 - Email: hello@dishylink.com
 - [X/Twitter](https://x.com/daveyhert)

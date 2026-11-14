@@ -19,7 +19,8 @@ import { join } from "node:path";
 import { createCloudHandler } from "../cloud/starlinkCloudHandler";
 import { resilientFetch } from "../cloud/resilientFetch";
 import { t } from "./i18n";
-import { DishClient, DISH_LAN_HANDLE_URL, ROUTER_LAN_HANDLE_URL } from "../core/dishClient";
+import { DishClient, ROUTER_LAN_HANDLE_URL } from "../core/dishClient";
+import { dishHandleUrlFrom } from "../core/dishEndpoint";
 import type { DishConfigJson } from "../core/dishClient";
 import { prepareDishConfigUpdate } from "../core/dishConfigUpdate";
 import {
@@ -32,6 +33,7 @@ import {
 import { prepareRouterClientUpdate, readRouterClients } from "../core/routerClientUpdate";
 import type { RouterClientUpdate } from "../core/routerClientUpdate";
 import { hostIdentity } from "./selfDevice";
+import { preferences } from "./preferences";
 
 const LOGIN_URL = "https://www.starlink.com/account";
 // The login window gets its own session, so signing out can wipe its Starlink
@@ -132,7 +134,9 @@ export function startCloud(rendererRoot: string, sessionFile?: string): void {
     ? join(rendererRoot, "dish.protoset")
     : join(app.getAppPath(), "public/dish.protoset");
   let routerPromise: Promise<DishClient> | null = null;
-  let dishPromise: Promise<DishClient> | null = null;
+  // Keyed by the address it was built for: the dish setting can change while
+  // this process runs, and a client holds the URL it dials.
+  let dishPromise: { address: string | null; client: Promise<DishClient> } | null = null;
   // Every router callback needs the same client, and the gateway ones need it
   // only as a codec — loading it dials nothing.
   const loadRouter = () =>
@@ -140,6 +144,19 @@ export function startCloud(rendererRoot: string, sessionFile?: string): void {
       handleUrl: ROUTER_LAN_HANDLE_URL,
       protosetBytes: new Uint8Array(readFileSync(protosetPath)),
     }));
+  const loadDish = () => {
+    const address = preferences().dishAddress;
+    if (dishPromise?.address !== address) {
+      dishPromise = {
+        address,
+        client: DishClient.load("dish", {
+          handleUrl: dishHandleUrlFrom(address),
+          protosetBytes: new Uint8Array(readFileSync(protosetPath)),
+        }),
+      };
+    }
+    return dishPromise.client;
+  };
   handler = createCloudHandler({
     fetch: timedFetch,
     readCookie,
@@ -147,13 +164,7 @@ export function startCloud(rendererRoot: string, sessionFile?: string): void {
     clearCookie,
     prepareDeviceUpdate: async (update, targetId, callGateway) =>
       prepareRouterClientUpdate(await loadRouter(), update, targetId, callGateway, hostIdentity()),
-    prepareDishConfigUpdate: async (changes) => {
-      dishPromise ??= DishClient.load("dish", {
-        handleUrl: DISH_LAN_HANDLE_URL,
-        protosetBytes: new Uint8Array(readFileSync(protosetPath)),
-      });
-      return prepareDishConfigUpdate(await dishPromise, changes);
-    },
+    prepareDishConfigUpdate: async (changes) => prepareDishConfigUpdate(await loadDish(), changes),
     // Encoding only — the client is never dialled here, so this works on a kit
     // whose router answers nothing on the LAN. A subnet change reads the current
     // networks through the caller's gateway, which has the same reach.

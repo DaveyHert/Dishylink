@@ -54,7 +54,10 @@ export const ROUTER_LAN_HANDLE_URL = `http://${ROUTER_LAN_ADDRESS}:9001/SpaceX.A
  *  (the dev server's own process, preparing a cloud write) has no such origin
  *  and needs this absolute one instead. */
 export const DISH_LAN_ADDRESS = "192.168.100.1";
-export const DISH_LAN_HANDLE_URL = `http://${DISH_LAN_ADDRESS}:9201/SpaceX.API.Device.Device/Handle`;
+/** The dish's grpc-web port. Fixed in firmware, and the same on every
+ *  address the dish is reachable at — including one a NAT hands back. */
+export const DISH_PORT = 9201;
+export const DISH_LAN_HANDLE_URL = `http://${DISH_LAN_ADDRESS}:${DISH_PORT}/SpaceX.API.Device.Device/Handle`;
 
 // Oneof field numbers inside SpaceX.API.Device.Request (from the dish schema).
 const REQUEST_FIELD = {

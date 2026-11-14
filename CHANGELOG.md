@@ -2,6 +2,22 @@
 
 All notable changes to Dishylink are documented here.
 
+## [1.3.2] - 2026-11-14
+
+### The dish can live somewhere else
+
+- The dish no longer has to be at 192.168.100.1. That address is fixed in the
+  dish's own firmware and right for an ordinary kit, but a Mini wired into
+  another router is only reachable where that router exposes it — and until now
+  there was nothing to tell Dishylink where that was, so the app showed nothing
+  for a dish that was working perfectly. The new setting is Settings › Starlink
+  › Advanced › Connection › Dish IP address. Leave it empty for the default; the
+  port stays 9201, since the dish serves the same API there whatever address it
+  is reached at.
+- The address is re-read on every request rather than at startup, so a change
+  takes effect immediately instead of at the next restart — which for a recorder
+  that runs for weeks would mean never.
+
 ## [1.3.1] - 2026-11-02
 
 ### Fixed

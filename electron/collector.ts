@@ -44,6 +44,9 @@ export async function startCollector(rendererRoot: string): Promise<void> {
   // The recorder dials the router with no window open, so it reads the same
   // preference the window edits rather than the default it was built with.
   historian.setRouterAddressReader(() => preferences().routerAddress);
+  // Same for the dish, whose address moves when another router sits in front of
+  // it and forwards the dish's port somewhere of its own choosing.
+  historian.setDishAddressReader(() => preferences().dishAddress);
   // A device that spends its data allowance is paused from here, through the
   // account session this process holds. The recorder decides; only main can send.
   historian.setDevicePauser((clientId, paused) => pauseDevice(clientId, paused));

@@ -7,7 +7,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { NotificationState } from "../core/alertNotification";
 import type { HostNetworkIdentity } from "../core/hostNetworkIdentity";
-import type { RouterAddress } from "../core/ipAddress";
+import type { DishAddress, RouterAddress } from "../core/ipAddress";
 import {
   NOTIFICATION_STATE_CHANNEL,
   MENUBAR_THROUGHPUT_CHANNEL,
@@ -45,6 +45,11 @@ contextBridge.exposeInMainWorld("dishlink", {
   routerAddress: (): Promise<RouterAddress> => ipcRenderer.invoke("get-router-address"),
   setRouterAddress: (address: string | null): Promise<RouterAddress | null> =>
     ipcRenderer.invoke("set-router-address", address),
+  // Where this process dials the dish. Same reason as the router: main's
+  // recorder reaches it with no window open.
+  dishAddress: (): Promise<DishAddress> => ipcRenderer.invoke("get-dish-address"),
+  setDishAddress: (address: string | null): Promise<DishAddress | null> =>
+    ipcRenderer.invoke("set-dish-address", address),
   // Opens the Starlink login window in the main process; resolves once the account
   // is connected, or with ok:false if the user closes it.
   signIn: (): Promise<{ ok: boolean; message?: string }> => ipcRenderer.invoke("starlink-signin"),
