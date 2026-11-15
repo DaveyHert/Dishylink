@@ -66,9 +66,14 @@ function ruleToForm(rule: CustomAlertRule): RuleFormState {
   };
 }
 
-function WebhookSettingsSection() {
+function WebhookSettingsSection({
+  settings,
+  setWebhook,
+  testWebhook,
+  loading,
+  error,
+}: ReturnType<typeof useWebhookSettings>) {
   const { t } = useTranslation();
-  const { settings, setWebhook, testWebhook, loading, error } = useWebhookSettings();
   const [editWebhookUrl, setEditWebhookUrl] = useState("");
   const [editBuiltinAlerts, setEditBuiltinAlerts] = useState(false);
   const [editCustomAlerts, setEditCustomAlerts] = useState(false);
@@ -172,16 +177,21 @@ function WebhookSettingsSection() {
   );
 }
 
-function DailyDigestSettingsSection() {
+function DailyDigestSettingsSection({
+  settings,
+  setDigest,
+  loading,
+  error,
+}: Pick<ReturnType<typeof useWebhookSettings>, "settings" | "setDigest" | "loading" | "error">) {
   const { t } = useTranslation();
-  const { settings, setDigest, loading, error } = useWebhookSettings();
-  const [editEnabled, setEditEnabled] = useState(false);
-  const [editHour, setEditHour] = useState("8");
+  const [editEnabled, setEditEnabled] = useState(settings.digest.enabled);
+  // Store hour as a plain number string ("8", not "08") to match option values.
+  const [editHour, setEditHour] = useState(String(settings.digest.hourOfDay));
 
   useEffect(() => {
     setEditEnabled(settings.digest.enabled);
     setEditHour(String(settings.digest.hourOfDay));
-  }, [settings]);
+  }, [settings.digest.enabled, settings.digest.hourOfDay]);
 
   const handleSaveDigest = async () => {
     await setDigest({ enabled: editEnabled, hourOfDay: Number(editHour) });
@@ -189,7 +199,8 @@ function DailyDigestSettingsSection() {
 
   if (loading) return null;
 
-  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+  // Values are plain number strings ("0"–"23") so they match editHour exactly.
+  const hours = Array.from({ length: 24 }, (_, i) => String(i));
 
   return (
     <div className='flex flex-col gap-4'>
@@ -215,7 +226,7 @@ function DailyDigestSettingsSection() {
             <SelectContent className={selectContentClass}>
               {hours.map((h) => (
                 <SelectItem key={h} value={h} className={selectItemClass}>
-                  {h}:00
+                  {h.padStart(2, "0")}:00
                 </SelectItem>
               ))}
             </SelectContent>
@@ -387,6 +398,8 @@ function CustomRuleEditor({ rule: initialRule, onCancel, onSave }: {
 export function CustomAlertsTab() {
   const { t } = useTranslation();
   const { rules, loading, error, save, remove, toggle, reload } = useCustomRules();
+  // Single shared instance so both webhook sections read and write the same state.
+  const webhookHook = useWebhookSettings();
   const [editingRule, setEditingRule] = useState<RuleFormState | null>(null);
 
   const handleNewRule = () => setEditingRule(newRuleForm());
@@ -397,12 +410,17 @@ export function CustomAlertsTab() {
     reload(); // Refresh list after save
   };
 
-  if (loading) return null; // Or a loading spinner
+  if (loading || webhookHook.loading) return null;
 
   return (
     <div className='flex flex-col gap-6'>
-      <WebhookSettingsSection />
-      <DailyDigestSettingsSection />
+      <WebhookSettingsSection {...webhookHook} />
+      <DailyDigestSettingsSection
+        settings={webhookHook.settings}
+        setDigest={webhookHook.setDigest}
+        loading={webhookHook.loading}
+        error={webhookHook.error}
+      />
 
       <SectionLabel>{t("settings.customAlertRules")}</SectionLabel>
 
