@@ -96,3 +96,19 @@ win:
   # the prebuilt-icns dance on macOS above — its ICO writer is fine, so no per-format
   # icon script is needed on this side.
   icon: build/icon.png
+
+# Unsigned Linux AppImage. No code signing is required for AppImages to run; users
+# chmod +x and launch. Tray + notifications work on Linux already (see main.ts);
+# live menu-bar / floating throughput is macOS/Windows-only and stays that way.
+# Both arches ship separately for the same reason as Mac/Windows: Electron is almost
+# the whole download, and nothing here is compiled per-arch.
+linux:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  syncDesktopName: true
+  target:
+    - target: AppImage
+      arch: [x64, arm64]
+  icon: build/icon.png
+  category: Network
+  synopsis: Monitor the performance and health of your Starlink
+  description: An open-source desktop app to monitor Starlink performance and health over your local network.
