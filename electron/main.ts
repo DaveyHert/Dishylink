@@ -58,6 +58,7 @@ import {
 } from "./throughputWidget";
 import { startUpdateChecks, updateState, onUpdateStateChanged } from "./updater";
 import { allowYoutubeEmbeds } from "./youtubeEmbed";
+import { CollectorBusyError } from "../collector/collectorLock.mts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const rendererRoot = join(here, "../dist");
@@ -760,12 +761,37 @@ void app.whenReady().then(async () => {
   // A dev server runs its own recorder; a second collector here would double-poll
   // the dish.
   if (!devServerUrl) {
-    await startCollector(rendererRoot);
-    handleAppProtocol(rendererRoot, handleApiRequest, handleCloudRequest);
-    configureLoginItem();
-    // Bound to the recorder just started, so alerting begins with the app, not a window.
-    startAlertNotifications();
-    startMenuBarThroughput();
+    try {
+      await startCollector(rendererRoot);
+      handleAppProtocol(rendererRoot, handleApiRequest, handleCloudRequest);
+      configureLoginItem();
+      // Bound to the recorder just started, so alerting begins with the app, not a window.
+      startAlertNotifications();
+      startMenuBarThroughput();
+    } catch (error) {
+      if (error instanceof CollectorBusyError) {
+        // Another instance of Dishylink is already running (e.g. registered twice
+        // in Login Items / launchd). The lock file prevents both copies writing to
+        // the same data directory and corrupting it. Show a plain-language dialog
+        // so the user knows what happened and how to fix it, then continue: the
+        // window and tray still open, they just won't record or serve /api until
+        // the duplicate is removed and the app is restarted.
+        dialog.showErrorBox(
+          "Dishylink is already recording",
+          "Another copy of Dishylink is already running in the background and owns the " +
+            "recording data.\n\n" +
+            "Only one copy can record at a time, so this window will open in view-only " +
+            "mode — live stats will still show, but history and energy data will come " +
+            "from the already-running copy.\n\n" +
+            "To fix this permanently: open System Settings \u2192 General \u2192 Login Items " +
+            "and remove any duplicate Dishylink entries, then restart.",
+        );
+      } else {
+        // Any other startup error is unexpected — re-throw so the existing fatal()
+        // handler catches it and logs it, as it did before.
+        throw error;
+      }
+    }
   }
   // Registered for dev and packaged alike: notifications are the alerting channel.
   registerNotificationHandler();
