@@ -9,9 +9,16 @@
 
 const DOT_VERTEX = `
 attribute vec4 aData; uniform mat4 uMvp; uniform float uPointScale; varying float vKind;
+uniform vec3 uBeamStart; uniform vec3 uBeamEnd; uniform float uBeamRadius;
+varying float vBeamHit;
 void main() {
   gl_Position = uMvp * vec4(aData.xyz, 1.0);
-  float base = aData.w > 2.5 ? 1.7 : aData.w > 1.5 ? 1.45 : 1.0;
+  vec3 beam = uBeamEnd - uBeamStart;
+  float along = clamp(dot(aData.xyz - uBeamStart, beam) / max(dot(beam, beam), 0.000001), 0.0, 1.0);
+  float separation = length(aData.xyz - (uBeamStart + along * beam));
+  bool clearView = aData.w > 0.5 && aData.w < 1.5;
+  vBeamHit = clearView && uBeamRadius > 0.0 && separation <= uBeamRadius ? 1.0 : 0.0;
+  float base = vBeamHit > 0.5 ? 1.7 : aData.w > 2.5 ? 1.7 : aData.w > 1.5 ? 1.45 : 1.0;
   gl_PointSize = clamp(uPointScale * base / gl_Position.w, 1.5, 14.0);
   vKind = aData.w;
 }`;
@@ -24,13 +31,14 @@ void main() {
 // Mixed, not faded: the dot is opaque, so it reads as the same grey wherever it
 // lands rather than thinning out over the brighter parts of the scene.
 const DOT_FRAGMENT = `
-precision mediump float; varying float vKind;
+precision mediump float; varying float vKind; varying float vBeamHit;
 uniform vec3 uUnmapped; uniform vec3 uClear; uniform vec3 uPartial; uniform vec3 uObstructed;
-uniform vec3 uFog;
+uniform vec3 uFog; uniform vec3 uBeamHighlight;
 void main() {
   vec2 d = gl_PointCoord - 0.5;
   if (dot(d, d) > 0.25) discard;
-  vec3 col = vKind < 0.5 ? mix(uUnmapped, uFog, 0.7)
+  vec3 col = vBeamHit > 0.5 ? uBeamHighlight
+           : vKind < 0.5 ? mix(uUnmapped, uFog, 0.7)
            : vKind < 1.5 ? uClear
            : vKind < 2.5 ? uPartial
            : uObstructed;
@@ -43,10 +51,11 @@ void main() { gl_Position = uMvp * vec4(aStar.xyz, 1.0); gl_PointSize = aStar.w;
 
 const STAR_FRAGMENT = `
 precision mediump float;
+uniform float uStarIntensity;
 void main() {
   vec2 d = gl_PointCoord - 0.5;
   if (dot(d, d) > 0.25) discard;
-  gl_FragColor = vec4(0.85, 0.88, 0.95, 0.75);
+  gl_FragColor = vec4(0.85, 0.88, 0.95, 0.75 * uStarIntensity);
 }`;
 
 const MESH_VERTEX = `
@@ -56,8 +65,9 @@ void main() { gl_Position = uMvp * vec4(aPos, 1.0); vColor = aColor; vDepth = gl
 
 const MESH_FRAGMENT = `
 precision mediump float; varying vec3 vColor; varying float vDepth; uniform vec3 uFog;
+uniform bool uUnfogged;
 void main() {
-  float f = clamp((vDepth - 4.0) / 14.0, 0.0, 1.0);
+  float f = uUnfogged ? 0.0 : clamp((vDepth - 4.0) / 14.0, 0.0, 1.0);
   gl_FragColor = vec4(mix(vColor, uFog, f), 1.0);
 }`;
 
@@ -86,7 +96,12 @@ void main() { vAcross = aAcross; vAlong = aAlong; gl_Position = uMvp * vec4(aPos
 
 const BEAM_FRAGMENT = `
 precision mediump float; varying float vAcross; varying float vAlong;
+uniform vec3 uBeamStart; uniform vec3 uBeamEnd; uniform float uDomeLift;
+uniform bool uOutsidePass;
 void main() {
+  vec3 center = mix(uBeamStart, uBeamEnd, vAlong) - vec3(0.0, uDomeLift, 0.0);
+  bool outside = dot(center, center) > 1.0;
+  if (outside != uOutsidePass) discard;
   float edge = 1.0 - abs(vAcross);
   float core = pow(clamp(edge, 0.0, 1.0), 2.2);
   // Fade the base so the ribbon emerges from the dish instead of blooming a bright
@@ -141,9 +156,13 @@ export function createPrograms(gl: WebGLRenderingContext): SkyPrograms {
   };
   const program = (vertex: string, fragment: string) => {
     const p = gl.createProgram()!;
-    gl.attachShader(p, compile(gl.VERTEX_SHADER, vertex));
-    gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fragment));
+    const shaders = [compile(gl.VERTEX_SHADER, vertex), compile(gl.FRAGMENT_SHADER, fragment)];
+    for (const shader of shaders) gl.attachShader(p, shader);
     gl.linkProgram(p);
+    for (const shader of shaders) {
+      gl.detachShader(p, shader);
+      gl.deleteShader(shader);
+    }
     return p;
   };
 
