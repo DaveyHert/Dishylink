@@ -96,9 +96,7 @@ function WebhookSettingsSection({
   const [editBuiltinAlerts, setEditBuiltinAlerts] = useState(
     settings.webhook?.builtinAlerts ?? false,
   );
-  const [editCustomAlerts, setEditCustomAlerts] = useState(
-    settings.webhook?.customAlerts ?? false,
-  );
+  const [editCustomAlerts, setEditCustomAlerts] = useState(settings.webhook?.customAlerts ?? false);
   const [editDigestWebhook, setEditDigestWebhook] = useState(settings.webhook?.digest ?? false);
   const [webhookTestResult, setWebhookTestResult] = useState<boolean | null>(null);
   const [webhookUrlError, setWebhookUrlError] = useState<string | null>(null);
@@ -476,10 +474,7 @@ export function CustomAlertsTab() {
 
   return (
     <div className='flex flex-col gap-6'>
-      <WebhookSettingsSection
-        key={webhookHook.settings.webhook?.url ?? "none"}
-        {...webhookHook}
-      />
+      <WebhookSettingsSection key={webhookHook.settings.webhook?.url ?? "none"} {...webhookHook} />
       <DailyDigestSettingsSection
         key={`${webhookHook.settings.digest.enabled}-${webhookHook.settings.digest.hourOfDay}`}
         settings={webhookHook.settings}
