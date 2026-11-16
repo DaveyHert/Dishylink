@@ -55,9 +55,7 @@ function readMetric(sample: CustomSample, metric: CustomAlertMetric): number | n
 }
 
 function breaches(value: number, rule: CustomAlertRule): boolean {
-  return rule.condition === "above"
-    ? value > rule.threshold
-    : value < rule.threshold;
+  return rule.condition === "above" ? value > rule.threshold : value < rule.threshold;
 }
 
 interface RuleState {

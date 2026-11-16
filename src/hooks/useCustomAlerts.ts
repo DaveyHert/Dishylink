@@ -66,17 +66,13 @@ export function useCustomRules() {
     [load],
   );
 
-  const remove = useCallback(
-    async (id: string): Promise<void> => {
-      const res = await apiRequest(
-        `/api/custom-rules?id=${encodeURIComponent(id)}`,
-        { method: "DELETE" },
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setRules((prev) => prev.filter((r) => r.id !== id));
-    },
-    [],
-  );
+  const remove = useCallback(async (id: string): Promise<void> => {
+    const res = await apiRequest(`/api/custom-rules?id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    setRules((prev) => prev.filter((r) => r.id !== id));
+  }, []);
 
   const toggle = useCallback(
     async (rule: CustomAlertRule): Promise<void> => {

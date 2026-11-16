@@ -14,9 +14,25 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { InfoIcon, PlusIcon, TrashIcon, TestTubeIcon } from "lucide-react";
-import { SectionLabel, SettingRow, triggerClass, selectContentClass, selectItemClass } from "./settingsChrome";
-import { useCustomRules, useWebhookSettings, type CustomAlertRule, type WebhookConfig } from "../../hooks/useCustomAlerts";
-import { METRIC_BOUNDS, MAX_DURATION_SECONDS, type CustomAlertMetric, type CustomAlertCondition } from "@core/customAlertRules";
+import {
+  SectionLabel,
+  SettingRow,
+  triggerClass,
+  selectContentClass,
+  selectItemClass,
+} from "./settingsChrome";
+import {
+  useCustomRules,
+  useWebhookSettings,
+  type CustomAlertRule,
+  type WebhookConfig,
+} from "../../hooks/useCustomAlerts";
+import {
+  METRIC_BOUNDS,
+  MAX_DURATION_SECONDS,
+  type CustomAlertMetric,
+  type CustomAlertCondition,
+} from "@core/customAlertRules";
 import { validateWebhookUrl } from "@core/webhookDelivery";
 
 /** Static labels for each metric — avoids dynamic t() key lookup that TS can't type-check. */
@@ -98,12 +114,15 @@ function WebhookSettingsSection({
       return;
     }
 
-    const newConfig: WebhookConfig | null = editWebhookUrl === "" ? null : {
-      url: editWebhookUrl,
-      builtinAlerts: editBuiltinAlerts,
-      customAlerts: editCustomAlerts,
-      digest: editDigestWebhook,
-    };
+    const newConfig: WebhookConfig | null =
+      editWebhookUrl === ""
+        ? null
+        : {
+            url: editWebhookUrl,
+            builtinAlerts: editBuiltinAlerts,
+            customAlerts: editCustomAlerts,
+            digest: editDigestWebhook,
+          };
     await setWebhook(newConfig);
   };
 
@@ -123,13 +142,19 @@ function WebhookSettingsSection({
         title={t("settings.webhookUrl")}
         caption={t("settings.webhookUrlDesc")}
         info={t("settings.webhookUrlInfo")}
-        note={webhookUrlError && <Callout tone='error' icon='warning'>{webhookUrlError}</Callout>}
+        note={
+          webhookUrlError && (
+            <Callout tone='error' icon='warning'>
+              {webhookUrlError}
+            </Callout>
+          )
+        }
       >
         <Input
           value={editWebhookUrl}
           onChange={(e) => setEditWebhookUrl(e.target.value)}
-          placeholder="https://hooks.slack.com/… or https://api.telegram.org/bot<TOKEN>/sendMessage?chat_id=<ID>"
-          className="w-[300px]"
+          placeholder='https://hooks.slack.com/… or https://api.telegram.org/bot<TOKEN>/sendMessage?chat_id=<ID>'
+          className='w-[300px]'
         />
       </SettingRow>
 
@@ -158,13 +183,20 @@ function WebhookSettingsSection({
 
       <div className='flex justify-end gap-2'>
         {settings.webhook && (
-          <Button variant='outline' size='sm' onClick={handleTestWebhook} className='flex items-center gap-2'>
+          <Button
+            variant='outline'
+            size='sm'
+            onClick={handleTestWebhook}
+            className='flex items-center gap-2'
+          >
             <TestTubeIcon size={16} /> {t("common.test")}
           </Button>
         )}
         {webhookTestResult !== null && (
-          <Callout tone={webhookTestResult ? 'info' : 'error'} className='flex items-center gap-2'>
-            {webhookTestResult ? t("settings.webhookTestSuccess") : t("settings.webhookTestFailure")}
+          <Callout tone={webhookTestResult ? "info" : "error"} className='flex items-center gap-2'>
+            {webhookTestResult
+              ? t("settings.webhookTestSuccess")
+              : t("settings.webhookTestFailure")}
           </Callout>
         )}
         <Button size='sm' onClick={handleSaveWebhook} disabled={loading}>
@@ -172,7 +204,11 @@ function WebhookSettingsSection({
         </Button>
       </div>
 
-      {error && <Callout tone='error' icon='warning'>{t("common.failed", { message: error })}</Callout>}
+      {error && (
+        <Callout tone='error' icon='warning'>
+          {t("common.failed", { message: error })}
+        </Callout>
+      )}
     </div>
   );
 }
@@ -240,12 +276,20 @@ function DailyDigestSettingsSection({
         </Button>
       </div>
 
-      {error && <Callout tone='error' icon='warning'>{t("common.failed", { message: error })}</Callout>}
+      {error && (
+        <Callout tone='error' icon='warning'>
+          {t("common.failed", { message: error })}
+        </Callout>
+      )}
     </div>
   );
 }
 
-function CustomRuleEditor({ rule: initialRule, onCancel, onSave }: {
+function CustomRuleEditor({
+  rule: initialRule,
+  onCancel,
+  onSave,
+}: {
   rule: RuleFormState;
   onCancel: () => void;
   onSave: (rule: CustomAlertRule) => Promise<void>;
@@ -276,7 +320,11 @@ function CustomRuleEditor({ rule: initialRule, onCancel, onSave }: {
     } else {
       const bounds = METRIC_BOUNDS[rule.metric];
       if (thresholdNum < bounds.min || thresholdNum > bounds.max) {
-        newErrors.threshold = t("settings.thresholdOutOfBounds", { min: bounds.min, max: bounds.max, unit: bounds.unit });
+        newErrors.threshold = t("settings.thresholdOutOfBounds", {
+          min: bounds.min,
+          max: bounds.max,
+          unit: bounds.unit,
+        });
         hasError = true;
       }
     }
@@ -311,15 +359,21 @@ function CustomRuleEditor({ rule: initialRule, onCancel, onSave }: {
           value={rule.name}
           onChange={(e) => setRule({ ...rule, name: e.target.value })}
           placeholder={t("settings.ruleNamePlaceholder")}
-          className="w-[250px]"
+          className='w-[250px]'
         />
       </SettingRow>
-      {errors.name && <Callout tone='error' icon='warning'>{errors.name}</Callout>}
+      {errors.name && (
+        <Callout tone='error' icon='warning'>
+          {errors.name}
+        </Callout>
+      )}
 
       <SettingRow title={t("settings.metric")}>
         <Select
           value={rule.metric}
-          onValueChange={(value) => setRule({ ...rule, metric: value as CustomAlertMetric, threshold: "" })}
+          onValueChange={(value) =>
+            setRule({ ...rule, metric: value as CustomAlertMetric, threshold: "" })
+          }
         >
           <SelectTrigger className={triggerClass} style={{ width: 180 }}>
             <SelectValue />
@@ -343,26 +397,34 @@ function CustomRuleEditor({ rule: initialRule, onCancel, onSave }: {
             <SelectValue />
           </SelectTrigger>
           <SelectContent className={selectContentClass}>
-            <SelectItem value="above" className={selectItemClass}>{t("settings.conditionAbove")}</SelectItem>
-            <SelectItem value="below" className={selectItemClass}>{t("settings.conditionBelow")}</SelectItem>
+            <SelectItem value='above' className={selectItemClass}>
+              {t("settings.conditionAbove")}
+            </SelectItem>
+            <SelectItem value='below' className={selectItemClass}>
+              {t("settings.conditionBelow")}
+            </SelectItem>
           </SelectContent>
         </Select>
       </SettingRow>
 
       <SettingRow title={t("settings.threshold")}>
         <Input
-          type="number"
+          type='number'
           value={rule.threshold}
           onChange={(e) => setRule({ ...rule, threshold: e.target.value })}
           placeholder={String(metricBounds.min)}
           min={metricBounds.min}
           max={metricBounds.max}
           step={metricBounds.step}
-          className="w-[120px]"
+          className='w-[120px]'
         />
-        <span className="text-sm text-muted-foreground">{metricBounds.unit}</span>
+        <span className='text-sm text-muted-foreground'>{metricBounds.unit}</span>
       </SettingRow>
-      {errors.threshold && <Callout tone='error' icon='warning'>{errors.threshold}</Callout>}
+      {errors.threshold && (
+        <Callout tone='error' icon='warning'>
+          {errors.threshold}
+        </Callout>
+      )}
 
       <SettingRow
         title={t("settings.durationSeconds")}
@@ -370,26 +432,37 @@ function CustomRuleEditor({ rule: initialRule, onCancel, onSave }: {
         info={t("settings.durationSecondsInfo", { max: MAX_DURATION_SECONDS })}
       >
         <Input
-          type="number"
+          type='number'
           value={rule.durationSeconds}
           onChange={(e) => setRule({ ...rule, durationSeconds: e.target.value })}
-          placeholder="0"
-          min="0"
+          placeholder='0'
+          min='0'
           max={String(MAX_DURATION_SECONDS)}
-          step="1"
-          className="w-[120px]"
+          step='1'
+          className='w-[120px]'
         />
-        <span className="text-sm text-muted-foreground">{t("common.seconds") || "s"}</span>
+        <span className='text-sm text-muted-foreground'>{t("common.seconds") || "s"}</span>
       </SettingRow>
-      {errors.durationSeconds && <Callout tone='error' icon='warning'>{errors.durationSeconds}</Callout>}
+      {errors.durationSeconds && (
+        <Callout tone='error' icon='warning'>
+          {errors.durationSeconds}
+        </Callout>
+      )}
 
       <SettingRow title={t("common.on")}>
-        <Switch checked={rule.enabled} onCheckedChange={(val) => setRule({ ...rule, enabled: val })} />
+        <Switch
+          checked={rule.enabled}
+          onCheckedChange={(val) => setRule({ ...rule, enabled: val })}
+        />
       </SettingRow>
 
       <div className='flex justify-end gap-2 mt-4'>
-        <Button variant='outline' size='sm' onClick={onCancel}>{t("common.cancel")}</Button>
-        <Button size='sm' onClick={validateAndSave}>{rule.isNew ? t("common.create") : t("common.save")}</Button>
+        <Button variant='outline' size='sm' onClick={onCancel}>
+          {t("common.cancel")}
+        </Button>
+        <Button size='sm' onClick={validateAndSave}>
+          {rule.isNew ? t("common.create") : t("common.save")}
+        </Button>
       </div>
     </div>
   );
@@ -424,7 +497,11 @@ export function CustomAlertsTab() {
 
       <SectionLabel>{t("settings.customAlertRules")}</SectionLabel>
 
-      {error && <Callout tone='error' icon='warning'>{t("common.failed", { message: error })}</Callout>}
+      {error && (
+        <Callout tone='error' icon='warning'>
+          {t("common.failed", { message: error })}
+        </Callout>
+      )}
 
       {rules.length === 0 && !editingRule && (
         <p className='text-muted-foreground'>{t("settings.noCustomRules")}</p>
@@ -432,13 +509,19 @@ export function CustomAlertsTab() {
 
       <div className='flex flex-col gap-2'>
         {rules.map((rule) => (
-          <div key={rule.id} className='flex items-center justify-between p-3 border rounded-lg bg-card-muted'>
+          <div
+            key={rule.id}
+            className='flex items-center justify-between p-3 border rounded-lg bg-card-muted'
+          >
             <div className='flex flex-col'>
               <span className='font-semibold'>{rule.name}</span>
               <span className='text-sm text-muted-foreground'>
                 {METRIC_LABELS[rule.metric]}{" "}
-                {rule.condition === "above" ? t("settings.conditionAbove") : t("settings.conditionBelow")}{" "}
-                {rule.threshold}{METRIC_BOUNDS[rule.metric].unit}
+                {rule.condition === "above"
+                  ? t("settings.conditionAbove")
+                  : t("settings.conditionBelow")}{" "}
+                {rule.threshold}
+                {METRIC_BOUNDS[rule.metric].unit}
                 {rule.durationSeconds > 0 ? ` for ${rule.durationSeconds}s` : ""}
               </span>
             </div>

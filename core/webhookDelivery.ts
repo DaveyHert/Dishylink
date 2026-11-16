@@ -159,12 +159,10 @@ export function customTransitionPayload(transition: CustomAlertTransition): Webh
 /** Build a webhook payload for the daily digest. */
 export function digestPayload(data: WebhookDigestData): WebhookPayload {
   const lines: string[] = ["📊 Daily Dishylink digest"];
-  if (data.uptimePercent !== null)
-    lines.push(`• Uptime: ${data.uptimePercent.toFixed(1)}%`);
+  if (data.uptimePercent !== null) lines.push(`• Uptime: ${data.uptimePercent.toFixed(1)}%`);
   if (data.peakDownloadMbps !== null)
     lines.push(`• Peak download: ${data.peakDownloadMbps.toFixed(0)} Mbps`);
-  if (data.dataUsedGb !== null)
-    lines.push(`• Data used: ${data.dataUsedGb.toFixed(2)} GB`);
+  if (data.dataUsedGb !== null) lines.push(`• Data used: ${data.dataUsedGb.toFixed(2)} GB`);
   if (data.outageCount > 0)
     lines.push(
       `• Outages: ${data.outageCount}${data.worstOutageCause ? ` (worst: ${data.worstOutageCause})` : ""}`,
@@ -180,7 +178,10 @@ export function digestPayload(data: WebhookDigestData): WebhookPayload {
 
 /** POST a payload to the webhook URL. Returns true on 2xx, false otherwise.
  *  Never throws — callers should not await this in a hot path. */
-export async function postWebhook(config: WebhookConfig, payload: WebhookPayload): Promise<boolean> {
+export async function postWebhook(
+  config: WebhookConfig,
+  payload: WebhookPayload,
+): Promise<boolean> {
   const body = wrapPayload(config.url, payload);
   try {
     const response = await fetch(config.url, {
