@@ -92,6 +92,7 @@ import { usageKey } from "../core/clientUsage.ts";
 import { AlertStore, type AlertEpisode } from "./alertStore.mts";
 import { AlertEngine, type AlertObservation, type AlertTransition } from "../core/alertEngine.ts";
 import { ObstructionStore, packCells } from "./obstructionStore.mts";
+import { CustomFeatures } from "./customFeatures.mts";
 
 const DISH_URL =
   process.env.DISH_URL ?? "http://192.168.100.1:9201/SpaceX.API.Device.Device/Handle";
@@ -131,6 +132,8 @@ const ALERTS_FILE = join(DATA_DIR, "alerts.ndjson");
 const POSTMORTEM_FILE = join(DATA_DIR, "postmortems.ndjson");
 const OBSTRUCTION_FILE = join(DATA_DIR, "obstruction.ndjson");
 const LOCK_FILE = join(DATA_DIR, "historian.lock");
+// Custom features (rules, webhooks, digest) share the same data dir.
+const CUSTOM_FEATURES_DATA_DIR = DATA_DIR;
 const PORT = Number(process.env.HISTORIAN_PORT ?? 8088);
 const POLL_MS = 5_000;
 /**
@@ -925,6 +928,12 @@ const clientStore = new ClientStore(CLIENTS_FILE);
 const clientWindow = new ClientWindow(CLIENT_SAMPLES_FILE);
 const alertStore = new AlertStore(ALERTS_FILE);
 const postmortemStore = new PostmortemStore(POSTMORTEM_FILE);
+const customFeatures = new CustomFeatures(
+  CUSTOM_FEATURES_DATA_DIR,
+  () => latestSamples,
+  () => eventStore.all(),
+  (startSec, endSec) => store.readRange(startSec, endSec),
+);
 
 /**
  * Decides what changed; this file only writes it down and passes it on. Seeded
@@ -1081,6 +1090,8 @@ export function recordAlertTransitions(transitions: AlertTransition[]): void {
     }
   }
   for (const listener of alertListeners) listener(transitions);
+  // Dispatch webhooks for built-in transitions, best-effort.
+  for (const transition of transitions) customFeatures.dispatchBuiltinWebhook(transition);
 }
 
 let latestRadio: { readings: RadioStatReading[]; atMs: number } | null = null;
@@ -1968,6 +1979,22 @@ export function handleRequest(request: IncomingMessage, response: ServerResponse
     response.end(JSON.stringify({ ok: true, lastWrittenMinute: store.lastWrittenMinute }));
     return;
   }
+  // Custom alert rules.
+  if (
+    customFeatures.handleCustomRulesRequest(request.method, url, (body) => {
+      response.setHeader("Content-Type", "application/json");
+      response.end(body);
+    })
+  )
+    return;
+  // Webhook / digest settings.
+  if (
+    customFeatures.handleWebhookSettingsRequest(request.method, url, (body) => {
+      response.setHeader("Content-Type", "application/json");
+      response.end(body);
+    })
+  )
+    return;
   response.statusCode = 404;
   response.end("not found");
 }
@@ -2103,6 +2130,10 @@ export function start(): void {
   // Checked every 5 minutes; the store's isDue() keeps the actual dish call hourly.
   void pollObstructionCycle();
   setInterval(() => void pollObstructionCycle(), 300_000);
+  // Evaluate custom alert rules once per main poll cycle.
+  setInterval(() => customFeatures.runCustomAlerts(), POLL_MS);
+  // Check and send daily digest every 5 minutes.
+  setInterval(() => customFeatures.checkAndSendDigest(), 5 * 60_000);
   setInterval(recordClients, CLIENTS_RECORD_MS);
   setInterval(() => clientWindow.snapshot(), SNAPSHOT_EVERY_MS);
   setInterval(() => clientTotals.snapshot(), SNAPSHOT_EVERY_MS);

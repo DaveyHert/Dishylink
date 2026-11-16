@@ -18,6 +18,7 @@ import { specForHardware } from "../../lib/dishMesh";
 import { RouterSettingsTab } from "./RouterSettingsTab";
 import { StarlinkSettingsTab } from "./StarlinkSettingsTab";
 import { AppSettingsTab } from "./AppSettingsTab";
+import { CustomAlertsTab } from "./CustomAlertsTab";
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -120,6 +121,7 @@ export function SettingsModal({
               { value: "starlink", label: t("common.starlink") },
               { value: "router", label: t("common.router") },
               { value: "app", label: t("common.app") },
+              { value: "alerts", label: t("settings.alertsTab") },
             ]}
           />
         </div>
@@ -149,6 +151,7 @@ export function SettingsModal({
               />
             )}
             {tab === "app" && <AppSettingsTab clients={clients} />}
+            {tab === "alerts" && <CustomAlertsTab />}
           </div>
         </div>
       </DialogContent>

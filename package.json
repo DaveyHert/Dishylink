@@ -44,7 +44,7 @@
   "dependencies": {
     "@bufbuild/protobuf": "^2.6.0",
     "@number-flow/react": "^0.6.2",
-    "@tanstack/react-virtual": "^3.14.20",
+    "@tanstack/react-virtual": "^3.14.26",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "electron-updater": "^6.8.11",

@@ -5,7 +5,7 @@ import { useHashRoute } from "./useHashRoute";
 export type PanelName =
   "speedtest" | "alignment" | "datausage" | "network" | "account" | "settings" | "terminal";
 
-export type SettingsTab = "starlink" | "router" | "app";
+export type SettingsTab = "starlink" | "router" | "app" | "alerts";
 
 // Panels are opened by the toolbar, which owns this state, but a control buried
 // in one panel sometimes has to send the user to another. Module-level so it can
