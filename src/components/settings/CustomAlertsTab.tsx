@@ -1,6 +1,6 @@
 // Settings tab for custom alert rules, webhooks, and daily digest.
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -90,21 +90,18 @@ function WebhookSettingsSection({
   error,
 }: ReturnType<typeof useWebhookSettings>) {
   const { t } = useTranslation();
-  const [editWebhookUrl, setEditWebhookUrl] = useState("");
-  const [editBuiltinAlerts, setEditBuiltinAlerts] = useState(false);
-  const [editCustomAlerts, setEditCustomAlerts] = useState(false);
-  const [editDigestWebhook, setEditDigestWebhook] = useState(false);
+  // Initialized from settings on mount. The parent remounts this component
+  // (via key) after every save so these always start from the latest values.
+  const [editWebhookUrl, setEditWebhookUrl] = useState(settings.webhook?.url ?? "");
+  const [editBuiltinAlerts, setEditBuiltinAlerts] = useState(
+    settings.webhook?.builtinAlerts ?? false,
+  );
+  const [editCustomAlerts, setEditCustomAlerts] = useState(
+    settings.webhook?.customAlerts ?? false,
+  );
+  const [editDigestWebhook, setEditDigestWebhook] = useState(settings.webhook?.digest ?? false);
   const [webhookTestResult, setWebhookTestResult] = useState<boolean | null>(null);
   const [webhookUrlError, setWebhookUrlError] = useState<string | null>(null);
-
-  // Sync local edit state with fetched settings when they change.
-  // This happens on initial load and after a successful save/load.
-  useEffect(() => {
-    setEditWebhookUrl(settings.webhook?.url ?? "");
-    setEditBuiltinAlerts(settings.webhook?.builtinAlerts ?? false);
-    setEditCustomAlerts(settings.webhook?.customAlerts ?? false);
-    setEditDigestWebhook(settings.webhook?.digest ?? false);
-  }, [settings]);
 
   const handleSaveWebhook = async () => {
     setWebhookUrlError(null);
@@ -224,11 +221,7 @@ function DailyDigestSettingsSection({
   // Store hour as a plain number string ("8", not "08") to match option values.
   const [editHour, setEditHour] = useState(String(settings.digest.hourOfDay));
 
-  useEffect(() => {
-    setEditEnabled(settings.digest.enabled);
-    setEditHour(String(settings.digest.hourOfDay));
-  }, [settings.digest.enabled, settings.digest.hourOfDay]);
-
+  // No sync effect needed — parent remounts via key after every save.
   const handleSaveDigest = async () => {
     await setDigest({ enabled: editEnabled, hourOfDay: Number(editHour) });
   };
@@ -295,14 +288,10 @@ function CustomRuleEditor({
   onSave: (rule: CustomAlertRule) => Promise<void>;
 }) {
   const { t } = useTranslation();
+  // Initialized from initialRule on mount. The call site passes key={rule.id}
+  // so this component remounts fresh whenever the user switches rules.
   const [rule, setRule] = useState(initialRule);
   const [errors, setErrors] = useState<Record<string, string | null>>({});
-
-  // Sync rule state for editing after initialRule changes (e.g. when editing a new rule)
-  useEffect(() => {
-    setRule(initialRule);
-    setErrors({}); // Clear errors when rule changes
-  }, [initialRule]);
 
   const validateAndSave = async () => {
     const newErrors: Record<string, string | null> = {};
@@ -487,8 +476,12 @@ export function CustomAlertsTab() {
 
   return (
     <div className='flex flex-col gap-6'>
-      <WebhookSettingsSection {...webhookHook} />
+      <WebhookSettingsSection
+        key={webhookHook.settings.webhook?.url ?? "none"}
+        {...webhookHook}
+      />
       <DailyDigestSettingsSection
+        key={`${webhookHook.settings.digest.enabled}-${webhookHook.settings.digest.hourOfDay}`}
         settings={webhookHook.settings}
         setDigest={webhookHook.setDigest}
         loading={webhookHook.loading}
@@ -539,7 +532,12 @@ export function CustomAlertsTab() {
       </div>
 
       {editingRule && (
-        <CustomRuleEditor rule={editingRule} onCancel={handleCancelEdit} onSave={handleSaveRule} />
+        <CustomRuleEditor
+          key={editingRule.id}
+          rule={editingRule}
+          onCancel={handleCancelEdit}
+          onSave={handleSaveRule}
+        />
       )}
 
       {!editingRule && (

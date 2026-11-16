@@ -45,7 +45,10 @@ export function useCustomRules() {
   }, []);
 
   useEffect(() => {
-    void load();
+    async function init() {
+      await load();
+    }
+    void init();
   }, [load]);
 
   const save = useCallback(
@@ -106,7 +109,10 @@ export function useWebhookSettings() {
   }, []);
 
   useEffect(() => {
-    void load();
+    async function init() {
+      await load();
+    }
+    void init();
   }, [load]);
 
   const setWebhook = useCallback(
