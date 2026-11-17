@@ -12,11 +12,12 @@ import { NetworkIcon } from "../../assets/icons/NetworkIcon";
 import { UserIcon } from "../../assets/icons/UserIcon";
 import { PlanetIcon } from "../../assets/icons/PlanetIcon";
 import { SettingsIcon } from "../../assets/icons/SettingsIcon";
+import { UptimeIcon } from "../../assets/icons/UptimeIcon";
 
 // The `id` of each destination matches the App's panel key, which is how a
 // toolbar lights the open one.
 export type ToolbarItemId =
-  "speedtest" | "alignment" | "datausage" | "network" | "account" | "satellite" | "settings";
+  "speedtest" | "alignment" | "datausage" | "network" | "account" | "satellite" | "uptime" | "settings";
 
 export interface ToolbarItem {
   id: ToolbarItemId;
@@ -35,6 +36,7 @@ const TOOLBAR_ITEMS: { id: ToolbarItemId; labelKey: TranslationKey; Icon: Toolba
     { id: "network", labelKey: "navigation.network", Icon: NetworkIcon },
     { id: "account", labelKey: "navigation.account", Icon: UserIcon },
     { id: "satellite", labelKey: "navigation.satelliteView", Icon: PlanetIcon },
+    { id: "uptime", labelKey: "navigation.uptime", Icon: UptimeIcon },
     { id: "settings", labelKey: "navigation.settings", Icon: SettingsIcon },
   ];
 
