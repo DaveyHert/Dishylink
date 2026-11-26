@@ -1251,7 +1251,11 @@
   },
   "eventDetail": {
     "title": "Détails de l'événement",
-    "kind": { "outage": "Panne", "degraded": "Dégradé", "info": "Info" },
+    "kind": {
+      "outage": "Panne",
+      "degraded": "Dégradé",
+      "info": "Info"
+    },
     "span": "{{start}} à {{end}}",
     "noReport": "L'enregistreur d'historique n'a pas chronométré cet événement, il n'y a donc aucune mesure.",
     "beforeDrop": "Cinq minutes avant la panne",
@@ -1437,5 +1441,25 @@
     "notificationsUndeliverable": "macOS ne délivre pas les notifications — autorisez Dishylink dans Réglages Système ▸ Notifications.",
     "notificationsDevRun": "Les notifications natives nécessitent l'application Dishylink installée ; une exécution de développement ne peut pas les afficher.",
     "signInTitle": "Se connecter à Starlink"
+  },
+  "pauseAll": {
+    "pauseAll": "Tout mettre en pause",
+    "unpauseAll": "Tout reprendre",
+    "pausing": "Mise en pause…",
+    "unpausing": "Reprise…",
+    "error": "Impossible de mettre en pause tous les appareils.",
+    "confirmTitle": "Mettre en pause tous les appareils ?",
+    "confirmBody_one": "Cela mettra en pause l’accès internet de {{count}} appareil. Il reste sur votre Wi-Fi et vous pouvez le réactiver à tout moment.",
+    "confirmBody_other": "Cela mettra en pause l’accès internet de {{count}} appareils. Ils restent sur votre Wi-Fi et vous pouvez les réactiver à tout moment.",
+    "confirmAction": "Tout mettre en pause",
+    "scheduleButton": "Programmer une pause",
+    "scheduleTitle": "Programmer une pause nocturne",
+    "scheduleSubtitle": "Les appareils seront bloqués chaque nuit de {{start}} à {{end}}. Vous pouvez modifier ou supprimer cette règle depuis l’onglet Règles.",
+    "scheduleBlockHours": "Heures de blocage (chaque jour)",
+    "scheduleDevices": "Appareils à bloquer",
+    "scheduleNoDevices": "Sélectionnez au moins un appareil.",
+    "scheduleNoDevicesAvailable": "Aucun autre appareil sur le réseau.",
+    "scheduleCreate": "Créer le calendrier",
+    "scheduledRuleDefaultName": "Pause nocturne"
   }
 }

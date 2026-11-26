@@ -1251,7 +1251,11 @@
   },
   "eventDetail": {
     "title": "Detalhes do evento",
-    "kind": { "outage": "Interrupção", "degraded": "Degradado", "info": "Info" },
+    "kind": {
+      "outage": "Interrupção",
+      "degraded": "Degradado",
+      "info": "Info"
+    },
     "span": "{{start}} a {{end}}",
     "noReport": "O gravador de histórico não cronometrou este evento, por isso não há valores.",
     "beforeDrop": "Cinco minutos antes da interrupção",
@@ -1437,5 +1441,25 @@
     "notificationsUndeliverable": "O macOS não está entregando as notificações — permita o Dishylink em Ajustes do Sistema ▸ Notificações.",
     "notificationsDevRun": "As notificações nativas precisam do aplicativo Dishylink instalado; uma execução de desenvolvimento não consegue exibi-las.",
     "signInTitle": "Entrar na Starlink"
+  },
+  "pauseAll": {
+    "pauseAll": "Pausar tudo",
+    "unpauseAll": "Retomar tudo",
+    "pausing": "Pausando…",
+    "unpausing": "Retomando…",
+    "error": "Não foi possível pausar todos os dispositivos.",
+    "confirmTitle": "Pausar todos os dispositivos?",
+    "confirmBody_one": "Isso pausará o acesso à internet de {{count}} dispositivo. Ele continua na sua rede Wi-Fi e pode ser retomado a qualquer momento.",
+    "confirmBody_other": "Isso pausará o acesso à internet de todos os {{count}} dispositivos. Eles continuam na sua rede Wi-Fi e podem ser retomados a qualquer momento.",
+    "confirmAction": "Pausar tudo",
+    "scheduleButton": "Agendar pausa",
+    "scheduleTitle": "Agendar uma pausa noturna",
+    "scheduleSubtitle": "Os dispositivos serão bloqueados todas as noites das {{start}} às {{end}}. Você pode editar ou excluir esta regra na aba Regras.",
+    "scheduleBlockHours": "Horário de bloqueio (todos os dias)",
+    "scheduleDevices": "Dispositivos a bloquear",
+    "scheduleNoDevices": "Selecione pelo menos um dispositivo.",
+    "scheduleNoDevicesAvailable": "Nenhum outro dispositivo na rede.",
+    "scheduleCreate": "Criar agendamento",
+    "scheduledRuleDefaultName": "Pausa noturna"
   }
 }

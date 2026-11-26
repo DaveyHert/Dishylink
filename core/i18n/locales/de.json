@@ -120,7 +120,11 @@
     "terminalCount_other": "{{count}} Terminals",
     "noDevices": "Keine Geräte in diesem Konto.",
     "inactive": "Inaktiv",
-    "status": { "online": "online", "offline": "offline", "inactive": "inaktiv" },
+    "status": {
+      "online": "online",
+      "offline": "offline",
+      "inactive": "inaktiv"
+    },
     "starlinkId": "Starlink-ID",
     "serialNumber": "Seriennummer",
     "kitNumber": "Kit-Nummer",
@@ -1088,7 +1092,10 @@
         "ok": "Mast ist annähernd senkrecht",
         "firing": "Mast ist nicht annähernd senkrecht"
       },
-      "lowMotorCurrent": { "ok": "Motorstrom normal", "firing": "Niedriger Motorstrom" },
+      "lowMotorCurrent": {
+        "ok": "Motorstrom normal",
+        "firing": "Niedriger Motorstrom"
+      },
       "lowerSignalThanPredicted": {
         "ok": "Signal wie vorhergesagt",
         "firing": "Wetterstörung",
@@ -1197,7 +1204,10 @@
         "ok": "Router konfiguriert",
         "firing": "Router ist frisch gefust und noch nicht eingerichtet"
       },
-      "sandboxDisabled": { "ok": "Sandbox verfügbar", "firing": "Sandbox-Modus ist deaktiviert" },
+      "sandboxDisabled": {
+        "ok": "Sandbox verfügbar",
+        "firing": "Sandbox-Modus ist deaktiviert"
+      },
       "onlyOverflightBlocked": {
         "ok": "Dienst uneingeschränkt",
         "firing": "Nur der Überflugdienst ist blockiert"
@@ -1213,7 +1223,10 @@
         "firing": "Antenne antwortet nicht",
         "advice": "Prüfen Sie, ob die Antenne Strom hat und ihr Kabel zum Router an beiden Enden fest sitzt."
       },
-      "routerUnreachable": { "ok": "Router antwortet", "firing": "Router antwortet nicht" },
+      "routerUnreachable": {
+        "ok": "Router antwortet",
+        "firing": "Router antwortet nicht"
+      },
       "starlinkOutage": {
         "ok": "Pings zum Starlink-Netzwerk sind wieder erfolgreich",
         "firing": "Die Antenne ist erreichbar, aber Pings zum Starlink-Netzwerk schlagen fehl",
@@ -1231,7 +1244,11 @@
   },
   "eventDetail": {
     "title": "Ereignisdetails",
-    "kind": { "outage": "Ausfall", "degraded": "Beeinträchtigt", "info": "Info" },
+    "kind": {
+      "outage": "Ausfall",
+      "degraded": "Beeinträchtigt",
+      "info": "Info"
+    },
     "span": "{{start}} bis {{end}}",
     "noReport": "Die Verlaufsaufzeichnung hat dieses Ereignis nicht erfasst, daher gibt es dazu keine Messwerte.",
     "beforeDrop": "Fünf Minuten vor dem Ausfall",
@@ -1302,7 +1319,10 @@
       "label": "Wetterstörung",
       "tip": "Starker Regen/Schnee hat das Signal-Rausch-Verhältnis unter den nutzbaren Pegel gedrückt."
     },
-    "BOOTING": { "label": "Starlink startet", "tip": "Die Antenne startete neu / fuhr hoch." },
+    "BOOTING": {
+      "label": "Starlink startet",
+      "tip": "Die Antenne startete neu / fuhr hoch."
+    },
     "SKY_SEARCH": {
       "label": "Satellitensuche",
       "tip": "Die Antenne suchte den Himmel ab, um Satelliten zu erfassen (nach dem Start oder einem Standortwechsel)."
@@ -1319,7 +1339,10 @@
       "label": "Geplanter Ruhezustand",
       "tip": "Geplantes Ruhefenster (der „Schlummer“-Zeitplan in der App)."
     },
-    "CABLE_TEST": { "label": "Kabeltest", "tip": "Die Antenne führte ihre Kabeldiagnose durch." },
+    "CABLE_TEST": {
+      "label": "Kabeltest",
+      "tip": "Die Antenne führte ihre Kabeldiagnose durch."
+    },
     "INHIBIT_RF": {
       "label": "Übertragung pausiert",
       "tip": "Die Antenne hat das Senden eingestellt (Funk unterbunden – aus Sicherheitsgründen oder auf Befehl)."
@@ -1405,5 +1428,25 @@
     "notificationsUndeliverable": "macOS stellt keine Benachrichtigungen zu – erlauben Sie Dishylink unter Systemeinstellungen ▸ Mitteilungen.",
     "notificationsDevRun": "Native Benachrichtigungen brauchen die installierte Dishylink-App; ein Entwicklungslauf kann sie nicht anzeigen.",
     "signInTitle": "Bei Starlink anmelden"
+  },
+  "pauseAll": {
+    "pauseAll": "Alle pausieren",
+    "unpauseAll": "Alle fortsetzen",
+    "pausing": "Wird pausiert…",
+    "unpausing": "Wird fortgesetzt…",
+    "error": "Alle Geräte konnten nicht pausiert werden.",
+    "confirmTitle": "Alle Geräte pausieren?",
+    "confirmBody_one": "Dadurch wird der Internetzugang für {{count}} Gerät pausiert. Es bleibt im WLAN und kann jederzeit fortgesetzt werden.",
+    "confirmBody_other": "Dadurch wird der Internetzugang für alle {{count}} Geräte pausiert. Sie bleiben im WLAN und können jederzeit fortgesetzt werden.",
+    "confirmAction": "Alle pausieren",
+    "scheduleButton": "Pause planen",
+    "scheduleTitle": "Nächtliche Pause planen",
+    "scheduleSubtitle": "Geräte werden jede Nacht von {{start}} bis {{end}} blockiert. Sie können diese Regel jederzeit im Tab Regeln bearbeiten oder löschen.",
+    "scheduleBlockHours": "Sperrstunden (jeden Tag)",
+    "scheduleDevices": "Zu sperrende Geräte",
+    "scheduleNoDevices": "Wählen Sie mindestens ein Gerät aus.",
+    "scheduleNoDevicesAvailable": "Keine anderen Geräte im Netzwerk.",
+    "scheduleCreate": "Zeitplan erstellen",
+    "scheduledRuleDefaultName": "Nächtliche Pause"
   }
 }

@@ -314,6 +314,26 @@
     "deviceNamePlaceholder": "Device name",
     "nodeNamePlaceholder": "Node name"
   },
+  "pauseAll": {
+    "pauseAll": "Pause all",
+    "unpauseAll": "Unpause all",
+    "pausing": "Pausing…",
+    "unpausing": "Unpausing…",
+    "error": "Could not pause all devices.",
+    "confirmTitle": "Pause all devices?",
+    "confirmBody_one": "This will pause internet access for {{count}} device. Each stays on your Wi-Fi and you can unpause them all at any time.",
+    "confirmBody_other": "This will pause internet access for all {{count}} devices. Each stays on your Wi-Fi and you can unpause them all at any time.",
+    "confirmAction": "Pause all",
+    "scheduleButton": "Schedule pause",
+    "scheduleTitle": "Schedule a nightly pause",
+    "scheduleSubtitle": "Devices will be blocked every night from {{start}} to {{end}}. You can edit or delete this rule from the Rules tab at any time.",
+    "scheduleBlockHours": "Block hours (every day)",
+    "scheduleDevices": "Devices to block",
+    "scheduleNoDevices": "Pick at least one device.",
+    "scheduleNoDevicesAvailable": "No other devices on the network.",
+    "scheduleCreate": "Create schedule",
+    "scheduledRuleDefaultName": "Nightly pause"
+  },
   "advanced": {
     "connectAccountToUse": "Connect your Starlink account to use this"
   },

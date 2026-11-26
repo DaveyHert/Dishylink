@@ -1251,7 +1251,11 @@
   },
   "eventDetail": {
     "title": "Detalles del evento",
-    "kind": { "outage": "Corte", "degraded": "Degradado", "info": "Info" },
+    "kind": {
+      "outage": "Corte",
+      "degraded": "Degradado",
+      "info": "Info"
+    },
     "span": "{{start}} a {{end}}",
     "noReport": "El registro del historial no cronometró este evento, así que no hay cifras.",
     "beforeDrop": "Cinco minutos antes del corte",
@@ -1437,5 +1441,25 @@
     "notificationsUndeliverable": "macOS no está entregando las notificaciones; permite Dishylink en Ajustes del Sistema ▸ Notificaciones.",
     "notificationsDevRun": "Las notificaciones nativas necesitan la aplicación Dishylink instalada; una ejecución de desarrollo no puede mostrarlas.",
     "signInTitle": "Iniciar sesión en Starlink"
+  },
+  "pauseAll": {
+    "pauseAll": "Pausar todo",
+    "unpauseAll": "Reanudar todo",
+    "pausing": "Pausando…",
+    "unpausing": "Reanudando…",
+    "error": "No se pudieron pausar todos los dispositivos.",
+    "confirmTitle": "¿Pausar todos los dispositivos?",
+    "confirmBody_one": "Esto pausará el acceso a internet de {{count}} dispositivo. Se queda en tu Wi-Fi y puedes reanudarlo en cualquier momento.",
+    "confirmBody_other": "Esto pausará el acceso a internet de todos los {{count}} dispositivos. Siguen en tu Wi-Fi y puedes reanudarlos en cualquier momento.",
+    "confirmAction": "Pausar todo",
+    "scheduleButton": "Programar pausa",
+    "scheduleTitle": "Programar una pausa nocturna",
+    "scheduleSubtitle": "Los dispositivos serán bloqueados cada noche de {{start}} a {{end}}. Puedes editar o eliminar esta regla desde la pestaña Reglas.",
+    "scheduleBlockHours": "Horas de bloqueo (cada día)",
+    "scheduleDevices": "Dispositivos a bloquear",
+    "scheduleNoDevices": "Elige al menos un dispositivo.",
+    "scheduleNoDevicesAvailable": "No hay otros dispositivos en la red.",
+    "scheduleCreate": "Crear programación",
+    "scheduledRuleDefaultName": "Pausa nocturna"
   }
 }
