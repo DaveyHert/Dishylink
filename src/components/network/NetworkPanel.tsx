@@ -316,13 +316,13 @@ function NetworkPanelBody({
             </div>
           )}
           <ListSection
-            caption={`${t("network.deviceCount", { count: devices.length })} · ${`
+            caption={`${t("network.deviceCount", { count: devices.length })} · ${
               viaCloud
                 ? network.accountRosterError
                   ? t("network.viaAccountStale")
                   : t("network.viaAccount", { seconds: CLOUD_CLIENTS_POLL_MS / 1000 })
                 : t("network.liveFromRouter", { seconds: CLIENTS_POLL_MS / 1000 })
-            `}`}
+            }`}
           >
             {sortedDevices.map((client, index) => (
               <DeviceRow
