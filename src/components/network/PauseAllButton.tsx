@@ -1,19 +1,28 @@
 // "Pause all" / bedtime-mode button for the Connected tab.
 //
-// Pauses every non-self device in one shot (serially — the cloud gateway
-// serialises writes on its own side already, so sending them concurrently would
-// just pile them up there). Unpauses with a single click once active.
+// Phase 1 — Reliability:
+//   - Partial failure recovery: each device's outcome is recorded; failed
+//     devices are named, and "Retry failed" re-runs only those, in the same
+//     direction as the run that failed them.
+//   - Accurate state: derived entirely from the live roster's `blocked` flag,
+//     never from local optimistic state, so the button can never claim a pause
+//     that the router did not take.
+//   - Safe unpause: only devices currently paused are targeted.
+//   - Duplicate-submission guard: the button and the dialog's action are both
+//     disabled while a run is in flight.
 //
-// Pausing every device at once is an intentional action, so a confirmation
-// dialog guards the initial press. Unpausing is never confirmed — it only
-// restores access, and the way back being one tap is the point.
+// Phase 3 — UX:
+//   - Device-level status: the confirm dialog lists devices with their live
+//     paused/active badge, so what will change is visible before it happens.
+//   - Progress feedback: a "3 of 7" counter while the run is in flight.
+//   - Partial-failure summary with a targeted retry.
 
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { MoonIcon } from "lucide-react";
+import { AlertCircleIcon, MoonIcon, RefreshCwIcon } from "lucide-react";
 import type { WifiClientJson } from "@core/dishClient";
-import { setRouterClientPaused } from "../../lib/routerClientUpdate";
 import { Button } from "../ui/button";
+import { Badge } from "../ui/badge";
 import { SpinLoader } from "../loaders/SpinLoader";
 import {
   Dialog,
@@ -23,79 +32,109 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
+import {
+  applyPauseAll,
+  pauseableDevices,
+  pauseTargets,
+  type BulkPauseProgress,
+  type PauseResult,
+  type PauseTarget,
+} from "./pauseAllService";
 
 export function PauseAllButton({
   devices,
   selfClientId,
   disabled,
 }: {
-  /** The full roster — only non-self, non-already-paused devices are touched. */
   devices: WifiClientJson[];
-  /** The viewer's own clientId so we never pause ourselves. */
   selfClientId: number | undefined;
-  /** Grey out the control when the cloud account is not ready. */
   disabled?: boolean;
 }) {
   const { t } = useTranslation();
   const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<BulkPauseProgress | null>(null);
+  const [results, setResults] = useState<PauseResult[] | null>(null);
+  /** Which way the last run went, so a retry repeats it rather than flipping it. */
+  const [lastDirection, setLastDirection] = useState<"pause" | "unpause">("pause");
 
-  // Devices that can be paused by this button.
-  const pauseable = devices.filter((d) => d.clientId !== undefined && d.clientId !== selfClientId);
-  const allPaused = pauseable.length > 0 && pauseable.every((d) => d.blocked === true);
+  // State comes from the roster, never from what we asked for.
+  const pauseable = pauseableDevices(devices, selfClientId);
   const anyPaused = pauseable.some((d) => d.blocked === true);
+  const busy = progress !== null;
 
-  const applyAll = async (pausing: boolean) => {
-    setBusy(true);
-    setError(null);
-    const targets = pausing
-      ? pauseable.filter((d) => !d.blocked)
-      : pauseable.filter((d) => d.blocked);
-    try {
-      for (const device of targets) {
-        if (device.clientId === undefined) continue;
-        await setRouterClientPaused(device.clientId, pausing);
-      }
-    } catch (err) {
-      setError((err as Error).message ?? t("pauseAll.error"));
-    } finally {
-      setBusy(false);
-    }
+  const failed = results?.filter((result) => result.outcome === "failed") ?? [];
+
+  const run = async (pausing: boolean, targets: PauseTarget[]) => {
+    if (busy || targets.length === 0) return;
+    setLastDirection(pausing ? "pause" : "unpause");
+    setResults(null);
+    setProgress({ done: 0, total: targets.length, results: [] });
+    const final = await applyPauseAll(targets, pausing, (next) => setProgress({ ...next }));
+    setProgress(null);
+    setResults(final);
   };
 
   if (pauseable.length === 0) return null;
 
+  const directionLabel =
+    lastDirection === "pause" ? t("pauseAll.pausing") : t("pauseAll.unpausing");
+
   return (
     <>
       <Button
-        variant={allPaused || anyPaused ? "outline" : "secondary"}
+        variant={anyPaused ? "outline" : "secondary"}
         size='sm'
-        disabled={disabled || busy || pauseable.length === 0}
+        disabled={disabled || busy}
         className='flex cursor-pointer items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-70'
         onClick={() => {
-          if (allPaused || anyPaused) {
-            void applyAll(false);
-          } else {
+          if (anyPaused) void run(false, pauseTargets(devices, selfClientId, false));
+          else {
+            setResults(null);
             setConfirming(true);
           }
         }}
       >
         {busy ? (
-          <SpinLoader
-            variant='segment'
-            size={14}
-            label={allPaused || anyPaused ? t("pauseAll.unpausing") : t("pauseAll.pausing")}
-          />
+          <SpinLoader variant='segment' size={14} label={directionLabel} />
         ) : (
           <MoonIcon className='size-3.5' />
         )}
-        {allPaused || anyPaused ? t("pauseAll.unpauseAll") : t("pauseAll.pauseAll")}
+        {busy && progress
+          ? `${directionLabel} ${t("pauseAll.progress", {
+              done: progress.done,
+              total: progress.total,
+            })}`
+          : anyPaused
+            ? t("pauseAll.unpauseAll")
+            : t("pauseAll.pauseAll")}
       </Button>
 
-      {error && <p className='mt-1 text-[11.5px] text-destructive'>{error}</p>}
+      {!busy && failed.length > 0 && (
+        <span className='flex items-center gap-1.5 text-[11.5px] text-destructive'>
+          <AlertCircleIcon className='size-3.5 flex-none' />
+          <span>{t("pauseAll.partialFail", { count: failed.length })}</span>
+          <button
+            type='button'
+            className='flex cursor-pointer items-center gap-1 underline underline-offset-2 hover:no-underline'
+            onClick={() =>
+              void run(
+                lastDirection === "pause",
+                failed.map((result) => ({ clientId: result.clientId, name: result.name })),
+              )
+            }
+          >
+            <RefreshCwIcon className='size-3' />
+            {t("pauseAll.retryFailed")}
+          </button>
+        </span>
+      )}
 
-      <Dialog open={confirming} onOpenChange={setConfirming}>
+      <Dialog
+        open={confirming}
+        onOpenChange={(next) => {
+          if (!busy) setConfirming(next);
+        }}
+      >
         <DialogContent
           showCloseButton={false}
           className='glass-panel gap-3 sm:max-w-md'
@@ -109,19 +148,42 @@ export function PauseAllButton({
               {t("pauseAll.confirmBody", { count: pauseable.length })}
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className='mt-2 gap-2'>
+
+          <div className='thin-scroll flex max-h-[200px] flex-col gap-0.5 overflow-y-auto rounded-lg border border-border/50 bg-[color-mix(in_srgb,var(--ink)_3%,transparent)] p-2'>
+            {pauseable.map((device) => (
+              <div
+                key={device.clientId}
+                className='flex items-center justify-between gap-2 px-1.5 py-1'
+              >
+                <span className='truncate text-[12.5px] text-foreground'>
+                  {device.givenName ?? device.macAddress ?? String(device.clientId)}
+                </span>
+                {device.blocked ? (
+                  <Badge tone='neutral'>{t("network.paused")}</Badge>
+                ) : (
+                  <span className='text-[11px] text-muted-foreground'>
+                    {t("pauseAll.deviceActive")}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <DialogFooter className='mt-1 gap-2'>
             <Button
               variant='outline'
               className='cursor-pointer sm:min-w-28'
+              disabled={busy}
               onClick={() => setConfirming(false)}
             >
               {t("common.cancel")}
             </Button>
             <Button
               className='cursor-pointer sm:min-w-28'
+              disabled={busy}
               onClick={() => {
                 setConfirming(false);
-                void applyAll(true);
+                void run(true, pauseTargets(devices, selfClientId, true));
               }}
             >
               {t("pauseAll.confirmAction")}

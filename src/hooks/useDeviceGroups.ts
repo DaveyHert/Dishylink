@@ -33,6 +33,9 @@ export interface DeviceGroups {
   error: string | null;
   save: (terms: DeviceGroupTerms) => Promise<void>;
   remove: (groupId: string) => Promise<void>;
+  /** Read the groups again now, for a write made outside this hook — a quick
+   *  schedule POSTs its own request rather than going through `save`. */
+  reload: () => Promise<void>;
 }
 
 export function useDeviceGroups(): DeviceGroups {
@@ -116,5 +119,5 @@ export function useDeviceGroups(): DeviceGroups {
     [write],
   );
 
-  return { groups, pauseEnforceable, loading, error, save, remove };
+  return { groups, pauseEnforceable, loading, error, save, remove, reload: load };
 }

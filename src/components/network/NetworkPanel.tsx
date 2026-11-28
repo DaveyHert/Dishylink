@@ -46,6 +46,8 @@ import { clientEntryKey, displayName, isClientDevice, liveThroughputMbps } from 
 import type { MemberCandidate } from "./rules/allowanceTerms";
 import { PauseAllButton } from "./PauseAllButton";
 import { ScheduledPauseDialog } from "./ScheduledPauseDialog";
+import { ScheduledPauseOverview } from "./ScheduledPauseOverview";
+import { useDeviceGroups } from "../../hooks/useDeviceGroups";
 
 export function NetworkPanel({
   network,
@@ -120,6 +122,9 @@ function NetworkPanelBody({
   const cloudReady = cloudStatus === "ready";
   // The viewer's own clientId — used by pause-all to skip itself.
   const selfClientId = self.clientId;
+  // Schedules already on the recorder: the overview lists them, and the quick
+  // form checks them so it updates one rather than creating a twin.
+  const deviceGroups = useDeviceGroups();
 
   /** The LAN is silent and the account is answering in its place. */
   const viaCloud = network.clientsSource === "cloud";
@@ -297,6 +302,8 @@ function NetworkPanelBody({
           {viaCloud && network.accountRosterError && (
             <div className='mb-2 text-[11.5px] text-destructive'>{network.accountRosterError}</div>
           )}
+          {/* Pauses already scheduled, switchable without leaving the list. */}
+          <ScheduledPauseOverview deviceGroups={deviceGroups} />
           {/* Pause-all and scheduled-pause controls — shown only when the cloud
               account is ready so the writes can actually reach the router. */}
           {cloudReady && sortedDevices.length > 0 && (
@@ -309,9 +316,15 @@ function NetworkPanelBody({
               <ScheduledPauseDialog
                 devices={sortedDevices}
                 selfClientId={selfClientId}
+                existingGroups={deviceGroups.groups}
                 open={schedulingPause}
                 onOpenChange={setSchedulingPause}
-                onSaved={() => setSchedulingPause(false)}
+                onSaved={() => {
+                  setSchedulingPause(false);
+                  // The form writes its own request, so the overview's poll would
+                  // otherwise show the old list until its next tick.
+                  void deviceGroups.reload();
+                }}
               />
             </div>
           )}
