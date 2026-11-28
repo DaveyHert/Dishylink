@@ -44,6 +44,10 @@ import { usageKey } from "@core/clientUsage";
 import { clientHasCounters } from "@core/dishClient";
 import { clientEntryKey, displayName, isClientDevice, liveThroughputMbps } from "./networkFormat";
 import type { MemberCandidate } from "./rules/allowanceTerms";
+import { PauseAllButton } from "./PauseAllButton";
+import { ScheduledPauseDialog } from "./ScheduledPauseDialog";
+import { ScheduledPauseOverview } from "./ScheduledPauseOverview";
+import { useDeviceGroups } from "../../hooks/useDeviceGroups";
 
 export function NetworkPanel({
   network,
@@ -94,6 +98,7 @@ function NetworkPanelBody({
 }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<"connected" | "nodes" | "rules">("connected");
+  const [schedulingPause, setSchedulingPause] = useState(false);
   useOuiRegistry();
   // Radio temps come from the historian, not the router directly. Poll only
   // while the panel is mounted (i.e. the Network panel is open).
@@ -114,6 +119,12 @@ function NetworkPanelBody({
   const accountUnavailable = cloudStatus !== "loading" && cloudStatus !== "ready";
   const needsAccount = cloudStatus === "not-connected";
   const needsSelfDevice = selfDeviceHost() !== null && selfResolved && !selfIdentified(self);
+  const cloudReady = cloudStatus === "ready";
+  // The viewer's own clientId — used by pause-all to skip itself.
+  const selfClientId = self.clientId;
+  // Schedules already on the recorder: the overview lists them, and the quick
+  // form checks them so it updates one rather than creating a twin.
+  const deviceGroups = useDeviceGroups();
 
   /** The LAN is silent and the account is answering in its place. */
   const viaCloud = network.clientsSource === "cloud";
@@ -290,6 +301,32 @@ function NetworkPanelBody({
         <>
           {viaCloud && network.accountRosterError && (
             <div className='mb-2 text-[11.5px] text-destructive'>{network.accountRosterError}</div>
+          )}
+          {/* Pauses already scheduled, switchable without leaving the list. */}
+          <ScheduledPauseOverview deviceGroups={deviceGroups} />
+          {/* Pause-all and scheduled-pause controls — shown only when the cloud
+              account is ready so the writes can actually reach the router. */}
+          {cloudReady && sortedDevices.length > 0 && (
+            <div className='mb-3 flex flex-wrap items-center gap-2'>
+              <PauseAllButton
+                devices={sortedDevices}
+                selfClientId={selfClientId}
+                disabled={!cloudReady}
+              />
+              <ScheduledPauseDialog
+                devices={sortedDevices}
+                selfClientId={selfClientId}
+                existingGroups={deviceGroups.groups}
+                open={schedulingPause}
+                onOpenChange={setSchedulingPause}
+                onSaved={() => {
+                  setSchedulingPause(false);
+                  // The form writes its own request, so the overview's poll would
+                  // otherwise show the old list until its next tick.
+                  void deviceGroups.reload();
+                }}
+              />
+            </div>
           )}
           <ListSection
             caption={`${t("network.deviceCount", { count: devices.length })} · ${

@@ -1251,7 +1251,11 @@
   },
   "eventDetail": {
     "title": "Detalles del evento",
-    "kind": { "outage": "Corte", "degraded": "Degradado", "info": "Info" },
+    "kind": {
+      "outage": "Corte",
+      "degraded": "Degradado",
+      "info": "Info"
+    },
     "span": "{{start}} a {{end}}",
     "noReport": "El registro del historial no cronometró este evento, así que no hay cifras.",
     "beforeDrop": "Cinco minutos antes del corte",
@@ -1437,5 +1441,48 @@
     "notificationsUndeliverable": "macOS no está entregando las notificaciones; permite Dishylink en Ajustes del Sistema ▸ Notificaciones.",
     "notificationsDevRun": "Las notificaciones nativas necesitan la aplicación Dishylink instalada; una ejecución de desarrollo no puede mostrarlas.",
     "signInTitle": "Iniciar sesión en Starlink"
+  },
+  "pauseAll": {
+    "pauseAll": "Pausar todo",
+    "unpauseAll": "Reanudar todo",
+    "pausing": "Pausando",
+    "unpausing": "Reanudando",
+    "progress": "{{done}} de {{total}}",
+    "error": "No se pudieron pausar todos los dispositivos.",
+    "partialFail_one": "No se pudo actualizar {{count}} dispositivo.",
+    "partialFail_other": "No se pudieron actualizar {{count}} dispositivos.",
+    "retryFailed": "Reintentar los fallidos",
+    "deviceActive": "Activo",
+    "confirmTitle": "¿Pausar todos los dispositivos?",
+    "confirmBody_one": "Esto pausará el acceso a internet de {{count}} dispositivo. Seguirá en tu Wi-Fi y podrás reanudarlo en cualquier momento.",
+    "confirmBody_other": "Esto pausará el acceso a internet de todos los {{count}} dispositivos. Seguirán en tu Wi-Fi y podrás reanudarlos en cualquier momento.",
+    "confirmAction": "Pausar todo",
+    "overviewTitle": "Pausas programadas",
+    "overviewDevices_one": "{{count}} dispositivo",
+    "overviewDevices_other": "{{count}} dispositivos",
+    "overviewOff": "desactivada",
+    "overviewEnable": "Activar",
+    "overviewDisable": "Desactivar",
+    "overviewDelete": "Eliminar programación",
+    "scheduleButton": "Programar pausa",
+    "scheduleTitle": "Programar una pausa nocturna",
+    "scheduleSubtitle": "Los dispositivos se bloquearán de {{start}} a {{end}} en los días que elijas. Puedes editar o eliminar esta regla desde la pestaña Reglas.",
+    "scheduleDays": "Días",
+    "schedulePreset": {
+      "everyDay": "Todos los días",
+      "weekdays": "Entre semana",
+      "weekend": "Fines de semana"
+    },
+    "scheduleBlockHours": "Horas de bloqueo",
+    "scheduleDevices": "Dispositivos a bloquear",
+    "scheduleNoDevices": "Elige al menos un dispositivo.",
+    "scheduleNoDevicesAvailable": "No hay otros dispositivos en la red.",
+    "scheduleNoDays": "Elige al menos un día.",
+    "scheduleSameTime": "El inicio y el fin no pueden ser iguales: bloquearía todo el día.",
+    "scheduleTimezone": "Las horas están en {{zone}}.",
+    "scheduleDuplicate": "Coincide con «{{name}}», así que al guardar se actualizará esa programación en lugar de añadir otra.",
+    "scheduleCreate": "Crear programación",
+    "scheduleUpdate": "Actualizar programación",
+    "scheduledRuleDefaultName": "Pausa nocturna"
   }
 }
